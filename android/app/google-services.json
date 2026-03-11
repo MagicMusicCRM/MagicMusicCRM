@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1038036512599",
+    "project_id": "magicmusiccrm-42557",
+    "storage_bucket": "magicmusiccrm-42557.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1038036512599:android:6b303a532839920dd21812",
+        "android_client_info": {
+          "package_name": "magic.crm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAupMl9pk9dmFm9cNOzF-XCAq6Hb1roeLw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
