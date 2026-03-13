@@ -15,16 +15,20 @@ class UpdaterDialog extends ConsumerStatefulWidget {
     if (_isCheckingOrShowing) return;
     _isCheckingOrShowing = true;
 
+    debugPrint('GitHub Updater: Checking for updates...');
     try {
       final service = ref.read(githubUpdaterServiceProvider);
       final updateInfo = await service.checkForUpdates();
       
       if (updateInfo != null && context.mounted) {
+        debugPrint('GitHub Updater: New version found: ${updateInfo['version']}. Showing dialog.');
         await showDialog(
           context: context,
           barrierDismissible: false,
           builder: (context) => UpdaterDialog(updateInfo: updateInfo),
         );
+      } else {
+        debugPrint('GitHub Updater: No update needed or context not mounted.');
       }
     } finally {
       _isCheckingOrShowing = false;

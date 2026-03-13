@@ -7,15 +7,17 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overvi
 import 'package:magic_music_crm/features/admin/presentation/widgets/custom_field_config_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/mass_notification_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
+import 'package:magic_music_crm/core/widgets/updater_dialog.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class AdminDashboardScreen extends StatefulWidget {
+class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+  ConsumerState<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
-class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   int _currentIndex = 0;
   final GlobalKey<ManageEntitiesWidgetState> _manageKey = GlobalKey<ManageEntitiesWidgetState>();
 
@@ -24,6 +26,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    // Check for updates
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdaterDialog.checkAndShow(context, ref).catchError((e) {
+        debugPrint('AdminDashboard Updater error: $e');
+      });
+    });
+
     _tabs = [
       AdminOverviewWidget(
         onTabChange: (index, subIndex) {

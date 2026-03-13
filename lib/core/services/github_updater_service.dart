@@ -16,7 +16,12 @@ class GithubUpdaterService {
   GithubUpdaterService({
     required this.owner,
     required this.repo,
-  }) : _dio = Dio();
+  }) : _dio = Dio(BaseOptions(
+          headers: {
+            'User-Agent': 'Flutter-MagicMusicCRM-Updater',
+            'Accept': 'application/vnd.github.v3+json',
+          },
+        ));
 
   /// Gets the current app version from package info.
   Future<String> getCurrentVersion() async {
@@ -30,11 +35,6 @@ class GithubUpdaterService {
     try {
       final response = await _dio.get(
         'https://api.github.com/repos/$owner/$repo/releases/latest',
-        options: Options(
-          headers: {
-            'Accept': 'application/vnd.github.v3+json',
-          },
-        ),
       );
 
       if (response.statusCode == 200) {
@@ -57,10 +57,12 @@ class GithubUpdaterService {
               };
             }
           }
+        } else {
+          debugPrint('GitHub Updater: No new version found. Latest: $latestVersion, Current: $currentVersion');
         }
       }
     } catch (e) {
-      debugPrint('Error checking for updates: $e');
+      debugPrint('GitHub Updater check error: $e');
     }
     return null;
   }

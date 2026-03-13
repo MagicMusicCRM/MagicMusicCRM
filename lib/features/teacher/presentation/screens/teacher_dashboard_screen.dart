@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/widgets/updater_dialog.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -6,15 +8,25 @@ import '../widgets/teacher_schedule_widget.dart';
 import '../widgets/teacher_students_widget.dart';
 import '../widgets/teacher_chat_widget.dart';
 
-class TeacherDashboardScreen extends StatefulWidget {
+class TeacherDashboardScreen extends ConsumerStatefulWidget {
   const TeacherDashboardScreen({super.key});
 
   @override
-  State<TeacherDashboardScreen> createState() => _TeacherDashboardScreenState();
+  ConsumerState<TeacherDashboardScreen> createState() => _TeacherDashboardScreenState();
 }
 
-class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
+class _TeacherDashboardScreenState extends ConsumerState<TeacherDashboardScreen> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdaterDialog.checkAndShow(context, ref).catchError((e) {
+        debugPrint('TeacherDashboard Updater error: $e');
+      });
+    });
+  }
 
   final List<Widget> _tabs = const [
     TeacherScheduleWidget(),

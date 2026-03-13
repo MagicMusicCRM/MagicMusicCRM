@@ -52,9 +52,8 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp> with WidgetsBindi
       ref.read(notificationServiceProvider).initialize().catchError((e) {
         debugPrint('Notification service init error: $e');
       });
-      UpdaterDialog.checkAndShow(context, ref).catchError((e) {
-        debugPrint('Updater check error: $e');
-      });
+      // Removed UpdaterDialog.checkAndShow from here to move it to individual screens
+      // where Navigator context is guaranteed.
     });
   }
 
@@ -66,11 +65,7 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp> with WidgetsBindi
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      UpdaterDialog.checkAndShow(context, ref).catchError((e) {
-        debugPrint('Updater check error: $e');
-      });
-    }
+    // Removed UpdaterDialog.checkAndShow from here as well
   }
 
   @override

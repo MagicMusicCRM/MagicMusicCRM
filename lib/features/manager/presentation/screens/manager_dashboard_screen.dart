@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/widgets/updater_dialog.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -8,15 +10,25 @@ import '../widgets/leads_widget.dart';
 import '../widgets/finance_widget.dart';
 import '../widgets/reports_widget.dart';
 
-class ManagerDashboardScreen extends StatefulWidget {
+class ManagerDashboardScreen extends ConsumerStatefulWidget {
   const ManagerDashboardScreen({super.key});
 
   @override
-  State<ManagerDashboardScreen> createState() => _ManagerDashboardScreenState();
+  ConsumerState<ManagerDashboardScreen> createState() => _ManagerDashboardScreenState();
 }
 
-class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
+class _ManagerDashboardScreenState extends ConsumerState<ManagerDashboardScreen> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdaterDialog.checkAndShow(context, ref).catchError((e) {
+        debugPrint('ManagerDashboard Updater error: $e');
+      });
+    });
+  }
 
   final List<Widget> _tabs = const [
     ManagerOverviewWidget(),

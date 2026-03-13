@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/widgets/updater_dialog.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -6,15 +8,25 @@ import '../widgets/upcoming_lessons_list.dart';
 import '../widgets/subscription_status_card.dart';
 import '../widgets/chat_widget.dart';
 
-class ClientDashboardScreen extends StatefulWidget {
+class ClientDashboardScreen extends ConsumerStatefulWidget {
   const ClientDashboardScreen({super.key});
 
   @override
-  State<ClientDashboardScreen> createState() => _ClientDashboardScreenState();
+  ConsumerState<ClientDashboardScreen> createState() => _ClientDashboardScreenState();
 }
 
-class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
+class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdaterDialog.checkAndShow(context, ref).catchError((e) {
+        debugPrint('ClientDashboard Updater error: $e');
+      });
+    });
+  }
 
   final List<Widget> _tabs = const [
     _ScheduleTab(),
