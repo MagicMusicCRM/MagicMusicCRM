@@ -27,7 +27,7 @@ class _TasksWidgetState extends State<TasksWidget> {
     try {
       var query = _supabase
           .from('tasks')
-          .select('*, profiles!tasks_assigned_to_fkey(first_name, last_name)');
+          .select('*, profiles!tasks_assigned_to_fkey(first_name, last_name), branches(name)');
 
       if (_filter != 'all') {
         query = query.eq('status', _filter);
@@ -44,15 +44,26 @@ class _TasksWidgetState extends State<TasksWidget> {
   }
 
   Future<void> _createTask() async {
-    final result = await showDialog<Map<String, String>>(
+    final branches = await _supabase.from('branches').select('id, name');
+    final employees = await _supabase.from('profiles').select('id, first_name, last_name');
+    
+    if (!mounted) return;
+
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => const _TaskDialog(),
+      builder: (ctx) => _TaskDialog(
+        branches: List<Map<String, dynamic>>.from(branches),
+        employees: List<Map<String, dynamic>>.from(employees),
+      ),
     );
     if (result != null) {
       await _supabase.from('tasks').insert({
         'title': result['title'],
         'description': result['description'],
         'priority': result['priority'],
+        'branch_id': result['branch_id'],
+        'assigned_to': result['assigned_to'],
+        'due_date': result['due_date'],
         'status': 'todo',
         'created_by': _supabase.auth.currentUser?.id,
       });
@@ -223,9 +234,12 @@ class _TaskCard extends StatelessWidget {
             const SizedBox(height: 10),
             Wrap(
               spacing: 6,
+              runSpacing: 6,
               children: [
                 _Tag(label: _priorityLabel(priority), color: _priorityColor(priority)),
                 _Tag(label: _statusLabel(status), color: AppTheme.primaryPurple),
+                if (task['branches'] != null)
+                  _Tag(label: 'Филиал: ${task['branches']['name']}', color: AppTheme.success),
                 if (dueDate != null) _Tag(label: 'До: $dueDate', color: AppTheme.textSecondary),
                 if (assigneeText != null && assigneeText.isNotEmpty)
                   _Tag(label: assigneeText, color: AppTheme.secondaryGold),
@@ -257,7 +271,9 @@ class _Tag extends StatelessWidget {
 }
 
 class _TaskDialog extends StatefulWidget {
-  const _TaskDialog();
+  final List<Map<String, dynamic>> branches;
+  final List<Map<String, dynamic>> employees;
+  const _TaskDialog({required this.branches, required this.employees});
 
   @override
   State<_TaskDialog> createState() => _TaskDialogState();
@@ -267,6 +283,9 @@ class _TaskDialogState extends State<_TaskDialog> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String _priority = 'medium';
+  String? _selectedBranchId;
+  String? _selectedEmployeeId;
+  DateTime? _dueDate;
 
   @override
   void dispose() {
@@ -299,6 +318,39 @@ class _TaskDialogState extends State<_TaskDialog> {
               ],
               onChanged: (v) => setState(() => _priority = v ?? 'medium'),
             ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedBranchId,
+              dropdownColor: AppTheme.cardDark,
+              decoration: const InputDecoration(labelText: 'Филиал'),
+              items: widget.branches.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name'] ?? ''))).toList(),
+              onChanged: (v) => setState(() => _selectedBranchId = v),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedEmployeeId,
+              dropdownColor: AppTheme.cardDark,
+              decoration: const InputDecoration(labelText: 'Ответственный'),
+              items: widget.employees.map((e) => DropdownMenuItem(
+                value: e['id'].toString(), 
+                child: Text('${e['first_name'] ?? ''} ${e['last_name'] ?? ''}'.trim())
+              )).toList(),
+              onChanged: (v) => setState(() => _selectedEmployeeId = v),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final d = await showDatePicker(
+                  context: context,
+                  initialDate: _dueDate ?? DateTime.now(),
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (d != null) setState(() => _dueDate = d);
+              },
+              icon: const Icon(Icons.calendar_today_rounded, size: 18),
+              label: Text(_dueDate == null ? 'Установить срок' : DateFormat('dd.MM.yyyy').format(_dueDate!)),
+            ),
           ],
         ),
       ),
@@ -311,6 +363,9 @@ class _TaskDialogState extends State<_TaskDialog> {
                 'title': _titleCtrl.text.trim(),
                 'description': _descCtrl.text.trim(),
                 'priority': _priority,
+                'branch_id': _selectedBranchId,
+                'assigned_to': _selectedEmployeeId,
+                'due_date': _dueDate?.toIso8601String(),
               });
             }
           },

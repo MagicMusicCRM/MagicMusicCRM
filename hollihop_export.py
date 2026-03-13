@@ -91,6 +91,50 @@ def main():
         save_json("leads.json", {"Leads": all_leads})
         print(f"Successfully exported {len(all_leads)} leads.")
         
+    # 7. Export Students
+    all_students = []
+    skip = 0
+    print("Fetching students...")
+    while True:
+        students_response = fetch_data("GetStudents", {"skip": skip, "take": take})
+        if not students_response or "Students" not in students_response:
+            break
+            
+        chunk = students_response["Students"]
+        all_students.extend(chunk)
+        print(f"  Fetched {len(chunk)} students (Total: {len(all_students)})...")
+        
+        if len(chunk) < take:
+            break
+        skip += take
+        time.sleep(0.1)
+        
+    if all_students:
+        save_json("students.json", {"Students": all_students})
+        print(f"Successfully exported {len(all_students)} students.")
+
+    # 8. Export EdUnitStudents
+    all_edunit_students = []
+    skip = 0
+    print("Fetching EdUnitStudents...")
+    while True:
+        eus_response = fetch_data("GetEdUnitStudents", {"skip": skip, "take": take})
+        if not eus_response or "EdUnitStudents" not in eus_response:
+            break
+            
+        chunk = eus_response["EdUnitStudents"]
+        all_edunit_students.extend(chunk)
+        print(f"  Fetched {len(chunk)} EdUnitStudents (Total: {len(all_edunit_students)})...")
+        
+        if len(chunk) < take:
+            break
+        skip += take
+        time.sleep(0.1)
+        
+    if all_edunit_students:
+        save_json("ed_unit_students.json", {"EdUnitStudents": all_edunit_students})
+        print(f"Successfully exported {len(all_edunit_students)} EdUnitStudents.")
+        
     print("Export complete!")
 
 if __name__ == "__main__":

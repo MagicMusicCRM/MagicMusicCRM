@@ -156,16 +156,18 @@ class _LeadCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final id = lead['id'] as String;
-    final firstName = lead['name'] as String? ?? '';
-    final lastName = lead['last_name'] as String? ?? '';
-    final name = '$firstName $lastName'.trim();
-    final displayName = name.isEmpty ? 'Без имени' : name;
-    final phone = lead['phone'] as String? ?? '';
-    final source = lead['source'] as String? ?? '';
-    final currentStatus = lead['status'] as String? ?? 'new';
-    final dt = lead['created_at'] != null ? DateTime.tryParse(lead['created_at']) : null;
-    final dateStr = dt != null ? DateFormat('d MMM', 'ru').format(dt) : '';
+    try {
+      final id = lead['id']?.toString() ?? '';
+      final firstName = lead['name']?.toString() ?? '';
+      final lastName = lead['last_name']?.toString() ?? '';
+      final name = '$firstName $lastName'.trim();
+      final displayName = name.isEmpty ? 'Без имени' : name;
+      final phone = lead['phone']?.toString() ?? '';
+      final source = lead['source']?.toString() ?? '';
+      final currentStatus = lead['status']?.toString() ?? 'new';
+      final dtStr = lead['created_at']?.toString();
+      final dt = dtStr != null ? DateTime.tryParse(dtStr) : null;
+      final dateStr = dt != null ? DateFormat('d MMM', 'ru').format(dt) : '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -212,6 +214,15 @@ class _LeadCard extends StatelessWidget {
         ),
       ),
     );
+    } catch (e) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Text('Ошибка: $e'),
+        ),
+      );
+    }
   }
 }
 

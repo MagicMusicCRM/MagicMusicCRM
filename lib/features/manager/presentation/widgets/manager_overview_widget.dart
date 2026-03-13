@@ -26,21 +26,18 @@ class _ManagerOverviewWidgetState extends State<ManagerOverviewWidget> {
       final now = DateTime.now();
       final monthStart = DateTime(now.year, now.month, 1).toIso8601String();
 
-      final studentsCount = await _supabase.from('students').count();
-      final teachersCount = await _supabase.from('teachers').count();
-      final lessonsCount = await _supabase.from('lessons')
+      final studentsCount = (await _supabase.from('students').select('id') as List).length;
+      final teachersCount = (await _supabase.from('teachers').select('id') as List).length;
+      final lessonsCount = (await _supabase.from('lessons')
             .select('id')
             .gte('scheduled_at', monthStart)
-            .eq('status', 'completed')
-            .count();
-      final tasksCount = await _supabase.from('tasks')
+            .eq('status', 'completed') as List).length;
+      final tasksCount = (await _supabase.from('tasks')
             .select('id')
-            .eq('status', 'todo')
-            .count();
-      final leadsCount = await _supabase.from('leads')
+            .eq('status', 'todo') as List).length;
+      final leadsCount = (await _supabase.from('leads')
             .select('id')
-            .eq('status', 'new')
-            .count();
+            .eq('status', 'new') as List).length;
       final paymentsResult = await _supabase.from('payments')
             .select('amount')
             .gte('created_at', monthStart);

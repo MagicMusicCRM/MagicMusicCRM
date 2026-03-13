@@ -6,6 +6,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entit
 import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overview_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/custom_field_config_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/mass_notification_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -20,6 +21,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final List<Widget> _tabs = const [
     AdminOverviewWidget(),
     ManageEntitiesWidget(),
+    LeadsWidget(),
     CustomFieldConfigWidget(),
     MassNotificationWidget(),
   ];
@@ -61,6 +63,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Обзор'),
           BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Управление'),
+          BottomNavigationBarItem(icon: Icon(Icons.view_kanban_rounded), label: 'Лиды'),
           BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Настройки'),
           BottomNavigationBarItem(icon: Icon(Icons.notifications_rounded), label: 'Рассылка'),
         ],

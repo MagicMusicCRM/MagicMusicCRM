@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
 
 final entitiesProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, table) async {
   final supabase = Supabase.instance.client;
-
+  
   bool isDisposed = false;
-  final channelName = 'public:-';
+  final channelName = 'public:entities:$table';
   final channel = supabase.channel(channelName).onPostgresChanges(
     event: PostgresChangeEvent.all,
     schema: 'public',
@@ -32,7 +34,7 @@ final entitiesProvider = FutureProvider.family<List<Map<String, dynamic>>, Strin
   } else if (table == 'lessons') {
     final r = await supabase
         .from('lessons')
-        .select('*, students(profiles(first_name, last_name)), teachers(first_name, last_name, profiles(first_name, last_name)), rooms(name), branches(name)')
+        .select('*, students(profiles(first_name, last_name)), groups(name), teachers(first_name, last_name, profiles(first_name, last_name)), rooms(name), branches(name)')
         .order('scheduled_at', ascending: false)
         .limit(50);
     return List<Map<String, dynamic>>.from(r);
@@ -46,20 +48,23 @@ final entitiesProvider = FutureProvider.family<List<Map<String, dynamic>>, Strin
   return List<Map<String, dynamic>>.from(await supabase.from(table).select('*'));
 });
 
-class ManageEntitiesWidget extends StatefulWidget {
+class ManageEntitiesWidget extends ConsumerStatefulWidget {
   const ManageEntitiesWidget({super.key});
 
   @override
-  State<ManageEntitiesWidget> createState() => _ManageEntitiesWidgetState();
+  ConsumerState<ManageEntitiesWidget> createState() => _ManageEntitiesWidgetState();
 }
 
-class _ManageEntitiesWidgetState extends State<ManageEntitiesWidget> with SingleTickerProviderStateMixin {
+class _ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -70,32 +75,47 @@ class _ManageEntitiesWidgetState extends State<ManageEntitiesWidget> with Single
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        TabBar(
-          controller: _tabController,
-          labelColor: AppTheme.primaryPurple,
-          unselectedLabelColor: AppTheme.textSecondary,
-          indicatorColor: AppTheme.primaryPurple,
-          tabs: const [
-            Tab(text: 'Ученики'),
-            Tab(text: 'Преподаватели'),
-            Tab(text: 'Группы'),
-            Tab(text: 'Занятия'),
-          ],
-        ),
-        Expanded(
-          child: TabBarView(
+    return Scaffold(
+      body: Column(
+        children: [
+          TabBar(
             controller: _tabController,
-            children: const [
-              _StudentsList(),
-              _TeachersList(),
-              _GroupsList(),
-              _LessonsList(),
+            labelColor: AppTheme.primaryPurple,
+            unselectedLabelColor: AppTheme.textSecondary,
+            indicatorColor: AppTheme.primaryPurple,
+            tabs: const [
+              Tab(text: 'Ученики'),
+              Tab(text: 'Преподаватели'),
+              Tab(text: 'Группы'),
+              Tab(text: 'Занятия'),
             ],
           ),
-        ),
-      ],
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: const [
+                _StudentsList(),
+                _TeachersList(),
+                _GroupsList(),
+                _LessonsList(),
+              ],
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: _tabController.index == 3
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                final created = await CreateLessonDialog.show(context);
+                if (created == true) {
+                  ref.invalidate(entitiesProvider('lessons'));
+                }
+              },
+              backgroundColor: AppTheme.primaryPurple,
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: const Text('Создать занятие', style: TextStyle(color: Colors.white)),
+            )
+          : null,
     );
   }
 }
@@ -108,9 +128,9 @@ class _StudentsList extends ConsumerWidget {
     final async = ref.watch(entitiesProvider('students'));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (e, _) => Center(child: Text('Ошибка: $e', style: const TextStyle(color: AppTheme.danger))),
+      error: (e, _) => Center(child: Text('РћС€РёР±РєР°: $e', style: const TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('Нет учеников', style: TextStyle(color: AppTheme.textSecondary)));
+        if (items.isEmpty) return const Center(child: Text('РќРµС‚ СѓС‡РµРЅРёРєРѕРІ', style: TextStyle(color: AppTheme.textSecondary)));
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('students')),
@@ -130,7 +150,7 @@ class _StudentsList extends ConsumerWidget {
                     child: Text(name.isNotEmpty ? name[0] : '?',
                         style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700)),
                   ),
-                  title: Text(name.isEmpty ? 'Без имени' : name),
+                  title: Text(name.isEmpty ? 'Р‘РµР· РёРјРµРЅРё' : name),
                   subtitle: phone.isNotEmpty ? Text(phone, style: const TextStyle(color: AppTheme.textSecondary)) : null,
                   trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
                 ),
@@ -151,9 +171,9 @@ class _TeachersList extends ConsumerWidget {
     final async = ref.watch(entitiesProvider('teachers'));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (e, _) => Center(child: Text('Ошибка: $e', style: const TextStyle(color: AppTheme.danger))),
+      error: (e, _) => Center(child: Text('РћС€РёР±РєР°: $e', style: const TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('Нет преподавателей', style: TextStyle(color: AppTheme.textSecondary)));
+        if (items.isEmpty) return const Center(child: Text('РќРµС‚ РїСЂРµРїРѕРґР°РІР°С‚РµР»РµР№', style: TextStyle(color: AppTheme.textSecondary)));
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('teachers')),
@@ -169,17 +189,33 @@ class _TeachersList extends ConsumerWidget {
                 final p = item['profiles'] as Map<String, dynamic>?;
                 name = '${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim();
               }
-              final spec = item['specialization'] as String? ?? 'Не указана';
+              final dList = item['disciplines'] as List<dynamic>?;
+              String spec = 'Не указана';
+              if (dList != null && dList.isNotEmpty) {
+                try {
+                  spec = dList.map((d) => d['Name'].toString()).join(', ');
+                } catch (e) {
+                  spec = 'Ошибка парсинга';
+                }
+              } else {
+                spec = item['specialization'] as String? ?? 'Не указана';
+              }
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
+                  onTap: () async {
+                    final updated = await TeacherDetailDialog.show(context, item);
+                    if (updated == true) {
+                      ref.invalidate(entitiesProvider('teachers'));
+                    }
+                  },
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.secondaryGold.withAlpha(30),
                     child: Text(name.isNotEmpty ? name[0] : '?',
                         style: const TextStyle(color: AppTheme.secondaryGold, fontWeight: FontWeight.w700)),
                   ),
-                  title: Text(name.isEmpty ? 'Без имени' : name),
-                  subtitle: Text('Специализация: $spec', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  title: Text(name.isEmpty ? 'Р‘РµР· РёРјРµРЅРё' : name),
+                  subtitle: Text('РЎРїРµС†РёР°Р»РёР·Р°С†РёСЏ: $spec', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                   trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
                 ),
               );
@@ -196,9 +232,9 @@ class _LessonsList extends ConsumerWidget {
 
   String _statusLabel(String? s) {
     switch (s) {
-      case 'completed': return 'Завершено';
-      case 'cancelled': return 'Отменено';
-      default: return 'Запланировано';
+      case 'completed': return 'Р—Р°РІРµСЂС€РµРЅРѕ';
+      case 'cancelled': return 'РћС‚РјРµРЅРµРЅРѕ';
+      default: return 'Р—Р°РїР»Р°РЅРёСЂРѕРІР°РЅРѕ';
     }
   }
 
@@ -215,9 +251,9 @@ class _LessonsList extends ConsumerWidget {
     final async = ref.watch(entitiesProvider('lessons'));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (e, _) => Center(child: Text('Ошибка: $e', style: const TextStyle(color: AppTheme.danger))),
+      error: (e, _) => Center(child: Text('РћС€РёР±РєР°: $e', style: const TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('Нет занятий', style: TextStyle(color: AppTheme.textSecondary)));
+        if (items.isEmpty) return const Center(child: Text('РќРµС‚ Р·Р°РЅСЏС‚РёР№', style: TextStyle(color: AppTheme.textSecondary)));
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('lessons')),
@@ -227,14 +263,18 @@ class _LessonsList extends ConsumerWidget {
             itemBuilder: (ctx, i) {
               final l = items[i];
               final dt = DateTime.tryParse(l['scheduled_at'] ?? '');
-              final dateStr = dt != null ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal()) : '—';
+              final dateStr = dt != null ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal()) : 'вЂ”';
               final student = l['students']?['profiles'];
               final teacher = l['teachers'];
-              final studentName = student != null
-                  ? '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim()
-                  : 'Без ученика';
               
-              var teacherName = 'Без преподавателя';
+              String studentName = 'Без ученика';
+              if (student != null) {
+                studentName = '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
+              } else if (l['groups'] != null && l['groups']['name'] != null) {
+                studentName = 'Группа: ${l['groups']['name']}';
+              }
+              
+              var teacherName = 'Р‘РµР· РїСЂРµРїРѕРґР°РІР°С‚РµР»СЏ';
               if (teacher != null) {
                 final tf = teacher['first_name'] as String? ?? '';
                 final tl = teacher['last_name'] as String? ?? '';
@@ -245,10 +285,10 @@ class _LessonsList extends ConsumerWidget {
                     teacherName = '${tp['first_name'] ?? ''} ${tp['last_name'] ?? ''}'.trim();
                   }
                 }
-                if (teacherName.isEmpty) teacherName = 'Без преподавателя';
+                if (teacherName.isEmpty) teacherName = 'Р‘РµР· РїСЂРµРїРѕРґР°РІР°С‚РµР»СЏ';
               }
               
-              final room = l['rooms']?['name'] as String? ?? '—';
+              final room = l['rooms']?['name'] as String? ?? 'вЂ”';
               final status = l['status'] as String?;
 
               return Card(
@@ -263,9 +303,9 @@ class _LessonsList extends ConsumerWidget {
                           children: [
                             Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                             const SizedBox(height: 2),
-                            Text('Ученик: $studentName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            Text('Преп.: $teacherName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            Text('Кабинет: $room', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            Text('РЈС‡РµРЅРёРє: $studentName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            Text('РџСЂРµРї.: $teacherName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            Text('РљР°Р±РёРЅРµС‚: $room', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                           ],
                         ),
                       ),
@@ -297,9 +337,9 @@ class _GroupsList extends ConsumerWidget {
     final async = ref.watch(entitiesProvider('groups'));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (e, _) => Center(child: Text('������: $e', style: const TextStyle(color: AppTheme.danger))),
+      error: (e, _) => Center(child: Text('Ошибка: $e', style: const TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('��� �����', style: TextStyle(color: AppTheme.textSecondary)));
+        if (items.isEmpty) return const Center(child: Text('Нет групп', style: TextStyle(color: AppTheme.textSecondary)));
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('groups')),
@@ -308,11 +348,11 @@ class _GroupsList extends ConsumerWidget {
             itemCount: items.length,
             itemBuilder: (ctx, i) {
               final item = items[i];
-              final name = item['name'] as String? ?? '��� ��������';
-              final branchName = item['branches']?['name'] as String? ?? '��� �������';
+              final name = item['name'] as String? ?? 'Без названия';
+              final branchName = item['branches']?['name'] as String? ?? 'Без филиала';
               final teacher = item['teachers'];
               
-              var teacherName = '��� �������������';
+              var teacherName = 'Без преподавателя';
               if (teacher != null) {
                 final tf = teacher['first_name'] as String? ?? '';
                 final tl = teacher['last_name'] as String? ?? '';
@@ -323,7 +363,7 @@ class _GroupsList extends ConsumerWidget {
                     teacherName = '${tp['first_name'] ?? ''} ${tp['last_name'] ?? ''}'.trim();
                   }
                 }
-                if (teacherName.isEmpty) teacherName = '��� �������������';
+                if (teacherName.isEmpty) teacherName = 'Без преподавателя';
               }
 
               return Card(
@@ -334,7 +374,7 @@ class _GroupsList extends ConsumerWidget {
                     child: const Icon(Icons.group_rounded, color: AppTheme.primaryPurple),
                   ),
                   title: Text(name),
-                  subtitle: Text('����.: $teacherName � ���.: $branchName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  subtitle: Text('Преп.: $teacherName • Фил.: $branchName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                 ),
               );
             },

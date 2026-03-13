@@ -10,14 +10,13 @@ final statsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
   final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
 
-  final studentsCount = await supabase.from('students').count();
-  final teachersCount = await supabase.from('teachers').count();
-  final branchesCount = await supabase.from('branches').count();
-  final lessonsCount = await supabase.from('lessons')
+  final studentsCount = (await supabase.from('students').select('id') as List).length;
+  final teachersCount = (await supabase.from('teachers').select('id') as List).length;
+  final branchesCount = (await supabase.from('branches').select('id') as List).length;
+  final lessonsCount = (await supabase.from('lessons')
         .select('id')
         .gte('scheduled_at', todayStart)
-        .lte('scheduled_at', todayEnd)
-        .count();
+        .lte('scheduled_at', todayEnd) as List).length;
 
   return {
     'students': studentsCount,
