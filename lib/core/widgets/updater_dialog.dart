@@ -8,17 +8,26 @@ class UpdaterDialog extends ConsumerStatefulWidget {
 
   const UpdaterDialog({super.key, required this.updateInfo});
 
+  static bool _isCheckingOrShowing = false;
+
   /// Utility to show dialog and check for updates
   static Future<void> checkAndShow(BuildContext context, WidgetRef ref) async {
-    final service = ref.read(githubUpdaterServiceProvider);
-    final updateInfo = await service.checkForUpdates();
-    
-    if (updateInfo != null && context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => UpdaterDialog(updateInfo: updateInfo),
-      );
+    if (_isCheckingOrShowing) return;
+    _isCheckingOrShowing = true;
+
+    try {
+      final service = ref.read(githubUpdaterServiceProvider);
+      final updateInfo = await service.checkForUpdates();
+      
+      if (updateInfo != null && context.mounted) {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => UpdaterDialog(updateInfo: updateInfo),
+        );
+      }
+    } finally {
+      _isCheckingOrShowing = false;
     }
   }
 

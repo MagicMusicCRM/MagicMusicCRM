@@ -27,17 +27,16 @@ class _LeadsWidgetState extends State<LeadsWidget> {
   @override
   void initState() {
     super.initState();
-    _loadLeads();
+    _subscribeLeads();
   }
 
-  Future<void> _loadLeads() async {
-    setState(() => _loading = true);
-    try {
-      final data = await _supabase
-          .from('leads')
-          .select()
-          .order('created_at', ascending: false);
-
+  void _subscribeLeads() {
+    _supabase
+        .from('leads')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .listen((data) {
+      if (!mounted) return;
       final grouped = <String, List<Map<String, dynamic>>>{};
       final foundStatuses = <String>{};
       for (final s in _defaultStatuses) {
@@ -62,9 +61,9 @@ class _LeadsWidgetState extends State<LeadsWidget> {
         _activeStatuses = active;
         _loading = false;
       });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    }, onError: (err) {
+      if (mounted) setState(() => _loading = false);
+    });
   }
 
   Future<void> _addLead() async {
@@ -79,18 +78,15 @@ class _LeadsWidgetState extends State<LeadsWidget> {
         'source': result['source'],
         'status': 'new',
       });
-      _loadLeads();
     }
   }
 
   Future<void> _moveStatus(String id, String newStatus) async {
     await _supabase.from('leads').update({'status': newStatus}).eq('id', id);
-    _loadLeads();
   }
 
   Future<void> _deleteLead(String id) async {
     await _supabase.from('leads').delete().eq('id', id);
-    _loadLeads();
   }
 
   @override

@@ -104,8 +104,11 @@ class GithubUpdaterService {
   bool _isNewerVersion(String latest, String current) {
     if (latest == current) return false;
     
-    final latestParts = latest.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-    final currentParts = current.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final latestClean = latest.split('+').first;
+    final currentClean = current.split('+').first;
+    
+    final latestParts = latestClean.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final currentParts = currentClean.split('.').map((e) => int.tryParse(e) ?? 0).toList();
     
     for (var i = 0; i < latestParts.length && i < currentParts.length; i++) {
       if (latestParts[i] > currentParts[i]) return true;

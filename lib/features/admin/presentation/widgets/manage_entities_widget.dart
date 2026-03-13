@@ -6,6 +6,23 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 final entitiesProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, table) async {
   final supabase = Supabase.instance.client;
+
+  bool isDisposed = false;
+  final channelName = 'public:-';
+  final channel = supabase.channel(channelName).onPostgresChanges(
+    event: PostgresChangeEvent.all,
+    schema: 'public',
+    table: table,
+    callback: (payload) {
+      if (!isDisposed) ref.invalidateSelf();
+    },
+  ).subscribe();
+
+  ref.onDispose(() {
+    isDisposed = true;
+    supabase.removeChannel(channel);
+  });
+
   if (table == 'students') {
     final r = await supabase.from('students').select('*, profiles(first_name, last_name, phone)');
     return List<Map<String, dynamic>>.from(r);

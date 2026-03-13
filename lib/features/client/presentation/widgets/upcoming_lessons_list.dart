@@ -16,6 +16,22 @@ final upcomingLessonsProvider = FutureProvider<List<Map<String, dynamic>>>((ref)
       .maybeSingle();
   if (studentRes == null) return [];
 
+  bool isDisposed = false;
+  final channelName = 'public:lessons-${DateTime.now().millisecondsSinceEpoch}';
+  final channel = supabase.channel(channelName).onPostgresChanges(
+    event: PostgresChangeEvent.all,
+    schema: 'public',
+    table: 'lessons',
+    callback: (payload) {
+      if (!isDisposed) ref.invalidateSelf();
+    },
+  ).subscribe();
+
+  ref.onDispose(() {
+    isDisposed = true;
+    supabase.removeChannel(channel);
+  });
+
   final lessons = await supabase
       .from('lessons')
       .select('*, branches(name), teachers(first_name, last_name, profiles(first_name, last_name)), rooms(name)')

@@ -37,10 +37,11 @@ class MagicMusicApp extends ConsumerStatefulWidget {
   ConsumerState<MagicMusicApp> createState() => _MagicMusicAppState();
 }
 
-class _MagicMusicAppState extends ConsumerState<MagicMusicApp> {
+class _MagicMusicAppState extends ConsumerState<MagicMusicApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) {
       ref.read(notificationServiceProvider).initialize().catchError((e) {
         debugPrint('Notification service init error: $e');
@@ -49,6 +50,21 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp> {
         debugPrint('Updater check error: $e');
       });
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      UpdaterDialog.checkAndShow(context, ref).catchError((e) {
+        debugPrint('Updater check error: $e');
+      });
+    }
   }
 
   @override

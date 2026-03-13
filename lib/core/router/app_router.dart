@@ -39,6 +39,22 @@ String _roleToRoute(String role) {
   }
 }
 
+// ── Role Stream ────────────────────────────────────────────────────────────────
+final _roleStreamProvider = StreamProvider<String>((ref) {
+  final session = Supabase.instance.client.auth.currentSession;
+  if (session == null) return Stream.value('client');
+  return Supabase.instance.client
+      .from('profiles')
+      .stream(primaryKey: ['id'])
+      .eq('id', session.user.id)
+      .map((event) {
+        if (event.isNotEmpty) {
+          return (event.first['role'] as String?) ?? 'client';
+        }
+        return 'client';
+      });
+});
+
 // ── Auth state notifier ───────────────────────────────────────────────────────
 final _authStateProvider = StreamProvider<AuthState>((ref) {
   return Supabase.instance.client.auth.onAuthStateChange;
@@ -55,6 +71,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
     });
     authNotifier.value++;
+  });
+
+  ref.listen(_roleStreamProvider, (_, next) {
+    next.whenData((role) {
+      if (_cachedRole != role) {
+        _cachedRole = role;
+        authNotifier.value++;
+      }
+    });
   });
 
   return GoRouter(
