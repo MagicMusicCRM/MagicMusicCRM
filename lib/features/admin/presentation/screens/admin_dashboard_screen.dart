@@ -17,14 +17,32 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _currentIndex = 0;
+  final GlobalKey<ManageEntitiesWidgetState> _manageKey = GlobalKey<ManageEntitiesWidgetState>();
 
-  final List<Widget> _tabs = const [
-    AdminOverviewWidget(),
-    ManageEntitiesWidget(),
-    LeadsWidget(),
-    CustomFieldConfigWidget(),
-    MassNotificationWidget(),
-  ];
+  late final List<Widget> _tabs;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = [
+      AdminOverviewWidget(
+        onTabChange: (index, subIndex) {
+          setState(() {
+            _currentIndex = index;
+          });
+          if (index == 1 && subIndex != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _manageKey.currentState?.setTab(subIndex);
+            });
+          }
+        },
+      ),
+      ManageEntitiesWidget(key: _manageKey),
+      const LeadsWidget(),
+      const CustomFieldConfigWidget(),
+      const MassNotificationWidget(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {

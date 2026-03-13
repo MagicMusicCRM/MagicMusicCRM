@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lessons_kanban_widget.dart';
 
 final entitiesProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, table) async {
   final supabase = Supabase.instance.client;
@@ -49,19 +50,26 @@ final entitiesProvider = FutureProvider.family<List<Map<String, dynamic>>, Strin
 });
 
 class ManageEntitiesWidget extends ConsumerStatefulWidget {
-  const ManageEntitiesWidget({super.key});
+  final int initialTabIndex;
+  const ManageEntitiesWidget({super.key, this.initialTabIndex = 0});
 
   @override
-  ConsumerState<ManageEntitiesWidget> createState() => _ManageEntitiesWidgetState();
+  ConsumerState<ManageEntitiesWidget> createState() => ManageEntitiesWidgetState();
 }
 
-class _ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> with SingleTickerProviderStateMixin {
+class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  void setTab(int index) {
+    if (index >= 0 && index < _tabController.length) {
+      _tabController.animateTo(index);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this, initialIndex: widget.initialTabIndex);
     _tabController.addListener(() {
       if (mounted) setState(() {});
     });
@@ -88,6 +96,7 @@ class _ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> wit
               Tab(text: 'Преподаватели'),
               Tab(text: 'Группы'),
               Tab(text: 'Занятия'),
+              Tab(text: 'Канбан'),
             ],
           ),
           Expanded(
@@ -98,6 +107,7 @@ class _ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> wit
                 _TeachersList(),
                 _GroupsList(),
                 _LessonsList(),
+                LessonsKanbanWidget(),
               ],
             ),
           ),
@@ -130,7 +140,7 @@ class _StudentsList extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
       error: (e, _) => Center(child: Text('РћС€РёР±РєР°: $e', style: const TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('РќРµС‚ СѓС‡РµРЅРёРєРѕРІ', style: TextStyle(color: AppTheme.textSecondary)));
+        if (items.isEmpty) return const Center(child: Text('Нет учеников', style: TextStyle(color: AppTheme.textSecondary)));
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('students')),
@@ -150,7 +160,7 @@ class _StudentsList extends ConsumerWidget {
                     child: Text(name.isNotEmpty ? name[0] : '?',
                         style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700)),
                   ),
-                  title: Text(name.isEmpty ? 'Р‘РµР· РёРјРµРЅРё' : name),
+                  title: Text(name.isEmpty ? 'Без имени' : name),
                   subtitle: phone.isNotEmpty ? Text(phone, style: const TextStyle(color: AppTheme.textSecondary)) : null,
                   trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
                 ),
@@ -173,7 +183,7 @@ class _TeachersList extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
       error: (e, _) => Center(child: Text('РћС€РёР±РєР°: $e', style: const TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('РќРµС‚ РїСЂРµРїРѕРґР°РІР°С‚РµР»РµР№', style: TextStyle(color: AppTheme.textSecondary)));
+        if (items.isEmpty) return const Center(child: Text('Нет преподавателей', style: TextStyle(color: AppTheme.textSecondary)));
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('teachers')),
@@ -193,7 +203,14 @@ class _TeachersList extends ConsumerWidget {
               String spec = 'Не указана';
               if (dList != null && dList.isNotEmpty) {
                 try {
-                  spec = dList.map((d) => d['Name'].toString()).join(', ');
+                  if (dList is List) {
+                    spec = dList.map((d) {
+                      if (d is Map) return d['Name']?.toString() ?? d['name']?.toString() ?? '';
+                      return d.toString();
+                    }).where((s) => s.isNotEmpty).join(', ');
+                  } else {
+                    spec = dList.toString();
+                  }
                 } catch (e) {
                   spec = 'Ошибка парсинга';
                 }
@@ -214,8 +231,8 @@ class _TeachersList extends ConsumerWidget {
                     child: Text(name.isNotEmpty ? name[0] : '?',
                         style: const TextStyle(color: AppTheme.secondaryGold, fontWeight: FontWeight.w700)),
                   ),
-                  title: Text(name.isEmpty ? 'Р‘РµР· РёРјРµРЅРё' : name),
-                  subtitle: Text('РЎРїРµС†РёР°Р»РёР·Р°С†РёСЏ: $spec', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  title: Text(name.isEmpty ? 'Без имени' : name),
+                  subtitle: Text('Специализация: $spec', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                   trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
                 ),
               );
@@ -232,9 +249,9 @@ class _LessonsList extends ConsumerWidget {
 
   String _statusLabel(String? s) {
     switch (s) {
-      case 'completed': return 'Р—Р°РІРµСЂС€РµРЅРѕ';
-      case 'cancelled': return 'РћС‚РјРµРЅРµРЅРѕ';
-      default: return 'Р—Р°РїР»Р°РЅРёСЂРѕРІР°РЅРѕ';
+      case 'completed': return 'Завершено';
+      case 'cancelled': return 'Отменено';
+      default: return 'Запланировано';
     }
   }
 
@@ -253,7 +270,7 @@ class _LessonsList extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
       error: (e, _) => Center(child: Text('РћС€РёР±РєР°: $e', style: const TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('РќРµС‚ Р·Р°РЅСЏС‚РёР№', style: TextStyle(color: AppTheme.textSecondary)));
+        if (items.isEmpty) return const Center(child: Text('Нет занятий', style: TextStyle(color: AppTheme.textSecondary)));
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('lessons')),
@@ -263,7 +280,7 @@ class _LessonsList extends ConsumerWidget {
             itemBuilder: (ctx, i) {
               final l = items[i];
               final dt = DateTime.tryParse(l['scheduled_at'] ?? '');
-              final dateStr = dt != null ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal()) : 'вЂ”';
+              final dateStr = dt != null ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal()) : '—';
               final student = l['students']?['profiles'];
               final teacher = l['teachers'];
               
@@ -274,7 +291,7 @@ class _LessonsList extends ConsumerWidget {
                 studentName = 'Группа: ${l['groups']['name']}';
               }
               
-              var teacherName = 'Р‘РµР· РїСЂРµРїРѕРґР°РІР°С‚РµР»СЏ';
+              var teacherName = 'Без преподавателя';
               if (teacher != null) {
                 final tf = teacher['first_name'] as String? ?? '';
                 final tl = teacher['last_name'] as String? ?? '';
@@ -285,10 +302,10 @@ class _LessonsList extends ConsumerWidget {
                     teacherName = '${tp['first_name'] ?? ''} ${tp['last_name'] ?? ''}'.trim();
                   }
                 }
-                if (teacherName.isEmpty) teacherName = 'Р‘РµР· РїСЂРµРїРѕРґР°РІР°С‚РµР»СЏ';
+                if (teacherName.isEmpty) teacherName = 'Без преподавателя';
               }
               
-              final room = l['rooms']?['name'] as String? ?? 'вЂ”';
+              final room = l['rooms']?['name'] as String? ?? '—';
               final status = l['status'] as String?;
 
               return Card(
@@ -303,9 +320,9 @@ class _LessonsList extends ConsumerWidget {
                           children: [
                             Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                             const SizedBox(height: 2),
-                            Text('РЈС‡РµРЅРёРє: $studentName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            Text('РџСЂРµРї.: $teacherName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            Text('РљР°Р±РёРЅРµС‚: $room', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            Text('Ученик: $studentName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            Text('Преп.: $teacherName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            Text('Кабинет: $room', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                           ],
                         ),
                       ),

@@ -100,7 +100,7 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
         'group_id': _selectedGroupId,
         'student_id': _selectedStudentId,
         'branch_id': _selectedBranchId,
-        'room_id': _selectedRoomId,
+        'room_id': _selectedRoomId, // Can be null
         'scheduled_at': scheduledAt,
         'status': 'scheduled',
       });
@@ -144,11 +144,11 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
               value: _selectedTeacherId,
               decoration: const InputDecoration(labelText: 'Преподаватель *'),
               items: _teachers.map((t) {
-                final fn = t['first_name'] ?? '';
-                final ln = t['last_name'] ?? '';
+                final fn = t['first_name']?.toString() ?? '';
+                final ln = t['last_name']?.toString() ?? '';
                 final p = t['profiles'] as Map<String, dynamic>?;
                 final name = '$fn $ln'.trim().isEmpty ? '${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim() : '$fn $ln'.trim();
-                return DropdownMenuItem(value: t['id'].toString(), child: Text(name));
+                return DropdownMenuItem(value: t['id'].toString(), child: Text(name.isEmpty ? 'Без имени' : name));
               }).toList(),
               onChanged: (val) => setState(() => _selectedTeacherId = val),
             ),
@@ -158,7 +158,7 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
               decoration: const InputDecoration(labelText: 'Группа (если есть)'),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Индивидуально')),
-                ..._groups.map((g) => DropdownMenuItem(value: g['id'].toString(), child: Text(g['name']?.toString() ?? 'Без имени'))),
+                ..._groups.map((g) => DropdownMenuItem(value: g['id'].toString(), child: Text(g['name']?.toString() ?? 'Без названия'))),
               ],
               onChanged: (val) => setState(() {
                 _selectedGroupId = val;
@@ -173,7 +173,7 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                 items: _students.map((s) {
                   final p = s['profiles'] as Map<String, dynamic>?;
                   final name = '${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim();
-                  return DropdownMenuItem(value: s['id'].toString(), child: Text(name));
+                  return DropdownMenuItem(value: s['id'].toString(), child: Text(name.isEmpty ? 'Без имени' : name));
                 }).toList(),
                 onChanged: (val) => setState(() => _selectedStudentId = val),
               ),
