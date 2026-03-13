@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/constants/env.dart';
 import 'package:magic_music_crm/core/router/app_router.dart';
 import 'package:magic_music_crm/core/services/notification_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/updater_dialog.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +44,9 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp> {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       ref.read(notificationServiceProvider).initialize().catchError((e) {
         debugPrint('Notification service init error: $e');
+      });
+      UpdaterDialog.checkAndShow(context, ref).catchError((e) {
+        debugPrint('Updater check error: $e');
       });
     });
   }

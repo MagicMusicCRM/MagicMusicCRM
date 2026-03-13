@@ -1,0 +1,97 @@
+import os
+import json
+import urllib.request
+import urllib.parse
+from datetime import datetime
+import time
+
+API_URL = "https://sokol.t8s.ru/Api/V2/"
+AUTH_KEY = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n"
+
+# Create backup directory
+backup_dir = "hollihop_backup_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+os.makedirs(backup_dir, exist_ok=True)
+
+def fetch_data(endpoint, params=None):
+    if params is None:
+        params = {}
+    params['authkey'] = AUTH_KEY
+    
+    query_string = urllib.parse.urlencode(params)
+    url = f"{API_URL}{endpoint}?{query_string}"
+    
+    print(f"Fetching from {endpoint}...")
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return data
+    except Exception as e:
+        print(f"Error fetching {endpoint}: {e}")
+        return None
+
+def save_json(filename, data):
+    path = os.path.join(backup_dir, filename)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print(f"Saved {filename}")
+
+def main():
+    print(f"Starting HolliHop CRM Export to {backup_dir}...")
+    
+    # 1. Export Locations
+    locations = fetch_data("GetLocations")
+    if locations:
+        save_json("locations.json", locations)
+        
+    # 2. Export Offices
+    offices = fetch_data("GetOffices")
+    if offices:
+        save_json("offices.json", offices)
+        
+    # 3. Export Lead Statuses
+    statuses = fetch_data("GetLeadStatuses")
+    if statuses:
+        save_json("lead_statuses.json", statuses)
+        
+    # 4. Export Teachers
+    # Teachers don't seem to be paginated by default if there are few, but let's just fetch all.
+    teachers = fetch_data("GetTeachers")
+    if teachers:
+        save_json("teachers.json", teachers)
+        
+    # 5. Export EdUnits (Classes/Groups)
+    edunits = fetch_data("GetEdUnits")
+    if edunits:
+        save_json("ed_units.json", edunits)
+        
+    # 6. Export Leads (with pagination)
+    all_leads = []
+    skip = 0
+    take = 200
+    
+    print("Fetching leads (this might take a while)...")
+    while True:
+        leads_response = fetch_data("GetLeads", {"skip": skip, "take": take})
+        if not leads_response or "Leads" not in leads_response:
+            break
+            
+        leads_chunk = leads_response["Leads"]
+        all_leads.extend(leads_chunk)
+        
+        print(f"  Fetched {len(leads_chunk)} leads (Total: {len(all_leads)})...")
+        
+        if len(leads_chunk) < take:
+            break
+            
+        skip += take
+        time.sleep(0.1) # Be nice to the API
+        
+    if all_leads:
+        save_json("leads.json", {"Leads": all_leads})
+        print(f"Successfully exported {len(all_leads)} leads.")
+        
+    print("Export complete!")
+
+if __name__ == "__main__":
+    main()

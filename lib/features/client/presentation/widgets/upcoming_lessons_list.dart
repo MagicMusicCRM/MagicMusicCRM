@@ -18,7 +18,7 @@ final upcomingLessonsProvider = FutureProvider<List<Map<String, dynamic>>>((ref)
 
   final lessons = await supabase
       .from('lessons')
-      .select('*, branches(name), teachers(profiles(first_name, last_name)), rooms(name)')
+      .select('*, branches(name), teachers(first_name, last_name, profiles(first_name, last_name)), rooms(name)')
       .eq('student_id', studentRes['id'])
       .gte('scheduled_at', DateTime.now().toIso8601String())
       .order('scheduled_at', ascending: true)
@@ -82,8 +82,14 @@ class UpcomingLessonsList extends ConsumerWidget {
             itemBuilder: (context, index) {
               final lesson = lessons[index];
               final branchName = lesson['branches']?['name'] as String? ?? 'Без филиала';
-              final teacherFirst = lesson['teachers']?['profiles']?['first_name'] as String? ?? '';
-              final teacherLast = lesson['teachers']?['profiles']?['last_name'] as String? ?? '';
+              final teacher = lesson['teachers'];
+              final tp = teacher?['profiles'];
+              var teacherFirst = teacher?['first_name'] as String? ?? '';
+              var teacherLast = teacher?['last_name'] as String? ?? '';
+              if (teacherFirst.isEmpty && teacherLast.isEmpty) {
+                teacherFirst = tp?['first_name'] as String? ?? '';
+                teacherLast = tp?['last_name'] as String? ?? '';
+              }
               final teacherName = '$teacherFirst $teacherLast'.trim();
               final room = lesson['rooms']?['name'] as String? ?? '';
               final status = lesson['status'] as String?;

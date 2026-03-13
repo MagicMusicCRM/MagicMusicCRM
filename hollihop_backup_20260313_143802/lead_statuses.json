@@ -1,0 +1,34 @@
+{
+  "Statuses": [
+    {
+      "Id": 1,
+      "Name": "В процессе",
+      "Type": "regular"
+    },
+    {
+      "Id": 5,
+      "Name": "Пробный Урок",
+      "Type": "regular"
+    },
+    {
+      "Id": 6,
+      "Name": "Звонок после пробного",
+      "Type": "regular"
+    },
+    {
+      "Id": 2,
+      "Name": "Успешный",
+      "Type": "successful"
+    },
+    {
+      "Id": 4,
+      "Name": "Отложенный",
+      "Type": "pending"
+    },
+    {
+      "Id": 3,
+      "Name": "Отказ",
+      "Type": "unsuccessful"
+    }
+  ]
+}
