@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/github_updater_service.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 class UpdaterDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> updateInfo;
@@ -45,16 +44,6 @@ class _UpdaterDialogState extends ConsumerState<UpdaterDialog> {
   bool _hasError = false;
 
   Future<void> _startDownload() async {
-    // Request storage storage permissions if needed
-    if (await Permission.storage.request().isDenied) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Storage permission is required to download updates.')),
-        );
-      }
-      return;
-    }
-
     setState(() {
       _isDownloading = true;
       _hasError = false;

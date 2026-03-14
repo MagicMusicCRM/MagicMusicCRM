@@ -13,7 +13,7 @@ final lessonsFilteredProvider = FutureProvider.family<List<Map<String, dynamic>>
   final supabase = Supabase.instance.client;
   final r = await supabase
       .from('lessons')
-      .select('*, students(profiles(first_name, last_name), student_balances(balance)), teachers(profiles(first_name, last_name)), rooms(name), groups(name)')
+      .select('*, students(profiles(first_name, last_name)), teachers(profiles(first_name, last_name)), rooms(name), groups(name)')
       .gte('scheduled_at', startOfDay.toIso8601String())
       .lt('scheduled_at', endOfDay.toIso8601String())
       .order('scheduled_at');
@@ -286,9 +286,7 @@ class _LessonKanbanCard extends ConsumerWidget {
     final teacherName = teacher != null ? '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim() : '—';
     final groupName = lesson['groups']?['name'] ?? 'Индивидуально';
     
-    final studentData = lesson['students'];
-    final balanceArray = studentData?['student_balances'] as List<dynamic>?;
-    final balance = (balanceArray != null && balanceArray.isNotEmpty) ? (balanceArray[0]['balance'] as num?) : null;
+
     
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -332,14 +330,7 @@ class _LessonKanbanCard extends ConsumerWidget {
                     ],
                   ),
 
-                  if (balance != null && balance < 0) ...[
-                    const SizedBox(width: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(color: AppTheme.danger, borderRadius: BorderRadius.circular(4)),
-                      child: Text('${balance.toInt()}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
-                    ),
-                  ],
+
                 ],
               ),
               const SizedBox(height: 8),

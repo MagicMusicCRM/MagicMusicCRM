@@ -3,7 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 class ManagerOverviewWidget extends StatefulWidget {
-  const ManagerOverviewWidget({super.key});
+  final Function(int index, int? subIndex)? onTabChange;
+  const ManagerOverviewWidget({super.key, this.onTabChange});
 
   @override
   State<ManagerOverviewWidget> createState() => _ManagerOverviewWidgetState();
@@ -115,11 +116,11 @@ class _ManagerOverviewWidgetState extends State<ManagerOverviewWidget> {
               crossAxisSpacing: 12,
               childAspectRatio: 1.6,
               children: [
-                _StatCard(icon: Icons.people_alt_rounded, label: 'Учеников', value: '${_stats['students'] ?? 0}', color: AppTheme.primaryPurple),
-                _StatCard(icon: Icons.school_rounded, label: 'Преподавателей', value: '${_stats['teachers'] ?? 0}', color: AppTheme.secondaryGold),
-                _StatCard(icon: Icons.check_circle_rounded, label: 'Занятий в месяц', value: '${_stats['lessons_done'] ?? 0}', color: AppTheme.success),
-                _StatCard(icon: Icons.task_alt_rounded, label: 'Открытых задач', value: '${_stats['tasks_open'] ?? 0}', color: AppTheme.warning),
-                _StatCard(icon: Icons.person_add_rounded, label: 'Новых лидов', value: '${_stats['leads_new'] ?? 0}', color: AppTheme.danger),
+                GestureDetector(onTap: () => widget.onTabChange?.call(1, 0), child: _StatCard(icon: Icons.people_alt_rounded, label: 'Учеников', value: '${_stats['students'] ?? 0}', color: AppTheme.primaryPurple)),
+                GestureDetector(onTap: () => widget.onTabChange?.call(1, 1), child: _StatCard(icon: Icons.school_rounded, label: 'Преподавателей', value: '${_stats['teachers'] ?? 0}', color: AppTheme.secondaryGold)),
+                GestureDetector(onTap: () => widget.onTabChange?.call(1, 4), child: _StatCard(icon: Icons.check_circle_rounded, label: 'Занятий в месяц', value: '${_stats['lessons_done'] ?? 0}', color: AppTheme.success)),
+                GestureDetector(onTap: () => widget.onTabChange?.call(2, null), child: _StatCard(icon: Icons.task_alt_rounded, label: 'Открытых задач', value: '${_stats['tasks_open'] ?? 0}', color: AppTheme.warning)),
+                GestureDetector(onTap: () => widget.onTabChange?.call(3, null), child: _StatCard(icon: Icons.person_add_rounded, label: 'Новых лидов', value: '${_stats['leads_new'] ?? 0}', color: AppTheme.danger)),
               ],
             ),
           ],

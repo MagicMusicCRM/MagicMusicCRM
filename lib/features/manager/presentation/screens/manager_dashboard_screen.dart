@@ -11,6 +11,9 @@ import '../widgets/finance_widget.dart';
 import '../widgets/reports_widget.dart';
 import '../widgets/debtors_widget.dart';
 
+import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/custom_field_config_widget.dart';
+
 class ManagerDashboardScreen extends ConsumerStatefulWidget {
   const ManagerDashboardScreen({super.key});
 
@@ -20,6 +23,7 @@ class ManagerDashboardScreen extends ConsumerStatefulWidget {
 
 class _ManagerDashboardScreenState extends ConsumerState<ManagerDashboardScreen> {
   int _currentIndex = 0;
+  final GlobalKey<ManageEntitiesWidgetState> _manageKey = GlobalKey<ManageEntitiesWidgetState>();
 
   @override
   void initState() {
@@ -31,13 +35,26 @@ class _ManagerDashboardScreenState extends ConsumerState<ManagerDashboardScreen>
     });
   }
 
-  final List<Widget> _tabs = [
-    const ManagerOverviewWidget(),
+  late final List<Widget> _tabs = [
+    ManagerOverviewWidget(
+      onTabChange: (index, subIndex) {
+        setState(() {
+          _currentIndex = index;
+        });
+        if (index == 1 && subIndex != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _manageKey.currentState?.setTab(subIndex);
+          });
+        }
+      },
+    ),
+    ManageEntitiesWidget(key: _manageKey),
     const TasksWidget(),
     const LeadsWidget(),
     const FinanceWidget(),
     const DebtorsWidget(),
     const ReportsWidget(),
+    const CustomFieldConfigWidget(),
   ];
 
   @override
@@ -72,14 +89,17 @@ class _ManagerDashboardScreenState extends ConsumerState<ManagerDashboardScreen>
       body: _tabs[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
+        type: BottomNavigationBarType.fixed,
         onTap: (i) => setState(() => _currentIndex = i),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Обзор'),
+          BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Управление'),
           BottomNavigationBarItem(icon: Icon(Icons.task_alt_rounded), label: 'Задачи'),
           BottomNavigationBarItem(icon: Icon(Icons.people_outline_rounded), label: 'Лиды'),
           BottomNavigationBarItem(icon: Icon(Icons.payments_rounded), label: 'Финансы'),
           BottomNavigationBarItem(icon: Icon(Icons.money_off_rounded), label: 'Долги'),
           BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'Отчёты'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Настройки'),
         ],
       ),
     );

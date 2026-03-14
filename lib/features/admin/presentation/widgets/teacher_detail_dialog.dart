@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart'; // for entitiesProvider invalidation
 
 class TeacherDetailDialog extends StatefulWidget {
   final Map<String, dynamic> teacher;

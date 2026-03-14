@@ -121,53 +121,55 @@ class _FinancialDashboardWidgetState extends State<FinancialDashboardWidget> {
 
   Widget _buildRevenueExpensesChart() {
     return Card(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Прибыльность (6 мес)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          AspectRatio(
-            aspectRatio: 1.7,
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: _chartData.map((m) => m.revenue > m.expenses ? m.revenue : m.expenses).reduce((a, b) => a > b ? a : b) * 1.2,
-                barGroups: _chartData.asMap().entries.map((e) {
-                  return BarChartGroupData(
-                    x: e.key,
-                    barRods: [
-                      BarChartRodData(toY: e.value.revenue, color: AppTheme.success, width: 12, borderRadius: BorderRadius.circular(4)),
-                      BarChartRodData(toY: e.value.expenses, color: AppTheme.danger, width: 12, borderRadius: BorderRadius.circular(4)),
-                    ],
-                  );
-                }).toList(),
-                titlesData: FlTitlesData(
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (val, _) => Text(_chartData[val.toInt()].month, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Прибыльность (6 мес)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            AspectRatio(
+              aspectRatio: 1.7,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: _chartData.map((m) => m.revenue > m.expenses ? m.revenue : m.expenses).reduce((a, b) => a > b ? a : b) * 1.2,
+                  barGroups: _chartData.asMap().entries.map((e) {
+                    return BarChartGroupData(
+                      x: e.key,
+                      barRods: [
+                        BarChartRodData(toY: e.value.revenue, color: AppTheme.success, width: 12, borderRadius: BorderRadius.circular(4)),
+                        BarChartRodData(toY: e.value.expenses, color: AppTheme.danger, width: 12, borderRadius: BorderRadius.circular(4)),
+                      ],
+                    );
+                  }).toList(),
+                  titlesData: FlTitlesData(
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (val, _) => Text(_chartData[val.toInt()].month, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                      ),
                     ),
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
-                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  gridData: const FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
                 ),
-                gridData: const FlGridData(show: false),
-                borderData: FlBorderData(show: false),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _LegendItem(color: AppTheme.success, label: 'Доход'),
-              const SizedBox(width: 20),
-              _LegendItem(color: AppTheme.danger, label: 'Расход'),
-            ],
-          ),
-        ],
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _LegendItem(color: AppTheme.success, label: 'Доход'),
+                const SizedBox(width: 20),
+                _LegendItem(color: AppTheme.danger, label: 'Расход'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -186,7 +188,7 @@ class _FinancialDashboardWidgetState extends State<FinancialDashboardWidget> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _teacherEfficiency.length,
-              separatorBuilder: (_, __) => const Divider(height: 24),
+              separatorBuilder: (_, _) => const Divider(height: 24),
               itemBuilder: (context, i) {
                 final t = _teacherEfficiency[i];
                 return Row(

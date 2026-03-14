@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -90,17 +89,16 @@ class GithubUpdaterService {
   }
 
   Future<String> _getApkSavePath() async {
-    Directory? tempDir;
-    if (Platform.isAndroid) {
-      tempDir = await getExternalStorageDirectory();
-    } else {
-      tempDir = await getTemporaryDirectory();
+    final supportDir = await getApplicationSupportDirectory();
+    final apkPath = '${supportDir.path}/update.apk';
+    
+    // Clean up previous update file if it exists
+    final file = File(apkPath);
+    if (await file.exists()) {
+      await file.delete();
     }
     
-    // Fallback if getExternalStorageDirectory fails
-    tempDir ??= await getTemporaryDirectory();
-    
-    return '${tempDir.path}/update.apk';
+    return apkPath;
   }
 
   bool _isNewerVersion(String latest, String current) {

@@ -151,4 +151,61 @@ for e in edunits_data:
 if groups_payload:
     upsert_data("groups", groups_payload)
 
+# 6. Import Comments (Student & Lead Logs)
+print("Importing Comments...")
+
+# We need maps to link HolliHop IDs to Supabase UUIDs
+# Students map already exists if we ran import_students_and_lessons.py
+# For leads it's in leads_payload but we better fetch from DB for certainty
+headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+res_l = requests.get(f"{SUPABASE_URL}/rest/v1/leads?select=id,hollihop_id", headers=headers)
+leads_map = {l["hollihop_id"]: l["id"] for l in res_l.json()}
+
+res_s = requests.get(f"{SUPABASE_URL}/rest/v1/students?select=id,hollihop_id", headers=headers)
+students_map = {s["hollihop_id"]: s["id"] for s in res_s.json()}
+
+comments_payload = []
+
+def process_logs(filename, entity_type, id_key, id_map):
+    path = data_dir / filename
+    if not os.path.exists(path):
+        return
+    
+    with open(path, encoding='utf-8') as f:
+        logs_data = json.load(f).get('Logs', [])
+    
+    for log in logs_data:
+        hh_entity_id = log.get(id_key)
+        supabase_id = id_map.get(hh_entity_id)
+        
+        if supabase_id and log.get('Comment'):
+            comments_payload.append({
+                "entity_id": supabase_id,
+                "entity_type": entity_type,
+                "content": log.get('Comment'),
+                "created_at": log.get('Date'),
+                # We don't map author for now, default to system or null
+            })
+
+process_logs('student_logs.json', 'student', 'StudentIdSubj', students_map)
+process_logs('lead_logs.json', 'lead', 'LeadIdSubj', leads_map)
+
+if comments_payload:
+    # We use a custom upsert strategy for comments to avoid duplicates
+    # Since comments don't have unique IDs in our schema from HH easily, 
+    # we just insert them. If this script is run multiple times, 
+    # it might duplicate unless we add a hash or HH log ID.
+    # For now, let's just insert.
+    url = f"{SUPABASE_URL}/rest/v1/entity_comments"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
+    batch_size = 500
+    for i in range(0, len(comments_payload), batch_size):
+        batch = comments_payload[i:i+batch_size]
+        requests.post(url, headers=headers, json=batch)
+    print(f"Imported {len(comments_payload)} comments.")
+
 print("Import to Supabase finished successfully!")

@@ -154,12 +154,18 @@ def main():
         save_json("tasks.json", {"Tasks": all_tasks})
 
     # 10. Export Student Logs (History/Comments)
-    # This often includes communications and comments
     print("Fetching student logs...")
     logs_response = fetch_data("GetStudentLogs", {"take": 2000}) 
     if logs_response:
         save_json("student_logs.json", logs_response)
         print("Successfully exported student logs.")
+
+    # 11. Export Lead Logs (History/Comments)
+    print("Fetching lead logs...")
+    lead_logs_response = fetch_data("GetLeadLogs", {"take": 2000})
+    if lead_logs_response:
+        save_json("lead_logs.json", lead_logs_response)
+        print("Successfully exported lead logs.")
 
     print("Export complete!")
 
