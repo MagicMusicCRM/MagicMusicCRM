@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
+import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
+
 class ReportsWidget extends StatefulWidget {
   const ReportsWidget({super.key});
 
@@ -10,16 +12,25 @@ class ReportsWidget extends StatefulWidget {
   State<ReportsWidget> createState() => _ReportsWidgetState();
 }
 
-class _ReportsWidgetState extends State<ReportsWidget> {
+class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   final _supabase = Supabase.instance.client;
   List<_MonthData> _monthlyData = [];
+  List<Map<String, dynamic>> _lessonsRaw = [];
   bool _loading = true;
   Map<String, dynamic> _summary = {};
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadReports();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadReports() async {
@@ -31,7 +42,7 @@ class _ReportsWidgetState extends State<ReportsWidget> {
       final [lessons, payments, students] = await Future.wait([
         _supabase
             .from('lessons')
-            .select('scheduled_at, status')
+            .select('scheduled_at, status, teacher_id, teachers(profiles(first_name, last_name)), groups(name, price_per_lesson)')
             .gte('scheduled_at', sixMonthsAgo.toIso8601String()),
         _supabase
             .from('payments')
@@ -85,6 +96,7 @@ class _ReportsWidgetState extends State<ReportsWidget> {
 
       setState(() {
         _monthlyData = monthList;
+        _lessonsRaw = List<Map<String, dynamic>>.from(lessons);
         _summary = {
           'attendance': attendanceRate,
           'revenue': totalRevenue,
@@ -103,6 +115,32 @@ class _ReportsWidgetState extends State<ReportsWidget> {
       return const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple));
     }
 
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabController,
+          labelColor: AppTheme.primaryPurple,
+          unselectedLabelColor: AppTheme.textSecondary,
+          indicatorColor: AppTheme.primaryPurple,
+          tabs: const [
+            Tab(text: 'Аналитика'),
+            Tab(text: 'Финансы'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildOverviewTab(),
+              const FinancialDashboardWidget(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOverviewTab() {
     final fmt = NumberFormat('#,##0', 'ru');
     final maxRevenue = _monthlyData.isEmpty ? 1.0 : _monthlyData.map((m) => m.revenue).reduce((a, b) => a > b ? a : b);
     final maxLessons = _monthlyData.isEmpty ? 1 : _monthlyData.map((m) => m.lessons).reduce((a, b) => a > b ? a : b);
@@ -254,6 +292,10 @@ class _ReportsWidgetState extends State<ReportsWidget> {
             ),
             const SizedBox(height: 24),
 
+            // Teacher Revenue Breakdown
+            _buildTeacherRevenueBreakdown(),
+            const SizedBox(height: 24),
+
             // Monthly table
             const Text('Детализация', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
@@ -277,6 +319,62 @@ class _ReportsWidgetState extends State<ReportsWidget> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTeacherRevenueBreakdown() {
+    final Map<String, double> teacherRevenue = {};
+    final Map<String, String> teacherNames = {};
+
+    for (var l in _lessonsRaw) {
+      if (l['status'] == 'completed') {
+        final teacherId = l['teacher_id']?.toString() ?? 'unknown';
+        final teacher = l['teachers']?['profiles'];
+        final tName = teacher != null 
+            ? '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim()
+            : 'Неизвестный учитель';
+        
+        final cost = (l['groups']?['price_per_lesson'] as num?)?.toDouble() ?? 1500;
+        
+        teacherRevenue[teacherId] = (teacherRevenue[teacherId] ?? 0) + cost;
+        teacherNames[teacherId] = tName;
+      }
+    }
+
+    final sortedTeachers = teacherRevenue.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final fmt = NumberFormat('#,##0', 'ru');
+
+    if (sortedTeachers.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Выручка по учителям', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+        Card(
+          child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: sortedTeachers.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (ctx, i) {
+              final e = sortedTeachers[i];
+              final name = teacherNames[e.key] ?? '—';
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                  radius: 16,
+                  child: const Icon(Icons.person_outline_rounded, size: 16, color: AppTheme.primaryPurple),
+                ),
+                title: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                trailing: Text('${fmt.format(e.value)} ₽', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.success)),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lessons_kanban_widget.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
 
 final entitiesProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, table) async {
   final supabase = Supabase.instance.client;
@@ -113,20 +115,99 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> with
           ),
         ],
       ),
-      floatingActionButton: _tabController.index == 3
-          ? FloatingActionButton.extended(
-              onPressed: () async {
-                final created = await CreateLessonDialog.show(context);
-                if (created == true) {
-                  ref.invalidate(entitiesProvider('lessons'));
-                }
-              },
-              backgroundColor: AppTheme.primaryPurple,
-              icon: const Icon(Icons.add_rounded, color: Colors.white),
-              label: const Text('Создать занятие', style: TextStyle(color: Colors.white)),
-            )
-          : null,
+      floatingActionButton: _buildFAB(context, ref),
     );
+  }
+
+  Widget? _buildFAB(BuildContext context, WidgetRef ref) {
+    if (_tabController.index == 0) {
+      return FloatingActionButton.extended(
+        onPressed: () => _createStudent(context, ref),
+        backgroundColor: AppTheme.primaryPurple,
+        icon: const Icon(Icons.person_add_rounded, color: Colors.white),
+        label: const Text('Новый ученик', style: TextStyle(color: Colors.white)),
+      );
+    }
+    if (_tabController.index == 2) {
+      return FloatingActionButton.extended(
+        onPressed: () => _createGroup(context, ref),
+        backgroundColor: AppTheme.primaryPurple,
+        icon: const Icon(Icons.group_add_rounded, color: Colors.white),
+        label: const Text('Новая группа', style: TextStyle(color: Colors.white)),
+      );
+    }
+    if (_tabController.index == 3) {
+      return FloatingActionButton.extended(
+        onPressed: () async {
+          final created = await CreateLessonDialog.show(context);
+          if (created == true) {
+            ref.invalidate(entitiesProvider('lessons'));
+          }
+        },
+        backgroundColor: AppTheme.primaryPurple,
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: const Text('Создать занятие', style: TextStyle(color: Colors.white)),
+      );
+    }
+    return null;
+  }
+
+  Future<void> _createStudent(BuildContext context, WidgetRef ref) async {
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Новый ученик'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Имя Фамилия')),
+            const SizedBox(height: 12),
+            TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Телефон'), keyboardType: TextInputType.phone),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Создать')),
+        ],
+      ),
+    );
+
+    if (result == true && nameCtrl.text.isNotEmpty) {
+      final names = nameCtrl.text.trim().split(' ');
+      final fn = names.first;
+      final ln = names.length > 1 ? names.sublist(1).join(' ') : '';
+      
+      await Supabase.instance.client.from('students').insert({
+        'first_name': fn,
+        'last_name': ln,
+        'phone': phoneCtrl.text.trim(),
+      });
+      ref.invalidate(entitiesProvider('students'));
+    }
+  }
+
+  Future<void> _createGroup(BuildContext context, WidgetRef ref) async {
+    final nameCtrl = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Новая группа'),
+        content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Название группы')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Создать')),
+        ],
+      ),
+    );
+
+    if (result == true && nameCtrl.text.isNotEmpty) {
+      await Supabase.instance.client.from('groups').insert({
+        'name': nameCtrl.text.trim(),
+      });
+      ref.invalidate(entitiesProvider('groups'));
+    }
   }
 }
 
@@ -155,6 +236,7 @@ class _StudentsList extends ConsumerWidget {
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
+                  onTap: () => context.push('/student/${item['id']}'),
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.primaryPurple.withAlpha(30),
                     child: Text(name.isNotEmpty ? name[0] : '?',
@@ -203,14 +285,10 @@ class _TeachersList extends ConsumerWidget {
               String spec = 'Не указана';
               if (dList != null && dList.isNotEmpty) {
                 try {
-                  if (dList is List) {
-                    spec = dList.map((d) {
-                      if (d is Map) return d['Name']?.toString() ?? d['name']?.toString() ?? '';
-                      return d.toString();
-                    }).where((s) => s.isNotEmpty).join(', ');
-                  } else {
-                    spec = dList.toString();
-                  }
+                  spec = dList.map((d) {
+                    if (d is Map) return d['Name']?.toString() ?? d['name']?.toString() ?? '';
+                    return d.toString();
+                  }).where((s) => s.isNotEmpty).join(', ');
                 } catch (e) {
                   spec = 'Ошибка парсинга';
                 }
@@ -334,6 +412,18 @@ class _LessonsList extends ConsumerWidget {
                         ),
                         child: Text(_statusLabel(status), style: TextStyle(color: _statusColor(status), fontSize: 11, fontWeight: FontWeight.w600)),
                       ),
+                      const SizedBox(width: 4),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert_rounded, size: 20, color: AppTheme.textSecondary),
+                        onSelected: (val) {
+                          if (val == 'cancel') _cancelLesson(context, ref, l['id']);
+                          if (val == 'reschedule') _rescheduleLesson(context, ref, l['id'], dt);
+                        },
+                        itemBuilder: (ctx) => [
+                          const PopupMenuItem(value: 'cancel', child: Text('Отменить занятие')),
+                          const PopupMenuItem(value: 'reschedule', child: Text('Перенести')),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -343,6 +433,48 @@ class _LessonsList extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _cancelLesson(BuildContext context, WidgetRef ref, String lessonId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Отменить занятие?'),
+        content: const Text('Статус занятия будет изменен на "Отменено".'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Назад')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Отменить', style: TextStyle(color: AppTheme.danger))),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await Supabase.instance.client.from('lessons').update({'status': 'cancelled'}).eq('id', lessonId);
+      ref.invalidate(entitiesProvider('lessons'));
+    }
+  }
+
+  Future<void> _rescheduleLesson(BuildContext context, WidgetRef ref, String lessonId, DateTime? current) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: current ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (date == null || !context.mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current ?? DateTime.now()),
+    );
+    if (time == null || !context.mounted) return;
+
+    final newDateTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    
+    await Supabase.instance.client.from('lessons').update({
+      'scheduled_at': newDateTime.toIso8601String(),
+    }).eq('id', lessonId);
+    ref.invalidate(entitiesProvider('lessons'));
   }
 }
 
@@ -386,6 +518,12 @@ class _GroupsList extends ConsumerWidget {
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
+                  onTap: () async {
+                    final updated = await GroupDetailDialog.show(context, item);
+                    if (updated == true) {
+                      ref.invalidate(entitiesProvider('groups'));
+                    }
+                  },
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.primaryPurple.withAlpha(30),
                     child: const Icon(Icons.group_rounded, color: AppTheme.primaryPurple),

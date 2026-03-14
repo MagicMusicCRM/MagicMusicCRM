@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 class TasksWidget extends StatefulWidget {
@@ -27,7 +28,7 @@ class _TasksWidgetState extends State<TasksWidget> {
     try {
       var query = _supabase
           .from('tasks')
-          .select('*, profiles!tasks_assigned_to_fkey(first_name, last_name), branches(name)');
+          .select('*, profiles!tasks_assigned_to_fkey(first_name, last_name), branches(name), students(profiles(first_name, last_name)), leads(name), groups(name), teachers(profiles(first_name, last_name))');
 
       if (_filter != 'all') {
         query = query.eq('status', _filter);
@@ -46,6 +47,10 @@ class _TasksWidgetState extends State<TasksWidget> {
   Future<void> _createTask() async {
     final branches = await _supabase.from('branches').select('id, name');
     final employees = await _supabase.from('profiles').select('id, first_name, last_name');
+    final students = await _supabase.from('students').select('id, profiles(first_name, last_name)');
+    final leads = await _supabase.from('leads').select('id, name');
+    final groups = await _supabase.from('groups').select('id, name');
+    final teachers = await _supabase.from('teachers').select('id, profiles(first_name, last_name)');
     
     if (!mounted) return;
 
@@ -54,6 +59,10 @@ class _TasksWidgetState extends State<TasksWidget> {
       builder: (ctx) => _TaskDialog(
         branches: List<Map<String, dynamic>>.from(branches),
         employees: List<Map<String, dynamic>>.from(employees),
+        students: List<Map<String, dynamic>>.from(students),
+        leads: List<Map<String, dynamic>>.from(leads),
+        groups: List<Map<String, dynamic>>.from(groups),
+        teachers: List<Map<String, dynamic>>.from(teachers),
       ),
     );
     if (result != null) {
@@ -63,6 +72,10 @@ class _TasksWidgetState extends State<TasksWidget> {
         'priority': result['priority'],
         'branch_id': result['branch_id'],
         'assigned_to': result['assigned_to'],
+        'student_id': result['student_id'],
+        'lead_id': result['lead_id'],
+        'group_id': result['group_id'],
+        'teacher_id': result['teacher_id'],
         'due_date': result['due_date'],
         'status': 'todo',
         'created_by': _supabase.auth.currentUser?.id,
@@ -198,6 +211,28 @@ class _TaskCard extends StatelessWidget {
         ? '${assignee['first_name'] ?? ''} ${assignee['last_name'] ?? ''}'.trim()
         : null;
 
+    final student = task['students'];
+    final lead = task['leads'];
+
+    String? entityText;
+    VoidCallback? onEntityTap;
+
+    if (student != null) {
+      final sp = student['profiles'];
+      entityText = 'Ученик: ${sp?['first_name'] ?? ''} ${sp?['last_name'] ?? ''}'.trim();
+      onEntityTap = () => context.push('/student/${student['id']}');
+    } else if (lead != null) {
+      entityText = 'Лид: ${lead['name'] ?? ''}'.trim();
+      // Add lead detail navigation when ready
+    } else if (task['groups'] != null) {
+      entityText = 'Группа: ${task['groups']['name']}';
+      // onEntityTap = () => context.push('/group/${task['groups']['id']}');
+    } else if (task['teachers'] != null) {
+      final tp = task['teachers']['profiles'];
+      entityText = 'Учитель: ${tp?['first_name'] ?? ''} ${tp?['last_name'] ?? ''}'.trim();
+      // onEntityTap = () => context.push('/teacher/${task['teachers']['id']}');
+    }
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
@@ -243,6 +278,12 @@ class _TaskCard extends StatelessWidget {
                 if (dueDate != null) _Tag(label: 'До: $dueDate', color: AppTheme.textSecondary),
                 if (assigneeText != null && assigneeText.isNotEmpty)
                   _Tag(label: assigneeText, color: AppTheme.secondaryGold),
+                if (entityText != null)
+                  _Tag(
+                    label: entityText, 
+                    color: AppTheme.primaryPurple, 
+                    onTap: onEntityTap,
+                  ),
               ],
             ),
           ],
@@ -255,17 +296,31 @@ class _TaskCard extends StatelessWidget {
 class _Tag extends StatelessWidget {
   final String label;
   final Color color;
-  const _Tag({required this.label, required this.color});
+  final VoidCallback? onTap;
+  const _Tag({required this.label, required this.color, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withAlpha(25),
-        borderRadius: BorderRadius.circular(20),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withAlpha(25),
+          borderRadius: BorderRadius.circular(20),
+          border: onTap != null ? Border.all(color: color.withAlpha(50)) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+            if (onTap != null) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.open_in_new_rounded, size: 10, color: color),
+            ],
+          ],
+        ),
       ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -273,7 +328,18 @@ class _Tag extends StatelessWidget {
 class _TaskDialog extends StatefulWidget {
   final List<Map<String, dynamic>> branches;
   final List<Map<String, dynamic>> employees;
-  const _TaskDialog({required this.branches, required this.employees});
+  final List<Map<String, dynamic>> students;
+  final List<Map<String, dynamic>> leads;
+  final List<Map<String, dynamic>> groups;
+  final List<Map<String, dynamic>> teachers;
+  const _TaskDialog({
+    required this.branches, 
+    required this.employees,
+    required this.students,
+    required this.leads,
+    required this.groups,
+    required this.teachers,
+  });
 
   @override
   State<_TaskDialog> createState() => _TaskDialogState();
@@ -285,6 +351,10 @@ class _TaskDialogState extends State<_TaskDialog> {
   String _priority = 'medium';
   String? _selectedBranchId;
   String? _selectedEmployeeId;
+  String? _selectedStudentId;
+  String? _selectedLeadId;
+  String? _selectedGroupId;
+  String? _selectedTeacherId;
   DateTime? _dueDate;
 
   @override
@@ -329,13 +399,107 @@ class _TaskDialogState extends State<_TaskDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _selectedEmployeeId,
+              isExpanded: true,
               dropdownColor: AppTheme.cardDark,
               decoration: const InputDecoration(labelText: 'Ответственный'),
-              items: widget.employees.map((e) => DropdownMenuItem(
-                value: e['id'].toString(), 
-                child: Text('${e['first_name'] ?? ''} ${e['last_name'] ?? ''}'.trim())
-              )).toList(),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Не назначен')),
+                ...widget.employees.map((e) => DropdownMenuItem(
+                  value: e['id'].toString(), 
+                  child: Text('${e['first_name'] ?? ''} ${e['last_name'] ?? ''}'.trim())
+                )),
+              ],
               onChanged: (v) => setState(() => _selectedEmployeeId = v),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedStudentId,
+              isExpanded: true,
+              dropdownColor: AppTheme.cardDark,
+              decoration: const InputDecoration(labelText: 'Привязать к ученику'),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Не привязывать')),
+                ...widget.students.map((s) {
+                  final p = s['profiles'];
+                  return DropdownMenuItem(
+                    value: s['id'].toString(), 
+                    child: Text('${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim())
+                  );
+                }),
+              ],
+              onChanged: (v) => setState(() {
+                _selectedStudentId = v;
+                if (v != null) _selectedLeadId = null;
+              }),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedLeadId,
+              isExpanded: true,
+              dropdownColor: AppTheme.cardDark,
+              decoration: const InputDecoration(labelText: 'Привязать к лиду'),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Не привязывать')),
+                ...widget.leads.map((l) => DropdownMenuItem(
+                  value: l['id'].toString(), 
+                  child: Text(l['name'] ?? l['first_name'] ?? '')
+                )),
+              ],
+              onChanged: (v) => setState(() {
+                _selectedLeadId = v;
+                if (v != null) {
+                  _selectedStudentId = null;
+                  _selectedGroupId = null;
+                  _selectedTeacherId = null;
+                }
+              }),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedGroupId,
+              isExpanded: true,
+              dropdownColor: AppTheme.cardDark,
+              decoration: const InputDecoration(labelText: 'Привязать к группе'),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Не привязывать')),
+                ...widget.groups.map((g) => DropdownMenuItem(
+                  value: g['id'].toString(), 
+                  child: Text(g['name'] ?? '')
+                )),
+              ],
+              onChanged: (v) => setState(() {
+                _selectedGroupId = v;
+                if (v != null) {
+                  _selectedStudentId = null;
+                  _selectedLeadId = null;
+                  _selectedTeacherId = null;
+                }
+              }),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedTeacherId,
+              isExpanded: true,
+              dropdownColor: AppTheme.cardDark,
+              decoration: const InputDecoration(labelText: 'Привязать к учителю'),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Не привязывать')),
+                ...widget.teachers.map((t) {
+                  final p = t['profiles'];
+                  return DropdownMenuItem(
+                    value: t['id'].toString(), 
+                    child: Text('${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim())
+                  );
+                }),
+              ],
+              onChanged: (v) => setState(() {
+                _selectedTeacherId = v;
+                if (v != null) {
+                  _selectedStudentId = null;
+                  _selectedLeadId = null;
+                  _selectedGroupId = null;
+                }
+              }),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -365,7 +529,11 @@ class _TaskDialogState extends State<_TaskDialog> {
                 'priority': _priority,
                 'branch_id': _selectedBranchId,
                 'assigned_to': _selectedEmployeeId,
-                'due_date': _dueDate?.toIso8601String(),
+                 'student_id': _selectedStudentId,
+                 'lead_id': _selectedLeadId,
+                 'group_id': _selectedGroupId,
+                 'teacher_id': _selectedTeacherId,
+                 'due_date': _dueDate?.toIso8601String(),
               });
             }
           },

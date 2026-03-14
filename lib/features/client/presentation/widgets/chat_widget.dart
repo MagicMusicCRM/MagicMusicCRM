@@ -22,10 +22,31 @@ class _ChatWidgetState extends State<ChatWidget> {
         .from('messages')
         .stream(primaryKey: ['id'])
         .order('created_at', ascending: false)
-        .map((maps) => maps.where((m) => 
-            m['sender_id'] == widget.currentUserId || 
-            m['receiver_id'] == widget.currentUserId
-        ).map((m) => Map<String, dynamic>.from(m)).toList());
+        .map((maps) {
+          final filtered = maps.where((m) => 
+              m['sender_id'] == widget.currentUserId || 
+              m['receiver_id'] == widget.currentUserId
+          ).map((m) => Map<String, dynamic>.from(m)).toList();
+          
+          // Auto-mark as read if we are viewing it
+          _markAsRead(filtered);
+          
+          return filtered;
+        });
+  }
+
+  Future<void> _markAsRead(List<Map<String, dynamic>> messages) async {
+    final unreadIds = messages
+        .where((m) => m['receiver_id'] == widget.currentUserId && m['is_read'] == false)
+        .map((m) => m['id'] as String)
+        .toList();
+
+    if (unreadIds.isNotEmpty) {
+      await Supabase.instance.client
+          .from('messages')
+          .update({'is_read': true, 'read_at': DateTime.now().toIso8601String()})
+          .filter('id', 'in', unreadIds);
+    }
   }
 
   Future<void> _sendMessage() async {

@@ -134,7 +134,33 @@ def main():
     if all_edunit_students:
         save_json("ed_unit_students.json", {"EdUnitStudents": all_edunit_students})
         print(f"Successfully exported {len(all_edunit_students)} EdUnitStudents.")
-        
+
+    # 9. Export Tasks
+    all_tasks = []
+    skip = 0
+    print("Fetching tasks...")
+    while True:
+        tasks_response = fetch_data("GetTasks", {"skip": skip, "take": take})
+        if not tasks_response or "Tasks" not in tasks_response:
+            break
+        chunk = tasks_response["Tasks"]
+        all_tasks.extend(chunk)
+        print(f"  Fetched {len(chunk)} tasks...")
+        if len(chunk) < take:
+            break
+        skip += take
+        time.sleep(0.1)
+    if all_tasks:
+        save_json("tasks.json", {"Tasks": all_tasks})
+
+    # 10. Export Student Logs (History/Comments)
+    # This often includes communications and comments
+    print("Fetching student logs...")
+    logs_response = fetch_data("GetStudentLogs", {"take": 2000}) 
+    if logs_response:
+        save_json("student_logs.json", logs_response)
+        print("Successfully exported student logs.")
+
     print("Export complete!")
 
 if __name__ == "__main__":

@@ -1,0 +1,721 @@
+{
+  "Teachers": [
+    {
+      "Id": 42,
+      "Created": "2023-05-20T19:23:28",
+      "FirstName": "Наталия",
+      "LastName": "Назарова(П)",
+      "MiddleName": "Николаевна",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "1995-12-29",
+      "Mobile": "89015269023",
+      "UseMobileBySystem": false,
+      "Phone": "89015269023",
+      "EMail": "natalialter111@gmail.com",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 67,
+      "Created": "2023-06-02T14:21:55",
+      "FirstName": "Максим",
+      "LastName": "Афанасов",
+      "StatusId": 1,
+      "Status": "Работает",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "1997-10-01",
+      "Mobile": "89153560699",
+      "UseMobileBySystem": false,
+      "Phone": "89153560699",
+      "EMail": "maksimdrums@gmail.com",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 1412,
+      "Created": "2024-01-13T13:57:49",
+      "FirstName": "Антон",
+      "LastName": "Кондрашов",
+      "MiddleName": "Витальевич",
+      "StatusId": 1,
+      "Status": "Работает",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "1995-01-20",
+      "UseMobileBySystem": false,
+      "EMail": "harleydav7@gmail.com",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 2635,
+      "Created": "2024-04-30T14:23:33",
+      "FirstName": "Александр",
+      "LastName": "Ребров",
+      "MiddleName": "Николаевич",
+      "StatusId": 1,
+      "Status": "Работает",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "1993-09-15",
+      "UseMobileBySystem": false,
+      "EMail": "sedovat93@mail.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 3767,
+      "Created": "2024-07-26T11:11:16",
+      "FirstName": "ЗАМЕНА",
+      "LastName": "ПЕДАГОГА",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "UseMobileBySystem": false,
+      "EMail": "natalialter2.0@gmail.com",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 4008,
+      "Created": "2024-10-27T10:18:46",
+      "FirstName": "Михаил",
+      "LastName": "Земченков",
+      "MiddleName": "Александрович",
+      "StatusId": 1,
+      "Status": "Работает",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "1998-10-02",
+      "UseMobileBySystem": false,
+      "EMail": "denimqaa@icloud.com",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 4261,
+      "Created": "2025-01-16T18:47:38",
+      "FirstName": "Дина",
+      "LastName": "Бажанова",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "1981-01-29",
+      "UseMobileBySystem": false,
+      "EMail": "dinautkuzova@gmail.com",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 5295,
+      "Created": "2025-01-23T11:22:03",
+      "FirstName": "Дмитрий",
+      "LastName": "Дорошенко",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "1999-10-18",
+      "UseMobileBySystem": false,
+      "EMail": "dimadorsh@mail.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 5792,
+      "Created": "2025-06-23T10:39:08",
+      "FirstName": "Аделина",
+      "LastName": "Джафарова",
+      "MiddleName": "Джафаровна",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "2005-10-04",
+      "UseMobileBySystem": false,
+      "Phone": "89872113127",
+      "EMail": "adelina.dzhafarova@mail.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 6867,
+      "Created": "2025-07-10T07:58:55",
+      "FirstName": "Юстина",
+      "LastName": "Шарапановская",
+      "MiddleName": "Витальевна",
+      "StatusId": 2,
+      "Status": "Уволен",
+      "Fired": true,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "UseMobileBySystem": false,
+      "EMail": "yustinakim17@gmail.com",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7030,
+      "Created": "2025-09-03T18:36:56",
+      "FirstName": "Эрика",
+      "LastName": "Зимина",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "2000-01-07",
+      "UseMobileBySystem": false,
+      "EMail": "erikazimina777@gmail.com",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7169,
+      "Created": "2025-10-02T12:17:54",
+      "FirstName": "Фёдор",
+      "LastName": "Лагуткин",
+      "StatusId": 1,
+      "Status": "Работает",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "UseMobileBySystem": false,
+      "EMail": "Zor17.ravisky3@mail.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7297,
+      "Created": "2025-10-28T09:16:24",
+      "FirstName": "Анастасия",
+      "LastName": "Никитенко",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "UseMobileBySystem": false,
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7316,
+      "Created": "2025-10-31T14:26:24",
+      "FirstName": "Юлия",
+      "LastName": "Давыдова",
+      "MiddleName": "Владиславовна",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "UseMobileBySystem": false,
+      "EMail": "oratov@yandex.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7344,
+      "Created": "2025-11-05T15:20:21",
+      "FirstName": "Ася",
+      "LastName": "Виноградова",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "UseMobileBySystem": false,
+      "EMail": "asyavinogradova2004@yandex.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7380,
+      "Created": "2025-11-12T11:39:43",
+      "FirstName": "Станислав",
+      "LastName": "Козарев",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "2002-09-05",
+      "UseMobileBySystem": false,
+      "EMail": "stas.kozarev@bk.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7428,
+      "Created": "2025-11-21T18:49:03",
+      "FirstName": "Николай",
+      "LastName": "Карцев",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "UseMobileBySystem": false,
+      "EMail": "Karceras@yandex.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7516,
+      "Created": "2025-12-10T15:49:35",
+      "FirstName": "Катрина",
+      "LastName": "Подлесная",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Mobile": "89137696059",
+      "UseMobileBySystem": false,
+      "EMail": "adamanty_girl@mail.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7586,
+      "Created": "2025-12-24T17:19:34",
+      "FirstName": "Юстина",
+      "LastName": "Попова",
+      "MiddleName": "Аркадьевна",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "UseMobileBySystem": false,
+      "EMail": "yustina_popova@icloud.com",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    },
+    {
+      "Id": 7749,
+      "Created": "2026-02-17T15:56:31",
+      "FirstName": "Елизавета",
+      "LastName": "Попилян",
+      "MiddleName": "Владимировна",
+      "Fired": false,
+      "Disciplines": [
+        "Гитара",
+        "Фортепиано",
+        "Вокал",
+        "Барабаны"
+      ],
+      "Levels": [
+        "Без опыта",
+        "Начальный",
+        "Средний"
+      ],
+      "Maturities": [
+        "Взрослые",
+        "Дети"
+      ],
+      "Birthday": "2003-11-23",
+      "UseMobileBySystem": false,
+      "EMail": "popilyan.elizaveta@mail.ru",
+      "UseEMailBySystem": true,
+      "Offices": [
+        {
+          "Id": 1,
+          "Name": "Сокол"
+        },
+        {
+          "Id": 2,
+          "Name": "Спортивная"
+        }
+      ],
+      "Corporative": false
+    }
+  ]
+}

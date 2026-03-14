@@ -12,67 +12,64 @@ class TeacherChatWidget extends StatefulWidget {
 
 class _TeacherChatWidgetState extends State<TeacherChatWidget> {
   final _supabase = Supabase.instance.client;
-  List<Map<String, dynamic>> _contacts = [];
-  bool _loading = true;
-  String? _selectedContactId;
-  String? _selectedContactName;
+  late final Stream<List<Map<String, dynamic>>> _contactsStream;
 
   @override
   void initState() {
     super.initState();
-    _loadContacts();
-  }
-
-  Future<void> _loadContacts() async {
-    setState(() => _loading = true);
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
-
-      // Get unique people who've exchanged messages with this teacher
-      final sent = await _supabase
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId != null) {
+      _contactsStream = _supabase
           .from('messages')
-          .select('receiver_id, profiles!messages_receiver_id_fkey(id, first_name, last_name)')
-          .eq('sender_id', userId);
-      final received = await _supabase
-          .from('messages')
-          .select('sender_id, profiles!messages_sender_id_fkey(id, first_name, last_name)')
-          .eq('receiver_id', userId);
-
-      final seen = <String>{};
-      final contacts = <Map<String, dynamic>>[];
-
-      for (final m in sent) {
-        final p = m['profiles'] as Map<String, dynamic>?;
-        if (p != null && p['id'] != userId && seen.add(p['id'] as String)) {
-          contacts.add(p);
-        }
-      }
-      for (final m in received) {
-        final p = m['profiles'] as Map<String, dynamic>?;
-        if (p != null && p['id'] != userId && seen.add(p['id'] as String)) {
-          contacts.add(p);
-        }
-      }
-
-      setState(() {
-        _contacts = contacts;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() => _loading = false);
+          .stream(primaryKey: ['id'])
+          .map((data) {
+            final seen = <String>{};
+            final contacts = <Map<String, dynamic>>[];
+            
+            // Collect unique chat partners
+            for (final m in data) {
+              final String? otherId = m['sender_id'] == userId ? m['receiver_id'] : m['sender_id'];
+              if (otherId != null && otherId != userId && seen.add(otherId)) {
+                // We'll need profiles for these IDs. In a stream, we can't easily join.
+                // For now, we'll store the IDs and load profile info separately or use a view.
+                contacts.add({'id': otherId});
+              }
+            }
+            return contacts;
+          });
     }
   }
+
+  // Helper to load profile info for a list of IDs
+  Future<Map<String, dynamic>> _getProfile(String id) async {
+    final res = await _supabase.from('profiles').select().eq('id', id).single();
+    return res;
+  }
+
+  // Helper to get unread count for a contact
+  Stream<int> _unreadCountStream(String contactId) {
+    final userId = _supabase.auth.currentUser?.id;
+    return _supabase
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .map((data) => data.where((m) => 
+            m['sender_id'] == contactId && 
+            m['receiver_id'] == userId && 
+            m['is_read'] == false
+        ).length);
+  }
+
+  String? _selectedContactId;
+  String? _selectedContactName;
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple));
-    }
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return const Center(child: Text('Пожалуйста, войдите в систему'));
 
     if (_selectedContactId != null) {
       return _ChatView(
-        currentUserId: _supabase.auth.currentUser!.id,
+        currentUserId: userId,
         contactId: _selectedContactId!,
         contactName: _selectedContactName ?? '',
         onBack: () => setState(() {
@@ -82,39 +79,75 @@ class _TeacherChatWidgetState extends State<TeacherChatWidget> {
       );
     }
 
-    if (_contacts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.chat_bubble_outline_rounded, size: 64, color: AppTheme.textSecondary.withAlpha(80)),
-            const SizedBox(height: 16),
-            const Text('Нет сообщений', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
-            const SizedBox(height: 4),
-            const Text('Переписка появится после первых сообщений', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-          ],
-        ),
-      );
-    }
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _contactsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple));
+        }
+        
+        final contacts = snapshot.data ?? [];
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: _contacts.length,
-      itemBuilder: (context, i) {
-        final c = _contacts[i];
-        final name = '${c['first_name'] ?? ''} ${c['last_name'] ?? ''}'.trim();
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: AppTheme.primaryPurple.withAlpha(30),
-            child: Text(name.isNotEmpty ? name[0] : '?',
-                style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700)),
-          ),
-          title: Text(name.isEmpty ? 'Пользователь' : name),
-          trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
-          onTap: () => setState(() {
-            _selectedContactId = c['id'] as String;
-            _selectedContactName = name;
-          }),
+        if (contacts.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.chat_bubble_outline_rounded, size: 64, color: AppTheme.textSecondary.withAlpha(80)),
+                const SizedBox(height: 16),
+                const Text('Нет сообщений', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(8),
+          itemCount: contacts.length,
+          itemBuilder: (context, i) {
+            final c = contacts[i];
+            return FutureBuilder<Map<String, dynamic>>(
+              future: _getProfile(c['id']),
+              builder: (context, profSnap) {
+                if (!profSnap.hasData) return const SizedBox.shrink();
+                final p = profSnap.data!;
+                final name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+                
+                return StreamBuilder<int>(
+                  stream: _unreadCountStream(c['id']),
+                  builder: (context, unreadSnap) {
+                    final unreadCount = unreadSnap.data ?? 0;
+                    
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                        child: Text(name.isNotEmpty ? name[0] : '?',
+                            style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700)),
+                      ),
+                      title: Text(name.isEmpty ? 'Пользователь' : name),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (unreadCount > 0)
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(color: AppTheme.danger, shape: BoxShape.circle),
+                              child: Text('$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+                        ],
+                      ),
+                      onTap: () => setState(() {
+                        _selectedContactId = c['id'] as String;
+                        _selectedContactName = name;
+                      }),
+                    );
+                  }
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -147,7 +180,10 @@ class _ChatViewState extends State<_ChatView> {
   @override
   void initState() {
     super.initState();
-    _loadMessages();
+    _messagesStream();
+  }
+
+  void _messagesStream() {
     _supabase
         .from('messages')
         .stream(primaryKey: ['id'])
@@ -158,28 +194,34 @@ class _ChatViewState extends State<_ChatView> {
             (m['sender_id'] == widget.currentUserId && m['receiver_id'] == widget.contactId) ||
             (m['sender_id'] == widget.contactId && m['receiver_id'] == widget.currentUserId)
           ).toList();
+          
           setState(() {
             _messages = List<Map<String, dynamic>>.from(filtered);
             _loading = false;
           });
+
+          // Mark incoming as read
+          _markAsRead();
+
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (_scrollController.hasClients) {
-              _scrollController.animateTo(_scrollController.position.maxScrollExtent,
-                  duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+              _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
             }
           });
         });
   }
 
-  Future<void> _loadMessages() async {
-    final data = await _supabase.from('messages').select()
-        .or('and(sender_id.eq.${widget.currentUserId},receiver_id.eq.${widget.contactId}),and(sender_id.eq.${widget.contactId},receiver_id.eq.${widget.currentUserId})')
-        .order('created_at');
-    if (mounted) {
-      setState(() {
-        _messages = List<Map<String, dynamic>>.from(data);
-        _loading = false;
-      });
+  Future<void> _markAsRead() async {
+    final unreadIds = _messages
+        .where((m) => m['receiver_id'] == widget.currentUserId && m['is_read'] == false)
+        .map((m) => m['id'] as String)
+        .toList();
+
+    if (unreadIds.isNotEmpty) {
+      await _supabase
+          .from('messages')
+          .update({'is_read': true, 'read_at': DateTime.now().toIso8601String()})
+          .filter('id', 'in', unreadIds);
     }
   }
 

@@ -7,7 +7,7 @@ SUPABASE_URL = 'https://xblpnywnlhfgofskbdxb.supabase.co'
 SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHBueXdubGhmZ29mc2tiZHhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDA5ODcsImV4cCI6MjA4ODcxNjk4N30.qRuC_TQ8rlz68fzi0geqqdbkA7ABRBEyw3GyMkMJJxg'
 
 # The path to the latest backup folder
-project_dir = Path("C:/Users/potyl/Projects/MagicMusicCRM")
+project_dir = Path("c:/Users/User/Kvazar Projects/MagicMusicCRM")
 backup_dirs = sorted(project_dir.glob("hollihop_backup_*"), reverse=True)
 if not backup_dirs:
     print("No backup directory found!")

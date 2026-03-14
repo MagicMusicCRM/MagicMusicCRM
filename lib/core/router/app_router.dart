@@ -7,6 +7,7 @@ import 'package:magic_music_crm/features/client/presentation/screens/client_dash
 import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
+import 'package:magic_music_crm/features/admin/presentation/screens/student_detail_screen.dart';
 
 // ── Role cache ───────────────────────────────────────────────────────────────
 String? _cachedRole;
@@ -131,6 +132,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/manager',
         builder: (context, state) => const ManagerDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/student/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return StudentDetailScreen(studentId: id);
+        },
       ),
     ],
   );

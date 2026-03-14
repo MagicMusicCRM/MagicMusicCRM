@@ -82,4 +82,48 @@ class NotificationService {
       }
     }
   }
+  Future<void> sendNotification({
+    required String userId,
+    required String templateName,
+    Map<String, String>? variables,
+  }) async {
+    final supabase = Supabase.instance.client;
+    
+    try {
+      // 1. Fetch template
+      final templateRes = await supabase
+          .from('notification_templates')
+          .select()
+          .eq('name', templateName)
+          .maybeSingle();
+      
+      if (templateRes == null) {
+        debugPrint('Notification template not found: $templateName');
+        return;
+      }
+
+      // 2. Perform variable replacement (simple string replacement for MVP)
+      String title = templateRes['title_template'];
+      String body = templateRes['body_template'];
+      
+      variables?.forEach((key, value) {
+        title = title.replaceAll('{{$key}}', value);
+        body = body.replaceAll('{{$key}}', value);
+      });
+
+      // 3. Record the notification in a queue (or send immediately via edge function)
+      // For now, we simulate by logging and could insert into a 'notifications_queue' table
+      debugPrint('Sending notification to $userId: $title - $body');
+      
+      // await supabase.from('notifications_log').insert({
+      //   'user_id': userId,
+      //   'title': title,
+      //   'body': body,
+      //   'status': 'sent',
+      // });
+
+    } catch (e) {
+      debugPrint('Error sending notification: $e');
+    }
+  }
 }

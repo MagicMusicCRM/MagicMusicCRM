@@ -45,7 +45,7 @@ class _TeacherScheduleWidgetState extends State<TeacherScheduleWidget> {
       final data = await _supabase
           .from('lessons')
           .select('''
-            id, scheduled_at, status, duration_minutes,
+            id, scheduled_at, status, duration_minutes, lesson_plan,
             students(profiles(first_name, last_name)),
             rooms(name),
             branches(name)
@@ -158,6 +158,33 @@ class _LessonCard extends StatelessWidget {
     } catch (_) {}
   }
 
+  Future<void> _editLessonPlan(BuildContext context) async {
+    final controller = TextEditingController(text: lesson['lesson_plan'] ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('План занятия'),
+        content: TextField(
+          controller: controller,
+          maxLines: 5,
+          decoration: const InputDecoration(hintText: 'Что планируете делать на уроке?'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Сохранить')),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      await Supabase.instance.client
+          .from('lessons')
+          .update({'lesson_plan': result.trim()})
+          .eq('id', lesson['id']);
+      onRefresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dt = DateTime.tryParse(lesson['scheduled_at'] ?? '');
@@ -187,7 +214,7 @@ class _LessonCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(time, style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700, fontSize: 15)),
-                  Text('${duration}мин', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                  Text('$duration мин', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
                 ],
               ),
             ),
@@ -205,12 +232,34 @@ class _LessonCard extends StatelessWidget {
                       Text(roomName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                     ],
                   ),
+                  if (lesson['lesson_plan'] != null && (lesson['lesson_plan'] as String).isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'План: ${lesson['lesson_plan']}',
+                      style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 11, fontStyle: FontStyle.italic),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
               ),
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_horiz_rounded, size: 18, color: AppTheme.textSecondary),
+                  color: AppTheme.cardDark,
+                  onSelected: (v) {
+                    if (v == 'plan') _editLessonPlan(context);
+                    if (v == 'complete') _markCompleted(context);
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'plan', child: Text('План урока')),
+                    if (status == 'planned')
+                      const PopupMenuItem(value: 'complete', child: Text('Завершить')),
+                  ],
+                ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(

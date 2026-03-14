@@ -9,6 +9,7 @@ import '../widgets/tasks_widget.dart';
 import '../widgets/leads_widget.dart';
 import '../widgets/finance_widget.dart';
 import '../widgets/reports_widget.dart';
+import '../widgets/debtors_widget.dart';
 
 class ManagerDashboardScreen extends ConsumerStatefulWidget {
   const ManagerDashboardScreen({super.key});
@@ -30,12 +31,13 @@ class _ManagerDashboardScreenState extends ConsumerState<ManagerDashboardScreen>
     });
   }
 
-  final List<Widget> _tabs = const [
-    ManagerOverviewWidget(),
-    TasksWidget(),
-    LeadsWidget(),
-    FinanceWidget(),
-    ReportsWidget(),
+  final List<Widget> _tabs = [
+    const ManagerOverviewWidget(),
+    const TasksWidget(),
+    const LeadsWidget(),
+    const FinanceWidget(),
+    const DebtorsWidget(),
+    const ReportsWidget(),
   ];
 
   @override
@@ -76,6 +78,7 @@ class _ManagerDashboardScreenState extends ConsumerState<ManagerDashboardScreen>
           BottomNavigationBarItem(icon: Icon(Icons.task_alt_rounded), label: 'Задачи'),
           BottomNavigationBarItem(icon: Icon(Icons.people_outline_rounded), label: 'Лиды'),
           BottomNavigationBarItem(icon: Icon(Icons.payments_rounded), label: 'Финансы'),
+          BottomNavigationBarItem(icon: Icon(Icons.money_off_rounded), label: 'Долги'),
           BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'Отчёты'),
         ],
       ),
