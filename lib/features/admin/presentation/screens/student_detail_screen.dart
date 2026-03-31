@@ -49,7 +49,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       // Load lessons
       final lessonsRes = await _supabase
           .from('lessons')
-          .select('*, teachers(profiles(first_name, last_name)), groups(name), rooms(name)')
+          .select('*, teachers(first_name, last_name, profiles(first_name, last_name)), groups(name), rooms(name)')
           .eq('student_id', widget.studentId)
           .order('scheduled_at', ascending: false);
 
@@ -63,7 +63,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       // Load groups student belongs to
       final groupsRes = await _supabase
           .from('group_students')
-          .select('groups(id, name, teachers(profiles(first_name, last_name)))')
+          .select('groups(id, name, teachers(first_name, last_name, profiles(first_name, last_name)))')
           .eq('student_id', widget.studentId);
 
       // Load balance from view
@@ -120,7 +120,13 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     }
 
     final profile = _student!['profiles'] as Map<String, dynamic>?;
-    final name = '${profile?['first_name'] ?? ''} ${profile?['last_name'] ?? ''}'.trim();
+    final sfName = _student!['first_name']?.toString() ?? '';
+    final slName = _student!['last_name']?.toString() ?? '';
+    var name = '$sfName $slName'.trim();
+    if (name.isEmpty && profile != null) {
+      name = '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'.trim();
+    }
+    final displayName = name.isEmpty ? 'Без имени' : name;
     final phone = profile?['phone'] ?? '—';
     final email = _student!['email'] ?? '—';
     final customData = _student!['custom_data'] as Map<String, dynamic>? ?? {};
@@ -132,7 +138,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name.isEmpty ? 'Без имени' : name, style: const TextStyle(fontSize: 18)),
+              Text(displayName, style: const TextStyle(fontSize: 18)),
               if (_balance != null)
                 Text(
                   'Баланс: ${_balance!['balance']} ₽',
@@ -144,12 +150,12 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                 ),
             ],
           ),
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
             labelColor: AppTheme.primaryPurple,
-            unselectedLabelColor: AppTheme.textSecondary,
+            unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
             indicatorColor: AppTheme.primaryPurple,
-            tabs: [
+            tabs: const [
               Tab(text: 'Инфо'),
               Tab(text: 'Оплаты'),
               Tab(text: 'Инвойсы'),
@@ -184,14 +190,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
           _InfoRow(icon: Icons.phone_rounded, label: 'Телефон', value: phone),
           _InfoRow(icon: Icons.email_rounded, label: 'Email', value: email),
         ]),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         _buildInfoCard('Дополнительная информация', [
           _InfoRow(icon: Icons.cake_rounded, label: 'День рождения', value: _student!['birthday'] ?? '—'),
           _InfoRow(icon: Icons.person_outline_rounded, label: 'Пол', value: _student!['gender'] == 'male' ? 'Мужской' : (_student!['gender'] == 'female' ? 'Женский' : '—')),
           _InfoRow(icon: Icons.fingerprint_rounded, label: 'Holli Hop ID', value: _student!['hollihop_id']?.toString() ?? '—'),
           ...customData.entries.map((e) => _InfoRow(icon: Icons.info_outline_rounded, label: e.key, value: e.value?.toString() ?? '—')),
         ]),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         _buildInfoCard('Финансовые настройки', [
           _InfoRow(
             icon: Icons.payments_outlined, 
@@ -204,7 +210,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
             _InfoRow(icon: Icons.history_edu_outlined, label: 'Списано за уроки', value: '${_balance!['total_cost']} ₽'),
           ],
         ]),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         _buildInfoCard('Группы', [
           if (_groups.isEmpty)
             const _InfoRow(icon: Icons.group_off_rounded, label: 'Группы', value: 'Нет активных групп')
@@ -213,8 +219,13 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
               final teacher = g['teachers'];
               String tName = '—';
               if (teacher != null) {
-                final p = teacher['profiles'];
-                tName = '${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim();
+                final tfName = teacher['first_name']?.toString() ?? '';
+                final tlName = teacher['last_name']?.toString() ?? '';
+                final p = teacher['profiles'] as Map<String, dynamic>?;
+                tName = '$tfName $tlName'.trim();
+                if (tName.isEmpty && p != null) {
+                  tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+                }
               }
               return _InfoRow(
                 icon: Icons.group_rounded, 
@@ -234,8 +245,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         if (tabIndex == 3) {
           return FloatingActionButton.extended(
             onPressed: _showAddHistoryDialog,
-            label: const Text('Добавить'),
-            icon: const Icon(Icons.add_rounded),
+            label: Text('Добавить'),
+            icon: Icon(Icons.add_rounded),
             backgroundColor: AppTheme.primaryPurple,
           );
         }
@@ -251,16 +262,16 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: const Icon(Icons.comment_rounded, color: AppTheme.primaryPurple),
-            title: const Text('Добавить комментарий'),
+            leading: Icon(Icons.comment_rounded, color: AppTheme.primaryPurple),
+            title: Text('Добавить комментарий'),
             onTap: () => Navigator.pop(ctx, 'comment'),
           ),
           ListTile(
-            leading: const Icon(Icons.auto_graph_rounded, color: AppTheme.success),
-            title: const Text('Заметка о прогрессе'),
+            leading: Icon(Icons.auto_graph_rounded, color: AppTheme.success),
+            title: Text('Заметка о прогрессе'),
             onTap: () => Navigator.pop(ctx, 'progress'),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
         ],
       ),
     );
@@ -286,8 +297,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
           decoration: InputDecoration(hintText: isProgress ? 'Опишите успехи ученика...' : 'Введите текст...'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Сохранить')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: Text('Сохранить')),
         ],
       ),
     );
@@ -310,18 +321,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Новая задача'),
+        title: Text('Новая задача'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Что нужно сделать?')),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Детали'), maxLines: 2),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Создать')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Создать')),
         ],
       ),
     );
@@ -343,15 +354,15 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     final newPrice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Цена занятия'),
+        title: Text('Цена занятия'),
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(labelText: 'Сумма (₽)'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Сохранить')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: Text('Сохранить')),
         ],
       ),
     );
@@ -384,7 +395,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildPaymentsTab() {
     if (_payments.isEmpty) {
-      return const Center(child: Text('Оплат не найдено', style: TextStyle(color: AppTheme.textSecondary)));
+      return Center(child: Text('Оплат не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -396,10 +407,10 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            leading: const Icon(Icons.account_balance_wallet_rounded, color: AppTheme.success),
+            leading: Icon(Icons.account_balance_wallet_rounded, color: AppTheme.success),
             title: Text('${p['amount']} ₽', style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(dateStr),
-            trailing: Text(p['description'] ?? '', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+            trailing: Text(p['description'] ?? '', style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
           ),
         );
       },
@@ -408,7 +419,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildLessonsTab() {
     if (_lessons.isEmpty) {
-      return const Center(child: Text('Занятий не найдено', style: TextStyle(color: AppTheme.textSecondary)));
+      return Center(child: Text('Занятий не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -417,8 +428,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         final l = _lessons[i];
         final dt = DateTime.tryParse(l['scheduled_at'] ?? '');
         final dateStr = dt != null ? DateFormat('d MMM, HH:mm', 'ru').format(dt) : '—';
-        final teacher = l['teachers']?['profiles'];
-        final teacherName = teacher != null ? '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim() : '—';
+        final teacherData = l['teachers'] as Map<String, dynamic>?;
+        String teacherName = '—';
+        if (teacherData != null) {
+          final tfName = teacherData['first_name']?.toString() ?? '';
+          final tlName = teacherData['last_name']?.toString() ?? '';
+          final p = teacherData['profiles'] as Map<String, dynamic>?;
+          var tName = '$tfName $tlName'.trim();
+          if (tName.isEmpty && p != null) {
+            tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+          }
+          teacherName = tName.isEmpty ? '—' : tName;
+        }
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
@@ -443,7 +464,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildInvoicesTab() {
     if (_expectedPayments.isEmpty) {
-      return const Center(child: Text('Инвойсов не найдено', style: TextStyle(color: AppTheme.textSecondary)));
+      return Center(child: Text('Инвойсов не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -487,8 +508,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       children: [
         _buildInfoCard('Договоры и документы', [
           ListTile(
-            leading: const Icon(Icons.description_rounded, color: AppTheme.primaryPurple),
-            title: const Text('Основной договор'),
+            leading: Icon(Icons.description_rounded, color: AppTheme.primaryPurple),
+            title: Text('Основной договор'),
             subtitle: Text(contractUrl ?? 'Не прикреплен'),
             trailing: IconButton(
               icon: Icon(contractUrl != null ? Icons.edit_rounded : Icons.add_link_rounded),
@@ -508,14 +529,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     final newUrl = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ссылка на договор'),
+        title: Text('Ссылка на договор'),
         content: TextField(
           controller: controller,
           decoration: const InputDecoration(hintText: 'https://...', labelText: 'URL документа'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Сохранить')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: Text('Сохранить')),
         ],
       ),
     );
@@ -528,7 +549,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildHistoryTab() {
     if (_tasks.isEmpty && _comments.isEmpty) {
-      return const Center(child: Text('История пуста', style: TextStyle(color: AppTheme.textSecondary)));
+      return Center(child: Text('История пуста', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
     }
 
     final items = [
@@ -561,18 +582,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                     Row(
                       children: [
                         Icon(isTask ? Icons.task_alt_rounded : Icons.comment_rounded, size: 16, color: isTask ? AppTheme.warning : AppTheme.primaryPurple),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Text(isTask ? 'Задача' : 'Комментарий', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isTask ? AppTheme.warning : AppTheme.primaryPurple)),
                       ],
                     ),
-                    Text(dateStr, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                    Text(dateStr, style: TextStyle(fontSize: 11, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(isTask ? (data['title'] ?? '') : (data['content'] ?? ''), style: const TextStyle(fontSize: 14)),
                 if (isTask && data['description'] != null) ...[
-                  const SizedBox(height: 4),
-                  Text(data['description'], style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                  SizedBox(height: 4),
+                  Text(data['description'], style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
                 ],
               ],
             ),
@@ -587,7 +608,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     final progressNotes = _comments.where((c) => c['content']?.toString().startsWith('[PROGRESS]') ?? false).toList();
     
     if (progressNotes.isEmpty) {
-      return const Center(child: Text('Заметок об успехах ещё нет', style: TextStyle(color: AppTheme.textSecondary)));
+      return Center(child: Text('Заметок об успехах ещё нет', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
     }
 
     return ListView.builder(
@@ -610,14 +631,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.stars_rounded, color: AppTheme.success, size: 20),
-                    const SizedBox(width: 8),
-                    Text(dateStr, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Icon(Icons.stars_rounded, color: AppTheme.success, size: 20),
+                    SizedBox(width: 8),
+                    Text(dateStr, style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
                     const Spacer(),
-                    Text(authorName, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppTheme.textSecondary)),
+                    Text(authorName, style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
                   ],
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 Text(content, style: const TextStyle(fontSize: 15, height: 1.4)),
               ],
             ),
@@ -644,19 +665,19 @@ class _InfoRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: AppTheme.textSecondary),
-            const SizedBox(width: 12),
+            Icon(icon, size: 18, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+            SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                  Text(label, style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 11)),
                   Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                 ],
               ),
             ),
             if (onEdit != null)
-              const Icon(Icons.edit_outlined, size: 14, color: AppTheme.primaryPurple),
+              Icon(Icons.edit_outlined, size: 14, color: AppTheme.primaryPurple),
           ],
         ),
       ),

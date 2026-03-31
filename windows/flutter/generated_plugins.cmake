@@ -4,8 +4,11 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
+  desktop_drop
   firebase_core
+  just_audio_windows
   permission_handler_windows
+  record_windows
   url_launcher_windows
 )
 

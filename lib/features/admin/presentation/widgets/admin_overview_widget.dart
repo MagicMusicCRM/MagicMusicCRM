@@ -11,13 +11,13 @@ final statsProvider = StreamProvider<Map<String, dynamic>>((ref) {
     final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
     final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
 
-    final studentsCount = (await supabase.from('students').select('id')).length;
-    final teachersCount = (await supabase.from('teachers').select('id')).length;
-    final branchesCount = (await supabase.from('branches').select('id')).length;
+    final studentsCount = (await supabase.from('students').select('id') as List).length;
+    final teachersCount = (await supabase.from('teachers').select('id') as List).length;
+    final branchesCount = (await supabase.from('branches').select('id') as List).length;
     final lessonsCount = (await supabase.from('lessons')
           .select('id')
           .gte('scheduled_at', todayStart)
-          .lte('scheduled_at', todayEnd)).length;
+          .lte('scheduled_at', todayEnd) as List).length;
 
     return {
       'students': studentsCount,
@@ -44,7 +44,7 @@ class AdminOverviewWidget extends ConsumerWidget {
           children: [
             const Text('Обзор системы', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Text('Статистика по всей школе', style: TextStyle(color: AppTheme.textSecondary)),
+            Text('Статистика по всей школе', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 20),
             GridView.count(
               crossAxisCount: 2,
@@ -97,7 +97,7 @@ class AdminOverviewWidget extends ConsumerWidget {
           children: [
             const Icon(Icons.error_outline_rounded, color: AppTheme.danger, size: 48),
             const SizedBox(height: 8),
-            Text('Ошибка загрузки: $err', style: const TextStyle(color: AppTheme.textSecondary)),
+            Text('Ошибка загрузки: $err', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 12),
             FilledButton(onPressed: () => ref.invalidate(statsProvider), child: const Text('Повторить')),
           ],
@@ -133,7 +133,7 @@ class _StatCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(value, style: TextStyle(color: color, fontSize: 28, fontWeight: FontWeight.w800)),
-                  Text(title, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  Text(title, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                 ],
               ),
             ],

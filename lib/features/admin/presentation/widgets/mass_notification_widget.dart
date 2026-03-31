@@ -57,10 +57,10 @@ class _MassNotificationWidgetState extends State<MassNotificationWidget> {
         children: [
           const Text('Массовые уведомления', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          const Text('Отправка push-уведомлений ученикам и преподавателям',
-              style: TextStyle(color: AppTheme.textSecondary)),
+          Text('Отправка push-уведомлений ученикам и преподавателям',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 24),
-          const Text('Получатели:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+          Text('Получатели:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             value: _selectedAudience,
@@ -69,7 +69,7 @@ class _MassNotificationWidgetState extends State<MassNotificationWidget> {
             onChanged: (val) { if (val != null) setState(() => _selectedAudience = val); },
           ),
           const SizedBox(height: 20),
-          const Text('Текст сообщения:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+          Text('Текст сообщения:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
           const SizedBox(height: 8),
           TextField(
             controller: _messageController,

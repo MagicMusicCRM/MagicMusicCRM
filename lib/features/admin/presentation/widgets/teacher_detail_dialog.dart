@@ -104,7 +104,7 @@ class _TeacherDetailDialogState extends State<TeacherDetailDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена', style: TextStyle(color: AppTheme.textSecondary)),
+          child: Text('Отмена', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ),
         FilledButton(
           onPressed: _saving ? null : _save,

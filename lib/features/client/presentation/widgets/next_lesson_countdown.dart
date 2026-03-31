@@ -42,7 +42,7 @@ class _NextLessonCountdownState extends ConsumerState<NextLessonCountdown> {
 
   @override
   Widget build(BuildContext context) {
-    final lessonsAsync = ref.watch(upcomingLessonsProvider);
+    final lessonsAsync = ref.watch(upcomingLessonsRichProvider);
 
     return lessonsAsync.when(
       loading: () => const SizedBox.shrink(),
@@ -59,9 +59,14 @@ class _NextLessonCountdownState extends ConsumerState<NextLessonCountdown> {
 
         if (_timeLeft.isNegative) return const SizedBox.shrink();
 
-        final teacher = next['teachers'];
-        final tp = teacher?['profiles'];
-        final teacherName = '${tp?['first_name'] ?? ''} ${tp?['last_name'] ?? ''}'.trim();
+        final tFirst = next['teacher_first_name'] as String? ?? '';
+        final tLast = next['teacher_last_name'] as String? ?? '';
+        final tpFirst = next['teacher_profile_first_name'] as String? ?? '';
+        final tpLast = next['teacher_profile_last_name'] as String? ?? '';
+        
+        var teacherFirst = tFirst.isNotEmpty ? tFirst : tpFirst;
+        var teacherLast = tLast.isNotEmpty ? tLast : tpLast;
+        final teacherName = '$teacherFirst $teacherLast'.trim();
 
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

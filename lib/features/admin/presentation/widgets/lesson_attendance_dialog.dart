@@ -42,22 +42,34 @@ class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
       if (groupId != null) {
         final res = await _supabase
             .from('group_students')
-            .select('student_id, students(id, profiles(first_name, last_name))')
+            .select('student_id, students(id, first_name, last_name, profiles(first_name, last_name))')
             .eq('group_id', groupId);
         _students = List<Map<String, dynamic>>.from(res).map((item) {
           final s = item['students'] as Map<String, dynamic>;
+          final sfName = s['first_name']?.toString() ?? '';
+          final slName = s['last_name']?.toString() ?? '';
           final p = s['profiles'] as Map<String, dynamic>?;
+          var name = '$sfName $slName'.trim();
+          if (name.isEmpty && p != null) {
+            name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+          }
           return {
             'id': s['id'],
-            'name': '${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim(),
+            'name': name.isEmpty ? 'Без имени' : name,
           };
         }).toList();
       } else if (studentId != null) {
         final s = widget.lesson['students'];
+        final sfName = s?['first_name']?.toString() ?? '';
+        final slName = s?['last_name']?.toString() ?? '';
         final p = s?['profiles'];
+        var name = '$sfName $slName'.trim();
+        if (name.isEmpty && p != null) {
+          name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+        }
         _students = [{
           'id': studentId,
-          'name': '${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim(),
+          'name': name.isEmpty ? 'Без имени' : name,
         }];
       }
 
@@ -180,7 +192,7 @@ class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена', style: TextStyle(color: AppTheme.textSecondary)),
+          child: Text('Отмена', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ),
         FilledButton(
           onPressed: _saving ? null : _save,

@@ -35,17 +35,17 @@ class ProgressNotesWidget extends ConsumerWidget {
     final notesAsync = ref.watch(progressNotesProvider);
 
     return notesAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
+      loading: () => Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
       error: (err, _) => Center(child: Text('Ошибка загрузки: $err', style: const TextStyle(color: AppTheme.danger))),
       data: (notes) {
         if (notes.isEmpty) {
-          return const Center(
+          return Center(
             child: Padding(
               padding: EdgeInsets.all(24.0),
               child: Text(
                 'Заметок об успехах пока нет. Продолжайте заниматься!',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppTheme.textSecondary),
+                style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant),
               ),
             ),
           );
@@ -75,12 +75,12 @@ class ProgressNotesWidget extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.stars_rounded, color: AppTheme.success, size: 20),
-                      const SizedBox(width: 8),
-                      Text(dateStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      Icon(Icons.stars_rounded, color: AppTheme.success, size: 20),
+                      SizedBox(width: 8),
+                      Text(dateStr, style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     content,
                     style: const TextStyle(fontSize: 14, height: 1.4, fontWeight: FontWeight.w500),

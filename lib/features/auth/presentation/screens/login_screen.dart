@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -132,12 +133,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Войдите в систему',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,
-                        color: AppTheme.textSecondary,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 48),
@@ -152,9 +153,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: InputDecoration(
                         labelText: 'Email',
                         hintText: 'user@example.com',
-                        prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.textSecondary),
+                        prefixIcon: Icon(Icons.email_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         filled: true,
-                        fillColor: AppTheme.surfaceDark.withAlpha(200),
+                        fillColor: Theme.of(context).colorScheme.surface.withAlpha(200),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none,
@@ -181,9 +182,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: 'Пароль',
-                        prefixIcon: const Icon(Icons.lock_outlined, color: AppTheme.textSecondary),
+                        prefixIcon: Icon(Icons.lock_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         filled: true,
-                        fillColor: AppTheme.surfaceDark.withAlpha(200),
+                        fillColor: Theme.of(context).colorScheme.surface.withAlpha(200),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none,
@@ -197,7 +198,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             _obscurePassword
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
-                            color: AppTheme.textSecondary,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                           onPressed: () =>
                               setState(() => _obscurePassword = !_obscurePassword),
@@ -255,6 +256,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: () => context.push('/register'),
+                      child: const Text('Нет аккаунта? Зарегистрироваться', style: TextStyle(color: AppTheme.primaryPurple, fontSize: 16)),
                     ),
                   ],
                 ),

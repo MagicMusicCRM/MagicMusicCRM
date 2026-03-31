@@ -80,7 +80,7 @@ class _ConversionTrackingWidgetState extends State<ConversionTrackingWidget> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _buildSmallStat('Всего лидов', '${_stats['total_leads']}', AppTheme.textSecondary)),
+              Expanded(child: _buildSmallStat('Всего лидов', '${_stats['total_leads']}', Theme.of(context).colorScheme.onSurfaceVariant)),
               Expanded(child: _buildSmallStat('Стали учениками', '${_stats['converted']}', AppTheme.success)),
             ],
           ),
@@ -97,7 +97,7 @@ class _ConversionTrackingWidgetState extends State<ConversionTrackingWidget> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _buildSmallStat('Назначено', '${_stats['total_trials']}', AppTheme.textSecondary)),
+              Expanded(child: _buildSmallStat('Назначено', '${_stats['total_trials']}', Theme.of(context).colorScheme.onSurfaceVariant)),
               Expanded(child: _buildSmallStat('Проведено', '${_stats['completed_trials']}', AppTheme.success)),
             ],
           ),
@@ -122,9 +122,9 @@ class _ConversionTrackingWidgetState extends State<ConversionTrackingWidget> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  Text(title, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
                   Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: color)),
-                  Text(sub, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                  Text(sub, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
                 ],
               ),
             ),
@@ -138,7 +138,7 @@ class _ConversionTrackingWidgetState extends State<ConversionTrackingWidget> {
     return Column(
       children: [
         Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: color)),
-        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
       ],
     );
   }

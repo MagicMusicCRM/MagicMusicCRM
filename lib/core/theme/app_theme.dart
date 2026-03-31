@@ -1,97 +1,93 @@
 import 'package:flutter/material.dart';
+import 'telegram_colors.dart';
 
 class AppTheme {
-  // ── Brand Colors ────────────────────────────────────────────────────────────
-  static const Color primaryPurple = Color(0xFF7C3AED);   // Violet-600
-  static const Color secondaryGold = Color(0xFFD97706);   // Amber-600
-  static const Color bgDark = Color(0xFF0F0A1E);           // Near-black
-  static const Color surfaceDark = Color(0xFF1C1333);      // Card surface
-  static const Color cardDark = Color(0xFF271D42);         // Elevated card
-  static const Color textPrimary = Color(0xFFF1EEFF);
-  static const Color textSecondary = Color(0xFF9E8FC2);
-  static const Color success = Color(0xFF22C55E);
-  static const Color danger = Color(0xFFEF4444);
-  static const Color warning = Color(0xFFF59E0B);
+  // ── Legacy brand references (kept for compatibility) ────────────────────
+  static const Color primaryPurple = TelegramColors.brandPurple;
+  static const Color secondaryGold = TelegramColors.brandGold;
+  static const Color bgDark = TelegramColors.darkBg;
+  static const Color surfaceDark = TelegramColors.darkSurface;
+  static const Color cardDark = TelegramColors.darkInputBg;
+  static const Color textPrimary = TelegramColors.darkTextPrimary;
+  static const Color textSecondary = TelegramColors.darkTextSecondary;
+  static const Color success = TelegramColors.success;
+  static const Color danger = TelegramColors.danger;
+  static const Color warning = TelegramColors.warning;
+  static const Color surfaceColor = cardDark;
 
+  // ── Dark Theme (Telegram-inspired) ─────────────────────────────────────
   static ThemeData get dark {
-    final base = ThemeData.dark(useMaterial3: true);
-    return base.copyWith(
+    return ThemeData.dark(useMaterial3: true).copyWith(
       colorScheme: ColorScheme.dark(
-        primary: primaryPurple,
-        secondary: secondaryGold,
-        surface: surfaceDark,
+        primary: TelegramColors.accentBlue,
+        secondary: TelegramColors.brandPurple,
+        surface: TelegramColors.darkSurface,
         onPrimary: Colors.white,
         onSecondary: Colors.white,
-        onSurface: textPrimary,
-        error: danger,
+        onSurface: TelegramColors.darkTextPrimary,
+        error: TelegramColors.danger,
       ),
-      scaffoldBackgroundColor: bgDark,
+      scaffoldBackgroundColor: TelegramColors.darkBg,
       cardTheme: CardThemeData(
-        color: cardDark,
+        color: TelegramColors.darkSurface,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      appBarTheme: AppBarTheme(
-        backgroundColor: bgDark,
-        foregroundColor: textPrimary,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: TelegramColors.darkSurface,
+        foregroundColor: TelegramColors.darkTextPrimary,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: const TextStyle(
-          color: textPrimary,
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.3,
+        titleTextStyle: TextStyle(
+          color: TelegramColors.darkTextPrimary,
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
         ),
       ),
-      bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: surfaceDark,
-        selectedItemColor: primaryPurple,
-        unselectedItemColor: textSecondary,
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: TelegramColors.darkSurface,
+        selectedItemColor: TelegramColors.accentBlue,
+        unselectedItemColor: TelegramColors.darkTextSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: surfaceDark,
-        indicatorColor: primaryPurple.withAlpha(50),
+        backgroundColor: TelegramColors.darkSurface,
+        indicatorColor: TelegramColors.accentBlue.withAlpha(30),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: primaryPurple);
+            return const IconThemeData(color: TelegramColors.accentBlue);
           }
-          return const IconThemeData(color: textSecondary);
+          return const IconThemeData(color: TelegramColors.darkTextSecondary);
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const TextStyle(color: primaryPurple, fontWeight: FontWeight.w600);
+            return const TextStyle(color: TelegramColors.accentBlue, fontWeight: FontWeight.w600, fontSize: 12);
           }
-          return const TextStyle(color: textSecondary);
+          return const TextStyle(color: TelegramColors.darkTextSecondary, fontSize: 12);
         }),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: cardDark,
-        labelStyle: const TextStyle(color: textSecondary),
-        hintStyle: TextStyle(color: textSecondary.withAlpha(130)),
-        prefixIconColor: textSecondary,
+        fillColor: TelegramColors.darkInputBg,
+        labelStyle: const TextStyle(color: TelegramColors.darkTextSecondary),
+        hintStyle: TextStyle(color: TelegramColors.darkTextSecondary.withAlpha(130)),
+        prefixIconColor: TelegramColors.darkTextSecondary,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(22),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primaryPurple, width: 1.5),
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: TelegramColors.accentBlue, width: 1.5),
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: danger),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: danger, width: 1.5),
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: primaryPurple,
+          backgroundColor: TelegramColors.accentBlue,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
@@ -99,42 +95,143 @@ class AppTheme {
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: primaryPurple),
+        style: TextButton.styleFrom(foregroundColor: TelegramColors.accentBlue),
       ),
-      chipTheme: ChipThemeData(
-        backgroundColor: cardDark,
-        selectedColor: primaryPurple.withAlpha(80),
-        labelStyle: const TextStyle(color: textPrimary),
-        side: BorderSide.none,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-      dividerTheme: DividerThemeData(
-        color: textSecondary.withAlpha(40),
+      dividerTheme: const DividerThemeData(
+        color: TelegramColors.darkDivider,
         thickness: 1,
+        space: 0,
       ),
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w800),
-        headlineMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.w700),
-        headlineSmall: TextStyle(color: textPrimary, fontWeight: FontWeight.w700),
-        titleLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
-        titleMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.w500),
-        titleSmall: TextStyle(color: textSecondary, fontWeight: FontWeight.w500),
-        bodyLarge: TextStyle(color: textPrimary),
-        bodyMedium: TextStyle(color: textPrimary),
-        bodySmall: TextStyle(color: textSecondary),
-        labelLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
-        labelMedium: TextStyle(color: textSecondary),
+        headlineLarge: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w700),
+        headlineMedium: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w700),
+        headlineSmall: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w600),
+        titleLarge: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w600),
+        titleMedium: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w500),
+        titleSmall: TextStyle(color: TelegramColors.darkTextSecondary, fontWeight: FontWeight.w500),
+        bodyLarge: TextStyle(color: TelegramColors.darkTextPrimary),
+        bodyMedium: TextStyle(color: TelegramColors.darkTextPrimary),
+        bodySmall: TextStyle(color: TelegramColors.darkTextSecondary),
+        labelLarge: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w600),
+        labelMedium: TextStyle(color: TelegramColors.darkTextSecondary),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: cardDark,
-        contentTextStyle: const TextStyle(color: textPrimary),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: TelegramColors.darkSurface,
+        contentTextStyle: const TextStyle(color: TelegramColors.darkTextPrimary),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         behavior: SnackBarBehavior.floating,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: primaryPurple,
+        backgroundColor: TelegramColors.accentBlue,
         foregroundColor: Colors.white,
         shape: CircleBorder(),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: TelegramColors.darkSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 8,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: TelegramColors.darkSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
+  }
+
+  // ── Light Theme (Telegram-inspired) ────────────────────────────────────
+  static ThemeData get light {
+    return ThemeData.light(useMaterial3: true).copyWith(
+      colorScheme: ColorScheme.light(
+        primary: TelegramColors.accentBlue,
+        secondary: TelegramColors.brandPurple,
+        surface: TelegramColors.lightSurface,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onSurface: TelegramColors.lightTextPrimary,
+        error: TelegramColors.danger,
+      ),
+      scaffoldBackgroundColor: TelegramColors.lightBg,
+      cardTheme: CardThemeData(
+        color: TelegramColors.lightBg,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: TelegramColors.lightBg,
+        foregroundColor: TelegramColors.lightTextPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: TelegramColors.lightTextPrimary,
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: TelegramColors.lightInputBg,
+        labelStyle: const TextStyle(color: TelegramColors.lightTextSecondary),
+        hintStyle: TextStyle(color: TelegramColors.lightTextSecondary.withAlpha(130)),
+        prefixIconColor: TelegramColors.lightTextSecondary,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(22),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: TelegramColors.accentBlue, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: TelegramColors.accentBlue,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: TelegramColors.accentBlue),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: TelegramColors.lightDivider,
+        thickness: 0.5,
+        space: 0,
+      ),
+      textTheme: const TextTheme(
+        headlineLarge: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w700),
+        headlineMedium: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w700),
+        headlineSmall: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w600),
+        titleLarge: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w600),
+        titleMedium: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w500),
+        titleSmall: TextStyle(color: TelegramColors.lightTextSecondary, fontWeight: FontWeight.w500),
+        bodyLarge: TextStyle(color: TelegramColors.lightTextPrimary),
+        bodyMedium: TextStyle(color: TelegramColors.lightTextPrimary),
+        bodySmall: TextStyle(color: TelegramColors.lightTextSecondary),
+        labelLarge: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w600),
+        labelMedium: TextStyle(color: TelegramColors.lightTextSecondary),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: TelegramColors.lightBg,
+        contentTextStyle: const TextStyle(color: TelegramColors.lightTextPrimary),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        behavior: SnackBarBehavior.floating,
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: TelegramColors.accentBlue,
+        foregroundColor: Colors.white,
+        shape: CircleBorder(),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: TelegramColors.lightBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 4,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: TelegramColors.lightBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }

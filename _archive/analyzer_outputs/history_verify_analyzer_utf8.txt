@@ -1,0 +1,5 @@
+﻿Analyzing 2 items...                                            
+
+  error - The function 'StateProvider' isn't defined - lib\features\client\presentation\widgets\upcoming_lessons_list.dart:9:27 - undefined_function
+  error - The getter 'cardBackground' isn't defined for the type 'AppTheme' - lib\features\client\presentation\widgets\upcoming_lessons_list.dart:92:31 - undefined_getter
+

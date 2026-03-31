@@ -1,31 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/providers/realtime_providers.dart';
+import 'package:magic_music_crm/core/widgets/skeletons.dart';
 
 final subscriptionProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  final supabase = Supabase.instance.client;
-  final user = supabase.auth.currentUser;
+  final studentIdAsync = ref.watch(currentStudentIdProvider);
+  final studentId = studentIdAsync.asData?.value;
   
-  if (user == null) return null;
+  if (studentId == null) return null;
 
-  final studentRes = await supabase
-      .from('students')
-      .select('id')
-      .eq('profile_id', user.id)
-      .maybeSingle();
+  // Watch the stream to trigger re-fetches
+  ref.watch(studentSubscriptionsStreamProvider(studentId));
 
-  if (studentRes == null) return null;
-  
-  final studentId = studentRes['id'];
-
+  final supabase = ref.watch(supabaseProvider);
   final subRes = await supabase
       .from('subscriptions')
-      .select('*, courses(name)')
+      .select()
       .eq('student_id', studentId)
-      .eq('status', 'active')
-      .order('end_date', ascending: false)
+      .order('valid_until', ascending: false)
       .limit(1)
       .maybeSingle();
 
@@ -64,9 +58,9 @@ class SubscriptionStatusCard extends ConsumerWidget {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Пожалуйста, свяжитесь с администратором для приобретения или продления абонемента.',
-                    style: TextStyle(color: AppTheme.textSecondary),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -75,9 +69,12 @@ class SubscriptionStatusCard extends ConsumerWidget {
           );
         }
 
-        final courseName = subscription['courses']?['name'] as String? ?? 'Неизвестный курс';
-        final remainingClasses = subscription['remaining_classes'] as int? ?? 0;
-        final endDateStr = subscription['end_date'] as String;
+        final courseName = (subscription['type']?.toString() ?? 'Абонемент').toUpperCase();
+        final lessonsTotal = subscription['lessons_total'] as int? ?? 0;
+        final lessonsUsed = subscription['lessons_used'] as int? ?? 0;
+        final remainingClasses = lessonsTotal - lessonsUsed;
+        final endDateStr = subscription['valid_until'] as String?;
+        if (endDateStr == null) return const SizedBox.shrink();
         final endDate = DateTime.parse(endDateStr).toLocal();
         final daysLeft = endDate.difference(DateTime.now()).inDays;
 
@@ -118,10 +115,10 @@ class SubscriptionStatusCard extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    const Icon(Icons.calendar_month_rounded, color: AppTheme.textSecondary, size: 18),
+                    Icon(Icons.calendar_month_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
                     const SizedBox(width: 8),
                     Text('Действует до: ${DateFormat('d MMMM yyyy', 'ru').format(endDate)}',
-                        style: const TextStyle(color: AppTheme.textSecondary)),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   ],
                 ),
                 if (isExpiringSoon) ...[
@@ -154,8 +151,53 @@ class SubscriptionStatusCard extends ConsumerWidget {
           ),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
+      loading: () => const _SubscriptionSkeleton(),
       error: (err, _) => Center(child: Text('Ошибка: $err', style: const TextStyle(color: AppTheme.danger))),
+      skipLoadingOnRefresh: true,
+      skipLoadingOnReload: true,
+    );
+  }
+}
+
+class _SubscriptionSkeleton extends StatelessWidget {
+  const _SubscriptionSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.all(16.0),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Skeleton(width: 150, height: 24),
+                Skeleton(width: 80, height: 24),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Skeleton(width: 200, height: 18),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                   Skeleton(width: 24, height: 24),
+                   SizedBox(width: 12),
+                   Skeleton(width: 180, height: 14),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

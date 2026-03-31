@@ -42,7 +42,7 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
       final [lessons, payments, students] = await Future.wait([
         _supabase
             .from('lessons')
-            .select('scheduled_at, status, teacher_id, teachers(profiles(first_name, last_name)), groups(name, price_per_lesson)')
+            .select('scheduled_at, status, teacher_id, teachers(first_name, last_name, profiles(first_name, last_name)), groups(name, price_per_lesson)')
             .gte('scheduled_at', sixMonthsAgo.toIso8601String()),
         _supabase
             .from('payments')
@@ -120,7 +120,7 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
         TabBar(
           controller: _tabController,
           labelColor: AppTheme.primaryPurple,
-          unselectedLabelColor: AppTheme.textSecondary,
+          unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
           indicatorColor: AppTheme.primaryPurple,
           tabs: const [
             Tab(text: 'Аналитика'),
@@ -156,7 +156,7 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
           children: [
             const Text('Отчёты', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            const Text('За последние 6 месяцев', style: TextStyle(color: AppTheme.textSecondary)),
+            Text('За последние 6 месяцев', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 20),
 
             // KPI Row
@@ -202,7 +202,7 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text('${m.lessons}', style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                          Text('${m.lessons}', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                           const SizedBox(height: 4),
                           Stack(
                             alignment: Alignment.bottomCenter,
@@ -226,7 +226,7 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
                             ],
                           ),
                           const SizedBox(height: 6),
-                          Text(m.month, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                          Text(m.month, style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         ],
                       ),
                     ),
@@ -239,11 +239,11 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
               children: [
                 Container(width: 10, height: 10, color: AppTheme.primaryPurple),
                 const SizedBox(width: 6),
-                const Text('Завершено', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                Text('Завершено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
                 const SizedBox(width: 16),
                 Container(width: 10, height: 10, color: AppTheme.primaryPurple.withAlpha(40)),
                 const SizedBox(width: 6),
-                const Text('Всего запланировано', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                Text('Всего запланировано', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
               ],
             ),
             const SizedBox(height: 24),
@@ -265,8 +265,8 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
                         children: [
                           if (m.revenue > 0)
                             Text(
-                              m.revenue >= 1000 ? '${(m.revenue / 1000).toStringAsFixed(0)}к' : '${m.revenue.toStringAsFixed(0)}',
-                              style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
+                              m.revenue >= 1000 ? '${(m.revenue / 1000).toStringAsFixed(0)}к' : m.revenue.toStringAsFixed(0),
+                              style: TextStyle(fontSize: 9, color: Theme.of(context).colorScheme.onSurfaceVariant),
                             ),
                           const SizedBox(height: 4),
                           Container(
@@ -282,7 +282,7 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Text(m.month, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                          Text(m.month, style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         ],
                       ),
                     ),
@@ -329,10 +329,18 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
     for (var l in _lessonsRaw) {
       if (l['status'] == 'completed') {
         final teacherId = l['teacher_id']?.toString() ?? 'unknown';
-        final teacher = l['teachers']?['profiles'];
-        final tName = teacher != null 
-            ? '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim()
-            : 'Неизвестный учитель';
+        final teacherData = l['teachers'] as Map<String, dynamic>?;
+        String tName = 'Неизвестный учитель';
+        if (teacherData != null) {
+          final tfName = teacherData['first_name']?.toString() ?? '';
+          final tlName = teacherData['last_name']?.toString() ?? '';
+          final p = teacherData['profiles'] as Map<String, dynamic>?;
+          var name = '$tfName $tlName'.trim();
+          if (name.isEmpty && p != null) {
+            name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+          }
+          if (name.isNotEmpty) tName = name;
+        }
         
         final cost = (l['groups']?['price_per_lesson'] as num?)?.toDouble() ?? 1500;
         
@@ -358,7 +366,7 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: sortedTeachers.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (context, index) => const Divider(height: 1),
             itemBuilder: (ctx, i) {
               final e = sortedTeachers[i];
               final name = teacherNames[e.key] ?? '—';
@@ -405,7 +413,7 @@ class _KpiCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 13), textAlign: TextAlign.center),
             const SizedBox(height: 2),
-            Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), textAlign: TextAlign.center),
+            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10), textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -423,7 +431,7 @@ class _SmallStat extends StatelessWidget {
     return Column(
       children: [
         Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
-        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+        Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
       ],
     );
   }

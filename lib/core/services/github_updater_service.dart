@@ -46,6 +46,7 @@ class GithubUpdaterService {
         final latestVersion = latestVersionTag.replaceAll('v', '');
         
         if (_isNewerVersion(latestVersion, currentVersion)) {
+          debugPrint('GitHub Updater: New version available! Latest: $latestVersion, Current: $currentVersion');
           final assets = data['assets'] as List;
           for (var asset in assets) {
             final name = asset['name'] as String;
@@ -57,7 +58,7 @@ class GithubUpdaterService {
             }
           }
         } else {
-          debugPrint('GitHub Updater: No new version found. Latest: $latestVersion, Current: $currentVersion');
+          debugPrint('GitHub Updater: App is up to date. Latest: $latestVersion, Current: $currentVersion');
         }
       }
     } catch (e) {
@@ -72,6 +73,7 @@ class GithubUpdaterService {
     Function(int received, int total)? onProgress,
   }) async {
     try {
+      debugPrint('GitHub Updater: Starting download from $downloadUrl');
       final savePath = await _getApkSavePath();
       
       await _dio.download(
@@ -80,10 +82,13 @@ class GithubUpdaterService {
         onReceiveProgress: onProgress,
       );
 
+      debugPrint('GitHub Updater: Download complete. Opening: $savePath');
       final result = await OpenFilex.open(savePath);
+      debugPrint('GitHub Updater: OpenFilex result: ${result.type}, Message: ${result.message}');
       return result.type == ResultType.done;
-    } catch (e) {
-      debugPrint('Error downloading or installing update: $e');
+    } catch (e, stack) {
+      debugPrint('GitHub Updater: Error downloading or installing update: $e');
+      debugPrint('Stack trace: $stack');
       return false;
     }
   }
@@ -102,20 +107,28 @@ class GithubUpdaterService {
   }
 
   bool _isNewerVersion(String latest, String current) {
-    if (latest == current) return false;
+    // 1. Clean up and split by '+' to ignore build numbers if they cause issues
+    final latestClean = latest.trim().split('+').first;
+    final currentClean = current.trim().split('+').first;
+
+    if (latestClean == currentClean) return false;
     
-    final latestClean = latest.split('+').first;
-    final currentClean = current.split('+').first;
-    
+    // 2. Split into numeric parts
     final latestParts = latestClean.split('.').map((e) => int.tryParse(e) ?? 0).toList();
     final currentParts = currentClean.split('.').map((e) => int.tryParse(e) ?? 0).toList();
     
-    for (var i = 0; i < latestParts.length && i < currentParts.length; i++) {
-      if (latestParts[i] > currentParts[i]) return true;
-      if (latestParts[i] < currentParts[i]) return false;
+    // 3. Compare common parts
+    final maxLength = latestParts.length > currentParts.length ? latestParts.length : currentParts.length;
+    
+    for (var i = 0; i < maxLength; i++) {
+      final latestPart = i < latestParts.length ? latestParts[i] : 0;
+      final currentPart = i < currentParts.length ? currentParts[i] : 0;
+      
+      if (latestPart > currentPart) return true;
+      if (latestPart < currentPart) return false;
     }
     
-    return latestParts.length > currentParts.length;
+    return false;
   }
 }
 

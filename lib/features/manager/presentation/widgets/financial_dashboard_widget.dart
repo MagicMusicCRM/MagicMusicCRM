@@ -33,7 +33,7 @@ class _FinancialDashboardWidgetState extends State<FinancialDashboardWidget> {
       final [payments, expenses, lessons, rooms] = await Future.wait([
         _supabase.from('payments').select('amount, created_at').gte('created_at', sixMonthsAgo.toIso8601String()),
         _supabase.from('expenses').select('amount, created_at').gte('created_at', sixMonthsAgo.toIso8601String()),
-        _supabase.from('lessons').select('scheduled_at, status, teacher_id, room_id, teachers(profiles(first_name, last_name)), groups(price_per_lesson)').gte('scheduled_at', sixMonthsAgo.toIso8601String()),
+        _supabase.from('lessons').select('scheduled_at, status, teacher_id, room_id, teachers(first_name, last_name, profiles(first_name, last_name)), groups(price_per_lesson)').gte('scheduled_at', sixMonthsAgo.toIso8601String()),
         _supabase.from('rooms').select('id, name'),
       ]);
 
@@ -71,8 +71,15 @@ class _FinancialDashboardWidgetState extends State<FinancialDashboardWidget> {
         if (l['status'] == 'completed') {
           final tId = l['teacher_id'];
           if (tId != null) {
+            final tfName = l['teachers']?['first_name']?.toString() ?? '';
+            final tlName = l['teachers']?['last_name']?.toString() ?? '';
+            final tp = l['teachers']?['profiles'] as Map<String, dynamic>?;
+            var name = '$tfName $tlName'.trim();
+            if (name.isEmpty && tp != null) {
+              name = '${tp['first_name'] ?? ''} ${tp['last_name'] ?? ''}'.trim();
+            }
             tStats.putIfAbsent(tId, () => {
-              'name': '${l['teachers']?['profiles']?['first_name'] ?? ''} ${l['teachers']?['profiles']?['last_name'] ?? ''}'.trim(),
+              'name': name.isEmpty ? 'Без имени' : name,
               'completed': 0,
               'revenue': 0.0,
             });
@@ -147,7 +154,7 @@ class _FinancialDashboardWidgetState extends State<FinancialDashboardWidget> {
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        getTitlesWidget: (val, _) => Text(_chartData[val.toInt()].month, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                        getTitlesWidget: (val, _) => Text(_chartData[val.toInt()].month, style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ),
                     ),
                     leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -198,7 +205,7 @@ class _FinancialDashboardWidgetState extends State<FinancialDashboardWidget> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(t['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                          Text('${t['completed']} зан.', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                          Text('${t['completed']} зан.', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         ],
                       ),
                     ),
@@ -275,7 +282,7 @@ class _LegendItem extends StatelessWidget {
       children: [
         Container(width: 12, height: 12, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+        Text(label, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ],
     );
   }

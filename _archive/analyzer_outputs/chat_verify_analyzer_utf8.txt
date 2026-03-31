@@ -1,0 +1,6 @@
+﻿Analyzing 2 items...                                            
+
+  error - The method 'is_' isn't defined for the type 'PostgrestFilterBuilder' - lib\features\admin\presentation\widgets\admin_chat_dashboard.dart:105:12 - undefined_method
+  error - The method 'in_' isn't defined for the type 'PostgrestFilterBuilder' - lib\features\admin\presentation\widgets\admin_chat_dashboard.dart:346:71 - undefined_method
+  error - The method 'in_' isn't defined for the type 'PostgrestFilterBuilder' - lib\features\client\presentation\widgets\chat_widget.dart:95:12 - undefined_method
+

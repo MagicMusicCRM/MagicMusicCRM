@@ -13,8 +13,8 @@ class CustomFieldConfigWidget extends StatelessWidget {
         children: [
           const Text('Настройки полей', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          const Text('Управление дополнительными полями сущностей',
-              style: TextStyle(color: AppTheme.textSecondary)),
+          Text('Управление дополнительными полями сущностей',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 24),
           Card(
             child: Padding(
@@ -39,14 +39,14 @@ class CustomFieldConfigWidget extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     'Система использует гибкую схему JSONB для всех сущностей: ученики, филиалы, преподаватели.\n\n'
                     'При создании или редактировании записи можно задать произвольные поля в формате ключ-значение:\n'
                     '• «Имя родителя»: «Иван Иванов»\n'
                     '• «Уровень»: «Начинающий»\n'
                     '• «Любимый жанр»: «Классика»\n\n'
                     'Эти атрибуты автоматически сохраняются в поле custom_data.',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 14, height: 1.5),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14, height: 1.5),
                   ),
                 ],
               ),
@@ -74,9 +74,9 @@ class CustomFieldConfigWidget extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     'Возможность настройки глобальных схем полей для шаблонной работы с custom_data будет добавлена в следующей версии.',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14),
                   ),
                   const SizedBox(height: 12),
                   FilledButton.icon(

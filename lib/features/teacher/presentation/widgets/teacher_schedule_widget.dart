@@ -1,31 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart';
+import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:intl/intl.dart';
 
-class TeacherScheduleWidget extends StatefulWidget {
+class TeacherScheduleWidget extends ConsumerStatefulWidget {
   const TeacherScheduleWidget({super.key});
 
   @override
-  State<TeacherScheduleWidget> createState() => _TeacherScheduleWidgetState();
+  ConsumerState<TeacherScheduleWidget> createState() => _TeacherScheduleWidgetState();
 }
 
-class _TeacherScheduleWidgetState extends State<TeacherScheduleWidget> {
+class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
   final _supabase = Supabase.instance.client;
-  List<Map<String, dynamic>> _lessons = [];
-  bool _loading = true;
+  bool _isLoading = true;
+  
+  List<Appointment> _appointments = [];
+  final CalendarController _calendarController = CalendarController();
 
   @override
   void initState() {
     super.initState();
-    _loadLessons();
+    _fetchScheduleData();
   }
 
-  Future<void> _loadLessons() async {
-    setState(() => _loading = true);
+  Future<void> _fetchScheduleData() async {
+    setState(() => _isLoading = true);
     try {
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
 
       // Get teacher record
       final teacher = await _supabase
@@ -35,131 +42,77 @@ class _TeacherScheduleWidgetState extends State<TeacherScheduleWidget> {
           .maybeSingle();
 
       if (teacher == null) {
-        setState(() => _loading = false);
+        setState(() => _isLoading = false);
         return;
       }
 
-      final now = DateTime.now();
-      final weekStart = now.subtract(Duration(days: now.weekday - 1));
+      final lessonsRes = await _supabase.from('lessons').select('''
+        id, scheduled_at, duration_minutes, status, lesson_plan,
+        students(first_name, last_name, profiles(first_name, last_name)),
+        rooms(name, branches(name))
+      ''').eq('teacher_id', teacher['id']);
 
-      final data = await _supabase
-          .from('lessons')
-          .select('''
-            id, scheduled_at, status, duration_minutes, lesson_plan,
-            students(profiles(first_name, last_name)),
-            rooms(name),
-            branches(name)
-          ''')
-          .eq('teacher_id', teacher['id'])
-          .gte('scheduled_at', weekStart.toIso8601String())
-          .order('scheduled_at');
+      final appointments = <Appointment>[];
+      for (final lesson in lessonsRes) {
+        if (lesson['scheduled_at'] == null) continue;
+        final dbTime = DateTime.parse(lesson['scheduled_at']).toUtc();
+        final start = dbTime.add(const Duration(hours: 3));
+        final duration = lesson['duration_minutes'] as int? ?? 60;
+        final end = start.add(Duration(minutes: duration));
+        
+        final status = lesson['status'] as String?;
+        final studentEntry = lesson['students'] as Map<String, dynamic>?;
+        String studentName = 'Ученик';
+        if (studentEntry != null) {
+          final fn = studentEntry['first_name']?.toString() ?? '';
+          final ln = studentEntry['last_name']?.toString() ?? '';
+          final p = studentEntry['profiles'] as Map<String, dynamic>?;
+          var name = '$fn $ln'.trim();
+          if (name.isEmpty && p != null) {
+            name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+          }
+          studentName = name.isEmpty ? 'Без имени' : name;
+        }
+        final roomName = lesson['rooms']?['name'] ?? 'Аудитория';
+        final branchName = lesson['rooms']?['branches']?['name'] ?? '';
+        final locationInfo = branchName.isNotEmpty ? '$roomName ($branchName)' : roomName;
+
+        Color bgColor = AppTheme.primaryPurple;
+        if (status == 'completed') bgColor = AppTheme.success;
+        if (status == 'cancelled') bgColor = AppTheme.danger;
+
+        appointments.add(Appointment(
+          startTime: start,
+          endTime: end,
+          subject: studentName,
+          location: locationInfo,
+          color: bgColor,
+          notes: lesson['lesson_plan']?.toString() ?? '',
+          id: lesson['id'],
+        ));
+      }
 
       setState(() {
-        _lessons = List<Map<String, dynamic>>.from(data);
-        _loading = false;
+        _appointments = appointments;
+        _isLoading = false;
       });
     } catch (e) {
-      setState(() => _loading = false);
+      debugPrint('Error fetching teacher schedule: $e');
+      setState(() => _isLoading = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple));
-    }
-
-    if (_lessons.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.calendar_today_rounded, size: 64, color: AppTheme.textSecondary.withAlpha(80)),
-            const SizedBox(height: 16),
-            const Text('Нет занятий на этой неделе', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: _loadLessons,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Обновить'),
-            )
-          ],
-        ),
-      );
-    }
-
-    // Group by date
-    final Map<String, List<Map<String, dynamic>>> grouped = {};
-    for (final lesson in _lessons) {
-      final dt = DateTime.tryParse(lesson['scheduled_at'] ?? '') ?? DateTime.now();
-      final key = DateFormat('EEEE, d MMMM', 'ru').format(dt);
-      grouped.putIfAbsent(key, () => []).add(lesson);
-    }
-
-    return RefreshIndicator(
-      color: AppTheme.primaryPurple,
-      onRefresh: _loadLessons,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: grouped.entries.map((entry) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  entry.key,
-                  style: const TextStyle(
-                    color: AppTheme.primaryPurple,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              ...entry.value.map((lesson) => _LessonCard(lesson: lesson, onRefresh: _loadLessons)),
-              const SizedBox(height: 8),
-            ],
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
-class _LessonCard extends StatelessWidget {
-  final Map<String, dynamic> lesson;
-  final VoidCallback onRefresh;
-  const _LessonCard({required this.lesson, required this.onRefresh});
-
-  String _statusLabel(String? s) {
-    switch (s) {
-      case 'completed': return 'Завершено';
-      case 'cancelled': return 'Отменено';
-      default: return 'Запланировано';
-    }
-  }
-
-  Color _statusColor(String? s) {
-    switch (s) {
-      case 'completed': return AppTheme.success;
-      case 'cancelled': return AppTheme.danger;
-      default: return AppTheme.primaryPurple;
-    }
-  }
-
-  Future<void> _markCompleted(BuildContext context) async {
+  Future<void> _markCompleted(String lessonId) async {
     try {
-      await Supabase.instance.client
-          .from('lessons')
-          .update({'status': 'completed'})
-          .eq('id', lesson['id']);
-      onRefresh();
-    } catch (_) {}
+      await _supabase.from('lessons').update({'status': 'completed'}).eq('id', lessonId);
+      _fetchScheduleData();
+    } catch (e) {
+      debugPrint('Error completing lesson: $e');
+    }
   }
 
-  Future<void> _editLessonPlan(BuildContext context) async {
-    final controller = TextEditingController(text: lesson['lesson_plan'] ?? '');
+  Future<void> _editLessonPlan(String lessonId, String currentPlan) async {
+    final controller = TextEditingController(text: currentPlan);
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -177,115 +130,154 @@ class _LessonCard extends StatelessWidget {
     );
 
     if (result != null) {
-      await Supabase.instance.client
-          .from('lessons')
-          .update({'lesson_plan': result.trim()})
-          .eq('id', lesson['id']);
-      onRefresh();
+      await _supabase.from('lessons').update({'lesson_plan': result.trim()}).eq('id', lessonId);
+      _fetchScheduleData();
     }
+  }
+
+  void _showLessonDetails(Appointment appointment) {
+    if (appointment.id == null) return;
+    final lessonId = appointment.id.toString();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          title: Text(appointment.subject),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${DateFormat('dd.MM.yyyy HH:mm').format(appointment.startTime)} - ${DateFormat('HH:mm').format(appointment.endTime)}'),
+              const SizedBox(height: 8),
+              Text('Где: ${appointment.location ?? "Не указано"}'),
+              const SizedBox(height: 16),
+              if (appointment.notes?.isNotEmpty == true) ...[
+                const Text('План занятия:', style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.primaryPurple)),
+                const SizedBox(height: 4),
+                Text(appointment.notes!),
+              ] else
+                Text('План не заполнен', style: TextStyle(fontStyle: FontStyle.italic, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _editLessonPlan(lessonId, appointment.notes ?? '');
+              },
+              child: const Text('Изменить план'),
+            ),
+            if (appointment.color == AppTheme.primaryPurple)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _markCompleted(lessonId);
+                },
+                child: const Text('Завершить занятие', style: TextStyle(color: AppTheme.success)),
+              ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Закрыть'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final dt = DateTime.tryParse(lesson['scheduled_at'] ?? '');
-    final time = dt != null ? DateFormat('HH:mm').format(dt) : '--:--';
-    final duration = lesson['duration_minutes'] ?? 60;
-    final status = lesson['status'] as String?;
-    final student = lesson['students']?['profiles'];
-    final studentName = student != null
-        ? '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim()
-        : 'Неизвестен';
-    final roomName = lesson['rooms']?['name'] ?? '—';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: AppTheme.primaryPurple.withAlpha(25),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(time, style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700, fontSize: 15)),
-                  Text('$duration мин', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+    return Column(
+      children: [
+        // Header controls
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              DropdownButton<CalendarView>(
+                value: _calendarController.view,
+                dropdownColor: Theme.of(context).colorScheme.surface,
+                items: const [
+                  DropdownMenuItem(value: CalendarView.day, child: Text('День')),
+                  DropdownMenuItem(value: CalendarView.week, child: Text('Неделя')),
+                  DropdownMenuItem(value: CalendarView.month, child: Text('Месяц')),
+                  DropdownMenuItem(value: CalendarView.schedule, child: Text('Расписание')),
                 ],
+                onChanged: (view) {
+                  if (view != null) {
+                    setState(() => _calendarController.view = view);
+                  }
+                },
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(studentName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      const Icon(Icons.meeting_room_rounded, size: 13, color: AppTheme.textSecondary),
-                      const SizedBox(width: 4),
-                      Text(roomName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                    ],
-                  ),
-                  if (lesson['lesson_plan'] != null && (lesson['lesson_plan'] as String).isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'План: ${lesson['lesson_plan']}',
-                      style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 11, fontStyle: FontStyle.italic),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: _fetchScheduleData,
               ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_horiz_rounded, size: 18, color: AppTheme.textSecondary),
-                  color: AppTheme.cardDark,
-                  onSelected: (v) {
-                    if (v == 'plan') _editLessonPlan(context);
-                    if (v == 'complete') _markCompleted(context);
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(value: 'plan', child: Text('План урока')),
-                    if (status == 'planned')
-                      const PopupMenuItem(value: 'complete', child: Text('Завершить')),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _statusColor(status).withAlpha(25),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    _statusLabel(status),
-                    style: TextStyle(color: _statusColor(status), fontSize: 11, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                if (status == 'planned') ...[
-                  const SizedBox(height: 6),
-                  GestureDetector(
-                    onTap: () => _markCompleted(context),
-                    child: const Text(
-                      'Завершить',
-                      style: TextStyle(color: AppTheme.primaryPurple, fontSize: 11, decoration: TextDecoration.underline),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        
+        // Calendar Body
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple))
+              : SfCalendar(
+                  controller: _calendarController,
+                  view: CalendarView.day,
+                  firstDayOfWeek: 1, // Monday
+                  timeSlotViewSettings: const TimeSlotViewSettings(
+                    startHour: 6,
+                    endHour: 23,
+                    timeFormat: 'HH:mm',
+                    timeIntervalHeight: 60,
+                  ),
+                  dataSource: _TeacherLessonDataSource(_appointments),
+                  onTap: (CalendarTapDetails details) {
+                    if (details.appointments != null && details.appointments!.isNotEmpty) {
+                      final Appointment appItem = details.appointments![0];
+                      _showLessonDetails(appItem);
+                    }
+                  },
+                  appointmentBuilder: (BuildContext context, CalendarAppointmentDetails details) {
+                    final Appointment app = details.appointments.first;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: app.color.withAlpha(50),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: app.color, width: 1),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            app.subject,
+                            style: TextStyle(color: app.color, fontSize: 11, fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            app.location ?? '',
+                            style: TextStyle(color: app.color, fontSize: 9),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
+  }
+}
+
+class _TeacherLessonDataSource extends CalendarDataSource {
+  _TeacherLessonDataSource(List<Appointment> source) {
+    appointments = source;
   }
 }

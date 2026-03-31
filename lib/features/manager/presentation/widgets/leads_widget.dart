@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'manage_statuses_dialog.dart';
 
 class LeadsWidget extends StatefulWidget {
   const LeadsWidget({super.key});
@@ -16,18 +18,31 @@ class _LeadsWidgetState extends State<LeadsWidget> {
   List<StatusRecord> _activeStatuses = [];
   bool _loading = true;
 
-  static const _defaultStatuses = [
-    ('new', 'Новый', AppTheme.danger),
-    ('contacted', 'Контакт', AppTheme.warning),
-    ('negotiation', 'Переговоры', AppTheme.primaryPurple),
-    ('converted', 'Договор', AppTheme.success),
-    ('lost', 'Отказ', AppTheme.textSecondary),
-  ];
-
   @override
   void initState() {
     super.initState();
-    _subscribeLeads();
+    _loadStatusesAndSubscribe();
+  }
+
+  Future<void> _loadStatusesAndSubscribe() async {
+    try {
+      final res = await _supabase.from('lead_statuses').select().order('sort_order', ascending: true);
+      final statuses = <StatusRecord>[];
+      for (final r in res) {
+        final key = r['key'].toString();
+        final label = r['label'].toString();
+        final rawColor = r['color']?.toString() ?? '8B5CF6';
+        final hexColor = rawColor.replaceAll('#', '');
+        final color = Color(int.parse('FF$hexColor', radix: 16));
+        statuses.add((key, label, color));
+      }
+      
+      if (!mounted) return;
+      setState(() => _activeStatuses = statuses);
+      _subscribeLeads();
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   void _subscribeLeads() {
@@ -39,7 +54,8 @@ class _LeadsWidgetState extends State<LeadsWidget> {
       if (!mounted) return;
       final grouped = <String, List<Map<String, dynamic>>>{};
       final foundStatuses = <String>{};
-      for (final s in _defaultStatuses) {
+      
+      for (final s in _activeStatuses) {
         grouped[s.$1] = [];
       }
       for (final l in data) {
@@ -48,8 +64,8 @@ class _LeadsWidgetState extends State<LeadsWidget> {
         grouped.putIfAbsent(status, () => []).add(l);
       }
 
-      final active = List<StatusRecord>.from(_defaultStatuses);
-      final knownKeys = _defaultStatuses.map((e) => e.$1).toSet();
+      final active = List<StatusRecord>.from(_activeStatuses);
+      final knownKeys = _activeStatuses.map((e) => e.$1).toSet();
       for (final s in foundStatuses) {
         if (!knownKeys.contains(s)) {
           active.add((s, s, AppTheme.primaryPurple));
@@ -89,6 +105,14 @@ class _LeadsWidgetState extends State<LeadsWidget> {
     await _supabase.from('leads').delete().eq('id', id);
   }
 
+  void _openDetail(Map<String, dynamic> lead) async {
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => LeadDetailDialog(lead: lead, allStatuses: _activeStatuses),
+    );
+    // Stream will handle refresh
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -99,40 +123,139 @@ class _LeadsWidgetState extends State<LeadsWidget> {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
         onPressed: _addLead,
+        tooltip: 'Новый контакт',
         child: const Icon(Icons.person_add_rounded),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: _activeStatuses.map((s) {
-          final leads = _leadsByStatus[s.$1] ?? [];
-          if (leads.isEmpty) return const SizedBox.shrink();
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Воронка продаж', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await ManageStatusesDialog.show(context);
+                    _loadStatusesAndSubscribe();
+                  },
+                  icon: const Icon(Icons.settings_rounded, size: 16),
+                  label: const Text('Управление колонками'),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _activeStatuses.map((s) {
+                  final leads = _leadsByStatus[s.$1] ?? [];
+                  return _KanbanColumn(
+                    status: s,
+                    leads: leads,
+                    onMove: _moveStatus,
+                    onDelete: _deleteLead,
+                    onTap: _openDetail,
+                    allStatuses: _activeStatuses,
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KanbanColumn extends StatefulWidget {
+  final StatusRecord status;
+  final List<Map<String, dynamic>> leads;
+  final Function(String, String) onMove;
+  final Function(String) onDelete;
+  final Function(Map<String, dynamic>) onTap;
+  final List<StatusRecord> allStatuses;
+
+  const _KanbanColumn({
+    required this.status,
+    required this.leads,
+    required this.onMove,
+    required this.onDelete,
+    required this.onTap,
+    required this.allStatuses,
+  });
+
+  @override
+  State<_KanbanColumn> createState() => _KanbanColumnState();
+}
+
+class _KanbanColumnState extends State<_KanbanColumn> {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 300,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withAlpha(127),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: DragTarget<String>(
+        onWillAcceptWithDetails: (details) => true,
+        onAcceptWithDetails: (details) => widget.onMove(details.data, widget.status.$1),
+        builder: (context, candidateData, rejectedData) {
           return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Container(width: 10, height: 10, decoration: BoxDecoration(color: s.$3, shape: BoxShape.circle)),
+                    Container(width: 8, height: 8, decoration: BoxDecoration(color: widget.status.$3, shape: BoxShape.circle)),
                     const SizedBox(width: 8),
-                    Text(s.$2, style: TextStyle(color: s.$3, fontWeight: FontWeight.w700, fontSize: 14)),
+                    Text(widget.status.$2, style: TextStyle(color: widget.status.$3, fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(width: 8),
-                    Text('(${leads.length})', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10)),
+                      child: Text('${widget.leads.length}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                    ),
                   ],
                 ),
               ),
-              ...leads.map((lead) => _LeadCard(
-                    lead: lead,
-                    statusColor: s.$3,
-                    allStatuses: _activeStatuses,
-                    onMove: _moveStatus,
-                    onDelete: _deleteLead,
-                    onRefresh: () => setState(() {}),
-                  )),
-              const SizedBox(height: 8),
+              if (candidateData.isNotEmpty)
+                Container(
+                  height: 100,
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: widget.status.$3),
+                    borderRadius: BorderRadius.circular(10),
+                    color: widget.status.$3.withAlpha(25),
+                  ),
+                  child: const Center(child: Icon(Icons.move_to_inbox_rounded)),
+                ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  itemCount: widget.leads.length,
+                  itemBuilder: (context, index) {
+                    final lead = widget.leads[index];
+                    return _LeadCard(
+                      lead: lead,
+                      statusColor: widget.status.$3,
+                      allStatuses: widget.allStatuses,
+                      onMove: widget.onMove,
+                      onDelete: widget.onDelete,
+                      onTap: () => widget.onTap(lead),
+                      onRefresh: () => setState(() {}),
+                    );
+                  },
+                ),
+              ),
             ],
           );
-        }).toList(),
+        },
       ),
     );
   }
@@ -146,7 +269,8 @@ class _LeadCard extends StatelessWidget {
   final List<StatusRecord> allStatuses;
   final Function(String, String) onMove;
   final Function(String) onDelete;
-  final VoidCallback? onRefresh;
+  final VoidCallback onTap;
+  final VoidCallback onRefresh;
 
   const _LeadCard({
     required this.lead,
@@ -154,91 +278,128 @@ class _LeadCard extends StatelessWidget {
     required this.allStatuses,
     required this.onMove,
     required this.onDelete,
-    this.onRefresh,
+    required this.onTap,
+    required this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context) {
-    try {
-      final id = lead['id']?.toString() ?? '';
-      final firstName = (lead['name']?.toString() ?? '').isNotEmpty ? lead['name']?.toString() : (lead['first_name']?.toString() ?? '');
-      final lastName = lead['last_name']?.toString() ?? '';
-      final name = '$firstName $lastName'.trim();
-      final displayName = name.isEmpty ? 'Без имени' : name;
-      final phone = lead['phone']?.toString() ?? '';
-      final source = lead['source']?.toString() ?? '';
-      final currentStatus = lead['status']?.toString() ?? 'new';
-      final dtStr = lead['created_at']?.toString();
-      final dt = dtStr != null ? DateTime.tryParse(dtStr) : null;
-      final dateStr = dt != null ? DateFormat('d MMM', 'ru').format(dt) : '';
+    final id = lead['id']?.toString() ?? '';
+    final firstName = lead['name']?.toString() ?? '';
+    final lName = lead['last_name']?.toString() ?? '';
+    final name = '$firstName $lName'.trim();
+    final displayName = name.isEmpty ? 'Без имени' : name;
+    final phone = lead['phone']?.toString() ?? '';
+    final source = lead['source']?.toString() ?? '';
+    final currentStatus = lead['status']?.toString() ?? 'new';
+    final dtStr = lead['created_at']?.toString();
+    final dt = dtStr != null ? DateTime.tryParse(dtStr) : null;
+    final dateStr = dt != null ? DateFormat('d MMM', 'ru').format(dt) : '';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 44,
-              decoration: BoxDecoration(color: statusColor, borderRadius: BorderRadius.circular(4)),
+    final customData = lead['custom_data'] as Map<String, dynamic>? ?? {};
+    final discipline = customData['discipline']?.toString() ?? '';
+    final level = customData['level']?.toString() ?? '';
+
+    return LongPressDraggable<String>(
+      data: id,
+      feedback: Transform.rotate(
+        angle: 0.05,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: 280,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: Colors.black.withAlpha(76), blurRadius: 10, spreadRadius: 2)],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(displayName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  if (phone.isNotEmpty)
-                    Text(phone, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                  if (source.isNotEmpty)
-                    Text('Источник: $source', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-                ],
-              ),
-            ),
-            if (dateStr.isNotEmpty)
-              Text(dateStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert_rounded, color: AppTheme.textSecondary, size: 20),
-              color: AppTheme.cardDark,
-              onSelected: (v) {
-                if (v == 'delete') {
-                  onDelete(id);
-                } else if (v == 'comment') {
-                  _addComment(context);
-                } else if (v == 'task') {
-                  _addTask(context);
-                } else if (v == 'trial') {
-                  _scheduleTrial(context);
-                } else {
-                  onMove(id, v);
-                }
-              },
-              itemBuilder: (_) => [
-                ...allStatuses
-                    .where((s) => s.$1 != currentStatus)
-                    .map((s) => PopupMenuItem(value: s.$1, child: Text('→ ${s.$2}'))),
-                const PopupMenuDivider(),
-                const PopupMenuItem(value: 'comment', child: Text('Добавить комментарий')),
-                const PopupMenuItem(value: 'task', child: Text('Создать задачу')),
-                const PopupMenuItem(value: 'trial', child: Text('Назначить пробный')),
-                const PopupMenuDivider(),
-                const PopupMenuItem(value: 'delete', child: Text('Удалить', style: TextStyle(color: AppTheme.danger))),
+            child: Text(displayName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(displayName,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_horiz_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 150),
+                      onSelected: (v) {
+                        if (v == 'delete') {
+                          onDelete(id);
+                        } else if (v == 'comment') {
+                          _addComment(context);
+                        } else if (v == 'task') {
+                          _addTask(context);
+                        } else if (v == 'trial') {
+                          _scheduleTrial(context);
+                        } else {
+                          onMove(id, v);
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        ...allStatuses
+                            .where((s) => s.$1 != currentStatus)
+                            .map((s) => PopupMenuItem(value: s.$1, child: Text('→ ${s.$2}'))),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(value: 'comment', child: Text('Добавить комментарий')),
+                        const PopupMenuItem(value: 'task', child: Text('Создать задачу')),
+                        const PopupMenuItem(value: 'trial', child: Text('Назначить пробный')),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Удалить', style: TextStyle(color: AppTheme.danger))),
+                      ],
+                    ),
+                  ],
+                ),
+                if (phone.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(phone, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (discipline.isNotEmpty)
+                      _InfoBadge(text: discipline, color: AppTheme.primaryPurple.withAlpha(51), textColor: AppTheme.primaryPurple),
+                    if (level.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: _InfoBadge(text: level, color: AppTheme.warning.withAlpha(51), textColor: AppTheme.warning),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (source.isNotEmpty)
+                      Text(source, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
+                    Text(dateStr, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
+                  ],
+                ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
-    } catch (e) {
-      return Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Text('Ошибка: $e'),
-        ),
-      );
-    }
   }
 
   Future<void> _addComment(BuildContext context) async {
@@ -261,7 +422,7 @@ class _LeadCard extends StatelessWidget {
         'content': content.trim(),
         'author_id': Supabase.instance.client.auth.currentUser?.id,
       });
-      onRefresh?.call();
+      onRefresh();
     }
   }
 
@@ -285,7 +446,7 @@ class _LeadCard extends StatelessWidget {
         'status': 'todo',
         'created_by': Supabase.instance.client.auth.currentUser?.id,
       });
-      onRefresh?.call();
+      onRefresh();
     }
   }
 
@@ -317,7 +478,7 @@ class _LeadCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: selectedTeacher,
+                initialValue: selectedTeacher,
                 decoration: const InputDecoration(labelText: 'Учитель'),
                 items: teachers.map((t) => DropdownMenuItem(
                   value: t['id'].toString(),
@@ -327,7 +488,7 @@ class _LeadCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: selectedRoom,
+                initialValue: selectedRoom,
                 decoration: const InputDecoration(labelText: 'Кабинет'),
                 items: rooms.map((r) => DropdownMenuItem(
                   value: r['id'].toString(),
@@ -388,11 +549,30 @@ class _LeadCard extends StatelessWidget {
         'status': 'planned',
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пробное занятие назначено')),
-      );
-      onRefresh?.call();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Пробное занятие назначено')),
+        );
+      }
+      onRefresh();
     }
+  }
+}
+
+class _InfoBadge extends StatelessWidget {
+  final String text;
+  final Color color;
+  final Color textColor;
+
+  const _InfoBadge({required this.text, required this.color, required this.textColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+      child: Text(text, style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold)),
+    );
   }
 }
 
@@ -419,7 +599,7 @@ class _LeadDialogState extends State<_LeadDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.surfaceDark,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       title: const Text('Новый лид'),
       content: Column(
         mainAxisSize: MainAxisSize.min,

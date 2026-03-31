@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/providers/realtime_providers.dart';
+import 'package:magic_music_crm/core/widgets/skeletons.dart';
 
 final homeworkProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final supabase = Supabase.instance.client;
-  final user = supabase.auth.currentUser;
-  if (user == null) return [];
+  final studentIdAsync = ref.watch(currentStudentIdProvider);
+  final studentId = studentIdAsync.asData?.value;
+  
+  if (studentId == null) return [];
 
-  final studentRes = await supabase
-      .from('students')
-      .select('id')
-      .eq('profile_id', user.id)
-      .maybeSingle();
-  if (studentRes == null) return [];
+  // Watch the stream to trigger re-fetches
+  ref.watch(studentTasksStreamProvider(studentId));
 
+  final supabase = ref.watch(supabaseProvider);
   final tasks = await supabase
       .from('tasks')
       .select('*')
-      .eq('student_id', studentRes['id'])
+      .eq('student_id', studentId)
       .order('created_at', ascending: false);
 
   return List<Map<String, dynamic>>.from(tasks);
@@ -33,17 +33,20 @@ class HomeworkWidget extends ConsumerWidget {
     final homeworkAsync = ref.watch(homeworkProvider);
 
     return homeworkAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (err, _) => Center(child: Text('Ошибка: $err', style: const TextStyle(color: AppTheme.danger))),
+      loading: () => const Padding(
+        padding: EdgeInsets.all(12),
+        child: ListSkeleton(count: 5),
+      ),
+      error: (err, _) => Center(child: Text('Ошибка: $err', style: TextStyle(color: AppTheme.danger))),
       data: (tasks) {
         if (tasks.isEmpty) {
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.assignment_turned_in_rounded, size: 64, color: AppTheme.textSecondary.withAlpha(80)),
+                Icon(Icons.assignment_turned_in_rounded, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80)),
                 const SizedBox(height: 16),
-                const Text('Нет текущих заданий', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
+                Text('Нет текущих заданий', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 16)),
               ],
             ),
           );
@@ -72,7 +75,7 @@ class HomeworkWidget extends ConsumerWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       decoration: isDone ? TextDecoration.lineThrough : null,
-                      color: isDone ? AppTheme.textSecondary : AppTheme.textPrimary,
+                      color: isDone ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   subtitle: Column(
@@ -80,7 +83,7 @@ class HomeworkWidget extends ConsumerWidget {
                     children: [
                       if (task['description'] != null && task['description'].toString().isNotEmpty)
                         Text(task['description'], style: const TextStyle(fontSize: 12)),
-                      Text('Назначено: $dateStr', style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                      Text('Назначено: $dateStr', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                     ],
                   ),
                   onChanged: (val) async {

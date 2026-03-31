@@ -43,7 +43,7 @@ class _DebtorsWidgetState extends State<DebtorsWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator(color: AppTheme.danger));
+    if (_loading) return Center(child: CircularProgressIndicator(color: AppTheme.danger));
     
     final fmt = NumberFormat('#,##0', 'ru');
     
@@ -56,8 +56,8 @@ class _DebtorsWidgetState extends State<DebtorsWidget> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const Text('Должники', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-                const SizedBox(width: 8),
+                Text('Должники', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
@@ -74,7 +74,7 @@ class _DebtorsWidgetState extends State<DebtorsWidget> {
               onRefresh: _loadDebtors,
               color: AppTheme.danger,
               child: _debtors.isEmpty
-                  ? const Center(child: Text('Должников не найдено', style: TextStyle(color: AppTheme.textSecondary)))
+                  ? Center(child: Text('Должников не найдено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)))
                   : ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: _debtors.length,
@@ -93,16 +93,16 @@ class _DebtorsWidgetState extends State<DebtorsWidget> {
                             onTap: () => context.push('/admin/student/${d['student_id']}'),
                             leading: CircleAvatar(
                               backgroundColor: AppTheme.danger.withAlpha(30),
-                              child: const Icon(Icons.person_remove_rounded, color: AppTheme.danger, size: 20),
+                              child: Icon(Icons.person_remove_rounded, color: AppTheme.danger, size: 20),
                             ),
                             title: Text(name.isEmpty ? 'Без имени' : name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text(phone, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            subtitle: Text(phone, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                             trailing: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text('${fmt.format(balance)} ₽', style: const TextStyle(color: AppTheme.danger, fontWeight: FontWeight.w800, fontSize: 16)),
-                                const Text('задолженность', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                                Text('задолженность', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                               ],
                             ),
                           ),

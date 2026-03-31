@@ -1,0 +1,4 @@
+﻿Analyzing upcoming_lessons_list.dart...                         
+
+   info - Unnecessary braces in a string interpolation - lib\features\client\presentation\widgets\upcoming_lessons_list.dart:140:37 - unnecessary_brace_in_string_interps
+

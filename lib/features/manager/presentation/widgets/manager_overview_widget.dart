@@ -68,7 +68,7 @@ class _ManagerOverviewWidgetState extends State<ManagerOverviewWidget> {
       return const Center(child: CircularProgressIndicator(color: AppTheme.secondaryGold));
     }
 
-    final fmt = (double v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)}к ₽' : '${v.toStringAsFixed(0)} ₽';
+    String fmt(double v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)}к ₽' : '${v.toStringAsFixed(0)} ₽';
 
     return RefreshIndicator(
       color: AppTheme.secondaryGold,
@@ -81,7 +81,7 @@ class _ManagerOverviewWidgetState extends State<ManagerOverviewWidget> {
           children: [
             const Text('Сводка', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Text('Данные за текущий месяц', style: TextStyle(color: AppTheme.textSecondary)),
+            Text('Данные за текущий месяц', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 20),
             // Revenue highlight card
             Container(
@@ -151,7 +151,7 @@ class _StatCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w800)),
-                Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
               ],
             ),
           ],

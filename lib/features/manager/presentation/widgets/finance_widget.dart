@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/student_detail_dialog.dart';
 
 class FinanceWidget extends StatefulWidget {
   const FinanceWidget({super.key});
@@ -41,7 +42,7 @@ class _FinanceWidgetState extends State<FinanceWidget> {
 
       final data = await _supabase
           .from('payments')
-          .select('*, students(profiles(first_name, last_name))')
+          .select('*, students(*)')
           .gte('created_at', from.toIso8601String())
           .order('created_at', ascending: false);
 
@@ -84,7 +85,7 @@ class _FinanceWidgetState extends State<FinanceWidget> {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
         onPressed: _addPayment,
-        child: const Icon(Icons.add),
+        child: Icon(Icons.add),
       ),
       body: Column(
         children: [
@@ -105,13 +106,13 @@ class _FinanceWidgetState extends State<FinanceWidget> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Итого поступлений', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      Text('Итого поступлений', style: TextStyle(color: Colors.white70, fontSize: 13)),
                       Text('${fmt.format(_total)} ₽', style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
                     ],
                   ),
                 ),
                 SegmentedButton<String>(
-                  segments: const [
+                  segments: [
                     ButtonSegment(value: 'week', label: Text('Нед.')),
                     ButtonSegment(value: 'month', label: Text('Мес.')),
                     ButtonSegment(value: 'year', label: Text('Год')),
@@ -134,9 +135,9 @@ class _FinanceWidgetState extends State<FinanceWidget> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.success))
+                ? Center(child: CircularProgressIndicator(color: AppTheme.success))
                 : _payments.isEmpty
-                    ? const Center(child: Text('Нет платежей за период', style: TextStyle(color: AppTheme.textSecondary)))
+                    ? Center(child: Text('Нет платежей за период', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)))
                     : RefreshIndicator(
                         color: AppTheme.success,
                         onRefresh: _loadPayments,
@@ -147,7 +148,7 @@ class _FinanceWidgetState extends State<FinanceWidget> {
                             final p = _payments[i];
                             final amount = double.tryParse(p['amount'].toString()) ?? 0;
                             final type = _typeLabel(p['type'] as String?);
-                            final student = p['students']?['profiles'];
+                            final student = p['students'];
                             final name = student != null
                                 ? '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim()
                                 : 'Неизвестный ученик';
@@ -157,16 +158,20 @@ class _FinanceWidgetState extends State<FinanceWidget> {
                             return Card(
                               margin: const EdgeInsets.only(bottom: 8),
                               child: ListTile(
+                                onTap: student != null ? () async {
+                                  final updated = await StudentDetailDialog.show(context, Map<String, dynamic>.from(student));
+                                  if (updated == true) _loadPayments();
+                                } : null,
                                 leading: Container(
                                   width: 42, height: 42,
                                   decoration: BoxDecoration(
                                     color: AppTheme.success.withAlpha(25),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Icon(Icons.payments_rounded, color: AppTheme.success),
+                                  child: Icon(Icons.payments_rounded, color: AppTheme.success),
                                 ),
                                 title: Text(name.isEmpty ? 'Без имени' : name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                subtitle: Text('$type · $dateStr', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                                subtitle: Text('$type · $dateStr', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                                 trailing: Text('${fmt.format(amount)} ₽', style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.w700, fontSize: 15)),
                               ),
                             );
@@ -202,7 +207,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   Future<void> _loadStudents() async {
     final data = await Supabase.instance.client
         .from('students')
-        .select('id, profiles(first_name, last_name)');
+        .select('id, first_name, last_name');
     setState(() => _students = List<Map<String, dynamic>>.from(data));
   }
 
@@ -215,30 +220,29 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.surfaceDark,
-      title: const Text('Новый платёж'),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      title: Text('Новый платёж'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           DropdownButtonFormField<String>(
-            value: _selectedStudentId,
-            dropdownColor: AppTheme.cardDark,
+            initialValue: _selectedStudentId,
+            dropdownColor: Theme.of(context).colorScheme.surface,
             decoration: const InputDecoration(labelText: 'Ученик'),
             items: _students.map((s) {
-              final p = s['profiles'] as Map<String, dynamic>?;
-              final name = '${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim();
+              final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
               return DropdownMenuItem(value: s['id'] as String, child: Text(name.isEmpty ? 'Без имени' : name));
             }).toList(),
             onChanged: (v) => setState(() => _selectedStudentId = v),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           TextField(controller: _amountCtrl, decoration: const InputDecoration(labelText: 'Сумма (₽)'), keyboardType: TextInputType.number),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            value: _type,
-            dropdownColor: AppTheme.cardDark,
+            initialValue: _type,
+            dropdownColor: Theme.of(context).colorScheme.surface,
             decoration: const InputDecoration(labelText: 'Тип'),
-            items: const [
+            items: [
               DropdownMenuItem(value: 'subscription', child: Text('Абонемент')),
               DropdownMenuItem(value: 'extra_lesson', child: Text('Доп. занятие')),
               DropdownMenuItem(value: 'other', child: Text('Прочее')),
@@ -248,7 +252,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Отмена')),
         FilledButton(
           onPressed: () {
             final amount = double.tryParse(_amountCtrl.text.trim());
@@ -260,7 +264,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               });
             }
           },
-          child: const Text('Добавить'),
+          child: Text('Добавить'),
         ),
       ],
     );

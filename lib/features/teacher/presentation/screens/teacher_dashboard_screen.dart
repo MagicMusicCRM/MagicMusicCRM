@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/widgets/updater_dialog.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:go_router/go_router.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
-import '../widgets/teacher_schedule_widget.dart';
-import '../widgets/teacher_students_widget.dart';
-import '../widgets/teacher_chat_widget.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 
 class TeacherDashboardScreen extends ConsumerStatefulWidget {
   const TeacherDashboardScreen({super.key});
@@ -16,8 +11,6 @@ class TeacherDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _TeacherDashboardScreenState extends ConsumerState<TeacherDashboardScreen> {
-  int _currentIndex = 0;
-
   @override
   void initState() {
     super.initState();
@@ -28,51 +21,8 @@ class _TeacherDashboardScreenState extends ConsumerState<TeacherDashboardScreen>
     });
   }
 
-  final List<Widget> _tabs = const [
-    TeacherScheduleWidget(),
-    TeacherStudentsWidget(),
-    TeacherChatWidget(),
-  ];
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryPurple.withAlpha(30),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.music_note_rounded, color: AppTheme.primaryPurple, size: 20),
-            ),
-            const SizedBox(width: 10),
-            const Text('Кабинет преподавателя'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Выйти',
-            onPressed: () async {
-              await Supabase.instance.client.auth.signOut();
-              if (context.mounted) context.go('/login');
-            },
-          ),
-        ],
-      ),
-      body: _tabs[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today_rounded), label: 'Расписание'),
-          BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Ученики'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_rounded), label: 'Сообщения'),
-        ],
-      ),
-    );
+    return const MessengerScreen(role: 'teacher');
   }
 }

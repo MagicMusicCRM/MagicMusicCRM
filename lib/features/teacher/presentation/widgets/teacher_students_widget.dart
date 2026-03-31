@@ -37,10 +37,9 @@ class _TeacherStudentsWidgetState extends State<TeacherStudentsWidget> {
         return;
       }
 
-      // Get unique students from lessons
       final lessons = await _supabase
           .from('lessons')
-          .select('student_id, students(id, profile_id, custom_data, profiles(first_name, last_name, phone))')
+          .select('student_id, students(id, custom_data, first_name, last_name, phone)')
           .eq('teacher_id', teacher['id']);
 
       // Deduplicate by student_id
@@ -82,9 +81,9 @@ class _TeacherStudentsWidgetState extends State<TeacherStudentsWidget> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.people_rounded, size: 64, color: AppTheme.textSecondary.withAlpha(80)),
+            Icon(Icons.people_rounded, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80)),
             const SizedBox(height: 16),
-            const Text('Нет прикреплённых учеников', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
+            Text('Нет прикреплённых учеников', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 16)),
           ],
         ),
       );
@@ -115,11 +114,11 @@ class _StudentCardState extends State<_StudentCard> {
 
   @override
   Widget build(BuildContext context) {
-    final profile = widget.student['profiles'] as Map<String, dynamic>?;
-    final firstName = profile?['first_name'] ?? '';
-    final lastName = profile?['last_name'] ?? '';
+    final student = widget.student;
+    final firstName = student['first_name'] ?? '';
+    final lastName = student['last_name'] ?? '';
     final fullName = '$firstName $lastName'.trim().isEmpty ? 'Без имени' : '$firstName $lastName'.trim();
-    final phone = profile?['phone'] ?? '—';
+    final phone = student['phone'] ?? '—';
     final lessonCount = widget.student['_lesson_count'] as int;
     final customData = widget.student['custom_data'] as Map<String, dynamic>? ?? {};
     final notes = customData['notes'] as String? ?? '';
@@ -152,7 +151,7 @@ class _StudentCardState extends State<_StudentCard> {
                       children: [
                         Text(fullName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                         if (level.isNotEmpty)
-                          Text(level, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                          Text(level, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
                       ],
                     ),
                   ),
@@ -169,7 +168,7 @@ class _StudentCardState extends State<_StudentCard> {
                   ),
                   const SizedBox(width: 4),
                   Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                      color: AppTheme.textSecondary),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ],
               ),
               if (_expanded) ...[
@@ -201,9 +200,9 @@ class _InfoRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: AppTheme.textSecondary),
+        Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
         const SizedBox(width: 8),
-        Text('$label: ', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        Text('$label: ', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
         Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
       ],
     );

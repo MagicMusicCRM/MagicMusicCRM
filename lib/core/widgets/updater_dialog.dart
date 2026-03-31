@@ -69,6 +69,12 @@ class _UpdaterDialogState extends ConsumerState<UpdaterDialog> {
           _isDownloading = false;
           _hasError = true;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ошибка при загрузке или установке обновления'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }

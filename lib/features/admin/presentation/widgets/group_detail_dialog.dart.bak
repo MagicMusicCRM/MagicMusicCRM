@@ -1,0 +1,107 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/student_detail_dialog.dart';
+
+class GroupDetailDialog extends ConsumerStatefulWidget {
+  final Map<String, dynamic> group;
+
+  const GroupDetailDialog({super.key, required this.group});
+
+  static Future<void> show(BuildContext context, Map<String, dynamic> group) {
+    return showDialog(
+      context: context,
+      builder: (_) => GroupDetailDialog(group: group),
+    );
+  }
+
+  @override
+  ConsumerState<GroupDetailDialog> createState() => _GroupDetailDialogState();
+}
+
+class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
+  final _supabase = Supabase.instance.client;
+  bool _loading = true;
+  List<Map<String, dynamic>> _students = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMembers();
+  }
+
+  Future<void> _loadMembers() async {
+    try {
+      final res = await _supabase
+          .from('group_students')
+          .select('students(*)')
+          .eq('group_id', widget.group['id']);
+      
+      if (mounted) {
+        setState(() {
+          _students = (res as List).map((e) => e['students'] as Map<String, dynamic>).toList();
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groupName = widget.group['name'] ?? 'Без названия';
+
+    return Dialog(
+      backgroundColor: AppTheme.surfaceDark,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(groupName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text('Группа (ID: ${widget.group['hollihop_id'] ?? 'N/A'})',
+                          style: const TextStyle(color: AppTheme.textSecondary)),
+                    ],
+                  ),
+                ),
+                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _students.isEmpty
+                      ? const Center(child: Text('В группе нет учеников', style: TextStyle(color: AppTheme.textSecondary)))
+                      : ListView.builder(
+                          itemCount: _students.length,
+                          itemBuilder: (context, index) {
+                            final s = _students[index];
+                            final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
+                            return ListTile(
+                              leading: const CircleAvatar(child: Icon(Icons.person)),
+                              title: Text(name.isEmpty ? 'Без имени' : name),
+                              subtitle: Text(s['phone'] ?? ''),
+                              onTap: () async {
+                                await StudentDetailDialog.show(context, s);
+                                _loadMembers(); // Refresh in case data changed
+                              },
+                            );
+                          },
+                        ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

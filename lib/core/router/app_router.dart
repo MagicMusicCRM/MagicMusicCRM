@@ -3,11 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/login_screen.dart';
+import 'package:magic_music_crm/features/auth/presentation/screens/registration_screen.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/student_detail_screen.dart';
+import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
+import 'package:magic_music_crm/features/auth/presentation/screens/check_email_screen.dart';
+
 
 // ── Role cache ───────────────────────────────────────────────────────────────
 String? _cachedRole;
@@ -90,21 +94,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       final session = Supabase.instance.client.auth.currentSession;
       final isAuth = session != null;
       final loc = state.matchedLocation;
-      final isAuthRoute = loc == '/login';
+      final isAuthRoute = loc == '/login' || loc == '/register' || loc == '/check-email';
 
       if (!isAuth) {
         return isAuthRoute ? null : '/login';
       }
 
-      if (isAuth && isAuthRoute) {
-        final role = await _fetchRole(session.user.id);
-        return _roleToRoute(role);
+      final role = await _fetchRole(session.user.id);
+      final roleRoute = _roleToRoute(role);
+
+      if (isAuthRoute || loc == '/') {
+        return roleRoute;
       }
 
-      if (isAuth && loc == '/') {
-        final role = await _fetchRole(session.user.id);
-        return _roleToRoute(role);
-      }
+      // Proactive role-path enforcement
+      if (loc.startsWith('/admin') && role != 'admin') return roleRoute;
+      if (loc.startsWith('/manager') && role != 'manager') return roleRoute;
+      if (loc.startsWith('/teacher') && role != 'teacher') return roleRoute;
+      if (loc.startsWith('/client') && role != 'client') return roleRoute;
 
       return null;
     },
@@ -116,6 +123,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegistrationScreen(),
+      ),
+      GoRoute(
+        path: '/check-email',
+        builder: (context, state) {
+          final email = state.extra as String? ?? '';
+          return CheckEmailScreen(email: email);
+        },
       ),
       GoRoute(
         path: '/client',
@@ -139,6 +157,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id']!;
           return StudentDetailScreen(studentId: id);
         },
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
       ),
     ],
   );

@@ -1,0 +1,75 @@
+﻿Analyzing MagicMusicCRM...                                      
+
+   info - Don't invoke 'print' in production code - export_hollihop.dart:17:3 - avoid_print
+   info - Don't invoke 'print' in production code - export_hollihop.dart:28:9 - avoid_print
+   info - Don't invoke 'print' in production code - export_hollihop.dart:33:5 - avoid_print
+   info - Don't invoke 'print' in production code - export_hollihop.dart:47:3 - avoid_print
+   info - Don't invoke 'print' in production code - export_hollihop.dart:51:3 - avoid_print
+   info - Don't invoke 'print' in production code - export_hollihop.dart:80:7 - avoid_print
+   info - Don't invoke 'print' in production code - export_hollihop.dart:91:3 - avoid_print
+   info - Don't invoke 'print' in production code - export_hollihop.dart:101:5 - avoid_print
+   info - Don't invoke 'print' in production code - export_hollihop.dart:112:3 - avoid_print
+   info - Don't invoke 'print' in production code - lib\core\services\hollihop_service.dart:23:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\core\services\hollihop_service.dart:35:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\core\services\hollihop_service.dart:48:7 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\core\widgets\skeletons.dart:66:38 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\core\widgets\skeletons.dart:87:34 - deprecated_member_use
+warning - Unused import: 'package:magic_music_crm/core/theme/app_theme.dart' - lib\features\admin\presentation\widgets\broadcast_dialog.dart:3:8 - unused_import
+warning - The operand can't be 'null', so the condition is always 'true' - lib\features\admin\presentation\widgets\broadcast_dialog.dart:40:92 - unnecessary_null_comparison
+warning - The operand can't be 'null', so the condition is always 'true' - lib\features\admin\presentation\widgets\broadcast_dialog.dart:45:92 - unnecessary_null_comparison
+   info - Don't invoke 'print' in production code - lib\features\admin\presentation\widgets\create_lesson_dialog.dart:99:7 - avoid_print
+warning - The value of the local variable 'localTime' isn't used - lib\features\admin\presentation\widgets\create_lesson_dialog.dart:111:13 - unused_local_variable
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\admin\presentation\widgets\create_lesson_dialog.dart:203:15 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\admin\presentation\widgets\create_lesson_dialog.dart:251:21 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\admin\presentation\widgets\create_lesson_dialog.dart:270:23 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\admin\presentation\widgets\create_room_dialog.dart:110:13 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\features\admin\presentation\widgets\lesson_attendance_dialog.dart:99:7 - avoid_print
+   info - Unnecessary use of multiple underscores - lib\features\admin\presentation\widgets\lesson_attendance_dialog.dart:149:39 - unnecessary_underscores
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\features\admin\presentation\widgets\lesson_attendance_dialog.dart:165:31 - deprecated_member_use
+   info - Unnecessary 'const' keyword - lib\features\admin\presentation\widgets\lessons_kanban_widget.dart:386:22 - unnecessary_const
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\admin\presentation\widgets\mass_notification_widget.dart:66:13 - deprecated_member_use
+warning - Unused import: 'package:magic_music_crm/core/services/hollihop_service.dart' - lib\features\admin\presentation\widgets\student_detail_dialog.dart:6:8 - unused_import
+warning - The value of the field '_branches' isn't used - lib\features\admin\presentation\widgets\student_detail_dialog.dart:35:30 - unused_field
+   info - Don't use 'BuildContext's across async gaps - lib\features\admin\presentation\widgets\student_detail_dialog.dart:86:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\features\admin\presentation\widgets\student_detail_dialog.dart:148:52 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\admin\presentation\widgets\student_detail_dialog.dart:225:62 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps - lib\features\admin\presentation\widgets\student_detail_dialog.dart:292:28 - use_build_context_synchronously
+   info - Unnecessary braces in a string interpolation - lib\features\client\presentation\widgets\upcoming_lessons_list.dart:140:37 - unnecessary_brace_in_string_interps
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\finance_widget.dart:229:13 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\finance_widget.dart:242:13 - deprecated_member_use
+warning - The value of the field '_disciplines' isn't used - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:29:16 - unused_field
+warning - The value of the field '_levels' isn't used - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:30:16 - unused_field
+   info - Don't use 'BuildContext's across async gaps - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:82:28 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:215:62 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:228:9 - deprecated_member_use
+warning - The declaration '_buildDropdown' isn't referenced - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:274:10 - unused_element
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:279:9 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:283:40 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:295:9 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:299:40 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:340:42 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps - lib\features\manager\presentation\widgets\lead_detail_dialog.dart:386:28 - use_build_context_synchronously
+warning - The value of the local variable 'updated' isn't used - lib\features\manager\presentation\widgets\leads_widget.dart:109:11 - unused_local_variable
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\manager\presentation\widgets\leads_widget.dart:202:37 - deprecated_member_use
+   info - 'onWillAccept' is deprecated and shouldn't be used. Use onWillAcceptWithDetails instead. This callback is similar to onWillAcceptWithDetails but does not provide drag details. This feature was deprecated after v3.14.0-0.2.pre - lib\features\manager\presentation\widgets\leads_widget.dart:206:9 - deprecated_member_use
+   info - 'onAccept' is deprecated and shouldn't be used. Use onAcceptWithDetails instead. This callback is similar to onAcceptWithDetails but does not provide drag details. This feature was deprecated after v3.14.0-0.2.pre - lib\features\manager\presentation\widgets\leads_widget.dart:207:9 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\manager\presentation\widgets\leads_widget.dart:234:45 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\manager\presentation\widgets\leads_widget.dart:315:57 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\manager\presentation\widgets\leads_widget.dart:380:82 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\manager\presentation\widgets\leads_widget.dart:384:80 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\leads_widget.dart:481:17 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\leads_widget.dart:491:17 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps - lib\features\manager\presentation\widgets\leads_widget.dart:552:28 - use_build_context_synchronously
+   info - Use a function declaration rather than a variable assignment to bind a function to a name - lib\features\manager\presentation\widgets\manager_overview_widget.dart:71:11 - prefer_function_declarations_over_variables
+   info - Unnecessary use of string interpolation - lib\features\manager\presentation\widgets\reports_widget.dart:268:97 - unnecessary_string_interpolations
+   info - Unnecessary use of multiple underscores - lib\features\manager\presentation\widgets\reports_widget.dart:369:35 - unnecessary_underscores
+   info - Statements in an if should be enclosed in a block - lib\features\manager\presentation\widgets\tasks_widget.dart:264:40 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\manager\presentation\widgets\tasks_widget.dart:265:26 - curly_braces_in_flow_control_structures
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\tasks_widget.dart:393:15 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\tasks_widget.dart:405:15 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\tasks_widget.dart:413:15 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\tasks_widget.dart:428:15 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\tasks_widget.dart:455:15 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\tasks_widget.dart:477:15 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\manager\presentation\widgets\tasks_widget.dart:499:15 - deprecated_member_use
+

@@ -2,42 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:go_router/go_router.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/lessons_kanban_widget.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/skeletons.dart';
+import 'create_student_dialog.dart';
+import 'create_teacher_dialog.dart';
+import 'create_group_dialog.dart';
+import 'student_detail_dialog.dart';
+import 'teacher_detail_dialog.dart';
+import 'group_detail_dialog.dart';
+import 'create_room_dialog.dart';
+import 'create_employee_dialog.dart';
 
 final entitiesProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, table) async {
   final supabase = Supabase.instance.client;
   
-  bool isDisposed = false;
-  final channelName = 'public:entities:$table';
-  final channel = supabase.channel(channelName).onPostgresChanges(
-    event: PostgresChangeEvent.all,
-    schema: 'public',
-    table: table,
-    callback: (payload) {
-      if (!isDisposed) ref.invalidateSelf();
-    },
-  ).subscribe();
-
-  ref.onDispose(() {
-    isDisposed = true;
-    supabase.removeChannel(channel);
-  });
-
   if (table == 'students') {
-    final r = await supabase.from('students').select('*, profiles(first_name, last_name, phone)');
+    final r = await supabase.from('students').select('*, profiles(first_name, last_name)');
     return List<Map<String, dynamic>>.from(r);
   } else if (table == 'teachers') {
-    final r = await supabase.from('teachers').select('*, profiles(first_name, last_name, phone)');
+    final r = await supabase.from('teachers').select('*, profiles(first_name, last_name)');
     return List<Map<String, dynamic>>.from(r);
   } else if (table == 'lessons') {
     final r = await supabase
         .from('lessons')
-        .select('*, students(profiles(first_name, last_name)), groups(name), teachers(first_name, last_name, profiles(first_name, last_name)), rooms(name), branches(name)')
+        .select('*, students(first_name, last_name, profiles(first_name, last_name)), groups(name), teachers(first_name, last_name, profiles(first_name, last_name)), rooms(name), branches(name)')
         .order('scheduled_at', ascending: false)
         .limit(50);
     return List<Map<String, dynamic>>.from(r);
@@ -47,13 +35,17 @@ final entitiesProvider = FutureProvider.family<List<Map<String, dynamic>>, Strin
         .select('*, branches(name), teachers(first_name, last_name, profiles(first_name, last_name))')
         .order('name', ascending: true);
     return List<Map<String, dynamic>>.from(r);
+  } else if (table == 'rooms') {
+    final r = await supabase.from('rooms').select('*, branches(name)').order('name', ascending: true);
+    return List<Map<String, dynamic>>.from(r);
   }
-  return List<Map<String, dynamic>>.from(await supabase.from(table).select('*'));
+  
+  final res = await supabase.from(table).select('*');
+  return List<Map<String, dynamic>>.from(res);
 });
 
 class ManageEntitiesWidget extends ConsumerStatefulWidget {
-  final int initialTabIndex;
-  const ManageEntitiesWidget({super.key, this.initialTabIndex = 0});
+  const ManageEntitiesWidget({super.key});
 
   @override
   ConsumerState<ManageEntitiesWidget> createState() => ManageEntitiesWidgetState();
@@ -61,6 +53,14 @@ class ManageEntitiesWidget extends ConsumerStatefulWidget {
 
 class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 6, vsync: this);
+  }
 
   void setTab(int index) {
     if (index >= 0 && index < _tabController.length) {
@@ -69,182 +69,177 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> with
   }
 
   @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 5, vsync: this, initialIndex: widget.initialTabIndex);
-    _tabController.addListener(() {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          TabBar(
-            controller: _tabController,
-            labelColor: AppTheme.primaryPurple,
-            unselectedLabelColor: AppTheme.textSecondary,
-            indicatorColor: AppTheme.primaryPurple,
-            tabs: const [
-              Tab(text: 'Ученики'),
-              Tab(text: 'Преподаватели'),
-              Tab(text: 'Группы'),
-              Tab(text: 'Занятия'),
-              Tab(text: 'Канбан'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
+      backgroundColor: Colors.transparent,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(110),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (val) => setState(() => _searchQuery = val),
+                decoration: InputDecoration(
+                  hintText: 'Поиск...',
+                  prefixIcon: Icon(Icons.search_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+                  suffixIcon: _searchQuery.isNotEmpty 
+                    ? IconButton(
+                        icon: Icon(Icons.close_rounded, size: 20),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                  filled: true,
+                  fillColor: Theme.of(context!).colorScheme.surface,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            TabBar(
               controller: _tabController,
-              children: const [
-                _StudentsList(),
-                _TeachersList(),
-                _GroupsList(),
-                _LessonsList(),
-                LessonsKanbanWidget(),
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 16),
+              indicatorColor: AppTheme.primaryPurple,
+              labelColor: AppTheme.primaryPurple,
+              unselectedLabelColor: Theme.of(context!).colorScheme.onSurfaceVariant,
+              tabs: [
+                Tab(text: 'Ученики'),
+                Tab(text: 'Преподаватели'),
+                Tab(text: 'Группы'),
+                Tab(text: 'Занятия'),
+                Tab(text: 'Аудитории'),
+                Tab(text: 'Сотрудники'),
               ],
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: _buildFAB(context, ref),
-    );
-  }
-
-  Widget? _buildFAB(BuildContext context, WidgetRef ref) {
-    if (_tabController.index == 0) {
-      return FloatingActionButton.extended(
-        onPressed: () => _createStudent(context, ref),
-        backgroundColor: AppTheme.primaryPurple,
-        icon: const Icon(Icons.person_add_rounded, color: Colors.white),
-        label: const Text('Новый ученик', style: TextStyle(color: Colors.white)),
-      );
-    }
-    if (_tabController.index == 2) {
-      return FloatingActionButton.extended(
-        onPressed: () => _createGroup(context, ref),
-        backgroundColor: AppTheme.primaryPurple,
-        icon: const Icon(Icons.group_add_rounded, color: Colors.white),
-        label: const Text('Новая группа', style: TextStyle(color: Colors.white)),
-      );
-    }
-    if (_tabController.index == 3) {
-      return FloatingActionButton.extended(
-        onPressed: () async {
-          final created = await CreateLessonDialog.show(context);
-          if (created == true) {
-            ref.invalidate(entitiesProvider('lessons'));
-          }
-        },
-        backgroundColor: AppTheme.primaryPurple,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text('Создать занятие', style: TextStyle(color: Colors.white)),
-      );
-    }
-    return null;
-  }
-
-  Future<void> _createStudent(BuildContext context, WidgetRef ref) async {
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Новый ученик'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Имя Фамилия')),
-            const SizedBox(height: 12),
-            TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Телефон'), keyboardType: TextInputType.phone),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Создать')),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _StudentsList(searchQuery: _searchQuery),
+          _TeachersList(searchQuery: _searchQuery),
+          _GroupsList(searchQuery: _searchQuery),
+          const _LessonsList(),
+          _RoomsList(searchQuery: _searchQuery),
+          _EmployeesList(searchQuery: _searchQuery),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _createNewEntity(context),
+        backgroundColor: AppTheme.primaryPurple,
+        child: Icon(Icons.add_rounded, color: Colors.white),
+      ),
     );
-
-    if (result == true && nameCtrl.text.isNotEmpty) {
-      final names = nameCtrl.text.trim().split(' ');
-      final fn = names.first;
-      final ln = names.length > 1 ? names.sublist(1).join(' ') : '';
-      
-      await Supabase.instance.client.from('students').insert({
-        'first_name': fn,
-        'last_name': ln,
-        'phone': phoneCtrl.text.trim(),
-      });
-      ref.invalidate(entitiesProvider('students'));
-    }
   }
 
-  Future<void> _createGroup(BuildContext context, WidgetRef ref) async {
-    final nameCtrl = TextEditingController();
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Новая группа'),
-        content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Название группы')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Создать')),
-        ],
-      ),
-    );
+  void _createNewEntity(BuildContext context) async {
+    Widget? dialog;
+    switch (_tabController.index) {
+      case 0:
+        dialog = const CreateStudentDialog();
+        break;
+      case 1:
+        dialog = const CreateTeacherDialog();
+        break;
+      case 2:
+        dialog = const CreateGroupDialog();
+        break;
+      case 3:
+        // No longer creating lessons from here, redirecting to Schedule
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Для создания занятия используйте раздел "Расписание"'))
+        );
+        return;
+      case 4:
+        dialog = const CreateRoomDialog();
+        break;
+      case 5:
+        dialog = const CreateEmployeeDialog();
+        break;
+    }
 
-    if (result == true && nameCtrl.text.isNotEmpty) {
-      await Supabase.instance.client.from('groups').insert({
-        'name': nameCtrl.text.trim(),
-      });
-      ref.invalidate(entitiesProvider('groups'));
+    if (dialog != null) {
+      final res = await showDialog(context: context, builder: (ctx) => dialog!);
+      if (res == true) {
+        // Invalidate appropriately based on tab index
+        if (_tabController.index == 4) ref.invalidate(entitiesProvider('rooms'));
+        if (_tabController.index == 2) ref.invalidate(entitiesProvider('groups'));
+        if (_tabController.index == 1) ref.invalidate(entitiesProvider('teachers'));
+        if (_tabController.index == 0) ref.invalidate(entitiesProvider('students'));
+        if (_tabController.index == 5) ref.invalidate(entitiesProvider('employees'));
+      }
     }
   }
 }
 
 class _StudentsList extends ConsumerWidget {
-  const _StudentsList();
+  final String searchQuery;
+  const _StudentsList({required this.searchQuery});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(entitiesProvider('students'));
     return async.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (e, _) => Center(child: Text('РћС€РёР±РєР°: $e', style: const TextStyle(color: AppTheme.danger))),
+      loading: () => Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
+      error: (e, _) => Center(child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('Нет учеников', style: TextStyle(color: AppTheme.textSecondary)));
+        var filtered = items;
+        if (searchQuery.isNotEmpty) {
+          filtered = items.where((item) {
+            final firstName = (item['first_name'] ?? item['profiles']?['first_name'] ?? '').toString().toLowerCase();
+            final lastName = (item['last_name'] ?? item['profiles']?['last_name'] ?? '').toString().toLowerCase();
+            return firstName.contains(searchQuery.toLowerCase()) || lastName.contains(searchQuery.toLowerCase());
+          }).toList();
+        }
+
+        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет учеников' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('students')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
-            itemCount: items.length,
+            itemCount: filtered.length,
             itemBuilder: (ctx, i) {
-              final item = items[i];
-              final p = item['profiles'] as Map<String, dynamic>?;
-              final name = '${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim();
-              final phone = p?['phone'] as String? ?? '';
+              final item = filtered[i];
+              final fName = item['first_name'] ?? item['profiles']?['first_name'] ?? '';
+              final lName = item['last_name'] ?? item['profiles']?['last_name'] ?? '';
+              final name = '$fName $lName'.trim();
+              final phone = item['phone'] as String? ?? '';
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
-                  onTap: () => context.push('/student/${item['id']}'),
+                  onTap: () async {
+                    final updated = await StudentDetailDialog.show(context, item);
+                    if (updated == true) {
+                      ref.invalidate(entitiesProvider('students'));
+                    }
+                  },
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.primaryPurple.withAlpha(30),
                     child: Text(name.isNotEmpty ? name[0] : '?',
                         style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700)),
                   ),
                   title: Text(name.isEmpty ? 'Без имени' : name),
-                  subtitle: phone.isNotEmpty ? Text(phone, style: const TextStyle(color: AppTheme.textSecondary)) : null,
-                  trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+                  subtitle: phone.isNotEmpty ? Text(phone, style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)) : null,
+                  trailing: Icon(Icons.chevron_right_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant),
                 ),
               );
             },
@@ -256,31 +251,38 @@ class _StudentsList extends ConsumerWidget {
 }
 
 class _TeachersList extends ConsumerWidget {
-  const _TeachersList();
+  final String searchQuery;
+  const _TeachersList({required this.searchQuery});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(entitiesProvider('teachers'));
     return async.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (e, _) => Center(child: Text('РћС€РёР±РєР°: $e', style: const TextStyle(color: AppTheme.danger))),
+      loading: () => Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
+      error: (e, _) => Center(child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('Нет преподавателей', style: TextStyle(color: AppTheme.textSecondary)));
+        var filtered = items;
+        if (searchQuery.isNotEmpty) {
+          filtered = items.where((item) {
+            final firstName = (item['first_name'] ?? item['profiles']?['first_name'] ?? '').toString().toLowerCase();
+            final lastName = (item['last_name'] ?? item['profiles']?['last_name'] ?? '').toString().toLowerCase();
+            return firstName.contains(searchQuery.toLowerCase()) || lastName.contains(searchQuery.toLowerCase());
+          }).toList();
+        }
+
+        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет преподавателей' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('teachers')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
-            itemCount: items.length,
+            itemCount: filtered.length,
             itemBuilder: (ctx, i) {
-              final item = items[i];
-              final tf = item['first_name'] as String? ?? '';
-              final tl = item['last_name'] as String? ?? '';
-              var name = '$tf $tl'.trim();
-              if (name.isEmpty) {
-                final p = item['profiles'] as Map<String, dynamic>?;
-                name = '${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim();
-              }
+              final item = filtered[i];
+              final fName = item['first_name'] ?? item['profiles']?['first_name'] ?? '';
+              final lName = item['last_name'] ?? item['profiles']?['last_name'] ?? '';
+              final name = '$fName $lName'.trim();
               final dList = item['disciplines'] as List<dynamic>?;
               String spec = 'Не указана';
               if (dList != null && dList.isNotEmpty) {
@@ -310,8 +312,8 @@ class _TeachersList extends ConsumerWidget {
                         style: const TextStyle(color: AppTheme.secondaryGold, fontWeight: FontWeight.w700)),
                   ),
                   title: Text(name.isEmpty ? 'Без имени' : name),
-                  subtitle: Text('Специализация: $spec', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+                  subtitle: Text('Специализация: $spec', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  trailing: Icon(Icons.chevron_right_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant),
                 ),
               );
             },
@@ -345,10 +347,10 @@ class _LessonsList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(entitiesProvider('lessons'));
     return async.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (e, _) => Center(child: Text('РћС€РёР±РєР°: $e', style: const TextStyle(color: AppTheme.danger))),
+      loading: () => Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
+      error: (e, _) => Center(child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('Нет занятий', style: TextStyle(color: AppTheme.textSecondary)));
+        if (items.isEmpty) return Center(child: Text('Нет занятий', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('lessons')),
@@ -359,28 +361,25 @@ class _LessonsList extends ConsumerWidget {
               final l = items[i];
               final dt = DateTime.tryParse(l['scheduled_at'] ?? '');
               final dateStr = dt != null ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal()) : '—';
-              final student = l['students']?['profiles'];
-              final teacher = l['teachers'];
               
+              final student = l['students'];
               String studentName = 'Без ученика';
               if (student != null) {
-                studentName = '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
+                final sf = student['first_name'] ?? student['profiles']?['first_name'] ?? '';
+                final sl = student['last_name'] ?? student['profiles']?['last_name'] ?? '';
+                studentName = '$sf $sl'.trim();
+                if (studentName.isEmpty) studentName = 'Без имени';
               } else if (l['groups'] != null && l['groups']['name'] != null) {
                 studentName = 'Группа: ${l['groups']['name']}';
               }
               
-              var teacherName = 'Без преподавателя';
+              final teacher = l['teachers'];
+              String teacherName = 'Без преподавателя';
               if (teacher != null) {
-                final tf = teacher['first_name'] as String? ?? '';
-                final tl = teacher['last_name'] as String? ?? '';
+                final tf = teacher['first_name'] ?? teacher['profiles']?['first_name'] ?? '';
+                final tl = teacher['last_name'] ?? teacher['profiles']?['last_name'] ?? '';
                 teacherName = '$tf $tl'.trim();
-                if (teacherName.isEmpty) {
-                  final tp = teacher['profiles'];
-                  if (tp != null) {
-                    teacherName = '${tp['first_name'] ?? ''} ${tp['last_name'] ?? ''}'.trim();
-                  }
-                }
-                if (teacherName.isEmpty) teacherName = 'Без преподавателя';
+                if (teacherName.isEmpty) teacherName = 'Без имени';
               }
               
               final room = l['rooms']?['name'] as String? ?? '—';
@@ -397,10 +396,10 @@ class _LessonsList extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                            const SizedBox(height: 2),
-                            Text('Ученик: $studentName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            Text('Преп.: $teacherName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            Text('Кабинет: $room', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            SizedBox(height: 2),
+                            Text('Ученик: $studentName', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                            Text('Преп.: $teacherName', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                            Text('Кабинет: $room', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
                           ],
                         ),
                       ),
@@ -412,9 +411,9 @@ class _LessonsList extends ConsumerWidget {
                         ),
                         child: Text(_statusLabel(status), style: TextStyle(color: _statusColor(status), fontSize: 11, fontWeight: FontWeight.w600)),
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: 4),
                       PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert_rounded, size: 20, color: AppTheme.textSecondary),
+                        icon: Icon(Icons.more_vert_rounded, size: 20, color: Theme.of(context!).colorScheme.onSurfaceVariant),
                         onSelected: (val) {
                           if (val == 'cancel') _cancelLesson(context, ref, l['id']);
                           if (val == 'reschedule') _rescheduleLesson(context, ref, l['id'], dt);
@@ -439,11 +438,11 @@ class _LessonsList extends ConsumerWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Отменить занятие?'),
-        content: const Text('Статус занятия будет изменен на "Отменено".'),
+        title: Text('Отменить занятие?'),
+        content: Text('Статус занятия будет изменен на "Отменено".'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Назад')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Отменить', style: TextStyle(color: AppTheme.danger))),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Назад')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Отменить', style: TextStyle(color: AppTheme.danger))),
         ],
       ),
     );
@@ -479,39 +478,43 @@ class _LessonsList extends ConsumerWidget {
 }
 
 class _GroupsList extends ConsumerWidget {
-  const _GroupsList();
+  final String searchQuery;
+  const _GroupsList({required this.searchQuery});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(entitiesProvider('groups'));
     return async.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (e, _) => Center(child: Text('Ошибка: $e', style: const TextStyle(color: AppTheme.danger))),
+      loading: () => Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
+      error: (e, _) => Center(child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('Нет групп', style: TextStyle(color: AppTheme.textSecondary)));
+        var filtered = items;
+        if (searchQuery.isNotEmpty) {
+          filtered = items.where((item) {
+            final name = (item['name'] as String? ?? '').toLowerCase();
+            return name.contains(searchQuery.toLowerCase());
+          }).toList();
+        }
+
+        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет групп' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('groups')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
-            itemCount: items.length,
+            itemCount: filtered.length,
             itemBuilder: (ctx, i) {
-              final item = items[i];
+              final item = filtered[i];
               final name = item['name'] as String? ?? 'Без названия';
               final branchName = item['branches']?['name'] as String? ?? 'Без филиала';
               final teacher = item['teachers'];
               
               var teacherName = 'Без преподавателя';
               if (teacher != null) {
-                final tf = teacher['first_name'] as String? ?? '';
-                final tl = teacher['last_name'] as String? ?? '';
+                final tf = teacher['first_name'] ?? teacher['profiles']?['first_name'] ?? '';
+                final tl = teacher['last_name'] ?? teacher['profiles']?['last_name'] ?? '';
                 teacherName = '$tf $tl'.trim();
-                if (teacherName.isEmpty) {
-                  final tp = teacher['profiles'];
-                  if (tp != null) {
-                    teacherName = '${tp['first_name'] ?? ''} ${tp['last_name'] ?? ''}'.trim();
-                  }
-                }
                 if (teacherName.isEmpty) teacherName = 'Без преподавателя';
               }
 
@@ -526,10 +529,10 @@ class _GroupsList extends ConsumerWidget {
                   },
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.primaryPurple.withAlpha(30),
-                    child: const Icon(Icons.group_rounded, color: AppTheme.primaryPurple),
+                    child: Icon(Icons.group_rounded, color: AppTheme.primaryPurple),
                   ),
                   title: Text(name),
-                  subtitle: Text('Преп.: $teacherName • Фил.: $branchName', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  subtitle: Text('Преп.: $teacherName • Фил.: $branchName', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
                 ),
               );
             },
@@ -540,3 +543,139 @@ class _GroupsList extends ConsumerWidget {
   }
 }
 
+class _RoomsList extends ConsumerWidget {
+  final String searchQuery;
+  const _RoomsList({required this.searchQuery});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(entitiesProvider('rooms'));
+    return async.when(
+      loading: () => Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
+      error: (e, _) => Center(child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger))),
+      data: (items) {
+        var filtered = items;
+        if (searchQuery.isNotEmpty) {
+          filtered = items.where((item) {
+            final name = (item['name'] as String? ?? '').toLowerCase();
+            return name.contains(searchQuery.toLowerCase());
+          }).toList();
+        }
+
+        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет аудиторий' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+
+        return RefreshIndicator(
+          color: AppTheme.primaryPurple,
+          onRefresh: () async => ref.invalidate(entitiesProvider('rooms')),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: filtered.length,
+            itemBuilder: (ctx, i) {
+              final item = filtered[i];
+              final name = item['name'] as String? ?? 'Без названия';
+              final branchName = item['branches']?['name'] as String? ?? 'Без филиала';
+              final capacity = item['capacity']?.toString() ?? '1';
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  onTap: () async {
+                    final res = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => CreateRoomDialog(room: item),
+                    );
+                    if (res == true) {
+                      ref.invalidate(entitiesProvider('rooms'));
+                    }
+                  },
+                  leading: CircleAvatar(
+                    backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                    child: Icon(Icons.meeting_room_rounded, color: AppTheme.primaryPurple),
+                  ),
+                  title: Text(name),
+                  subtitle: Text('Вместимость: $capacity чел. • Фил.: $branchName', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  trailing: Icon(Icons.edit_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant, size: 18),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────
+// Employees List
+// ─────────────────────────────────────────────────
+class _EmployeesList extends ConsumerWidget {
+  final String searchQuery;
+  const _EmployeesList({required this.searchQuery});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final all = ref.watch(entitiesProvider('employees'));
+    return all.when(
+      loading: () => Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
+      error: (e, _) => Center(child: Text('Ошибка: $e')),
+      data: (items) {
+        final q = searchQuery.toLowerCase();
+        final filtered = items.where((e) {
+          final name = '${e['first_name'] ?? ''} ${e['last_name'] ?? ''}'.toLowerCase();
+          final email = (e['email'] ?? '').toString().toLowerCase();
+          final phone = (e['phone'] ?? '').toString().toLowerCase();
+          return q.isEmpty || name.contains(q) || email.contains(q) || phone.contains(q);
+        }).toList();
+
+        if (filtered.isEmpty) {
+          return Center(child: Text('Нет сотрудников', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: filtered.length,
+          itemBuilder: (_, i) {
+            final e = filtered[i];
+            final firstName = e['first_name'] as String? ?? '';
+            final lastName = e['last_name'] as String? ?? '';
+            final fullName = '$lastName $firstName'.trim().isEmpty ? 'Без имени' : '$lastName $firstName'.trim();
+            final role = e['role'] as String? ?? 'admin';
+            final roleLabel = role == 'manager' ? 'Управляющий' : 'Администратор';
+            final roleColor = role == 'manager' ? const Color(0xFF8B5CF6) : const Color(0xFFF59E0B);
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: roleColor.withAlpha(40),
+                  child: Text(
+                    fullName.isNotEmpty ? fullName[0].toUpperCase() : '?',
+                    style: TextStyle(color: roleColor, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                title: Text(fullName),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if ((e['email'] ?? '').isNotEmpty)
+                      Text(e['email'], style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                    if ((e['phone'] ?? '').isNotEmpty)
+                      Text(e['phone'], style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  ],
+                ),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: roleColor.withAlpha(30),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: roleColor.withAlpha(80)),
+                  ),
+                  child: Text(roleLabel, style: TextStyle(color: roleColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}

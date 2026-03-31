@@ -28,7 +28,7 @@ class _TasksWidgetState extends State<TasksWidget> {
     try {
       var query = _supabase
           .from('tasks')
-          .select('*, profiles!tasks_assigned_to_fkey(first_name, last_name), branches(name), students(profiles(first_name, last_name)), leads(name), groups(name), teachers(profiles(first_name, last_name))');
+          .select('*, profiles!tasks_assigned_to_fkey(first_name, last_name), branches(name), students(first_name, last_name, profiles(first_name, last_name)), leads(name), groups(name), teachers(first_name, last_name, profiles(first_name, last_name))');
 
       if (_filter != 'all') {
         query = query.eq('status', _filter);
@@ -47,10 +47,10 @@ class _TasksWidgetState extends State<TasksWidget> {
   Future<void> _createTask() async {
     final branches = await _supabase.from('branches').select('id, name');
     final employees = await _supabase.from('profiles').select('id, first_name, last_name');
-    final students = await _supabase.from('students').select('id, profiles(first_name, last_name)');
+    final students = await _supabase.from('students').select('id, first_name, last_name, profiles(first_name, last_name)');
     final leads = await _supabase.from('leads').select('id, name');
     final groups = await _supabase.from('groups').select('id, name');
-    final teachers = await _supabase.from('teachers').select('id, profiles(first_name, last_name)');
+    final teachers = await _supabase.from('teachers').select('id, first_name, last_name, profiles(first_name, last_name)');
     
     if (!mounted) return;
 
@@ -100,7 +100,7 @@ class _TasksWidgetState extends State<TasksWidget> {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
         onPressed: _createTask,
-        child: const Icon(Icons.add),
+        child: Icon(Icons.add),
       ),
       body: Column(
         children: [
@@ -111,11 +111,11 @@ class _TasksWidgetState extends State<TasksWidget> {
               child: Row(
                 children: [
                   _FilterChip(label: 'Все', value: 'all', selected: _filter == 'all', onTap: () { setState(() => _filter = 'all'); _loadTasks(); }),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   _FilterChip(label: 'К выполнению', value: 'todo', selected: _filter == 'todo', onTap: () { setState(() => _filter = 'todo'); _loadTasks(); }),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   _FilterChip(label: 'В работе', value: 'in_progress', selected: _filter == 'in_progress', onTap: () { setState(() => _filter = 'in_progress'); _loadTasks(); }),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   _FilterChip(label: 'Завершены', value: 'done', selected: _filter == 'done', onTap: () { setState(() => _filter = 'done'); _loadTasks(); }),
                 ],
               ),
@@ -123,9 +123,9 @@ class _TasksWidgetState extends State<TasksWidget> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple))
+                ? Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple))
                 : _tasks.isEmpty
-                    ? const Center(child: Text('Нет задач', style: TextStyle(color: AppTheme.textSecondary)))
+                    ? Center(child: Text('Нет задач', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)))
                     : RefreshIndicator(
                         color: AppTheme.primaryPurple,
                         onRefresh: _loadTasks,
@@ -159,10 +159,10 @@ class _FilterChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? AppTheme.primaryPurple : AppTheme.cardDark,
+          color: selected ? AppTheme.primaryPurple : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(label, style: TextStyle(color: selected ? Colors.white : AppTheme.textSecondary, fontWeight: FontWeight.w600, fontSize: 13)),
+        child: Text(label, style: TextStyle(color: selected ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600, fontSize: 13)),
       ),
     );
   }
@@ -218,8 +218,14 @@ class _TaskCard extends StatelessWidget {
     VoidCallback? onEntityTap;
 
     if (student != null) {
+      final sfName = student['first_name']?.toString() ?? '';
+      final slName = student['last_name']?.toString() ?? '';
       final sp = student['profiles'];
-      entityText = 'Ученик: ${sp?['first_name'] ?? ''} ${sp?['last_name'] ?? ''}'.trim();
+      var sName = '$sfName $slName'.trim();
+      if (sName.isEmpty && sp != null) {
+        sName = '${sp['first_name'] ?? ''} ${sp['last_name'] ?? ''}'.trim();
+      }
+      entityText = 'Ученик: ${sName.isEmpty ? 'Без имени' : sName}';
       onEntityTap = () => context.push('/student/${student['id']}');
     } else if (lead != null) {
       entityText = 'Лид: ${lead['name'] ?? ''}'.trim();
@@ -228,8 +234,14 @@ class _TaskCard extends StatelessWidget {
       entityText = 'Группа: ${task['groups']['name']}';
       // onEntityTap = () => context.push('/group/${task['groups']['id']}');
     } else if (task['teachers'] != null) {
+      final tfName = task['teachers']['first_name']?.toString() ?? '';
+      final tlName = task['teachers']['last_name']?.toString() ?? '';
       final tp = task['teachers']['profiles'];
-      entityText = 'Учитель: ${tp?['first_name'] ?? ''} ${tp?['last_name'] ?? ''}'.trim();
+      var tName = '$tfName $tlName'.trim();
+      if (tName.isEmpty && tp != null) {
+        tName = '${tp['first_name'] ?? ''} ${tp['last_name'] ?? ''}'.trim();
+      }
+      entityText = 'Учитель: ${tName.isEmpty ? 'Без имени' : tName}';
       // onEntityTap = () => context.push('/teacher/${task['teachers']['id']}');
     }
 
@@ -246,11 +258,14 @@ class _TaskCard extends StatelessWidget {
                   child: Text(task['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert_rounded, color: AppTheme.textSecondary),
-                  color: AppTheme.cardDark,
+                  icon: Icon(Icons.more_vert_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  color: Theme.of(context).colorScheme.surface,
                   onSelected: (v) {
-                    if (v == 'delete') onDelete(id);
-                    else onStatusChange(id, v);
+                    if (v == 'delete') {
+                      onDelete(id);
+                    } else {
+                      onStatusChange(id, v);
+                    }
                   },
                   itemBuilder: (_) => [
                     if (status != 'in_progress') const PopupMenuItem(value: 'in_progress', child: Text('В работу')),
@@ -263,10 +278,10 @@ class _TaskCard extends StatelessWidget {
               ],
             ),
             if (task['description'] != null && (task['description'] as String).isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(task['description'], style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+              SizedBox(height: 4),
+              Text(task['description'], style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
             ],
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -275,7 +290,7 @@ class _TaskCard extends StatelessWidget {
                 _Tag(label: _statusLabel(status), color: AppTheme.primaryPurple),
                 if (task['branches'] != null)
                   _Tag(label: 'Филиал: ${task['branches']['name']}', color: AppTheme.success),
-                if (dueDate != null) _Tag(label: 'До: $dueDate', color: AppTheme.textSecondary),
+                if (dueDate != null) _Tag(label: 'До: $dueDate', color: Theme.of(context).colorScheme.onSurfaceVariant),
                 if (assigneeText != null && assigneeText.isNotEmpty)
                   _Tag(label: assigneeText, color: AppTheme.secondaryGold),
                 if (entityText != null)
@@ -315,7 +330,7 @@ class _Tag extends StatelessWidget {
           children: [
             Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
             if (onTap != null) ...[
-              const SizedBox(width: 4),
+              SizedBox(width: 4),
               Icon(Icons.open_in_new_rounded, size: 10, color: color),
             ],
           ],
@@ -367,40 +382,40 @@ class _TaskDialogState extends State<_TaskDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppTheme.surfaceDark,
-      title: const Text('Новая задача'),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      title: Text('Новая задача'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(controller: _titleCtrl, decoration: const InputDecoration(labelText: 'Название')),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             TextField(controller: _descCtrl, decoration: const InputDecoration(labelText: 'Описание (необязательно)'), maxLines: 3),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _priority,
-              dropdownColor: AppTheme.cardDark,
+              initialValue: _priority,
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: const InputDecoration(labelText: 'Приоритет'),
-              items: const [
+              items: [
                 DropdownMenuItem(value: 'low', child: Text('Низкий')),
                 DropdownMenuItem(value: 'medium', child: Text('Средний')),
                 DropdownMenuItem(value: 'high', child: Text('Высокий')),
               ],
               onChanged: (v) => setState(() => _priority = v ?? 'medium'),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedBranchId,
-              dropdownColor: AppTheme.cardDark,
+              initialValue: _selectedBranchId,
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: const InputDecoration(labelText: 'Филиал'),
               items: widget.branches.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name'] ?? ''))).toList(),
               onChanged: (v) => setState(() => _selectedBranchId = v),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedEmployeeId,
+              initialValue: _selectedEmployeeId,
               isExpanded: true,
-              dropdownColor: AppTheme.cardDark,
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: const InputDecoration(labelText: 'Ответственный'),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Не назначен')),
@@ -411,19 +426,25 @@ class _TaskDialogState extends State<_TaskDialog> {
               ],
               onChanged: (v) => setState(() => _selectedEmployeeId = v),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedStudentId,
+              initialValue: _selectedStudentId,
               isExpanded: true,
-              dropdownColor: AppTheme.cardDark,
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: const InputDecoration(labelText: 'Привязать к ученику'),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Не привязывать')),
                 ...widget.students.map((s) {
+                  final sfName = s['first_name']?.toString() ?? '';
+                  final slName = s['last_name']?.toString() ?? '';
                   final p = s['profiles'];
+                  var name = '$sfName $slName'.trim();
+                  if (name.isEmpty && p != null) {
+                    name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+                  }
                   return DropdownMenuItem(
                     value: s['id'].toString(), 
-                    child: Text('${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim())
+                    child: Text(name.isEmpty ? 'Без имени' : name)
                   );
                 }),
               ],
@@ -432,11 +453,11 @@ class _TaskDialogState extends State<_TaskDialog> {
                 if (v != null) _selectedLeadId = null;
               }),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedLeadId,
+              initialValue: _selectedLeadId,
               isExpanded: true,
-              dropdownColor: AppTheme.cardDark,
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: const InputDecoration(labelText: 'Привязать к лиду'),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Не привязывать')),
@@ -454,11 +475,11 @@ class _TaskDialogState extends State<_TaskDialog> {
                 }
               }),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedGroupId,
+              initialValue: _selectedGroupId,
               isExpanded: true,
-              dropdownColor: AppTheme.cardDark,
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: const InputDecoration(labelText: 'Привязать к группе'),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Не привязывать')),
@@ -476,19 +497,25 @@ class _TaskDialogState extends State<_TaskDialog> {
                 }
               }),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedTeacherId,
+              initialValue: _selectedTeacherId,
               isExpanded: true,
-              dropdownColor: AppTheme.cardDark,
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: const InputDecoration(labelText: 'Привязать к учителю'),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Не привязывать')),
                 ...widget.teachers.map((t) {
+                  final tfName = t['first_name']?.toString() ?? '';
+                  final tlName = t['last_name']?.toString() ?? '';
                   final p = t['profiles'];
+                  var name = '$tfName $tlName'.trim();
+                  if (name.isEmpty && p != null) {
+                    name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+                  }
                   return DropdownMenuItem(
                     value: t['id'].toString(), 
-                    child: Text('${p?['first_name'] ?? ''} ${p?['last_name'] ?? ''}'.trim())
+                    child: Text(name.isEmpty ? 'Без имени' : name)
                   );
                 }),
               ],
@@ -501,7 +528,7 @@ class _TaskDialogState extends State<_TaskDialog> {
                 }
               }),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: () async {
                 final d = await showDatePicker(
@@ -512,14 +539,14 @@ class _TaskDialogState extends State<_TaskDialog> {
                 );
                 if (d != null) setState(() => _dueDate = d);
               },
-              icon: const Icon(Icons.calendar_today_rounded, size: 18),
+              icon: Icon(Icons.calendar_today_rounded, size: 18),
               label: Text(_dueDate == null ? 'Установить срок' : DateFormat('dd.MM.yyyy').format(_dueDate!)),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Отмена')),
         FilledButton(
           onPressed: () {
             if (_titleCtrl.text.trim().isNotEmpty) {
@@ -537,7 +564,7 @@ class _TaskDialogState extends State<_TaskDialog> {
               });
             }
           },
-          child: const Text('Создать'),
+          child: Text('Создать'),
         ),
       ],
     );
