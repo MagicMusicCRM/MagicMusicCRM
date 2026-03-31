@@ -54,6 +54,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   // Realtime
   RealtimeChannel? _messagesChannel;
   RealtimeChannel? _groupMessagesChannel;
+  RealtimeChannel? _typingChannel;
+  String _typingText = '';
+  Map<String, String> _typists = {}; // userId -> userName
 
   @override
   void initState() {
@@ -66,6 +69,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   void dispose() {
     _messagesChannel?.unsubscribe();
     _groupMessagesChannel?.unsubscribe();
+    _leaveTypingChannel();
     super.dispose();
   }
 
@@ -170,10 +174,16 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
     for (final client in clientProfiles) {
       final cid = client['id'] as String;
+      
+      // For teachers, exclude messages with receiver_id is null (Administration chat)
+      final orFilter = widget.role == 'teacher'
+          ? 'and(sender_id.eq.$cid,receiver_id.eq.$_userId),and(sender_id.eq.$_userId,receiver_id.eq.$cid)'
+          : 'and(sender_id.eq.$cid,or(receiver_id.eq.$_userId,receiver_id.is.null)),and(sender_id.eq.$_userId,receiver_id.eq.$cid)';
+
       final lastMsg = await _supabase
           .from('messages')
           .select()
-          .or('and(sender_id.eq.$cid,or(receiver_id.eq.$_userId,receiver_id.is.null)),and(sender_id.eq.$_userId,receiver_id.eq.$cid)')
+          .or(orFilter)
           .isFilter('group_chat_id', null)
           .order('created_at', ascending: false)
           .limit(1)
@@ -384,10 +394,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             return false;
           }).toList();
         } else if (partnerId != null) {
+          final orFilter = widget.role == 'teacher'
+              ? 'and(sender_id.eq.$partnerId,receiver_id.eq.$_userId),and(sender_id.eq.$_userId,receiver_id.eq.$partnerId)'
+              : 'and(sender_id.eq.$partnerId,or(receiver_id.eq.$_userId,receiver_id.is.null)),and(sender_id.eq.$_userId,receiver_id.eq.$partnerId),and(sender_id.eq.$partnerId,receiver_id.is.null)';
+
           msgs = await _supabase
               .from('messages')
               .select()
-              .or('and(sender_id.eq.$partnerId,or(receiver_id.eq.$_userId,receiver_id.is.null)),and(sender_id.eq.$_userId,receiver_id.eq.$partnerId),and(sender_id.eq.$partnerId,receiver_id.is.null)')
+              .or(orFilter)
               .isFilter('group_chat_id', null)
               .order('created_at', ascending: true)
               .limit(500);
@@ -397,6 +411,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             final isFromPartner = m['sender_id'] == partnerId;
             final isFromMe = m['sender_id'] == _userId;
             if (isFromPartner) {
+              if (widget.role == 'teacher') return m['receiver_id'] == _userId;
               return m['receiver_id'] == null || m['receiver_id'] == _userId || _adminIds.contains(m['receiver_id']);
             }
             if (isFromMe) return m['receiver_id'] == partnerId;
@@ -469,6 +484,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   void _subscribeToMessages() {
     _messagesChannel = _supabase.channel('messenger_$_userId');
+    
+    // Listen for direct and group messages
     _messagesChannel!.onPostgresChanges(
       event: PostgresChangeEvent.insert,
       schema: 'public',
@@ -527,14 +544,61 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           _updateChatItemLastMessage(m);
         }
       },
-    ).subscribe();
+    );
+
+    // Listen for channel posts
+    _messagesChannel!.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'channel_posts',
+      callback: (payload) {
+        final post = payload.newRecord;
+        final channelId = post['channel_id']?.toString();
+
+        if (mounted) {
+          // If viewing this channel, add to messages
+          if (_selectedChatId == channelId && _selectedChatType == 'channel') {
+            setState(() {
+              _messages.add({
+                ...post,
+                'sender_id': post['author_id'],
+                'message_type': post['message_type'] ?? 'text',
+                'is_read': true,
+              });
+            });
+          }
+
+          // Refresh chat list item's last message
+          _updateChatItemLastMessage({
+            ...post,
+            'group_chat_id': null, // It's a channel, but we use this helper
+            '_is_channel_post': true,
+          });
+        }
+      },
+    );
+
+    _messagesChannel!.subscribe();
   }
 
   void _updateChatItemLastMessage(Map<String, dynamic> msg) {
     final groupChatId = msg['group_chat_id']?.toString();
+    final channelId = msg['channel_id']?.toString();
+    final isChannel = msg['_is_channel_post'] == true;
+
     setState(() {
       for (var i = 0; i < _chatItems.length; i++) {
         final item = _chatItems[i];
+        
+        if (isChannel && item['id'] == channelId && item['_item_type'] == 'channel') {
+           _chatItems[i] = {
+            ...item,
+            '_last_message': msg,
+            '_last_message_time': msg['created_at'],
+          };
+          break;
+        }
+
         if (groupChatId != null && item['id'] == groupChatId) {
           _chatItems[i] = {
             ...item,
@@ -542,16 +606,31 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             '_last_message_time': msg['created_at'],
           };
           break;
-        } else if (groupChatId == null) {
+        } else if (groupChatId == null && !isChannel) {
           if (widget.role == 'client' && item['id'] == 'admin_chat') {
-            _chatItems[i] = {
-              ...item,
-              '_last_message': msg,
-              '_last_message_time': msg['created_at'],
-            };
-            break;
+             // Admin chat for clients - check if sender is from adminIds or it's my own message to null receiver
+             final senderId = msg['sender_id']?.toString();
+             final receiverId = msg['receiver_id']?.toString();
+             bool isRelevant = (senderId == _userId && receiverId == null) || 
+                              _adminIds.contains(senderId) || 
+                              _adminIds.contains(receiverId);
+             
+             if (isRelevant) {
+                _chatItems[i] = {
+                  ...item,
+                  '_last_message': msg,
+                  '_last_message_time': msg['created_at'],
+                };
+                break;
+             }
           } else if (item['_partner_id'] == msg['sender_id'] ||
               item['_partner_id'] == msg['receiver_id']) {
+            
+            // For teachers, ignore messages to "Administration" (null receiver)
+            if (widget.role == 'teacher' && msg['receiver_id'] == null) {
+              continue;
+            }
+
             _chatItems[i] = {
               ...item,
               '_last_message': msg,
@@ -562,6 +641,102 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         }
       }
     });
+  }
+
+  // ── Typing Presence ────────────────────────────────────────────────────────
+
+  Future<void> _joinTypingChannel(String chatId) async {
+    _leaveTypingChannel();
+
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    // Get my profile for name
+    final profile = await _supabase.from('profiles').select('first_name, last_name').eq('id', user.id).maybeSingle();
+    final myName = '${profile?['first_name'] ?? ''} ${profile?['last_name'] ?? ''}'.trim();
+
+    _typingChannel = _supabase.channel('typing_$chatId');
+    
+    _typingChannel!.onPresenceSync((_) {
+      final states = _typingChannel!.presenceState();
+      final Map<String, String> newTypists = {};
+      
+      for (final state in states) {
+        for (final presence in state.presences) {
+          final Map<String, dynamic> payload = presence.payload;
+          final typistId = payload['id']?.toString();
+          final isTyping = payload['isTyping'] == true;
+          
+          if (typistId != null && typistId != _userId && isTyping) {
+            final role = payload['role']?.toString();
+            final name = payload['name']?.toString() ?? 'Пользователь';
+            
+            if (widget.role == 'client' && (role == 'admin' || role == 'manager')) {
+              newTypists[typistId] = 'Администратор';
+            } else {
+              newTypists[typistId] = name;
+            }
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _typists = newTypists;
+          if (newTypists.isEmpty) {
+            _typingText = '';
+          } else if (newTypists.length == 1) {
+            _typingText = '${newTypists.values.first} печатает...';
+          } else {
+            _typingText = '${newTypists.length} чел. печатают...';
+          }
+        });
+      }
+    }).subscribe((status, [error]) {
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        _trackTyping(false, myName);
+      }
+    });
+  }
+
+  void _leaveTypingChannel() {
+    _typingChannel?.unsubscribe();
+    _typingChannel = null;
+    if (mounted) {
+      setState(() {
+        _typists = {};
+        _typingText = '';
+      });
+    }
+  }
+
+  Future<void> _trackTyping(bool isTyping, String name) async {
+    if (_typingChannel == null) return;
+    await _typingChannel!.track({
+      'id': _userId,
+      'name': name,
+      'role': widget.role,
+      'isTyping': isTyping,
+    });
+  }
+
+  void _handleTyping(bool isTyping) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    
+    // Get name from profile if not cached etc. 
+    // For performance, we could cache this, but profile select is fast with RLS
+    final profile = await _supabase.from('profiles').select('first_name').eq('id', user.id).maybeSingle();
+    final name = profile?['first_name'] ?? 'Аноним';
+    
+    await _trackTyping(isTyping, name);
+    
+    // Auto-stop typing after 3 seconds
+    if (isTyping) {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) _trackTyping(false, name);
+      });
+    }
   }
 
   // ── Send message ───────────────────────────────────────────────────────────
@@ -689,9 +864,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       _messages = [];
     });
     _loadMessages();
+    _joinTypingChannel(id);
   }
 
   void _deselectChat() {
+    _leaveTypingChannel();
     setState(() {
       _selectedChatId = null;
       _selectedChatType = null;
@@ -807,7 +984,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     if (widget.role == 'client') {
       // Clients only see the chat shell directly, no CRM navigation
       return Scaffold(
-        body: _buildMessengerShell(context),
+        body: SafeArea(
+          child: _buildMessengerShell(context),
+        ),
       );
     }
 
@@ -882,7 +1061,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       );
     } else {
       return Scaffold(
-        body: bodyContent,
+        body: SafeArea(child: bodyContent),
         bottomNavigationBar: _selectedCrmTab == 0 && _selectedChatId != null
             ? null // Hide bar in chat view
             : BottomNavigationBar(
@@ -1199,12 +1378,34 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           ),
           // Input (not for channels unless user has permission)
           if (!isChannel)
-            MessageInput(
-              onSendText: _sendTextMessage,
-              onSendVoice: _sendVoiceMessage,
-              onSendFile: (bytes, name, size, {caption}) async {
-                _showSendFileDialog(bytes, name, size);
-              },
+            Column(
+              children: [
+                if (_typingText.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, bottom: 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _typingText,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: isDark
+                              ? TelegramColors.darkTextSecondary
+                              : TelegramColors.lightTextSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                MessageInput(
+                  onSendText: _sendTextMessage,
+                  onSendVoice: _sendVoiceMessage,
+                  onTyping: _handleTyping,
+                  onSendFile: (bytes, name, size, {caption}) async {
+                    _showSendFileDialog(bytes, name, size);
+                  },
+                ),
+              ],
             )
           else
             FutureBuilder<bool>(
@@ -1213,6 +1414,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 if (snapshot.data == true) {
                   return MessageInput(
                     onSendText: _sendTextMessage,
+                    onTyping: _handleTyping,
                     onSendFile: (bytes, name, size, {caption}) async {
                       _showSendFileDialog(bytes, name, size);
                     },

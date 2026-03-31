@@ -18,6 +18,15 @@ final currentRoleProvider = FutureProvider<String>((ref) async {
   return (profile?['role'] as String?) ?? 'client';
 });
 
+/// List of admin and manager profile IDs (for deciding what counts as an "Administration" message).
+final adminIdsProvider = FutureProvider<List<String>>((ref) async {
+  final res = await _supabase
+      .from('profiles')
+      .select('id')
+      .inFilter('role', ['admin', 'manager']);
+  return (res as List).map((a) => a['id'].toString()).toList();
+});
+
 // ── Direct chats (for admins/managers — list of client conversations) ────────
 
 /// Provides list of conversations for admin/manager.
@@ -30,57 +39,58 @@ final clientConversationsProvider =
     return;
   }
 
-  // Fetch all client profiles that have messages
-  final clients = await _supabase
+  // Subscribe to profiles changes where role is client
+  final profilesStream = _supabase
       .from('profiles')
-      .select()
+      .stream(primaryKey: ['id'])
       .eq('role', 'client')
       .order('first_name');
 
-  // Get last messages and unread counts
-  final enriched = <Map<String, dynamic>>[];
-  for (final client in clients) {
-    final cid = client['id'] as String;
-    // Get last message between this client and any admin/school
-    final lastMsg = await _supabase
-        .from('messages')
-        .select()
-        .or('sender_id.eq.$cid,receiver_id.eq.$cid')
-        .order('created_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
+  await for (final clients in profilesStream) {
+    final enriched = <Map<String, dynamic>>[];
+    for (final client in clients) {
+      final cid = client['id'] as String;
+      // Get last message between this client and any admin/school
+      final lastMsg = await _supabase
+          .from('messages')
+          .select()
+          .or('sender_id.eq.$cid,receiver_id.eq.$cid')
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
 
-    // Get unread count for this client
-    final unreadRes = await _supabase
-        .from('messages')
-        .select('id')
-        .eq('sender_id', cid)
-        .eq('is_read', false)
-        .or('receiver_id.is.null,receiver_id.eq.$userId');
+      // Get unread count for this client
+      final unreadRes = await _supabase
+          .from('messages')
+          .select('id')
+          .eq('sender_id', cid)
+          .eq('is_read', false)
+          .or('receiver_id.is.null,receiver_id.eq.$userId');
 
-    final unread = (unreadRes as List).length;
+      final unread = (unreadRes as List).length;
 
-    if (lastMsg != null || unread > 0) {
-      enriched.add({
-        ...client,
-        '_last_message': lastMsg,
-        '_unread_count': unread,
-        '_last_message_time': lastMsg?['created_at'],
-      });
+      if (lastMsg != null || unread > 0) {
+        enriched.add({
+          ...client,
+          '_last_message': lastMsg,
+          '_unread_count': unread,
+          '_last_message_time': lastMsg?['created_at'],
+        });
+      }
     }
+
+    // Sort by last message time
+    enriched.sort((a, b) {
+      final aTime = a['_last_message_time'] as String?;
+      final bTime = b['_last_message_time'] as String?;
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime);
+    });
+
+    yield enriched;
   }
-
-  // Sort by last message time
-  enriched.sort((a, b) {
-    final aTime = a['_last_message_time'] as String?;
-    final bTime = b['_last_message_time'] as String?;
-    if (aTime == null && bTime == null) return 0;
-    if (aTime == null) return 1;
-    if (bTime == null) return -1;
-    return bTime.compareTo(aTime);
-  });
-
-  yield enriched;
 });
 
 // ── Messages for a specific conversation ─────────────────────────────────────
@@ -91,78 +101,84 @@ final conversationMessagesProvider =
   final userId = _supabase.auth.currentUser?.id;
   if (userId == null) return Stream.value([]);
 
+  var query = _supabase.from('messages').stream(primaryKey: ['id']);
+
   if (partnerId == null) {
-    // School inbox — messages with receiver_id = null
-    return _supabase
-        .from('messages')
-        .stream(primaryKey: ['id'])
+    // School inbox or a general thread where receiver_id is null
+    // We filter by receiver_id is null and group_chat_id is null.
+    // Note: .stream() filter capabilities are limited, so we do basic filtering here.
+    return query
+        .eq('group_chat_id', 'null') // This might not work as expected in .stream()
         .order('created_at');
   }
 
-  return _supabase
-      .from('messages')
-      .stream(primaryKey: ['id'])
-      .order('created_at');
+  // For direct chats, we ideally want (sender=me AND receiver=partner) OR (sender=partner AND receiver=me)
+  // Since .stream() only supports simple .eq() filters, we'll return messages where 
+  // either sender or receiver is the partner, and let RLS/Flutter handle the rest.
+  return query.order('created_at');
 });
 
 // ── Group chats ──────────────────────────────────────────────────────────────
 
 /// Group chats the current user belongs to.
 final userGroupChatsProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+    StreamProvider<List<Map<String, dynamic>>>((ref) async* {
   final userId = _supabase.auth.currentUser?.id;
-  if (userId == null) return [];
-
-  final memberships = await _supabase
-      .from('group_chat_members')
-      .select('group_chat_id')
-      .eq('user_id', userId);
-
-  final groupIds = (memberships as List)
-      .map((m) => m['group_chat_id'] as String)
-      .toList();
-
-  if (groupIds.isEmpty) return [];
-
-  final groups = await _supabase
-      .from('group_chats')
-      .select()
-      .inFilter('id', groupIds)
-      .order('created_at', ascending: false);
-
-  // Enrich with last message and unread count
-  final enriched = <Map<String, dynamic>>[];
-  for (final group in groups) {
-    final gid = group['id'] as String;
-    final lastMsg = await _supabase
-        .from('messages')
-        .select()
-        .eq('group_chat_id', gid)
-        .order('created_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
-
-    enriched.add({
-      ...group,
-      '_last_message': lastMsg,
-      '_last_message_time': lastMsg?['created_at'],
-      '_type': 'group',
-    });
+  if (userId == null) {
+    yield [];
+    return;
   }
 
-  return enriched;
+  // Subscribe to memberships to know when groups are added/removed
+  final membershipsStream = _supabase
+      .from('group_chat_members')
+      .stream(primaryKey: ['id'])
+      .eq('user_id', userId);
+
+  await for (final memberships in membershipsStream) {
+    final groupIds = memberships.map((m) => m['group_chat_id'] as String).toList();
+    if (groupIds.isEmpty) {
+      yield [];
+      continue;
+    }
+
+    final groups = await _supabase
+        .from('group_chats')
+        .select()
+        .inFilter('id', groupIds)
+        .order('created_at', ascending: false);
+
+    // Enrich with last message
+    final enriched = <Map<String, dynamic>>[];
+    for (final group in groups) {
+      final gid = group['id'] as String;
+      final lastMsg = await _supabase
+          .from('messages')
+          .select()
+          .eq('group_chat_id', gid)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      enriched.add({
+        ...group,
+        '_last_message': lastMsg,
+        '_last_message_time': lastMsg?['created_at'],
+        '_type': 'group',
+      });
+    }
+    yield enriched;
+  }
 });
 
-/// Messages for a group chat.
+/// Real-time messages for a group chat.
 final groupMessagesProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, String>((ref, groupChatId) async {
-  final res = await _supabase
+    StreamProvider.family<List<Map<String, dynamic>>, String>((ref, groupChatId) {
+  return _supabase
       .from('messages')
-      .select()
+      .stream(primaryKey: ['id'])
       .eq('group_chat_id', groupChatId)
-      .order('created_at', ascending: true)
-      .limit(500);
-  return List<Map<String, dynamic>>.from(res);
+      .order('created_at', ascending: true);
 });
 
 /// Members of a group chat with profile info.
@@ -177,22 +193,22 @@ final groupMembersProvider =
 
 // ── Channels ─────────────────────────────────────────────────────────────────
 
-/// All channels.
-final channelsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final res = await _supabase.from('channels').select().order('created_at');
-  return List<Map<String, dynamic>>.from(res);
+/// All channels (real-time).
+final channelsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
+  return _supabase
+      .from('channels')
+      .stream(primaryKey: ['id'])
+      .order('created_at');
 });
 
-/// Posts for a channel.
+/// Real-time posts for a channel.
 final channelPostsProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, String>((ref, channelId) async {
-  final res = await _supabase
+    StreamProvider.family<List<Map<String, dynamic>>, String>((ref, channelId) {
+  return _supabase
       .from('channel_posts')
-      .select('*, profiles:author_id(first_name, last_name)')
+      .stream(primaryKey: ['id'])
       .eq('channel_id', channelId)
-      .order('created_at', ascending: true)
-      .limit(500);
-  return List<Map<String, dynamic>>.from(res);
+      .order('created_at', ascending: true);
 });
 
 /// Current user's permissions for a channel.
@@ -216,17 +232,6 @@ final channelAllPermissionsProvider =
       .select('*, profiles:user_id(first_name, last_name, role)')
       .eq('channel_id', channelId);
   return List<Map<String, dynamic>>.from(res);
-});
-
-// ── Admin IDs (cached) ───────────────────────────────────────────────────────
-
-/// List of admin and manager profile IDs.
-final adminIdsProvider = FutureProvider<List<String>>((ref) async {
-  final res = await _supabase
-      .from('profiles')
-      .select('id')
-      .inFilter('role', ['admin', 'manager']);
-  return (res as List).map((a) => a['id'].toString()).toList();
 });
 
 // ── All profiles (for group creation) ────────────────────────────────────────

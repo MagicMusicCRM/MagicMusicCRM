@@ -12,6 +12,7 @@ class MessageInput extends StatefulWidget {
   final Future<void> Function(String text) onSendText;
   final Future<void> Function(Uint8List bytes, int durationMs, String ext)? onSendVoice;
   final Future<void> Function(Uint8List bytes, String fileName, int fileSize, {String? caption})? onSendFile;
+  final void Function(bool isTyping)? onTyping;
   final bool enabled;
 
   const MessageInput({
@@ -19,6 +20,7 @@ class MessageInput extends StatefulWidget {
     required this.onSendText,
     this.onSendVoice,
     this.onSendFile,
+    this.onTyping,
     this.enabled = true,
   });
 
@@ -32,6 +34,7 @@ class _MessageInputState extends State<MessageInput> {
   bool _isRecording = false;
   bool _isSendingFile = false;
   bool _hasText = false;
+  DateTime? _lastTypingTime;
 
   bool get _isDesktop {
     try {
@@ -45,9 +48,20 @@ class _MessageInputState extends State<MessageInput> {
   void initState() {
     super.initState();
     _controller.addListener(() {
-      final hasText = _controller.text.trim().isNotEmpty;
+      final text = _controller.text;
+      final hasText = text.trim().isNotEmpty;
       if (hasText != _hasText) {
         setState(() => _hasText = hasText);
+      }
+
+      // Typing indicator logic
+      if (widget.onTyping != null && text.isNotEmpty) {
+        final now = DateTime.now();
+        if (_lastTypingTime == null || 
+            now.difference(_lastTypingTime!) > const Duration(seconds: 2)) {
+          _lastTypingTime = now;
+          widget.onTyping!(true);
+        }
       }
     });
   }
