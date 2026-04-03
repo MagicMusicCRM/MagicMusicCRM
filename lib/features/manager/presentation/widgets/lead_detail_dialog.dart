@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
+import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 
 class LeadDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> lead;
@@ -23,9 +24,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   late Map<String, dynamic> _leadData;
   late TextEditingController _notesCtrl;
   late TextEditingController _commentCtrl;
-  final _supabase = Supabase.instance.client;
   bool _saving = false;
-
 
   List<Map<String, dynamic>> _branches = [];
   bool _loadingMetadata = true;
@@ -40,15 +39,18 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   }
 
   Future<void> _fetchMetadata() async {
-    final service = ref.read(hollihopServiceProvider);
+    final hollihopService = ref.read(hollihopServiceProvider);
+    final supaService = ref.read(supaLeadServiceProvider);
+    
     final results = await Future.wait<dynamic>([
-      service.getDisciplines() as Future<dynamic>,
-      service.getLevels() as Future<dynamic>,
-      _supabase.from('branches').select('id, name') as Future<dynamic>,
+      hollihopService.getDisciplines() as Future<dynamic>,
+      hollihopService.getLevels() as Future<dynamic>,
+      supaService.getBranches() as Future<dynamic>,
     ]);
+    
     if (mounted) {
       setState(() {
-          _branches = List<Map<String, dynamic>>.from(results[2] as List);
+        _branches = List<Map<String, dynamic>>.from(results[2] as List);
         _loadingMetadata = false;
       });
     }
@@ -65,15 +67,18 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     setState(() => _saving = true);
     try {
       final id = _leadData['id'];
-      await _supabase.from('leads').update({
-        'name': _leadData['name'],
-        'last_name': _leadData['last_name'],
-        'phone': _leadData['phone'],
-        'email': _leadData['email'],
-        'status': _leadData['status'],
-        'notes': _notesCtrl.text,
-        'custom_data': _leadData['custom_data'] ?? {},
-      }).eq('id', id);
+      await ref.read(supaLeadServiceProvider).updateLead(
+        id: id,
+        data: {
+          'name': _leadData['name'],
+          'last_name': _leadData['last_name'],
+          'phone': _leadData['phone'],
+          'email': _leadData['email'],
+          'status': _leadData['status'],
+          'notes': _notesCtrl.text,
+          'custom_data': _leadData['custom_data'] ?? {},
+        },
+      );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e')));
@@ -186,7 +191,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: _saving ? null : _save,
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryPurple,
+                    foregroundColor: Colors.white,
+                  ),
                   child: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Сохранить'),
                 ),
               ],
@@ -218,11 +226,11 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     );
   }
 
-  Widget _buildStatusPicker(StatusRecord current) {
+  Widget _buildStatusPicker((String, String, Color) current) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
-        initialValue: _leadData['status'],
+        value: _leadData['status'],
         decoration: const InputDecoration(labelText: 'Статус'),
         items: widget.allStatuses.map((s) {
           return DropdownMenuItem(
@@ -268,13 +276,11 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     );
   }
 
-
-
   Widget _buildBranchDropdown(String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
-        initialValue: _leadData['branch_id'],
+        value: _leadData['branch_id'],
         decoration: InputDecoration(
           labelText: label,
           filled: true,
@@ -354,15 +360,15 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     final text = _commentCtrl.text.trim();
     if (text.isEmpty) return;
     
-    final user = _supabase.auth.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
     try {
-      await _supabase.from('lead_comments').insert({
-        'lead_id': _leadData['id'],
-        'author_id': user.id,
-        'content': text,
-      });
+      await ref.read(supaLeadServiceProvider).addLeadComment(
+        leadId: _leadData['id'],
+        authorId: user.id,
+        content: text,
+      );
       _commentCtrl.clear();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
@@ -370,19 +376,14 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   }
 }
 
-class _CommentsList extends StatelessWidget {
+class _CommentsList extends ConsumerWidget {
   final String leadId;
   const _CommentsList({required this.leadId});
 
   @override
-  Widget build(BuildContext context) {
-    final supabase = Supabase.instance.client;
+  Widget build(BuildContext context, WidgetRef ref) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: supabase
-          .from('lead_comments')
-          .stream(primaryKey: ['id'])
-          .eq('lead_id', leadId)
-          .order('created_at', ascending: false),
+      stream: ref.watch(supaLeadServiceProvider).getLeadCommentsStream(leadId),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
         final comments = snapshot.data!;
@@ -421,5 +422,3 @@ class _CommentsList extends StatelessWidget {
     );
   }
 }
-
-typedef StatusRecord = (String, String, Color);

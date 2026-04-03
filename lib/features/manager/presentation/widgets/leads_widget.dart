@@ -1,85 +1,41 @@
-import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'manage_statuses_dialog.dart';
 
-class LeadsWidget extends StatefulWidget {
+class LeadsWidget extends ConsumerStatefulWidget {
   const LeadsWidget({super.key});
 
   @override
-  State<LeadsWidget> createState() => _LeadsWidgetState();
+  ConsumerState<LeadsWidget> createState() => _LeadsWidgetState();
 }
 
-class _LeadsWidgetState extends State<LeadsWidget> {
-  final _supabase = Supabase.instance.client;
-  Map<String, List<Map<String, dynamic>>> _leadsByStatus = {};
+class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   List<StatusRecord> _activeStatuses = [];
-  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadStatusesAndSubscribe();
+    _loadStatuses();
   }
 
-  Future<void> _loadStatusesAndSubscribe() async {
-    try {
-      final res = await _supabase.from('lead_statuses').select().order('sort_order', ascending: true);
-      final statuses = <StatusRecord>[];
-      for (final r in res) {
-        final key = r['key'].toString();
-        final label = r['label'].toString();
-        final rawColor = r['color']?.toString() ?? '8B5CF6';
-        final hexColor = rawColor.replaceAll('#', '');
-        final color = Color(int.parse('FF$hexColor', radix: 16));
-        statuses.add((key, label, color));
-      }
-      
-      if (!mounted) return;
-      setState(() => _activeStatuses = statuses);
-      _subscribeLeads();
-    } catch (e) {
-      if (mounted) setState(() => _loading = false);
+  Future<void> _loadStatuses() async {
+    final res = await ref.read(leadStatusesProvider.future);
+    final statuses = <StatusRecord>[];
+    for (final r in res) {
+      final key = r['key'].toString();
+      final label = r['label'].toString();
+      final rawColor = r['color']?.toString() ?? '8B5CF6';
+      final hexColor = rawColor.replaceAll('#', '');
+      final color = Color(int.parse('FF$hexColor', radix: 16));
+      statuses.add((key, label, color));
     }
-  }
-
-  void _subscribeLeads() {
-    _supabase
-        .from('leads')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false)
-        .listen((data) {
-      if (!mounted) return;
-      final grouped = <String, List<Map<String, dynamic>>>{};
-      final foundStatuses = <String>{};
-      
-      for (final s in _activeStatuses) {
-        grouped[s.$1] = [];
-      }
-      for (final l in data) {
-        final status = l['status'] as String? ?? 'new';
-        foundStatuses.add(status);
-        grouped.putIfAbsent(status, () => []).add(l);
-      }
-
-      final active = List<StatusRecord>.from(_activeStatuses);
-      final knownKeys = _activeStatuses.map((e) => e.$1).toSet();
-      for (final s in foundStatuses) {
-        if (!knownKeys.contains(s)) {
-          active.add((s, s, AppTheme.primaryPurple));
-        }
-      }
-
-      setState(() {
-        _leadsByStatus = grouped;
-        _activeStatuses = active;
-        _loading = false;
-      });
-    }, onError: (err) {
-      if (mounted) setState(() => _loading = false);
-    });
+    
+    if (!mounted) return;
+    setState(() => _activeStatuses = statuses);
   }
 
   Future<void> _addLead() async {
@@ -88,21 +44,20 @@ class _LeadsWidgetState extends State<LeadsWidget> {
       builder: (_) => const _LeadDialog(),
     );
     if (result != null) {
-      await _supabase.from('leads').insert({
-        'name': result['name'],
-        'phone': result['phone'],
-        'source': result['source'],
-        'status': 'new',
-      });
+      await ref.read(supaLeadServiceProvider).addLead(
+        name: result['name']!,
+        phone: result['phone']!,
+        source: result['source']!,
+      );
     }
   }
 
   Future<void> _moveStatus(String id, String newStatus) async {
-    await _supabase.from('leads').update({'status': newStatus}).eq('id', id);
+    await ref.read(supaLeadServiceProvider).updateLeadStatus(id, newStatus);
   }
 
   Future<void> _deleteLead(String id) async {
-    await _supabase.from('leads').delete().eq('id', id);
+    await ref.read(supaLeadServiceProvider).deleteLead(id);
   }
 
   void _openDetail(Map<String, dynamic> lead) async {
@@ -110,63 +65,86 @@ class _LeadsWidgetState extends State<LeadsWidget> {
       context: context,
       builder: (_) => LeadDetailDialog(lead: lead, allStatuses: _activeStatuses),
     );
-    // Stream will handle refresh
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple));
-    }
+    final leadsAsync = ref.watch(leadsStreamProvider);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addLead,
-        tooltip: 'Новый контакт',
-        child: const Icon(Icons.person_add_rounded),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Воронка продаж', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    await ManageStatusesDialog.show(context);
-                    _loadStatusesAndSubscribe();
-                  },
-                  icon: const Icon(Icons.settings_rounded, size: 16),
-                  label: const Text('Управление колонками'),
+    return leadsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
+      error: (err, stack) => Center(child: Text('Ошибка: $err')),
+      data: (data) {
+        final grouped = <String, List<Map<String, dynamic>>>{};
+        final foundStatuses = <String>{};
+        
+        for (final s in _activeStatuses) {
+          grouped[s.$1] = [];
+        }
+        for (final l in data) {
+          final status = l['status'] as String? ?? 'new';
+          foundStatuses.add(status);
+          grouped.putIfAbsent(status, () => []).add(l);
+        }
+
+        final active = List<StatusRecord>.from(_activeStatuses);
+        final knownKeys = _activeStatuses.map((e) => e.$1).toSet();
+        for (final s in foundStatuses) {
+          if (!knownKeys.contains(s)) {
+            active.add((s, s, AppTheme.primaryPurple));
+          }
+        }
+
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          floatingActionButton: FloatingActionButton(
+            onPressed: _addLead,
+            tooltip: 'Новый контакт',
+            child: const Icon(Icons.person_add_rounded),
+          ),
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Воронка продаж', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await ManageStatusesDialog.show(context);
+                        _loadStatuses();
+                      },
+                      icon: const Icon(Icons.settings_rounded, size: 16),
+                      label: const Text('Управление колонками'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _activeStatuses.map((s) {
-                  final leads = _leadsByStatus[s.$1] ?? [];
-                  return _KanbanColumn(
-                    status: s,
-                    leads: leads,
-                    onMove: _moveStatus,
-                    onDelete: _deleteLead,
-                    onTap: _openDetail,
-                    allStatuses: _activeStatuses,
-                  );
-                }).toList(),
               ),
-            ),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: active.map((s) {
+                      final leads = grouped[s.$1] ?? [];
+                      return _KanbanColumn(
+                        status: s,
+                        leads: leads,
+                        onMove: _moveStatus,
+                        onDelete: _deleteLead,
+                        onTap: _openDetail,
+                        allStatuses: active,
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -263,7 +241,7 @@ class _KanbanColumnState extends State<_KanbanColumn> {
 
 typedef StatusRecord = (String, String, Color);
 
-class _LeadCard extends StatelessWidget {
+class _LeadCard extends ConsumerWidget {
   final Map<String, dynamic> lead;
   final Color statusColor;
   final List<StatusRecord> allStatuses;
@@ -283,7 +261,7 @@ class _LeadCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final id = lead['id']?.toString() ?? '';
     final firstName = lead['name']?.toString() ?? '';
     final lName = lead['last_name']?.toString() ?? '';
@@ -343,11 +321,11 @@ class _LeadCard extends StatelessWidget {
                         if (v == 'delete') {
                           onDelete(id);
                         } else if (v == 'comment') {
-                          _addComment(context);
+                          _addComment(context, ref);
                         } else if (v == 'task') {
-                          _addTask(context);
+                          _addTask(context, ref);
                         } else if (v == 'trial') {
-                          _scheduleTrial(context);
+                          _scheduleTrial(context, ref);
                         } else {
                           onMove(id, v);
                         }
@@ -402,7 +380,7 @@ class _LeadCard extends StatelessWidget {
     );
   }
 
-  Future<void> _addComment(BuildContext context) async {
+  Future<void> _addComment(BuildContext context, WidgetRef ref) async {
     final controller = TextEditingController();
     final content = await showDialog<String>(
       context: context,
@@ -416,17 +394,19 @@ class _LeadCard extends StatelessWidget {
       ),
     );
     if (content != null && content.trim().isNotEmpty) {
-      await Supabase.instance.client.from('entity_comments').insert({
-        'entity_id': lead['id'],
-        'entity_type': 'lead',
-        'content': content.trim(),
-        'author_id': Supabase.instance.client.auth.currentUser?.id,
-      });
-      onRefresh();
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        await ref.read(supaLeadServiceProvider).addComment(
+          leadId: lead['id'],
+          content: content.trim(),
+          authorId: userId,
+        );
+        onRefresh();
+      }
     }
   }
 
-  Future<void> _addTask(BuildContext context) async {
+  Future<void> _addTask(BuildContext context, WidgetRef ref) async {
     final controller = TextEditingController();
     final title = await showDialog<String>(
       context: context,
@@ -440,20 +420,23 @@ class _LeadCard extends StatelessWidget {
       ),
     );
     if (title != null && title.trim().isNotEmpty) {
-      await Supabase.instance.client.from('tasks').insert({
-        'title': title.trim(),
-        'lead_id': lead['id'],
-        'status': 'todo',
-        'created_by': Supabase.instance.client.auth.currentUser?.id,
-      });
-      onRefresh();
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        await ref.read(supaLeadServiceProvider).addLeadTask(
+          leadId: lead['id'],
+          title: title.trim(),
+          creatorId: userId,
+        );
+        onRefresh();
+      }
     }
   }
 
-  Future<void> _scheduleTrial(BuildContext context) async {
+  Future<void> _scheduleTrial(BuildContext context, WidgetRef ref) async {
     final client = Supabase.instance.client;
     
     // Quick fetching of available teachers and rooms
+    // TODO: Move teacher/room fetching to a dedicated service/provider too
     final [teachersRes, roomsRes] = await Future.wait([
       client.from('teachers').select('id, first_name, last_name'),
       client.from('rooms').select('id, name'),
@@ -478,7 +461,7 @@ class _LeadCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                initialValue: selectedTeacher,
+                value: selectedTeacher,
                 decoration: const InputDecoration(labelText: 'Учитель'),
                 items: teachers.map((t) => DropdownMenuItem(
                   value: t['id'].toString(),
@@ -488,7 +471,7 @@ class _LeadCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: selectedRoom,
+                value: selectedRoom,
                 decoration: const InputDecoration(labelText: 'Кабинет'),
                 items: rooms.map((r) => DropdownMenuItem(
                   value: r['id'].toString(),
@@ -540,14 +523,12 @@ class _LeadCard extends StatelessWidget {
         selectedTime.minute,
       );
 
-      await client.from('lessons').insert({
-        'lead_id': lead['id'],
-        'teacher_id': selectedTeacher,
-        'room_id': selectedRoom,
-        'scheduled_at': scheduledAt.toIso8601String(),
-        'is_trial': true,
-        'status': 'planned',
-      });
+      await ref.read(supaLeadServiceProvider).scheduleTrial(
+        leadId: lead['id'],
+        teacherId: selectedTeacher!,
+        roomId: selectedRoom!,
+        scheduledAt: scheduledAt,
+      );
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

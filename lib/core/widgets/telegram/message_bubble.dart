@@ -114,13 +114,28 @@ class MessageBubble extends StatelessWidget {
                       isMe: isMe,
                     ),
                   )
-                else if (messageType == 'file')
+                else if (messageType == 'file') ...[
                   FileAttachmentWidget(
                     fileName: message['attachment_name']?.toString(),
                     fileUrl: message['attachment_url']?.toString(),
                     fileSize: message['attachment_size'] as int?,
                     isMe: isMe,
-                  )
+                  ),
+                  if (message['content'] != null && 
+                      message['content'].toString().isNotEmpty && 
+                      !message['content'].toString().startsWith('📎'))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 2, right: 2),
+                      child: Text(
+                        message['content'].toString(),
+                        style: TextStyle(
+                          color: isMe ? outgoingTextColor : incomingTextColor,
+                          fontSize: 15,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                ]
                 else
                   Text(
                     message['content'] ?? '',

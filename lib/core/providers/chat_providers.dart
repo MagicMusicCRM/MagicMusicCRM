@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -144,7 +145,7 @@ final userGroupChatsProvider =
 
     final groups = await _supabase
         .from('group_chats')
-        .select()
+        .select('*, first_responder:profiles!first_responder_id(first_name, last_name)')
         .inFilter('id', groupIds)
         .order('created_at', ascending: false);
 
@@ -169,6 +170,58 @@ final userGroupChatsProvider =
     }
     yield enriched;
   }
+});
+
+// ── Presence (For "Admin X is handling this") ────────────────────────────────
+
+/// Presence state for a specific chat.
+/// Listens to a channel and returns list of active admin names.
+final chatPresenceProvider =
+    StreamProvider.family<List<String>, String>((ref, chatId) async* {
+  final profile = await ref.watch(currentProfileProvider.future);
+  if (profile == null || (profile['role'] != 'admin' && profile['role'] != 'manager')) {
+    yield [];
+    return;
+  }
+
+  final channel = _supabase.channel('chat_presence:$chatId');
+  final name = '${profile['first_name']} ${profile['last_name']}';
+
+  // Join Presence
+  channel.subscribe((status, [error]) {
+    if (status == 'SUBSCRIBED') {
+      channel.track({
+        'user_id': profile['id'],
+        'name': name,
+        'role': profile['role'],
+      });
+    }
+  });
+
+  // Listen to sync
+  final stream = StreamController<List<String>>();
+  
+  channel.onPresenceSync((payload) {
+    final state = channel.presenceState();
+    final activeAdmins = <String>[];
+    
+    for (final presence in state) {
+      final p = (presence as dynamic).payload;
+      // Only show other admins
+      if (p['user_id'] != profile['id'] && (p['role'] == 'admin' || p['role'] == 'manager')) {
+        activeAdmins.add(p['name'] as String);
+      }
+    }
+    
+    stream.add(activeAdmins.toSet().toList());
+  });
+
+  ref.onDispose(() {
+    channel.unsubscribe();
+    stream.close();
+  });
+
+  yield* stream.stream;
 });
 
 /// Real-time messages for a group chat.

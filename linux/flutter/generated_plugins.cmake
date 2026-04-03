@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   gtk
+  local_notifier
   record_linux
   url_launcher_linux
 )

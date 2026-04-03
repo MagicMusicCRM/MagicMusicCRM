@@ -16,6 +16,8 @@ class ChatListTile extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final IconData? channelIcon;
+  final Widget? statusIcon;
+  final VoidCallback? onStatusTap;
 
   const ChatListTile({
     super.key,
@@ -31,6 +33,8 @@ class ChatListTile extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.channelIcon,
+    this.statusIcon,
+    this.onStatusTap,
   });
 
   @override
@@ -97,7 +101,6 @@ class ChatListTile extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (time != null)
                           Text(
                             time!,
                             style: TextStyle(
@@ -108,6 +111,14 @@ class ChatListTile extends StatelessWidget {
                               fontWeight: unreadCount > 0
                                   ? FontWeight.w600
                                   : FontWeight.w400,
+                            ),
+                          ),
+                        if (statusIcon != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: GestureDetector(
+                              onTap: onStatusTap,
+                              child: statusIcon,
                             ),
                           ),
                       ],

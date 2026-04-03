@@ -1,5 +1,12 @@
 flutter_launcher_icons:
   android: true
   ios: true
+  windows:
+    generate: true
+    image_path: "assets/icon.png"
+    icon_size: 48
+  macos:
+    generate: true
+    image_path: "assets/icon.png"
   remove_alpha_ios: true
   image_path: "assets/icon.png"

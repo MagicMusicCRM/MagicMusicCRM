@@ -1,0 +1,5622 @@
+{
+  "languages": [
+    "bash",
+    "c",
+    "cpp",
+    "dart",
+    "java",
+    "kotlin",
+    "proto",
+    "python",
+    "swift"
+  ],
+  "stats": {
+    "total_files": 141,
+    "total_lines": 34224,
+    "parse_errors": 0,
+    "truncated": false,
+    "truncated_nodes": 0,
+    "supported_file_counts": {
+      "dart": 45,
+      "python": 14,
+      "kotlin": 4,
+      "cpp": 14,
+      "c": 43,
+      "swift": 7,
+      "bash": 2,
+      "proto": 11,
+      "java": 1
+    },
+    "languages_with_structural_queries": [
+      "c",
+      "cpp",
+      "csharp",
+      "elixir",
+      "gdscript",
+      "go",
+      "java",
+      "javascript",
+      "kotlin",
+      "lua",
+      "php",
+      "python",
+      "ruby",
+      "rust",
+      "scala",
+      "swift",
+      "tsx",
+      "typescript"
+    ],
+    "languages_with_custom_queries": [],
+    "module_only_file_counts": {
+      "dart": 45,
+      "proto": 11,
+      "bash": 2
+    },
+    "known_unsupported_file_counts": {},
+    "configured_but_unavailable_file_counts": {},
+    "custom_language_config_paths": []
+  },
+  "nodes": [
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "type": "Module",
+      "label": "extract_ast",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "lines": 707,
+      "lang": "python"
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast._load_builtin_languages",
+      "type": "Function",
+      "label": "_load_builtin_languages",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 29,
+      "end_line": 49
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast._should_skip_path",
+      "type": "Function",
+      "label": "_should_skip_path",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 57,
+      "end_line": 63
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast.write_filtered_file_tree",
+      "type": "Function",
+      "label": "write_filtered_file_tree",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 66,
+      "end_line": 76
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast._normalize_extension",
+      "type": "Function",
+      "label": "_normalize_extension",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 78,
+      "end_line": 84
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast._copy_lang_queries",
+      "type": "Function",
+      "label": "_copy_lang_queries",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 87,
+      "end_line": 94
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast._apply_cli_customizations",
+      "type": "Function",
+      "label": "_apply_cli_customizations",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 97,
+      "end_line": 151
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast._load_language_customizations",
+      "type": "Function",
+      "label": "_load_language_customizations",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 154,
+      "end_line": 259
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast._load_languages",
+      "type": "Function",
+      "label": "_load_languages",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 263,
+      "end_line": 306
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast.get_language",
+      "type": "Function",
+      "label": "get_language",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 275,
+      "end_line": 276
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast.get_language",
+      "type": "Function",
+      "label": "get_language",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 283,
+      "end_line": 286
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast._file_module_id",
+      "type": "Function",
+      "label": "_file_module_id",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 309,
+      "end_line": 321
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast.extract_file",
+      "type": "Function",
+      "label": "extract_file",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 326,
+      "end_line": 438
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast.collect_source_files",
+      "type": "Function",
+      "label": "collect_source_files",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 441,
+      "end_line": 489
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast.apply_max_nodes",
+      "type": "Function",
+      "label": "apply_max_nodes",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 493,
+      "end_line": 522
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.extract_ast.main",
+      "type": "Function",
+      "label": "main",
+      "path": ".agents/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 525,
+      "end_line": 701
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "type": "Module",
+      "label": "git_detective",
+      "path": ".agents/skills/nexus-mapper/scripts/git_detective.py",
+      "lines": 195,
+      "lang": "python"
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.git_detective.run_git",
+      "type": "Function",
+      "label": "run_git",
+      "path": ".agents/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 20,
+      "end_line": 34
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.git_detective.get_commit_file_changes",
+      "type": "Function",
+      "label": "get_commit_file_changes",
+      "path": ".agents/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 37,
+      "end_line": 68
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.git_detective.compute_hotspots",
+      "type": "Function",
+      "label": "compute_hotspots",
+      "path": ".agents/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 71,
+      "end_line": 94
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.git_detective.compute_coupling_pairs",
+      "type": "Function",
+      "label": "compute_coupling_pairs",
+      "path": ".agents/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 97,
+      "end_line": 129
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.git_detective.get_repo_stats",
+      "type": "Function",
+      "label": "get_repo_stats",
+      "path": ".agents/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 132,
+      "end_line": 148
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.git_detective.main",
+      "type": "Function",
+      "label": "main",
+      "path": ".agents/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 151,
+      "end_line": 190
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "type": "Module",
+      "label": "query_graph",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "lines": 557,
+      "lang": "python"
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "type": "Class",
+      "label": "GitStats",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "start_line": 27,
+      "end_line": 66
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats.__init__",
+      "type": "Function",
+      "label": "__init__",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "start_line": 30,
+      "end_line": 44
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats.file_risk",
+      "type": "Function",
+      "label": "file_risk",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "start_line": 46,
+      "end_line": 47
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats.file_coupling",
+      "type": "Function",
+      "label": "file_coupling",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "start_line": 49,
+      "end_line": 50
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats.format_risk_block",
+      "type": "Function",
+      "label": "format_risk_block",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "start_line": 54,
+      "end_line": 66
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "type": "Class",
+      "label": "ASTGraph",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "start_line": 69,
+      "end_line": 474
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.__init__",
+      "type": "Function",
+      "label": "__init__",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 85,
+      "end_line": 105
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._build_index",
+      "type": "Function",
+      "label": "_build_index",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 107,
+      "end_line": 138
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._module_aliases",
+      "type": "Function",
+      "label": "_module_aliases",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 140,
+      "end_line": 157
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_import_target",
+      "type": "Function",
+      "label": "resolve_import_target",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 159,
+      "end_line": 175
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._classify_imports",
+      "type": "Function",
+      "label": "_classify_imports",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 177,
+      "end_line": 186
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_to_module_id",
+      "type": "Function",
+      "label": "resolve_to_module_id",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 188,
+      "end_line": 201
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_to_path",
+      "type": "Function",
+      "label": "resolve_to_path",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 203,
+      "end_line": 208
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_file",
+      "type": "Function",
+      "label": "query_file",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 212,
+      "end_line": 280
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_who_imports",
+      "type": "Function",
+      "label": "query_who_imports",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 282,
+      "end_line": 300
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._format_who_imports",
+      "type": "Function",
+      "label": "_format_who_imports",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 302,
+      "end_line": 313
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_impact",
+      "type": "Function",
+      "label": "query_impact",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 315,
+      "end_line": 373
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_hub_analysis",
+      "type": "Function",
+      "label": "query_hub_analysis",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 375,
+      "end_line": 403
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_summary",
+      "type": "Function",
+      "label": "query_summary",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 405,
+      "end_line": 474
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._dir_key",
+      "type": "Function",
+      "label": "_dir_key",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 414,
+      "end_line": 418
+    },
+    {
+      "id": ".agents.skills.nexus-mapper.scripts.query_graph.main",
+      "type": "Function",
+      "label": "main",
+      "path": ".agents/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "start_line": 477,
+      "end_line": 552
+    },
+    {
+      "id": ".dart_tool.flutter_build.dart_plugin_registrant",
+      "type": "Module",
+      "label": "dart_plugin_registrant",
+      "path": ".dart_tool/flutter_build/dart_plugin_registrant.dart",
+      "lines": 203,
+      "lang": "dart"
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "type": "Module",
+      "label": "extract_ast",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "lines": 707,
+      "lang": "python"
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast._load_builtin_languages",
+      "type": "Function",
+      "label": "_load_builtin_languages",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 29,
+      "end_line": 49
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast._should_skip_path",
+      "type": "Function",
+      "label": "_should_skip_path",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 57,
+      "end_line": 63
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast.write_filtered_file_tree",
+      "type": "Function",
+      "label": "write_filtered_file_tree",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 66,
+      "end_line": 76
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast._normalize_extension",
+      "type": "Function",
+      "label": "_normalize_extension",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 78,
+      "end_line": 84
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast._copy_lang_queries",
+      "type": "Function",
+      "label": "_copy_lang_queries",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 87,
+      "end_line": 94
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast._apply_cli_customizations",
+      "type": "Function",
+      "label": "_apply_cli_customizations",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 97,
+      "end_line": 151
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast._load_language_customizations",
+      "type": "Function",
+      "label": "_load_language_customizations",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 154,
+      "end_line": 259
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast._load_languages",
+      "type": "Function",
+      "label": "_load_languages",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 263,
+      "end_line": 306
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast.get_language",
+      "type": "Function",
+      "label": "get_language",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 275,
+      "end_line": 276
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast.get_language",
+      "type": "Function",
+      "label": "get_language",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 283,
+      "end_line": 286
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast._file_module_id",
+      "type": "Function",
+      "label": "_file_module_id",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 309,
+      "end_line": 321
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast.extract_file",
+      "type": "Function",
+      "label": "extract_file",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 326,
+      "end_line": 438
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast.collect_source_files",
+      "type": "Function",
+      "label": "collect_source_files",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 441,
+      "end_line": 489
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast.apply_max_nodes",
+      "type": "Function",
+      "label": "apply_max_nodes",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 493,
+      "end_line": 522
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.extract_ast.main",
+      "type": "Function",
+      "label": "main",
+      "path": ".windsurf/skills/nexus-mapper/scripts/extract_ast.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "start_line": 525,
+      "end_line": 701
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "type": "Module",
+      "label": "git_detective",
+      "path": ".windsurf/skills/nexus-mapper/scripts/git_detective.py",
+      "lines": 195,
+      "lang": "python"
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.git_detective.run_git",
+      "type": "Function",
+      "label": "run_git",
+      "path": ".windsurf/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 20,
+      "end_line": 34
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.git_detective.get_commit_file_changes",
+      "type": "Function",
+      "label": "get_commit_file_changes",
+      "path": ".windsurf/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 37,
+      "end_line": 68
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.git_detective.compute_hotspots",
+      "type": "Function",
+      "label": "compute_hotspots",
+      "path": ".windsurf/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 71,
+      "end_line": 94
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.git_detective.compute_coupling_pairs",
+      "type": "Function",
+      "label": "compute_coupling_pairs",
+      "path": ".windsurf/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 97,
+      "end_line": 129
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.git_detective.get_repo_stats",
+      "type": "Function",
+      "label": "get_repo_stats",
+      "path": ".windsurf/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 132,
+      "end_line": 148
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.git_detective.main",
+      "type": "Function",
+      "label": "main",
+      "path": ".windsurf/skills/nexus-mapper/scripts/git_detective.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "start_line": 151,
+      "end_line": 190
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "type": "Module",
+      "label": "query_graph",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "lines": 557,
+      "lang": "python"
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "type": "Class",
+      "label": "GitStats",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "start_line": 27,
+      "end_line": 66
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats.__init__",
+      "type": "Function",
+      "label": "__init__",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "start_line": 30,
+      "end_line": 44
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats.file_risk",
+      "type": "Function",
+      "label": "file_risk",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "start_line": 46,
+      "end_line": 47
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats.file_coupling",
+      "type": "Function",
+      "label": "file_coupling",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "start_line": 49,
+      "end_line": 50
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats.format_risk_block",
+      "type": "Function",
+      "label": "format_risk_block",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "start_line": 54,
+      "end_line": 66
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "type": "Class",
+      "label": "ASTGraph",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "start_line": 69,
+      "end_line": 474
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.__init__",
+      "type": "Function",
+      "label": "__init__",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 85,
+      "end_line": 105
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._build_index",
+      "type": "Function",
+      "label": "_build_index",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 107,
+      "end_line": 138
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._module_aliases",
+      "type": "Function",
+      "label": "_module_aliases",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 140,
+      "end_line": 157
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_import_target",
+      "type": "Function",
+      "label": "resolve_import_target",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 159,
+      "end_line": 175
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._classify_imports",
+      "type": "Function",
+      "label": "_classify_imports",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 177,
+      "end_line": 186
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_to_module_id",
+      "type": "Function",
+      "label": "resolve_to_module_id",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 188,
+      "end_line": 201
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_to_path",
+      "type": "Function",
+      "label": "resolve_to_path",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 203,
+      "end_line": 208
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_file",
+      "type": "Function",
+      "label": "query_file",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 212,
+      "end_line": 280
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_who_imports",
+      "type": "Function",
+      "label": "query_who_imports",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 282,
+      "end_line": 300
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._format_who_imports",
+      "type": "Function",
+      "label": "_format_who_imports",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 302,
+      "end_line": 313
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_impact",
+      "type": "Function",
+      "label": "query_impact",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 315,
+      "end_line": 373
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_hub_analysis",
+      "type": "Function",
+      "label": "query_hub_analysis",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 375,
+      "end_line": 403
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_summary",
+      "type": "Function",
+      "label": "query_summary",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 405,
+      "end_line": 474
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._dir_key",
+      "type": "Function",
+      "label": "_dir_key",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "start_line": 414,
+      "end_line": 418
+    },
+    {
+      "id": ".windsurf.skills.nexus-mapper.scripts.query_graph.main",
+      "type": "Function",
+      "label": "main",
+      "path": ".windsurf/skills/nexus-mapper/scripts/query_graph.py",
+      "parent": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "start_line": 477,
+      "end_line": 552
+    },
+    {
+      "id": "android.app.build.gradle",
+      "type": "Module",
+      "label": "gradle",
+      "path": "android/app/build.gradle.kts",
+      "lines": 69,
+      "lang": "kotlin"
+    },
+    {
+      "id": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant",
+      "type": "Module",
+      "label": "GeneratedPluginRegistrant",
+      "path": "android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
+      "lines": 65,
+      "lang": "java"
+    },
+    {
+      "id": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant.GeneratedPluginRegistrant",
+      "type": "Class",
+      "label": "GeneratedPluginRegistrant",
+      "path": "android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
+      "parent": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant",
+      "start_line": 14,
+      "end_line": 64
+    },
+    {
+      "id": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant.GeneratedPluginRegistrant.registerWith",
+      "type": "Function",
+      "label": "registerWith",
+      "path": "android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
+      "parent": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant.GeneratedPluginRegistrant",
+      "start_line": 17,
+      "end_line": 63
+    },
+    {
+      "id": "android.app.src.main.kotlin.com.magicmusiccrm.magic_music_crm.MainActivity",
+      "type": "Module",
+      "label": "MainActivity",
+      "path": "android/app/src/main/kotlin/com/magicmusiccrm/magic_music_crm/MainActivity.kt",
+      "lines": 6,
+      "lang": "kotlin"
+    },
+    {
+      "id": "android.app.src.main.kotlin.com.magicmusiccrm.magic_music_crm.MainActivity.MainActivity",
+      "type": "Class",
+      "label": "MainActivity",
+      "path": "android/app/src/main/kotlin/com/magicmusiccrm/magic_music_crm/MainActivity.kt",
+      "parent": "android.app.src.main.kotlin.com.magicmusiccrm.magic_music_crm.MainActivity",
+      "start_line": 5,
+      "end_line": 5
+    },
+    {
+      "id": "android.build.gradle",
+      "type": "Module",
+      "label": "gradle",
+      "path": "android/build.gradle.kts",
+      "lines": 25,
+      "lang": "kotlin"
+    },
+    {
+      "id": "android.settings.gradle",
+      "type": "Module",
+      "label": "gradle",
+      "path": "android/settings.gradle.kts",
+      "lines": 28,
+      "lang": "kotlin"
+    },
+    {
+      "id": "bugreport.proto.activity",
+      "type": "Module",
+      "label": "activity",
+      "path": "bugreport/proto/activity.proto",
+      "lines": 9543,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.activity_CRITICAL",
+      "type": "Module",
+      "label": "activity_CRITICAL",
+      "path": "bugreport/proto/activity_CRITICAL.proto",
+      "lines": 1,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.incident_report",
+      "type": "Module",
+      "label": "incident_report",
+      "path": "bugreport/proto/incident_report.proto",
+      "lines": 4876,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.input_method",
+      "type": "Module",
+      "label": "input_method",
+      "path": "bugreport/proto/input_method.proto",
+      "lines": 2,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.input_method_CRITICAL",
+      "type": "Module",
+      "label": "input_method_CRITICAL",
+      "path": "bugreport/proto/input_method_CRITICAL.proto",
+      "lines": 2,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.netstats",
+      "type": "Module",
+      "label": "netstats",
+      "path": "bugreport/proto/netstats.proto",
+      "lines": 487,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.statusbar",
+      "type": "Module",
+      "label": "statusbar",
+      "path": "bugreport/proto/statusbar.proto",
+      "lines": 27,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.SurfaceFlinger_CRITICAL",
+      "type": "Module",
+      "label": "SurfaceFlinger_CRITICAL",
+      "path": "bugreport/proto/SurfaceFlinger_CRITICAL.proto",
+      "lines": 138,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.SurfaceFlingerAIDL_CRITICAL",
+      "type": "Module",
+      "label": "SurfaceFlingerAIDL_CRITICAL",
+      "path": "bugreport/proto/SurfaceFlingerAIDL_CRITICAL.proto",
+      "lines": 1,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.window_CRITICAL",
+      "type": "Module",
+      "label": "window_CRITICAL",
+      "path": "bugreport/proto/window_CRITICAL.proto",
+      "lines": 370,
+      "lang": "proto"
+    },
+    {
+      "id": "bugreport.proto.window_HIGH",
+      "type": "Module",
+      "label": "window_HIGH",
+      "path": "bugreport/proto/window_HIGH.proto",
+      "lines": 1,
+      "lang": "proto"
+    },
+    {
+      "id": "export_hollihop",
+      "type": "Module",
+      "label": "export_hollihop",
+      "path": "export_hollihop.dart",
+      "lines": 114,
+      "lang": "dart"
+    },
+    {
+      "id": "hollihop_export",
+      "type": "Module",
+      "label": "hollihop_export",
+      "path": "hollihop_export.py",
+      "lines": 174,
+      "lang": "python"
+    },
+    {
+      "id": "hollihop_export.fetch_data",
+      "type": "Function",
+      "label": "fetch_data",
+      "path": "hollihop_export.py",
+      "parent": "hollihop_export",
+      "start_line": 15,
+      "end_line": 31
+    },
+    {
+      "id": "hollihop_export.save_json",
+      "type": "Function",
+      "label": "save_json",
+      "path": "hollihop_export.py",
+      "parent": "hollihop_export",
+      "start_line": 33,
+      "end_line": 37
+    },
+    {
+      "id": "hollihop_export.main",
+      "type": "Function",
+      "label": "main",
+      "path": "hollihop_export.py",
+      "parent": "hollihop_export",
+      "start_line": 39,
+      "end_line": 170
+    },
+    {
+      "id": "import_students_and_lessons",
+      "type": "Module",
+      "label": "import_students_and_lessons",
+      "path": "import_students_and_lessons.py",
+      "lines": 187,
+      "lang": "python"
+    },
+    {
+      "id": "import_students_and_lessons.fetch_map",
+      "type": "Function",
+      "label": "fetch_map",
+      "path": "import_students_and_lessons.py",
+      "parent": "import_students_and_lessons",
+      "start_line": 21,
+      "end_line": 29
+    },
+    {
+      "id": "import_students_and_lessons.upsert_data",
+      "type": "Function",
+      "label": "upsert_data",
+      "path": "import_students_and_lessons.py",
+      "parent": "import_students_and_lessons",
+      "start_line": 33,
+      "end_line": 54
+    },
+    {
+      "id": "import_students_and_lessons.matches_weekday",
+      "type": "Function",
+      "label": "matches_weekday",
+      "path": "import_students_and_lessons.py",
+      "parent": "import_students_and_lessons",
+      "start_line": 150,
+      "end_line": 153
+    },
+    {
+      "id": "import_to_supabase",
+      "type": "Module",
+      "label": "import_to_supabase",
+      "path": "import_to_supabase.py",
+      "lines": 212,
+      "lang": "python"
+    },
+    {
+      "id": "import_to_supabase.upsert_data",
+      "type": "Function",
+      "label": "upsert_data",
+      "path": "import_to_supabase.py",
+      "parent": "import_to_supabase",
+      "start_line": 19,
+      "end_line": 39
+    },
+    {
+      "id": "import_to_supabase.process_logs",
+      "type": "Function",
+      "label": "process_logs",
+      "path": "import_to_supabase.py",
+      "parent": "import_to_supabase",
+      "start_line": 169,
+      "end_line": 188
+    },
+    {
+      "id": "ios.Flutter.ephemeral.flutter_lldb_helper",
+      "type": "Module",
+      "label": "flutter_lldb_helper",
+      "path": "ios/Flutter/ephemeral/flutter_lldb_helper.py",
+      "lines": 33,
+      "lang": "python"
+    },
+    {
+      "id": "ios.Flutter.ephemeral.flutter_lldb_helper.handle_new_rx_page",
+      "type": "Function",
+      "label": "handle_new_rx_page",
+      "path": "ios/Flutter/ephemeral/flutter_lldb_helper.py",
+      "parent": "ios.Flutter.ephemeral.flutter_lldb_helper",
+      "start_line": 7,
+      "end_line": 22
+    },
+    {
+      "id": "ios.Flutter.ephemeral.flutter_lldb_helper.__lldb_init_module",
+      "type": "Function",
+      "label": "__lldb_init_module",
+      "path": "ios/Flutter/ephemeral/flutter_lldb_helper.py",
+      "parent": "ios.Flutter.ephemeral.flutter_lldb_helper",
+      "start_line": 24,
+      "end_line": 32
+    },
+    {
+      "id": "ios.Flutter.flutter_export_environment",
+      "type": "Module",
+      "label": "flutter_export_environment",
+      "path": "ios/Flutter/flutter_export_environment.sh",
+      "lines": 14,
+      "lang": "bash"
+    },
+    {
+      "id": "ios.Runner.AppDelegate",
+      "type": "Module",
+      "label": "AppDelegate",
+      "path": "ios/Runner/AppDelegate.swift",
+      "lines": 17,
+      "lang": "swift"
+    },
+    {
+      "id": "ios.Runner.AppDelegate.AppDelegate",
+      "type": "Class",
+      "label": "AppDelegate",
+      "path": "ios/Runner/AppDelegate.swift",
+      "parent": "ios.Runner.AppDelegate",
+      "start_line": 4,
+      "end_line": 16
+    },
+    {
+      "id": "ios.Runner.AppDelegate.AppDelegate.application",
+      "type": "Function",
+      "label": "application",
+      "path": "ios/Runner/AppDelegate.swift",
+      "parent": "ios.Runner.AppDelegate.AppDelegate",
+      "start_line": 6,
+      "end_line": 11
+    },
+    {
+      "id": "ios.Runner.AppDelegate.AppDelegate.didInitializeImplicitFlutterEngine",
+      "type": "Function",
+      "label": "didInitializeImplicitFlutterEngine",
+      "path": "ios/Runner/AppDelegate.swift",
+      "parent": "ios.Runner.AppDelegate.AppDelegate",
+      "start_line": 13,
+      "end_line": 15
+    },
+    {
+      "id": "ios.Runner.GeneratedPluginRegistrant",
+      "type": "Module",
+      "label": "GeneratedPluginRegistrant",
+      "path": "ios/Runner/GeneratedPluginRegistrant.h",
+      "lines": 20,
+      "lang": "c"
+    },
+    {
+      "id": "ios.Runner.Runner-Bridging-Header",
+      "type": "Module",
+      "label": "Runner-Bridging-Header",
+      "path": "ios/Runner/Runner-Bridging-Header.h",
+      "lines": 2,
+      "lang": "c"
+    },
+    {
+      "id": "ios.Runner.SceneDelegate",
+      "type": "Module",
+      "label": "SceneDelegate",
+      "path": "ios/Runner/SceneDelegate.swift",
+      "lines": 7,
+      "lang": "swift"
+    },
+    {
+      "id": "ios.Runner.SceneDelegate.SceneDelegate",
+      "type": "Class",
+      "label": "SceneDelegate",
+      "path": "ios/Runner/SceneDelegate.swift",
+      "parent": "ios.Runner.SceneDelegate",
+      "start_line": 4,
+      "end_line": 6
+    },
+    {
+      "id": "ios.RunnerTests.RunnerTests",
+      "type": "Module",
+      "label": "RunnerTests",
+      "path": "ios/RunnerTests/RunnerTests.swift",
+      "lines": 13,
+      "lang": "swift"
+    },
+    {
+      "id": "ios.RunnerTests.RunnerTests.RunnerTests",
+      "type": "Class",
+      "label": "RunnerTests",
+      "path": "ios/RunnerTests/RunnerTests.swift",
+      "parent": "ios.RunnerTests.RunnerTests",
+      "start_line": 5,
+      "end_line": 12
+    },
+    {
+      "id": "ios.RunnerTests.RunnerTests.RunnerTests.testExample",
+      "type": "Function",
+      "label": "testExample",
+      "path": "ios/RunnerTests/RunnerTests.swift",
+      "parent": "ios.RunnerTests.RunnerTests.RunnerTests",
+      "start_line": 7,
+      "end_line": 10
+    },
+    {
+      "id": "lib.core.constants.env",
+      "type": "Module",
+      "label": "env",
+      "path": "lib/core/constants/env.dart",
+      "lines": 6,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.core.router.app_router",
+      "type": "Module",
+      "label": "app_router",
+      "path": "lib/core/router/app_router.dart",
+      "lines": 146,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.core.services.github_updater_service",
+      "type": "Module",
+      "label": "github_updater_service",
+      "path": "lib/core/services/github_updater_service.dart",
+      "lines": 129,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.core.services.notification_service",
+      "type": "Module",
+      "label": "notification_service",
+      "path": "lib/core/services/notification_service.dart",
+      "lines": 130,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.core.theme.app_theme",
+      "type": "Module",
+      "label": "app_theme",
+      "path": "lib/core/theme/app_theme.dart",
+      "lines": 142,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.core.widgets.updater_dialog",
+      "type": "Module",
+      "label": "updater_dialog",
+      "path": "lib/core/widgets/updater_dialog.dart",
+      "lines": 115,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.screens.admin_dashboard_screen",
+      "type": "Module",
+      "label": "admin_dashboard_screen",
+      "path": "lib/features/admin/presentation/screens/admin_dashboard_screen.dart",
+      "lines": 101,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.screens.student_detail_screen",
+      "type": "Module",
+      "label": "student_detail_screen",
+      "path": "lib/features/admin/presentation/screens/student_detail_screen.dart",
+      "lines": 666,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.widgets.admin_overview_widget",
+      "type": "Module",
+      "label": "admin_overview_widget",
+      "path": "lib/features/admin/presentation/widgets/admin_overview_widget.dart",
+      "lines": 146,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.widgets.create_lesson_dialog",
+      "type": "Module",
+      "label": "create_lesson_dialog",
+      "path": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "lines": 247,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.widgets.custom_field_config_widget",
+      "type": "Module",
+      "label": "custom_field_config_widget",
+      "path": "lib/features/admin/presentation/widgets/custom_field_config_widget.dart",
+      "lines": 100,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.widgets.group_detail_dialog",
+      "type": "Module",
+      "label": "group_detail_dialog",
+      "path": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
+      "lines": 204,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.widgets.lesson_attendance_dialog",
+      "type": "Module",
+      "label": "lesson_attendance_dialog",
+      "path": "lib/features/admin/presentation/widgets/lesson_attendance_dialog.dart",
+      "lines": 193,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.widgets.lessons_kanban_widget",
+      "type": "Module",
+      "label": "lessons_kanban_widget",
+      "path": "lib/features/admin/presentation/widgets/lessons_kanban_widget.dart",
+      "lines": 403,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.widgets.manage_entities_widget",
+      "type": "Module",
+      "label": "manage_entities_widget",
+      "path": "lib/features/admin/presentation/widgets/manage_entities_widget.dart",
+      "lines": 543,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.widgets.mass_notification_widget",
+      "type": "Module",
+      "label": "mass_notification_widget",
+      "path": "lib/features/admin/presentation/widgets/mass_notification_widget.dart",
+      "lines": 98,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.admin.presentation.widgets.teacher_detail_dialog",
+      "type": "Module",
+      "label": "teacher_detail_dialog",
+      "path": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
+      "lines": 117,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.auth.presentation.screens.login_screen",
+      "type": "Module",
+      "label": "login_screen",
+      "path": "lib/features/auth/presentation/screens/login_screen.dart",
+      "lines": 269,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.auth.presentation.screens.otp_screen",
+      "type": "Module",
+      "label": "otp_screen",
+      "path": "lib/features/auth/presentation/screens/otp_screen.dart",
+      "lines": 79,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.client.presentation.screens.client_dashboard_screen",
+      "type": "Module",
+      "label": "client_dashboard_screen",
+      "path": "lib/features/client/presentation/screens/client_dashboard_screen.dart",
+      "lines": 268,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.client.presentation.widgets.chat_widget",
+      "type": "Module",
+      "label": "chat_widget",
+      "path": "lib/features/client/presentation/widgets/chat_widget.dart",
+      "lines": 195,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.client.presentation.widgets.homework_widget",
+      "type": "Module",
+      "label": "homework_widget",
+      "path": "lib/features/client/presentation/widgets/homework_widget.dart",
+      "lines": 103,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.client.presentation.widgets.next_lesson_countdown",
+      "type": "Module",
+      "label": "next_lesson_countdown",
+      "path": "lib/features/client/presentation/widgets/next_lesson_countdown.dart",
+      "lines": 113,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.client.presentation.widgets.progress_notes_widget",
+      "type": "Module",
+      "label": "progress_notes_widget",
+      "path": "lib/features/client/presentation/widgets/progress_notes_widget.dart",
+      "lines": 97,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.client.presentation.widgets.subscription_status_card",
+      "type": "Module",
+      "label": "subscription_status_card",
+      "path": "lib/features/client/presentation/widgets/subscription_status_card.dart",
+      "lines": 162,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.client.presentation.widgets.upcoming_lessons_list",
+      "type": "Module",
+      "label": "upcoming_lessons_list",
+      "path": "lib/features/client/presentation/widgets/upcoming_lessons_list.dart",
+      "lines": 174,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.data.auto_invoicing_service",
+      "type": "Module",
+      "label": "auto_invoicing_service",
+      "path": "lib/features/manager/data/auto_invoicing_service.dart",
+      "lines": 54,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.presentation.screens.manager_dashboard_screen",
+      "type": "Module",
+      "label": "manager_dashboard_screen",
+      "path": "lib/features/manager/presentation/screens/manager_dashboard_screen.dart",
+      "lines": 108,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.presentation.widgets.conversion_tracking_widget",
+      "type": "Module",
+      "label": "conversion_tracking_widget",
+      "path": "lib/features/manager/presentation/widgets/conversion_tracking_widget.dart",
+      "lines": 146,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.presentation.widgets.debtors_widget",
+      "type": "Module",
+      "label": "debtors_widget",
+      "path": "lib/features/manager/presentation/widgets/debtors_widget.dart",
+      "lines": 119,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.presentation.widgets.finance_widget",
+      "type": "Module",
+      "label": "finance_widget",
+      "path": "lib/features/manager/presentation/widgets/finance_widget.dart",
+      "lines": 269,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.presentation.widgets.financial_dashboard_widget",
+      "type": "Module",
+      "label": "financial_dashboard_widget",
+      "path": "lib/features/manager/presentation/widgets/financial_dashboard_widget.dart",
+      "lines": 283,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.presentation.widgets.leads_widget",
+      "type": "Module",
+      "label": "leads_widget",
+      "path": "lib/features/manager/presentation/widgets/leads_widget.dart",
+      "lines": 452,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.presentation.widgets.manager_overview_widget",
+      "type": "Module",
+      "label": "manager_overview_widget",
+      "path": "lib/features/manager/presentation/widgets/manager_overview_widget.dart",
+      "lines": 163,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.presentation.widgets.reports_widget",
+      "type": "Module",
+      "label": "reports_widget",
+      "path": "lib/features/manager/presentation/widgets/reports_widget.dart",
+      "lines": 431,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.manager.presentation.widgets.tasks_widget",
+      "type": "Module",
+      "label": "tasks_widget",
+      "path": "lib/features/manager/presentation/widgets/tasks_widget.dart",
+      "lines": 546,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.teacher.presentation.screens.teacher_dashboard_screen",
+      "type": "Module",
+      "label": "teacher_dashboard_screen",
+      "path": "lib/features/teacher/presentation/screens/teacher_dashboard_screen.dart",
+      "lines": 79,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.teacher.presentation.widgets.teacher_chat_widget",
+      "type": "Module",
+      "label": "teacher_chat_widget",
+      "path": "lib/features/teacher/presentation/widgets/teacher_chat_widget.dart",
+      "lines": 332,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.teacher.presentation.widgets.teacher_schedule_widget",
+      "type": "Module",
+      "label": "teacher_schedule_widget",
+      "path": "lib/features/teacher/presentation/widgets/teacher_schedule_widget.dart",
+      "lines": 292,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.features.teacher.presentation.widgets.teacher_students_widget",
+      "type": "Module",
+      "label": "teacher_students_widget",
+      "path": "lib/features/teacher/presentation/widgets/teacher_students_widget.dart",
+      "lines": 212,
+      "lang": "dart"
+    },
+    {
+      "id": "lib.main",
+      "type": "Module",
+      "label": "main",
+      "path": "lib/main.dart",
+      "lines": 82,
+      "lang": "dart"
+    },
+    {
+      "id": "linux.flutter.generated_plugin_registrant",
+      "type": "Module",
+      "label": "generated_plugin_registrant",
+      "path": "linux/flutter/generated_plugin_registrant.cc",
+      "lines": 20,
+      "lang": "cpp"
+    },
+    {
+      "id": "linux.flutter.generated_plugin_registrant.fl_register_plugins",
+      "type": "Function",
+      "label": "fl_register_plugins",
+      "path": "linux/flutter/generated_plugin_registrant.cc",
+      "parent": "linux.flutter.generated_plugin_registrant",
+      "start_line": 12,
+      "end_line": 19
+    },
+    {
+      "id": "linux.flutter.generated_plugin_registrant",
+      "type": "Module",
+      "label": "generated_plugin_registrant",
+      "path": "linux/flutter/generated_plugin_registrant.h",
+      "lines": 16,
+      "lang": "c"
+    },
+    {
+      "id": "linux.runner.main",
+      "type": "Module",
+      "label": "main",
+      "path": "linux/runner/main.cc",
+      "lines": 7,
+      "lang": "cpp"
+    },
+    {
+      "id": "linux.runner.main.main",
+      "type": "Function",
+      "label": "main",
+      "path": "linux/runner/main.cc",
+      "parent": "linux.runner.main",
+      "start_line": 3,
+      "end_line": 6
+    },
+    {
+      "id": "linux.runner.my_application",
+      "type": "Module",
+      "label": "my_application",
+      "path": "linux/runner/my_application.cc",
+      "lines": 149,
+      "lang": "cpp"
+    },
+    {
+      "id": "linux.runner.my_application.first_frame_cb",
+      "type": "Function",
+      "label": "first_frame_cb",
+      "path": "linux/runner/my_application.cc",
+      "parent": "linux.runner.my_application",
+      "start_line": 18,
+      "end_line": 20
+    },
+    {
+      "id": "linux.runner.my_application.my_application_activate",
+      "type": "Function",
+      "label": "my_application_activate",
+      "path": "linux/runner/my_application.cc",
+      "parent": "linux.runner.my_application",
+      "start_line": 23,
+      "end_line": 79
+    },
+    {
+      "id": "linux.runner.my_application.my_application_local_command_line",
+      "type": "Function",
+      "label": "my_application_local_command_line",
+      "path": "linux/runner/my_application.cc",
+      "parent": "linux.runner.my_application",
+      "start_line": 82,
+      "end_line": 100
+    },
+    {
+      "id": "linux.runner.my_application.my_application_startup",
+      "type": "Function",
+      "label": "my_application_startup",
+      "path": "linux/runner/my_application.cc",
+      "parent": "linux.runner.my_application",
+      "start_line": 103,
+      "end_line": 109
+    },
+    {
+      "id": "linux.runner.my_application.my_application_shutdown",
+      "type": "Function",
+      "label": "my_application_shutdown",
+      "path": "linux/runner/my_application.cc",
+      "parent": "linux.runner.my_application",
+      "start_line": 112,
+      "end_line": 118
+    },
+    {
+      "id": "linux.runner.my_application.my_application_dispose",
+      "type": "Function",
+      "label": "my_application_dispose",
+      "path": "linux/runner/my_application.cc",
+      "parent": "linux.runner.my_application",
+      "start_line": 121,
+      "end_line": 125
+    },
+    {
+      "id": "linux.runner.my_application.my_application_class_init",
+      "type": "Function",
+      "label": "my_application_class_init",
+      "path": "linux/runner/my_application.cc",
+      "parent": "linux.runner.my_application",
+      "start_line": 127,
+      "end_line": 134
+    },
+    {
+      "id": "linux.runner.my_application.my_application_init",
+      "type": "Function",
+      "label": "my_application_init",
+      "path": "linux/runner/my_application.cc",
+      "parent": "linux.runner.my_application",
+      "start_line": 136,
+      "end_line": 136
+    },
+    {
+      "id": "linux.runner.my_application",
+      "type": "Module",
+      "label": "my_application",
+      "path": "linux/runner/my_application.h",
+      "lines": 22,
+      "lang": "c"
+    },
+    {
+      "id": "macos.Flutter.ephemeral.flutter_export_environment",
+      "type": "Module",
+      "label": "flutter_export_environment",
+      "path": "macos/Flutter/ephemeral/flutter_export_environment.sh",
+      "lines": 13,
+      "lang": "bash"
+    },
+    {
+      "id": "macos.Flutter.GeneratedPluginRegistrant",
+      "type": "Module",
+      "label": "GeneratedPluginRegistrant",
+      "path": "macos/Flutter/GeneratedPluginRegistrant.swift",
+      "lines": 23,
+      "lang": "swift"
+    },
+    {
+      "id": "macos.Flutter.GeneratedPluginRegistrant.RegisterGeneratedPlugins",
+      "type": "Function",
+      "label": "RegisterGeneratedPlugins",
+      "path": "macos/Flutter/GeneratedPluginRegistrant.swift",
+      "parent": "macos.Flutter.GeneratedPluginRegistrant",
+      "start_line": 15,
+      "end_line": 22
+    },
+    {
+      "id": "macos.Runner.AppDelegate",
+      "type": "Module",
+      "label": "AppDelegate",
+      "path": "macos/Runner/AppDelegate.swift",
+      "lines": 14,
+      "lang": "swift"
+    },
+    {
+      "id": "macos.Runner.AppDelegate.AppDelegate",
+      "type": "Class",
+      "label": "AppDelegate",
+      "path": "macos/Runner/AppDelegate.swift",
+      "parent": "macos.Runner.AppDelegate",
+      "start_line": 4,
+      "end_line": 13
+    },
+    {
+      "id": "macos.Runner.AppDelegate.AppDelegate.applicationShouldTerminateAfterLastWindowClosed",
+      "type": "Function",
+      "label": "applicationShouldTerminateAfterLastWindowClosed",
+      "path": "macos/Runner/AppDelegate.swift",
+      "parent": "macos.Runner.AppDelegate.AppDelegate",
+      "start_line": 6,
+      "end_line": 8
+    },
+    {
+      "id": "macos.Runner.AppDelegate.AppDelegate.applicationSupportsSecureRestorableState",
+      "type": "Function",
+      "label": "applicationSupportsSecureRestorableState",
+      "path": "macos/Runner/AppDelegate.swift",
+      "parent": "macos.Runner.AppDelegate.AppDelegate",
+      "start_line": 10,
+      "end_line": 12
+    },
+    {
+      "id": "macos.Runner.MainFlutterWindow",
+      "type": "Module",
+      "label": "MainFlutterWindow",
+      "path": "macos/Runner/MainFlutterWindow.swift",
+      "lines": 16,
+      "lang": "swift"
+    },
+    {
+      "id": "macos.Runner.MainFlutterWindow.MainFlutterWindow",
+      "type": "Class",
+      "label": "MainFlutterWindow",
+      "path": "macos/Runner/MainFlutterWindow.swift",
+      "parent": "macos.Runner.MainFlutterWindow",
+      "start_line": 4,
+      "end_line": 15
+    },
+    {
+      "id": "macos.Runner.MainFlutterWindow.MainFlutterWindow.awakeFromNib",
+      "type": "Function",
+      "label": "awakeFromNib",
+      "path": "macos/Runner/MainFlutterWindow.swift",
+      "parent": "macos.Runner.MainFlutterWindow.MainFlutterWindow",
+      "start_line": 5,
+      "end_line": 14
+    },
+    {
+      "id": "macos.RunnerTests.RunnerTests",
+      "type": "Module",
+      "label": "RunnerTests",
+      "path": "macos/RunnerTests/RunnerTests.swift",
+      "lines": 13,
+      "lang": "swift"
+    },
+    {
+      "id": "macos.RunnerTests.RunnerTests.RunnerTests",
+      "type": "Class",
+      "label": "RunnerTests",
+      "path": "macos/RunnerTests/RunnerTests.swift",
+      "parent": "macos.RunnerTests.RunnerTests",
+      "start_line": 5,
+      "end_line": 12
+    },
+    {
+      "id": "macos.RunnerTests.RunnerTests.RunnerTests.testExample",
+      "type": "Function",
+      "label": "testExample",
+      "path": "macos/RunnerTests/RunnerTests.swift",
+      "parent": "macos.RunnerTests.RunnerTests.RunnerTests",
+      "start_line": 7,
+      "end_line": 10
+    },
+    {
+      "id": "scripts.fix_db_data",
+      "type": "Module",
+      "label": "fix_db_data",
+      "path": "scripts/fix_db_data.py",
+      "lines": 87,
+      "lang": "python"
+    },
+    {
+      "id": "scripts.fix_db_data.upsert_data",
+      "type": "Function",
+      "label": "upsert_data",
+      "path": "scripts/fix_db_data.py",
+      "parent": "scripts.fix_db_data",
+      "start_line": 9,
+      "end_line": 23
+    },
+    {
+      "id": "scripts.fix_db_data.update_branch",
+      "type": "Function",
+      "label": "update_branch",
+      "path": "scripts/fix_db_data.py",
+      "parent": "scripts.fix_db_data",
+      "start_line": 25,
+      "end_line": 38
+    },
+    {
+      "id": "scripts.fix_db_data.insert_branches_and_rooms",
+      "type": "Function",
+      "label": "insert_branches_and_rooms",
+      "path": "scripts/fix_db_data.py",
+      "parent": "scripts.fix_db_data",
+      "start_line": 40,
+      "end_line": 83
+    },
+    {
+      "id": "scripts.insert_missing_data",
+      "type": "Module",
+      "label": "insert_missing_data",
+      "path": "scripts/insert_missing_data.py",
+      "lines": 67,
+      "lang": "python"
+    },
+    {
+      "id": "scripts.insert_missing_data.upsert_data",
+      "type": "Function",
+      "label": "upsert_data",
+      "path": "scripts/insert_missing_data.py",
+      "parent": "scripts.insert_missing_data",
+      "start_line": 9,
+      "end_line": 22
+    },
+    {
+      "id": "scripts.insert_missing_data.insert_branches_and_rooms",
+      "type": "Function",
+      "label": "insert_branches_and_rooms",
+      "path": "scripts/insert_missing_data.py",
+      "parent": "scripts.insert_missing_data",
+      "start_line": 24,
+      "end_line": 63
+    },
+    {
+      "id": "temp_git_widget",
+      "type": "Module",
+      "label": "temp_git_widget",
+      "path": "temp_git_widget.dart",
+      "lines": 348,
+      "lang": "dart"
+    },
+    {
+      "id": "test.widget_test",
+      "type": "Module",
+      "label": "widget_test",
+      "path": "test/widget_test.dart",
+      "lines": 11,
+      "lang": "dart"
+    },
+    {
+      "id": "test_api_endpoints",
+      "type": "Module",
+      "label": "test_api_endpoints",
+      "path": "test_api_endpoints.py",
+      "lines": 43,
+      "lang": "python"
+    },
+    {
+      "id": "test_api_endpoints.test_endpoint",
+      "type": "Function",
+      "label": "test_endpoint",
+      "path": "test_api_endpoints.py",
+      "parent": "test_api_endpoints",
+      "start_line": 20,
+      "end_line": 38
+    },
+    {
+      "id": "test_profile_insert",
+      "type": "Module",
+      "label": "test_profile_insert",
+      "path": "test_profile_insert.py",
+      "lines": 24,
+      "lang": "python"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.binary_messenger_impl",
+      "type": "Module",
+      "label": "binary_messenger_impl",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/binary_messenger_impl.h",
+      "lines": 51,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "type": "Module",
+      "label": "byte_buffer_streams",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/byte_buffer_streams.h",
+      "lines": 103,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.ReadByte",
+      "type": "Function",
+      "label": "ReadByte",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/byte_buffer_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "start_line": 29,
+      "end_line": 35
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.ReadBytes",
+      "type": "Function",
+      "label": "ReadBytes",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/byte_buffer_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "start_line": 38,
+      "end_line": 45
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.ReadAlignment",
+      "type": "Function",
+      "label": "ReadAlignment",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/byte_buffer_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "start_line": 48,
+      "end_line": 53
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.WriteByte",
+      "type": "Function",
+      "label": "WriteByte",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/byte_buffer_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "start_line": 77,
+      "end_line": 77
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.WriteBytes",
+      "type": "Function",
+      "label": "WriteBytes",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/byte_buffer_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "start_line": 80,
+      "end_line": 83
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.WriteAlignment",
+      "type": "Function",
+      "label": "WriteAlignment",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/byte_buffer_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "start_line": 86,
+      "end_line": 93
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "type": "Module",
+      "label": "core_implementations",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/core_implementations.cc",
+      "lines": 285,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations.ForwardToHandler",
+      "type": "Function",
+      "label": "ForwardToHandler",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/core_implementations.cc",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "start_line": 42,
+      "end_line": 78
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations.ResizeChannel",
+      "type": "Function",
+      "label": "ResizeChannel",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/core_implementations.cc",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "start_line": 181,
+      "end_line": 192
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations.SetChannelWarnsOnOverflow",
+      "type": "Function",
+      "label": "SetChannelWarnsOnOverflow",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/core_implementations.cc",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "start_line": 194,
+      "end_line": 205
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.engine_method_result",
+      "type": "Module",
+      "label": "engine_method_result",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/engine_method_result.cc",
+      "lines": 12,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_engine",
+      "type": "Module",
+      "label": "flutter_engine",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/flutter_engine.cc",
+      "lines": 127,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_view_controller",
+      "type": "Module",
+      "label": "flutter_view_controller",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/flutter_view_controller.cc",
+      "lines": 54,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "type": "Module",
+      "label": "basic_message_channel",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/basic_message_channel.h",
+      "lines": 150,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.Send",
+      "type": "Function",
+      "label": "Send",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/basic_message_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "start_line": 72,
+      "end_line": 76
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.Send",
+      "type": "Function",
+      "label": "Send",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/basic_message_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "start_line": 79,
+      "end_line": 84
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.SetMessageHandler",
+      "type": "Function",
+      "label": "SetMessageHandler",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/basic_message_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "start_line": 92,
+      "end_line": 120
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.Resize",
+      "type": "Function",
+      "label": "Resize",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/basic_message_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "start_line": 128,
+      "end_line": 130
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.SetWarnsOnOverflow",
+      "type": "Function",
+      "label": "SetWarnsOnOverflow",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/basic_message_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "start_line": 137,
+      "end_line": 139
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.binary_messenger",
+      "type": "Module",
+      "label": "binary_messenger",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/binary_messenger.h",
+      "lines": 54,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "type": "Module",
+      "label": "byte_streams",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/byte_streams.h",
+      "lines": 86,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.ReadInt32",
+      "type": "Function",
+      "label": "ReadInt32",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/byte_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "start_line": 30,
+      "end_line": 34
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.ReadInt64",
+      "type": "Function",
+      "label": "ReadInt64",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/byte_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "start_line": 37,
+      "end_line": 41
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.ReadDouble",
+      "type": "Function",
+      "label": "ReadDouble",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/byte_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "start_line": 44,
+      "end_line": 48
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.WriteInt32",
+      "type": "Function",
+      "label": "WriteInt32",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/byte_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "start_line": 68,
+      "end_line": 70
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.WriteInt64",
+      "type": "Function",
+      "label": "WriteInt64",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/byte_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "start_line": 73,
+      "end_line": 75
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.WriteDouble",
+      "type": "Function",
+      "label": "WriteDouble",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/byte_streams.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "start_line": 78,
+      "end_line": 80
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "type": "Module",
+      "label": "dart_project",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/dart_project.h",
+      "lines": 150,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.DartProject",
+      "type": "Function",
+      "label": "DartProject",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/dart_project.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "start_line": 65,
+      "end_line": 69
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.set_dart_entrypoint",
+      "type": "Function",
+      "label": "set_dart_entrypoint",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/dart_project.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "start_line": 77,
+      "end_line": 82
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.set_dart_entrypoint_arguments",
+      "type": "Function",
+      "label": "set_dart_entrypoint_arguments",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/dart_project.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "start_line": 89,
+      "end_line": 91
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.set_gpu_preference",
+      "type": "Function",
+      "label": "set_gpu_preference",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/dart_project.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "start_line": 100,
+      "end_line": 102
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.set_ui_thread_policy",
+      "type": "Function",
+      "label": "set_ui_thread_policy",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/dart_project.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "start_line": 109,
+      "end_line": 111
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "type": "Module",
+      "label": "encodable_value",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/encodable_value.h",
+      "lines": 293,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value.EncodableValue",
+      "type": "Function",
+      "label": "EncodableValue",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/encodable_value.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "start_line": 177,
+      "end_line": 177
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value.super",
+      "type": "Function",
+      "label": "super",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/encodable_value.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "start_line": 189,
+      "end_line": 189
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "type": "Module",
+      "label": "engine_method_result",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/engine_method_result.h",
+      "lines": 87,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result.ErrorInternal",
+      "type": "Function",
+      "label": "ErrorInternal",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/engine_method_result.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "start_line": 65,
+      "end_line": 71
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result.NotImplementedInternal",
+      "type": "Function",
+      "label": "NotImplementedInternal",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/engine_method_result.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "start_line": 74,
+      "end_line": 76
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "type": "Module",
+      "label": "event_channel",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_channel.h",
+      "lines": 182,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel.SetStreamHandler",
+      "type": "Function",
+      "label": "SetStreamHandler",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "start_line": 54,
+      "end_line": 135
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel.ErrorInternal",
+      "type": "Function",
+      "label": "ErrorInternal",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "start_line": 163,
+      "end_line": 169
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel.EndOfStreamInternal",
+      "type": "Function",
+      "label": "EndOfStreamInternal",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "start_line": 171,
+      "end_line": 171
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink",
+      "type": "Module",
+      "label": "event_sink",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_sink.h",
+      "lines": 63,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink.Success",
+      "type": "Function",
+      "label": "Success",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_sink.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink",
+      "start_line": 25,
+      "end_line": 25
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink.Success",
+      "type": "Function",
+      "label": "Success",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_sink.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink",
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink.Error",
+      "type": "Function",
+      "label": "Error",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_sink.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink",
+      "start_line": 31,
+      "end_line": 35
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink.EndOfStream",
+      "type": "Function",
+      "label": "EndOfStream",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_sink.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink",
+      "start_line": 45,
+      "end_line": 45
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler",
+      "type": "Module",
+      "label": "event_stream_handler",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_stream_handler.h",
+      "lines": 78,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler_functions",
+      "type": "Module",
+      "label": "event_stream_handler_functions",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_stream_handler_functions.h",
+      "lines": 79,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler_functions.on_cancel_",
+      "type": "Function",
+      "label": "on_cancel_",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/event_stream_handler_functions.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler_functions",
+      "start_line": 38,
+      "end_line": 38
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "type": "Module",
+      "label": "flutter_engine",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/flutter_engine.h",
+      "lines": 129,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view",
+      "type": "Module",
+      "label": "flutter_view",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/flutter_view.h",
+      "lines": 43,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view.GetNativeWindow",
+      "type": "Function",
+      "label": "GetNativeWindow",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/flutter_view.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view",
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "type": "Module",
+      "label": "flutter_view_controller",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/flutter_view_controller.h",
+      "lines": 77,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller.view_id",
+      "type": "Function",
+      "label": "view_id",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/flutter_view_controller.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "start_line": 42,
+      "end_line": 48
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.message_codec",
+      "type": "Module",
+      "label": "message_codec",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/message_codec.h",
+      "lines": 63,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_call",
+      "type": "Module",
+      "label": "method_call",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_call.h",
+      "lines": 44,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "type": "Module",
+      "label": "method_channel",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_channel.h",
+      "lines": 152,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel.SetMethodCallHandler",
+      "type": "Function",
+      "label": "SetMethodCallHandler",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "start_line": 99,
+      "end_line": 122
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel.Resize",
+      "type": "Function",
+      "label": "Resize",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "start_line": 130,
+      "end_line": 132
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel.SetWarnsOnOverflow",
+      "type": "Function",
+      "label": "SetWarnsOnOverflow",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_channel.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "start_line": 139,
+      "end_line": 141
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec",
+      "type": "Module",
+      "label": "method_codec",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_codec.h",
+      "lines": 112,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec.DecodeAndProcessResponseEnvelope",
+      "type": "Function",
+      "label": "DecodeAndProcessResponseEnvelope",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_codec.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec",
+      "start_line": 75,
+      "end_line": 80
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "type": "Module",
+      "label": "method_result",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_result.h",
+      "lines": 77,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result.Success",
+      "type": "Function",
+      "label": "Success",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_result.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "start_line": 29,
+      "end_line": 29
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result.Success",
+      "type": "Function",
+      "label": "Success",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_result.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result.Error",
+      "type": "Function",
+      "label": "Error",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_result.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "start_line": 41,
+      "end_line": 45
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result.NotImplemented",
+      "type": "Function",
+      "label": "NotImplemented",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_result.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "start_line": 59,
+      "end_line": 59
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions",
+      "type": "Module",
+      "label": "method_result_functions",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_result_functions.h",
+      "lines": 81,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions.ErrorInternal",
+      "type": "Function",
+      "label": "ErrorInternal",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_result_functions.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions",
+      "start_line": 57,
+      "end_line": 63
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions.NotImplementedInternal",
+      "type": "Function",
+      "label": "NotImplementedInternal",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/method_result_functions.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions",
+      "start_line": 66,
+      "end_line": 70
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "type": "Module",
+      "label": "plugin_registrar",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/plugin_registrar.h",
+      "lines": 132,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar.Reset",
+      "type": "Function",
+      "label": "Reset",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/plugin_registrar.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "start_line": 114,
+      "end_line": 114
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "type": "Module",
+      "label": "plugin_registrar_windows",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/plugin_registrar_windows.h",
+      "lines": 152,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows.PluginRegistrarWindows",
+      "type": "Function",
+      "label": "PluginRegistrarWindows",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/plugin_registrar_windows.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "start_line": 42,
+      "end_line": 47
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows.RegisterTopLevelWindowProcDelegate",
+      "type": "Function",
+      "label": "RegisterTopLevelWindowProcDelegate",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/plugin_registrar_windows.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "start_line": 88,
+      "end_line": 96
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows.UnregisterTopLevelWindowProcDelegate",
+      "type": "Function",
+      "label": "UnregisterTopLevelWindowProcDelegate",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/plugin_registrar_windows.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "start_line": 99,
+      "end_line": 105
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registry",
+      "type": "Module",
+      "label": "plugin_registry",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/plugin_registry.h",
+      "lines": 38,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_codec_serializer",
+      "type": "Module",
+      "label": "standard_codec_serializer",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/standard_codec_serializer.h",
+      "lines": 77,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_message_codec",
+      "type": "Module",
+      "label": "standard_message_codec",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/standard_message_codec.h",
+      "lines": 58,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_method_codec",
+      "type": "Module",
+      "label": "standard_method_codec",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/standard_method_codec.h",
+      "lines": 74,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar",
+      "type": "Module",
+      "label": "texture_registrar",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/texture_registrar.h",
+      "lines": 112,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar.PixelBufferTexture",
+      "type": "Function",
+      "label": "PixelBufferTexture",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/include/flutter/texture_registrar.h",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar",
+      "start_line": 31,
+      "end_line": 32
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.plugin_registrar",
+      "type": "Module",
+      "label": "plugin_registrar",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/plugin_registrar.cc",
+      "lines": 63,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "type": "Module",
+      "label": "standard_codec",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/standard_codec.cc",
+      "lines": 469,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec.EncodedTypeForValue",
+      "type": "Function",
+      "label": "EncodedTypeForValue",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/standard_codec.cc",
+      "parent": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "start_line": 48,
+      "end_line": 79
+    },
+    {
+      "id": "windows.flutter.ephemeral.cpp_client_wrapper.texture_registrar_impl",
+      "type": "Module",
+      "label": "texture_registrar_impl",
+      "path": "windows/flutter/ephemeral/cpp_client_wrapper/texture_registrar_impl.h",
+      "lines": 45,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_export",
+      "type": "Module",
+      "label": "flutter_export",
+      "path": "windows/flutter/ephemeral/flutter_export.h",
+      "lines": 29,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_messenger",
+      "type": "Module",
+      "label": "flutter_messenger",
+      "path": "windows/flutter/ephemeral/flutter_messenger.h",
+      "lines": 145,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_messenger.FlutterDesktopMessenger",
+      "type": "Class",
+      "label": "FlutterDesktopMessenger",
+      "path": "windows/flutter/ephemeral/flutter_messenger.h",
+      "parent": "windows.flutter.ephemeral.flutter_messenger",
+      "start_line": 19,
+      "end_line": 19
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_messenger._FlutterPlatformMessageResponseHandle",
+      "type": "Class",
+      "label": "_FlutterPlatformMessageResponseHandle",
+      "path": "windows/flutter/ephemeral/flutter_messenger.h",
+      "parent": "windows.flutter.ephemeral.flutter_messenger",
+      "start_line": 22,
+      "end_line": 22
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_plugin_registrar",
+      "type": "Module",
+      "label": "flutter_plugin_registrar",
+      "path": "windows/flutter/ephemeral/flutter_plugin_registrar.h",
+      "lines": 46,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_plugin_registrar.FlutterDesktopPluginRegistrar",
+      "type": "Class",
+      "label": "FlutterDesktopPluginRegistrar",
+      "path": "windows/flutter/ephemeral/flutter_plugin_registrar.h",
+      "parent": "windows.flutter.ephemeral.flutter_plugin_registrar",
+      "start_line": 20,
+      "end_line": 20
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_texture_registrar",
+      "type": "Module",
+      "label": "flutter_texture_registrar",
+      "path": "windows/flutter/ephemeral/flutter_texture_registrar.h",
+      "lines": 188,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_texture_registrar.FlutterDesktopTextureRegistrar",
+      "type": "Class",
+      "label": "FlutterDesktopTextureRegistrar",
+      "path": "windows/flutter/ephemeral/flutter_texture_registrar.h",
+      "parent": "windows.flutter.ephemeral.flutter_texture_registrar",
+      "start_line": 17,
+      "end_line": 17
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_texture_registrar.FlutterDesktopTextureRegistrar",
+      "type": "Class",
+      "label": "FlutterDesktopTextureRegistrar",
+      "path": "windows/flutter/ephemeral/flutter_texture_registrar.h",
+      "parent": "windows.flutter.ephemeral.flutter_texture_registrar",
+      "start_line": 19,
+      "end_line": 19
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_windows",
+      "type": "Module",
+      "label": "flutter_windows",
+      "path": "windows/flutter/ephemeral/flutter_windows.h",
+      "lines": 337,
+      "lang": "c"
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopViewController",
+      "type": "Class",
+      "label": "FlutterDesktopViewController",
+      "path": "windows/flutter/ephemeral/flutter_windows.h",
+      "parent": "windows.flutter.ephemeral.flutter_windows",
+      "start_line": 24,
+      "end_line": 24
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopViewController",
+      "type": "Class",
+      "label": "FlutterDesktopViewController",
+      "path": "windows/flutter/ephemeral/flutter_windows.h",
+      "parent": "windows.flutter.ephemeral.flutter_windows",
+      "start_line": 25,
+      "end_line": 25
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopView",
+      "type": "Class",
+      "label": "FlutterDesktopView",
+      "path": "windows/flutter/ephemeral/flutter_windows.h",
+      "parent": "windows.flutter.ephemeral.flutter_windows",
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopView",
+      "type": "Class",
+      "label": "FlutterDesktopView",
+      "path": "windows/flutter/ephemeral/flutter_windows.h",
+      "parent": "windows.flutter.ephemeral.flutter_windows",
+      "start_line": 29,
+      "end_line": 29
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopEngine",
+      "type": "Class",
+      "label": "FlutterDesktopEngine",
+      "path": "windows/flutter/ephemeral/flutter_windows.h",
+      "parent": "windows.flutter.ephemeral.flutter_windows",
+      "start_line": 32,
+      "end_line": 32
+    },
+    {
+      "id": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopEngine",
+      "type": "Class",
+      "label": "FlutterDesktopEngine",
+      "path": "windows/flutter/ephemeral/flutter_windows.h",
+      "parent": "windows.flutter.ephemeral.flutter_windows",
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "id": "windows.flutter.generated_plugin_registrant",
+      "type": "Module",
+      "label": "generated_plugin_registrant",
+      "path": "windows/flutter/generated_plugin_registrant.cc",
+      "lines": 24,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.flutter.generated_plugin_registrant.RegisterPlugins",
+      "type": "Function",
+      "label": "RegisterPlugins",
+      "path": "windows/flutter/generated_plugin_registrant.cc",
+      "parent": "windows.flutter.generated_plugin_registrant",
+      "start_line": 14,
+      "end_line": 23
+    },
+    {
+      "id": "windows.flutter.generated_plugin_registrant",
+      "type": "Module",
+      "label": "generated_plugin_registrant",
+      "path": "windows/flutter/generated_plugin_registrant.h",
+      "lines": 16,
+      "lang": "c"
+    },
+    {
+      "id": "windows.runner.flutter_window",
+      "type": "Module",
+      "label": "flutter_window",
+      "path": "windows/runner/flutter_window.cpp",
+      "lines": 72,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.runner.flutter_window",
+      "type": "Module",
+      "label": "flutter_window",
+      "path": "windows/runner/flutter_window.h",
+      "lines": 34,
+      "lang": "c"
+    },
+    {
+      "id": "windows.runner.main",
+      "type": "Module",
+      "label": "main",
+      "path": "windows/runner/main.cpp",
+      "lines": 44,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.runner.main.wWinMain",
+      "type": "Function",
+      "label": "wWinMain",
+      "path": "windows/runner/main.cpp",
+      "parent": "windows.runner.main",
+      "start_line": 8,
+      "end_line": 43
+    },
+    {
+      "id": "windows.runner.resource",
+      "type": "Module",
+      "label": "resource",
+      "path": "windows/runner/resource.h",
+      "lines": 17,
+      "lang": "c"
+    },
+    {
+      "id": "windows.runner.utils",
+      "type": "Module",
+      "label": "utils",
+      "path": "windows/runner/utils.cpp",
+      "lines": 66,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.runner.utils.CreateAndAttachConsole",
+      "type": "Function",
+      "label": "CreateAndAttachConsole",
+      "path": "windows/runner/utils.cpp",
+      "parent": "windows.runner.utils",
+      "start_line": 10,
+      "end_line": 22
+    },
+    {
+      "id": "windows.runner.utils.GetCommandLineArguments",
+      "type": "Function",
+      "label": "GetCommandLineArguments",
+      "path": "windows/runner/utils.cpp",
+      "parent": "windows.runner.utils",
+      "start_line": 24,
+      "end_line": 42
+    },
+    {
+      "id": "windows.runner.utils.Utf8FromUtf16",
+      "type": "Function",
+      "label": "Utf8FromUtf16",
+      "path": "windows/runner/utils.cpp",
+      "parent": "windows.runner.utils",
+      "start_line": 44,
+      "end_line": 65
+    },
+    {
+      "id": "windows.runner.utils",
+      "type": "Module",
+      "label": "utils",
+      "path": "windows/runner/utils.h",
+      "lines": 20,
+      "lang": "c"
+    },
+    {
+      "id": "windows.runner.win32_window",
+      "type": "Module",
+      "label": "win32_window",
+      "path": "windows/runner/win32_window.cpp",
+      "lines": 289,
+      "lang": "cpp"
+    },
+    {
+      "id": "windows.runner.win32_window.Scale",
+      "type": "Function",
+      "label": "Scale",
+      "path": "windows/runner/win32_window.cpp",
+      "parent": "windows.runner.win32_window",
+      "start_line": 36,
+      "end_line": 38
+    },
+    {
+      "id": "windows.runner.win32_window.EnableFullDpiSupportIfAvailable",
+      "type": "Function",
+      "label": "EnableFullDpiSupportIfAvailable",
+      "path": "windows/runner/win32_window.cpp",
+      "parent": "windows.runner.win32_window",
+      "start_line": 42,
+      "end_line": 54
+    },
+    {
+      "id": "windows.runner.win32_window.WindowClassRegistrar",
+      "type": "Class",
+      "label": "WindowClassRegistrar",
+      "path": "windows/runner/win32_window.cpp",
+      "parent": "windows.runner.win32_window",
+      "start_line": 59,
+      "end_line": 85
+    },
+    {
+      "id": "windows.runner.win32_window.WindowClassRegistrar.WindowClassRegistrar",
+      "type": "Function",
+      "label": "WindowClassRegistrar",
+      "path": "windows/runner/win32_window.cpp",
+      "parent": "windows.runner.win32_window.WindowClassRegistrar",
+      "start_line": 80,
+      "end_line": 80
+    },
+    {
+      "id": "windows.runner.win32_window",
+      "type": "Module",
+      "label": "win32_window",
+      "path": "windows/runner/win32_window.h",
+      "lines": 103,
+      "lang": "c"
+    },
+    {
+      "id": "windows.runner.win32_window.Size",
+      "type": "Class",
+      "label": "Size",
+      "path": "windows/runner/win32_window.h",
+      "parent": "windows.runner.win32_window",
+      "start_line": 21,
+      "end_line": 100
+    }
+  ],
+  "edges": [
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast._load_builtin_languages",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast._should_skip_path",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast.write_filtered_file_tree",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast._normalize_extension",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast._copy_lang_queries",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast._apply_cli_customizations",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast._load_language_customizations",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast._load_languages",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast.get_language",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast.get_language",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast._file_module_id",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast.extract_file",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast.collect_source_files",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast.apply_max_nodes",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".agents.skills.nexus-mapper.scripts.extract_ast.main",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": "sys",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": "argparse",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": "pathlib",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": "typing",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": "tree_sitter_language_pack",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": "tree_sitter_python",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": "tree_sitter",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.extract_ast",
+      "target": "tree_sitter",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": ".agents.skills.nexus-mapper.scripts.git_detective.run_git",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": ".agents.skills.nexus-mapper.scripts.git_detective.get_commit_file_changes",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": ".agents.skills.nexus-mapper.scripts.git_detective.compute_hotspots",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": ".agents.skills.nexus-mapper.scripts.git_detective.compute_coupling_pairs",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": ".agents.skills.nexus-mapper.scripts.git_detective.get_repo_stats",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": ".agents.skills.nexus-mapper.scripts.git_detective.main",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": "sys",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": "argparse",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": "subprocess",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": "pathlib",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": "collections",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.git_detective",
+      "target": "itertools",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats.__init__",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats.file_risk",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats.file_coupling",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.GitStats.format_risk_block",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.__init__",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._build_index",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._module_aliases",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_import_target",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._classify_imports",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_to_module_id",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_to_path",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_file",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_who_imports",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._format_who_imports",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_impact",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_hub_analysis",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_summary",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.ASTGraph._dir_key",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "target": ".agents.skills.nexus-mapper.scripts.query_graph.main",
+      "type": "contains"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "target": "sys",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "target": "argparse",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "target": "pathlib",
+      "type": "imports"
+    },
+    {
+      "source": ".agents.skills.nexus-mapper.scripts.query_graph",
+      "target": "collections",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast._load_builtin_languages",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast._should_skip_path",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast.write_filtered_file_tree",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast._normalize_extension",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast._copy_lang_queries",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast._apply_cli_customizations",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast._load_language_customizations",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast._load_languages",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast.get_language",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast.get_language",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast._file_module_id",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast.extract_file",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast.collect_source_files",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast.apply_max_nodes",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": ".windsurf.skills.nexus-mapper.scripts.extract_ast.main",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": "sys",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": "argparse",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": "pathlib",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": "typing",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": "tree_sitter_language_pack",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": "tree_sitter_python",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": "tree_sitter",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.extract_ast",
+      "target": "tree_sitter",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": ".windsurf.skills.nexus-mapper.scripts.git_detective.run_git",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": ".windsurf.skills.nexus-mapper.scripts.git_detective.get_commit_file_changes",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": ".windsurf.skills.nexus-mapper.scripts.git_detective.compute_hotspots",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": ".windsurf.skills.nexus-mapper.scripts.git_detective.compute_coupling_pairs",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": ".windsurf.skills.nexus-mapper.scripts.git_detective.get_repo_stats",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": ".windsurf.skills.nexus-mapper.scripts.git_detective.main",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": "sys",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": "argparse",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": "subprocess",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": "pathlib",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": "collections",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.git_detective",
+      "target": "itertools",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats.__init__",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats.file_risk",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats.file_coupling",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.GitStats.format_risk_block",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.__init__",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._build_index",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._module_aliases",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_import_target",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._classify_imports",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_to_module_id",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.resolve_to_path",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_file",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_who_imports",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._format_who_imports",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_impact",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_hub_analysis",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph.query_summary",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.ASTGraph._dir_key",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "target": ".windsurf.skills.nexus-mapper.scripts.query_graph.main",
+      "type": "contains"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "target": "sys",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "target": "argparse",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "target": "pathlib",
+      "type": "imports"
+    },
+    {
+      "source": ".windsurf.skills.nexus-mapper.scripts.query_graph",
+      "target": "collections",
+      "type": "imports"
+    },
+    {
+      "source": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant",
+      "target": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant.GeneratedPluginRegistrant",
+      "type": "contains"
+    },
+    {
+      "source": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant.GeneratedPluginRegistrant",
+      "target": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant.GeneratedPluginRegistrant.registerWith",
+      "type": "contains"
+    },
+    {
+      "source": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant",
+      "target": "androidx.annotation.Keep",
+      "type": "imports"
+    },
+    {
+      "source": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant",
+      "target": "androidx.annotation.NonNull",
+      "type": "imports"
+    },
+    {
+      "source": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant",
+      "target": "io.flutter.Log",
+      "type": "imports"
+    },
+    {
+      "source": "android.app.src.main.java.io.flutter.plugins.GeneratedPluginRegistrant",
+      "target": "io.flutter.embedding.engine.FlutterEngine",
+      "type": "imports"
+    },
+    {
+      "source": "android.app.src.main.kotlin.com.magicmusiccrm.magic_music_crm.MainActivity",
+      "target": "android.app.src.main.kotlin.com.magicmusiccrm.magic_music_crm.MainActivity.MainActivity",
+      "type": "contains"
+    },
+    {
+      "source": "android.app.src.main.kotlin.com.magicmusiccrm.magic_music_crm.MainActivity",
+      "target": "io.flutter.embedding.android.FlutterActivity",
+      "type": "imports"
+    },
+    {
+      "source": "hollihop_export",
+      "target": "hollihop_export.fetch_data",
+      "type": "contains"
+    },
+    {
+      "source": "hollihop_export",
+      "target": "hollihop_export.save_json",
+      "type": "contains"
+    },
+    {
+      "source": "hollihop_export",
+      "target": "hollihop_export.main",
+      "type": "contains"
+    },
+    {
+      "source": "hollihop_export",
+      "target": "os",
+      "type": "imports"
+    },
+    {
+      "source": "hollihop_export",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": "hollihop_export",
+      "target": "urllib.request",
+      "type": "imports"
+    },
+    {
+      "source": "hollihop_export",
+      "target": "urllib.parse",
+      "type": "imports"
+    },
+    {
+      "source": "hollihop_export",
+      "target": "datetime",
+      "type": "imports"
+    },
+    {
+      "source": "hollihop_export",
+      "target": "time",
+      "type": "imports"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "import_students_and_lessons.fetch_map",
+      "type": "contains"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "import_students_and_lessons.upsert_data",
+      "type": "contains"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "import_students_and_lessons.matches_weekday",
+      "type": "contains"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "os",
+      "type": "imports"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "requests",
+      "type": "imports"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "uuid",
+      "type": "imports"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "pathlib",
+      "type": "imports"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "datetime",
+      "type": "imports"
+    },
+    {
+      "source": "import_students_and_lessons",
+      "target": "time",
+      "type": "imports"
+    },
+    {
+      "source": "import_to_supabase",
+      "target": "import_to_supabase.upsert_data",
+      "type": "contains"
+    },
+    {
+      "source": "import_to_supabase",
+      "target": "import_to_supabase.process_logs",
+      "type": "contains"
+    },
+    {
+      "source": "import_to_supabase",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": "import_to_supabase",
+      "target": "os",
+      "type": "imports"
+    },
+    {
+      "source": "import_to_supabase",
+      "target": "requests",
+      "type": "imports"
+    },
+    {
+      "source": "import_to_supabase",
+      "target": "pathlib",
+      "type": "imports"
+    },
+    {
+      "source": "ios.Flutter.ephemeral.flutter_lldb_helper",
+      "target": "ios.Flutter.ephemeral.flutter_lldb_helper.handle_new_rx_page",
+      "type": "contains"
+    },
+    {
+      "source": "ios.Flutter.ephemeral.flutter_lldb_helper",
+      "target": "ios.Flutter.ephemeral.flutter_lldb_helper.__lldb_init_module",
+      "type": "contains"
+    },
+    {
+      "source": "ios.Flutter.ephemeral.flutter_lldb_helper",
+      "target": "lldb",
+      "type": "imports"
+    },
+    {
+      "source": "ios.Runner.AppDelegate",
+      "target": "ios.Runner.AppDelegate.AppDelegate",
+      "type": "contains"
+    },
+    {
+      "source": "ios.Runner.AppDelegate.AppDelegate",
+      "target": "ios.Runner.AppDelegate.AppDelegate.application",
+      "type": "contains"
+    },
+    {
+      "source": "ios.Runner.AppDelegate.AppDelegate",
+      "target": "ios.Runner.AppDelegate.AppDelegate.didInitializeImplicitFlutterEngine",
+      "type": "contains"
+    },
+    {
+      "source": "ios.Runner.AppDelegate",
+      "target": "Flutter",
+      "type": "imports"
+    },
+    {
+      "source": "ios.Runner.AppDelegate",
+      "target": "UIKit",
+      "type": "imports"
+    },
+    {
+      "source": "ios.Runner.SceneDelegate",
+      "target": "ios.Runner.SceneDelegate.SceneDelegate",
+      "type": "contains"
+    },
+    {
+      "source": "ios.Runner.SceneDelegate",
+      "target": "Flutter",
+      "type": "imports"
+    },
+    {
+      "source": "ios.Runner.SceneDelegate",
+      "target": "UIKit",
+      "type": "imports"
+    },
+    {
+      "source": "ios.RunnerTests.RunnerTests",
+      "target": "ios.RunnerTests.RunnerTests.RunnerTests",
+      "type": "contains"
+    },
+    {
+      "source": "ios.RunnerTests.RunnerTests.RunnerTests",
+      "target": "ios.RunnerTests.RunnerTests.RunnerTests.testExample",
+      "type": "contains"
+    },
+    {
+      "source": "ios.RunnerTests.RunnerTests",
+      "target": "Flutter",
+      "type": "imports"
+    },
+    {
+      "source": "ios.RunnerTests.RunnerTests",
+      "target": "UIKit",
+      "type": "imports"
+    },
+    {
+      "source": "ios.RunnerTests.RunnerTests",
+      "target": "XCTest",
+      "type": "imports"
+    },
+    {
+      "source": "linux.flutter.generated_plugin_registrant",
+      "target": "linux.flutter.generated_plugin_registrant.fl_register_plugins",
+      "type": "contains"
+    },
+    {
+      "source": "linux.flutter.generated_plugin_registrant",
+      "target": "generated_plugin_registrant.h",
+      "type": "imports"
+    },
+    {
+      "source": "linux.flutter.generated_plugin_registrant",
+      "target": "gtk/gtk_plugin.h",
+      "type": "imports"
+    },
+    {
+      "source": "linux.flutter.generated_plugin_registrant",
+      "target": "url_launcher_linux/url_launcher_plugin.h",
+      "type": "imports"
+    },
+    {
+      "source": "linux.flutter.generated_plugin_registrant",
+      "target": "flutter_linux/flutter_linux.h",
+      "type": "imports"
+    },
+    {
+      "source": "linux.runner.main",
+      "target": "linux.runner.main.main",
+      "type": "contains"
+    },
+    {
+      "source": "linux.runner.main",
+      "target": "my_application.h",
+      "type": "imports"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "linux.runner.my_application.first_frame_cb",
+      "type": "contains"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "linux.runner.my_application.my_application_activate",
+      "type": "contains"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "linux.runner.my_application.my_application_local_command_line",
+      "type": "contains"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "linux.runner.my_application.my_application_startup",
+      "type": "contains"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "linux.runner.my_application.my_application_shutdown",
+      "type": "contains"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "linux.runner.my_application.my_application_dispose",
+      "type": "contains"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "linux.runner.my_application.my_application_class_init",
+      "type": "contains"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "linux.runner.my_application.my_application_init",
+      "type": "contains"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "my_application.h",
+      "type": "imports"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "flutter_linux/flutter_linux.h",
+      "type": "imports"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "gdk/gdkx.h",
+      "type": "imports"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "flutter/generated_plugin_registrant.h",
+      "type": "imports"
+    },
+    {
+      "source": "linux.runner.my_application",
+      "target": "gtk/gtk.h",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Flutter.GeneratedPluginRegistrant",
+      "target": "macos.Flutter.GeneratedPluginRegistrant.RegisterGeneratedPlugins",
+      "type": "contains"
+    },
+    {
+      "source": "macos.Flutter.GeneratedPluginRegistrant",
+      "target": "FlutterMacOS",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Flutter.GeneratedPluginRegistrant",
+      "target": "Foundation",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Flutter.GeneratedPluginRegistrant",
+      "target": "app_links",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Flutter.GeneratedPluginRegistrant",
+      "target": "firebase_core",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Flutter.GeneratedPluginRegistrant",
+      "target": "firebase_messaging",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Flutter.GeneratedPluginRegistrant",
+      "target": "package_info_plus",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Flutter.GeneratedPluginRegistrant",
+      "target": "shared_preferences_foundation",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Flutter.GeneratedPluginRegistrant",
+      "target": "url_launcher_macos",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Runner.AppDelegate",
+      "target": "macos.Runner.AppDelegate.AppDelegate",
+      "type": "contains"
+    },
+    {
+      "source": "macos.Runner.AppDelegate.AppDelegate",
+      "target": "macos.Runner.AppDelegate.AppDelegate.applicationShouldTerminateAfterLastWindowClosed",
+      "type": "contains"
+    },
+    {
+      "source": "macos.Runner.AppDelegate.AppDelegate",
+      "target": "macos.Runner.AppDelegate.AppDelegate.applicationSupportsSecureRestorableState",
+      "type": "contains"
+    },
+    {
+      "source": "macos.Runner.AppDelegate",
+      "target": "Cocoa",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Runner.AppDelegate",
+      "target": "FlutterMacOS",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Runner.MainFlutterWindow",
+      "target": "macos.Runner.MainFlutterWindow.MainFlutterWindow",
+      "type": "contains"
+    },
+    {
+      "source": "macos.Runner.MainFlutterWindow.MainFlutterWindow",
+      "target": "macos.Runner.MainFlutterWindow.MainFlutterWindow.awakeFromNib",
+      "type": "contains"
+    },
+    {
+      "source": "macos.Runner.MainFlutterWindow",
+      "target": "Cocoa",
+      "type": "imports"
+    },
+    {
+      "source": "macos.Runner.MainFlutterWindow",
+      "target": "FlutterMacOS",
+      "type": "imports"
+    },
+    {
+      "source": "macos.RunnerTests.RunnerTests",
+      "target": "macos.RunnerTests.RunnerTests.RunnerTests",
+      "type": "contains"
+    },
+    {
+      "source": "macos.RunnerTests.RunnerTests.RunnerTests",
+      "target": "macos.RunnerTests.RunnerTests.RunnerTests.testExample",
+      "type": "contains"
+    },
+    {
+      "source": "macos.RunnerTests.RunnerTests",
+      "target": "Cocoa",
+      "type": "imports"
+    },
+    {
+      "source": "macos.RunnerTests.RunnerTests",
+      "target": "FlutterMacOS",
+      "type": "imports"
+    },
+    {
+      "source": "macos.RunnerTests.RunnerTests",
+      "target": "XCTest",
+      "type": "imports"
+    },
+    {
+      "source": "scripts.fix_db_data",
+      "target": "scripts.fix_db_data.upsert_data",
+      "type": "contains"
+    },
+    {
+      "source": "scripts.fix_db_data",
+      "target": "scripts.fix_db_data.update_branch",
+      "type": "contains"
+    },
+    {
+      "source": "scripts.fix_db_data",
+      "target": "scripts.fix_db_data.insert_branches_and_rooms",
+      "type": "contains"
+    },
+    {
+      "source": "scripts.fix_db_data",
+      "target": "requests",
+      "type": "imports"
+    },
+    {
+      "source": "scripts.fix_db_data",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": "scripts.fix_db_data",
+      "target": "uuid",
+      "type": "imports"
+    },
+    {
+      "source": "scripts.insert_missing_data",
+      "target": "scripts.insert_missing_data.upsert_data",
+      "type": "contains"
+    },
+    {
+      "source": "scripts.insert_missing_data",
+      "target": "scripts.insert_missing_data.insert_branches_and_rooms",
+      "type": "contains"
+    },
+    {
+      "source": "scripts.insert_missing_data",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": "scripts.insert_missing_data",
+      "target": "os",
+      "type": "imports"
+    },
+    {
+      "source": "scripts.insert_missing_data",
+      "target": "requests",
+      "type": "imports"
+    },
+    {
+      "source": "scripts.insert_missing_data",
+      "target": "pathlib",
+      "type": "imports"
+    },
+    {
+      "source": "test_api_endpoints",
+      "target": "test_api_endpoints.test_endpoint",
+      "type": "contains"
+    },
+    {
+      "source": "test_api_endpoints",
+      "target": "json",
+      "type": "imports"
+    },
+    {
+      "source": "test_api_endpoints",
+      "target": "urllib.request",
+      "type": "imports"
+    },
+    {
+      "source": "test_api_endpoints",
+      "target": "urllib.parse",
+      "type": "imports"
+    },
+    {
+      "source": "test_profile_insert",
+      "target": "requests",
+      "type": "imports"
+    },
+    {
+      "source": "test_profile_insert",
+      "target": "uuid",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.binary_messenger_impl",
+      "target": "flutter_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.binary_messenger_impl",
+      "target": "map",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.binary_messenger_impl",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.binary_messenger_impl",
+      "target": "include/flutter/binary_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.ReadByte",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.ReadBytes",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.ReadAlignment",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.WriteByte",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.WriteBytes",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams.WriteAlignment",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "cassert",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "cstdint",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "cstring",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "vector",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.byte_buffer_streams",
+      "target": "include/flutter/byte_streams.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations.ForwardToHandler",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations.ResizeChannel",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations.SetChannelWarnsOnOverflow",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "cassert",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "variant",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "binary_messenger_impl.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "include/flutter/engine_method_result.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "include/flutter/method_channel.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "include/flutter/standard_method_codec.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.core_implementations",
+      "target": "texture_registrar_impl.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.engine_method_result",
+      "target": "core_implementations.cc",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_engine",
+      "target": "include/flutter/flutter_engine.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_engine",
+      "target": "algorithm",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_engine",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_engine",
+      "target": "binary_messenger_impl.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_engine",
+      "target": "flutter_windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_view_controller",
+      "target": "include/flutter/flutter_view_controller.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_view_controller",
+      "target": "algorithm",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.flutter_view_controller",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.Send",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.Send",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.SetMessageHandler",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.Resize",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel.SetWarnsOnOverflow",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "utility",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "binary_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.basic_message_channel",
+      "target": "message_codec.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.binary_messenger",
+      "target": "cstdint",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.binary_messenger",
+      "target": "functional",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.binary_messenger",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.ReadInt32",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.ReadInt64",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.ReadDouble",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.WriteInt32",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.WriteInt64",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.byte_streams.WriteDouble",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.DartProject",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.set_dart_entrypoint",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.set_dart_entrypoint_arguments",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.set_gpu_preference",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project.set_ui_thread_policy",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.dart_project",
+      "target": "vector",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value.EncodableValue",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value.super",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "any",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "cassert",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "cstdint",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "map",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "optional",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "utility",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "variant",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.encodable_value",
+      "target": "vector",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result.ErrorInternal",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result.NotImplementedInternal",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "target": "vector",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "target": "binary_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "target": "method_codec.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.engine_method_result",
+      "target": "method_result.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel.SetStreamHandler",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel.ErrorInternal",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel.EndOfStreamInternal",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "binary_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "engine_method_result.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "event_sink.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_channel",
+      "target": "event_stream_handler.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink.Success",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink.Success",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink.Error",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_sink.EndOfStream",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler",
+      "target": "event_sink.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler_functions",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler_functions.on_cancel_",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler_functions",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler_functions",
+      "target": "event_sink.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.event_stream_handler_functions",
+      "target": "event_stream_handler.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "target": "flutter_windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "target": "chrono",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "target": "optional",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "target": "binary_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "target": "dart_project.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "target": "plugin_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_engine",
+      "target": "plugin_registry.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view.GetNativeWindow",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view",
+      "target": "flutter_windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller.view_id",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "target": "flutter_windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "target": "windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "target": "optional",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "target": "dart_project.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "target": "flutter_engine.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.flutter_view_controller",
+      "target": "flutter_view.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.message_codec",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.message_codec",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.message_codec",
+      "target": "vector",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_call",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_call",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel.SetMethodCallHandler",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel.Resize",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel.SetWarnsOnOverflow",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "basic_message_channel.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "binary_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "engine_method_result.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "method_call.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "method_codec.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_channel",
+      "target": "method_result.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec.DecodeAndProcessResponseEnvelope",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec",
+      "target": "vector",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec",
+      "target": "method_call.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_codec",
+      "target": "method_result.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result.Success",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result.Success",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result.Error",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result.NotImplemented",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions.ErrorInternal",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions.NotImplementedInternal",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions",
+      "target": "functional",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions",
+      "target": "utility",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.method_result_functions",
+      "target": "method_result.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar.Reset",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "target": "flutter_plugin_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "target": "map",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "target": "set",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "target": "binary_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar",
+      "target": "texture_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows.PluginRegistrarWindows",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows.RegisterTopLevelWindowProcDelegate",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows.UnregisterTopLevelWindowProcDelegate",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "target": "flutter_windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "target": "windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "target": "optional",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "target": "flutter_view.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registrar_windows",
+      "target": "plugin_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registry",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.plugin_registry",
+      "target": "flutter_plugin_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_codec_serializer",
+      "target": "byte_streams.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_codec_serializer",
+      "target": "encodable_value.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_message_codec",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_message_codec",
+      "target": "encodable_value.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_message_codec",
+      "target": "message_codec.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_message_codec",
+      "target": "standard_codec_serializer.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_method_codec",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_method_codec",
+      "target": "encodable_value.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_method_codec",
+      "target": "method_call.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_method_codec",
+      "target": "method_codec.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.standard_method_codec",
+      "target": "standard_codec_serializer.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar.PixelBufferTexture",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar",
+      "target": "flutter_texture_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar",
+      "target": "cstdint",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar",
+      "target": "functional",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar",
+      "target": "utility",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.include.flutter.texture_registrar",
+      "target": "variant",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.plugin_registrar",
+      "target": "include/flutter/plugin_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.plugin_registrar",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.plugin_registrar",
+      "target": "map",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.plugin_registrar",
+      "target": "binary_messenger_impl.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.plugin_registrar",
+      "target": "include/flutter/engine_method_result.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.plugin_registrar",
+      "target": "include/flutter/method_channel.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.plugin_registrar",
+      "target": "texture_registrar_impl.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec.EncodedTypeForValue",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "cassert",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "cstring",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "map",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "vector",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "byte_buffer_streams.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "include/flutter/standard_codec_serializer.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "include/flutter/standard_message_codec.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.standard_codec",
+      "target": "include/flutter/standard_method_codec.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.cpp_client_wrapper.texture_registrar_impl",
+      "target": "include/flutter/texture_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_messenger",
+      "target": "windows.flutter.ephemeral.flutter_messenger.FlutterDesktopMessenger",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_messenger",
+      "target": "windows.flutter.ephemeral.flutter_messenger._FlutterPlatformMessageResponseHandle",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_messenger",
+      "target": "stdbool.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_messenger",
+      "target": "stddef.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_messenger",
+      "target": "stdint.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_messenger",
+      "target": "flutter_export.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_plugin_registrar",
+      "target": "windows.flutter.ephemeral.flutter_plugin_registrar.FlutterDesktopPluginRegistrar",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_plugin_registrar",
+      "target": "stddef.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_plugin_registrar",
+      "target": "stdint.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_plugin_registrar",
+      "target": "flutter_export.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_plugin_registrar",
+      "target": "flutter_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_plugin_registrar",
+      "target": "flutter_texture_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_texture_registrar",
+      "target": "windows.flutter.ephemeral.flutter_texture_registrar.FlutterDesktopTextureRegistrar",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_texture_registrar",
+      "target": "windows.flutter.ephemeral.flutter_texture_registrar.FlutterDesktopTextureRegistrar",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_texture_registrar",
+      "target": "stddef.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_texture_registrar",
+      "target": "stdint.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_texture_registrar",
+      "target": "flutter_export.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopViewController",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopViewController",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopView",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopView",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopEngine",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "windows.flutter.ephemeral.flutter_windows.FlutterDesktopEngine",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "dxgi.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "stddef.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "stdint.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "flutter_export.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "flutter_messenger.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.ephemeral.flutter_windows",
+      "target": "flutter_plugin_registrar.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.generated_plugin_registrant",
+      "target": "windows.flutter.generated_plugin_registrant.RegisterPlugins",
+      "type": "contains"
+    },
+    {
+      "source": "windows.flutter.generated_plugin_registrant",
+      "target": "generated_plugin_registrant.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.generated_plugin_registrant",
+      "target": "app_links/app_links_plugin_c_api.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.generated_plugin_registrant",
+      "target": "firebase_core/firebase_core_plugin_c_api.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.generated_plugin_registrant",
+      "target": "permission_handler_windows/permission_handler_windows_plugin.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.generated_plugin_registrant",
+      "target": "url_launcher_windows/url_launcher_windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.flutter.generated_plugin_registrant",
+      "target": "flutter/plugin_registry.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.flutter_window",
+      "target": "flutter_window.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.flutter_window",
+      "target": "optional",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.flutter_window",
+      "target": "flutter/generated_plugin_registrant.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.flutter_window",
+      "target": "flutter/dart_project.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.flutter_window",
+      "target": "flutter/flutter_view_controller.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.flutter_window",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.flutter_window",
+      "target": "win32_window.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.main",
+      "target": "windows.runner.main.wWinMain",
+      "type": "contains"
+    },
+    {
+      "source": "windows.runner.main",
+      "target": "flutter/dart_project.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.main",
+      "target": "flutter/flutter_view_controller.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.main",
+      "target": "windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.main",
+      "target": "flutter_window.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.main",
+      "target": "utils.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "windows.runner.utils.CreateAndAttachConsole",
+      "type": "contains"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "windows.runner.utils.GetCommandLineArguments",
+      "type": "contains"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "windows.runner.utils.Utf8FromUtf16",
+      "type": "contains"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "utils.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "flutter_windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "io.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "stdio.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "iostream",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "string",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.utils",
+      "target": "vector",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "windows.runner.win32_window.Scale",
+      "type": "contains"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "windows.runner.win32_window.EnableFullDpiSupportIfAvailable",
+      "type": "contains"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "windows.runner.win32_window.WindowClassRegistrar",
+      "type": "contains"
+    },
+    {
+      "source": "windows.runner.win32_window.WindowClassRegistrar",
+      "target": "windows.runner.win32_window.WindowClassRegistrar.WindowClassRegistrar",
+      "type": "contains"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "win32_window.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "dwmapi.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "flutter_windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "resource.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "windows.runner.win32_window.Size",
+      "type": "contains"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "windows.h",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "functional",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "memory",
+      "type": "imports"
+    },
+    {
+      "source": "windows.runner.win32_window",
+      "target": "string",
+      "type": "imports"
+    }
+  ],
+  "warnings": [
+    "some languages were parsed with module-only coverage because no structural query template is bundled: bash (2 files), dart (45 files), proto (11 files)"
+  ]
+}
