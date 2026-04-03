@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/avatar_cropper_dialog.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
 
 class ChatInfoDialog extends ConsumerStatefulWidget {
   final String chatType; // 'direct', 'group', 'channel'
@@ -41,16 +42,25 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
   final List<Map<String, dynamic>> _mediaMessages = [];
   final List<Map<String, dynamic>> _fileMessages = [];
   final List<Map<String, dynamic>> _linkMessages = [];
+  final List<Map<String, dynamic>> _notes = [];
 
   bool get _canEdit {
     if (widget.chatType == 'direct') return false;
     return widget.userRole == 'admin' || widget.userRole == 'manager';
   }
 
+  bool get _isAdmin {
+    return widget.userRole == 'admin' || widget.userRole == 'manager';
+  }
+
+  bool get _hasNotesTab {
+    return _isAdmin && widget.chatType == 'direct';
+  }
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: _hasNotesTab ? 4 : 3, vsync: this);
     _loadData();
   }
 
@@ -73,6 +83,9 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
       } else if (widget.chatType == 'channel') {
         final res = await _supabase.from('channels').select().eq('id', widget.chatId).maybeSingle();
         _data = res;
+      }
+      if (_hasNotesTab) {
+        await _loadNotes();
       }
       await _loadHistory();
     } catch (e) {
@@ -118,10 +131,6 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
     final List<Map<String, dynamic>> messages = List<Map<String, dynamic>>.from(res);
     final linkRegExp = RegExp(r'(https?:\/\/[^\s]+)');
     
-    _mediaMessages.clear();
-    _fileMessages.clear();
-    _linkMessages.clear();
-
     for (final m in messages) {
       final type = m['message_type']?.toString();
       final content = m['content']?.toString() ?? '';
@@ -141,6 +150,68 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
           'link': match.group(0),
           'message': m,
         });
+      }
+    }
+  }
+
+  Future<void> _loadNotes() async {
+    try {
+      final res = await _supabase
+          .from('profile_notes')
+          .select('*, author:profiles!author_id(first_name, last_name, avatar_url)')
+          .eq('profile_id', widget.chatId)
+          .order('created_at', ascending: false);
+      _notes.clear();
+      _notes.addAll(List<Map<String, dynamic>>.from(res));
+    } catch (e) {
+      debugPrint('Error loading notes: $e');
+    }
+  }
+
+  Future<void> _addNote() async {
+    final controller = TextEditingController();
+    final content = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Добавить заметку'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Введите текст заметки...'),
+          maxLines: 5,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Добавить'),
+          ),
+        ],
+      ),
+    );
+
+    if (content != null && content.trim().isNotEmpty) {
+      setState(() => _isLoading = true);
+      try {
+        final authorId = _supabase.auth.currentUser?.id;
+        if (authorId == null) return;
+
+        await _supabase.from('profile_notes').insert({
+          'profile_id': widget.chatId,
+          'author_id': authorId,
+          'content': content.trim(),
+        });
+
+        await _loadNotes();
+      } catch (e) {
+        debugPrint('Error adding note: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка: $e'), backgroundColor: AppTheme.danger),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -236,10 +307,11 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
         indicatorColor: TelegramColors.accentBlue,
         labelColor: TelegramColors.accentBlue,
         unselectedLabelColor: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary,
-        tabs: const [
-          Tab(text: 'Медиа'),
-          Tab(text: 'Файлы'),
-          Tab(text: 'Ссылки'),
+        tabs: [
+          const Tab(text: 'Медиа'),
+          const Tab(text: 'Файлы'),
+          const Tab(text: 'Ссылки'),
+          if (_hasNotesTab) const Tab(text: 'Заметки'),
         ],
       ),
     );
@@ -367,7 +439,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
     return Scaffold(
       backgroundColor: isDark ? TelegramColors.darkBg : TelegramColors.lightBg,
       body: DefaultTabController(
-        length: 3,
+        length: _hasNotesTab ? 4 : 3,
         child: NestedScrollView(
           headerSliverBuilder: (context, innerBoxIsScrolled) {
             return [
@@ -509,6 +581,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
               _buildMediaGrid(),
               _buildFilesList(isDark),
               _buildLinksList(isDark),
+              if (_hasNotesTab) _buildNotesList(isDark),
             ],
           ),
         ),
@@ -532,6 +605,74 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
         const SizedBox(height: 8),
         Text(label, style: TextStyle(fontSize: 12, color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary)),
       ],
+    );
+  }
+
+  Widget _buildNotesList(bool isDark) {
+    if (_notes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Заметок пока нет', style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: _addNote,
+              icon: const Icon(Icons.add_comment_outlined),
+              label: const Text('Добавить первую'),
+            ),
+          ],
+        )
+      );
+    }
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.small(
+        onPressed: _addNote,
+        backgroundColor: TelegramColors.accentBlue,
+        child: const Icon(Icons.add_comment_rounded, color: Colors.white),
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _notes.length,
+        itemBuilder: (context, index) {
+          final note = _notes[index];
+          final author = note['author'];
+          final authorName = author != null 
+              ? '${author['first_name'] ?? ''} ${author['last_name'] ?? ''}'.trim()
+              : 'Админ';
+          // Fix for potential string/datetime issues
+          final createdAt = note['created_at'];
+          final time = createdAt != null 
+              ? (createdAt is String 
+                  ? DateFormat('dd.MM.yy HH:mm').format(DateTime.parse(createdAt))
+                  : DateFormat('dd.MM.yy HH:mm').format(createdAt))
+              : 'N/A';
+          
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(authorName, style: TextStyle(fontWeight: FontWeight.bold, color: TelegramColors.accentBlue, fontSize: 13)),
+                    Text(time, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(note['content'] ?? '', style: const TextStyle(fontSize: 14)),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

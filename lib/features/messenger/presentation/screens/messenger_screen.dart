@@ -21,6 +21,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
+import 'package:magic_music_crm/core/providers/chat_providers.dart';
 
 
 /// Unified Telegram-style messenger screen used by all roles.
@@ -219,7 +220,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
       final groups = await _supabase
           .from('group_chats')
-          .select()
+          .select('*, first_responder:profiles!first_responder_id(first_name, last_name)')
           .inFilter('id', groupIds);
 
       for (final group in groups) {
@@ -1260,6 +1261,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                                     ? Icons.group_rounded
                                     : null,
                             onTap: () => _selectChat(item),
+                            statusIcon: _buildStatusIcon(item, isDark),
+                            onStatusTap: () => _showStatusInfo(item),
                           );
                         },
                       ),
@@ -1332,6 +1335,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               }
             },
           ),
+          _PresenceBanner(chatId: _selectedChatId),
           Expanded(
             child: _loadingMessages
                 ? const Center(
@@ -1423,12 +1427,75 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 return const SizedBox.shrink();
               },
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget? _buildStatusIcon(Map<String, dynamic> item, bool isDark) {
+    if (widget.role != 'admin' && widget.role != 'manager') return null;
+    if (item['_item_type'] != 'group') return null;
+
+    final respondedAt = item['_group_data']?['responded_at'];
+    if (respondedAt == null) {
+      return Icon(Icons.help_outline_rounded, size: 18, color: Colors.amber.shade700);
+    } else {
+      return const Icon(Icons.check_circle_rounded, size: 18, color: Colors.green);
+    }
+  }
+
+  void _showStatusInfo(Map<String, dynamic> item) {
+    final groupData = item['_group_data'];
+    if (groupData == null) return;
+
+    final respondedAt = groupData['responded_at'];
+    if (respondedAt == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('На этот запрос еще никто не ответил')),
+      );
+      return;
+    }
+
+    final responder = groupData['first_responder'];
+    final responderName = responder != null 
+        ? '${responder['first_name'] ?? ''} ${responder['last_name'] ?? ''}'.trim()
+        : 'Неизвестно';
+    
+    final time = DateFormat('dd.MM HH:mm').format(DateTime.parse(respondedAt));
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Информация об ответе'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_rounded, color: TelegramColors.accentBlue),
+              title: const Text('Ответил первым:'),
+              subtitle: Text(responderName),
+              contentPadding: EdgeInsets.zero,
+            ),
+            ListTile(
+              leading: const Icon(Icons.access_time_rounded, color: TelegramColors.accentBlue),
+              title: const Text('Время ответа:'),
+              subtitle: Text(time),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Закрыть'),
+          ),
         ],
       ),
-    ),
-  );
-}
-}
+    );
+  }
+} // Correctly close _MessengerScreenState here
 
 // ── Message List with Date Separators ────────────────────────────────────────
 
@@ -1551,6 +1618,53 @@ class _MessageListViewState extends State<_MessageListView> {
           ],
         );
       },
+    );
+  }
+} // End of _MessageListViewState
+
+class _PresenceBanner extends ConsumerWidget {
+  final String? chatId;
+  const _PresenceBanner({this.chatId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (chatId == null) return const SizedBox.shrink();
+    
+    final presenceAsync = ref.watch(chatPresenceProvider(chatId!));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return presenceAsync.when(
+      data: (admins) {
+        if (admins.isEmpty) return const SizedBox.shrink();
+        
+        final text = admins.length == 1 
+            ? '${admins.first} ведет диалог' 
+            : '${admins.length} админа в чате';
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+          color: Colors.amber.withAlpha(25),
+          child: Row(
+            children: [
+              const Icon(Icons.remove_red_eye_rounded, size: 14, color: Colors.amber),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

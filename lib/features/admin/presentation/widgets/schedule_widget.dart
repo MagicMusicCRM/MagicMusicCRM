@@ -11,7 +11,7 @@ const List<Color> _roomColors = [
   Color(0xFFF59E0B), // amber
   Color(0xFF22C55E), // green
   Color(0xFF3B82F6), // blue
-  Color(0xFFA855F7), // purple
+  Color(0xFFD4AF37), // gold
   Color(0xFFEC4899), // pink
   Color(0xFF14B8A6), // teal
   Color(0xFFF97316), // orange

@@ -54,7 +54,7 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp> with WidgetsBindi
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _initDeepLinks();
-      ref.read(notificationServiceProvider).initialize().catchError((e) {
+      ref.read(notificationServiceProvider).setupNotifications().catchError((e) {
         debugPrint('Notification service init error: $e');
       });
     });

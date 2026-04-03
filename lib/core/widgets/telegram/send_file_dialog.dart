@@ -86,182 +86,200 @@ class _SendFileDialogState extends State<SendFileDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isImage = _isImage(widget.fileName);
 
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 450),
-        decoration: BoxDecoration(
-          color: isDark ? TelegramColors.darkSurface : Colors.white,
-          borderRadius: BorderRadius.circular(28),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.pop(context),
-                    splashRadius: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Отправить файл',
-                    style: TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.more_vert_rounded),
-                    onPressed: () {},
-                    splashRadius: 20,
-                  ),
-                ],
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.only(bottom: bottomPadding),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          decoration: BoxDecoration(
+            color: isDark ? TelegramColors.darkSurface : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(isDark ? 50 : 20),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
               ),
-            ),
-            
-            // File Preview / Info
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Row(
-                children: [
-                  // File Icon / Thumbnail
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: TelegramColors.accentBlue.withAlpha(isDark ? 50 : 30),
-                      borderRadius: BorderRadius.circular(12),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Отправить файл',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.3,
+                      ),
                     ),
-                    child: isImage && widget.fileBytes != null
-                        ? ClipRRect(
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.pop(context),
+                      splashRadius: 20,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                  ],
+                ),
+              ),
+              
+              // File Preview / Info
+              if (isImage && widget.fileBytes != null)
+                // Larger Image Preview
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  height: 200,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: isDark ? Colors.black26 : Colors.black.withAlpha(5),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.memory(
+                      widget.fileBytes!,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                )
+              else
+                // Standard File Info
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: TelegramColors.accentBlue.withAlpha(isDark ? 30 : 15),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: TelegramColors.accentBlue.withAlpha(50),
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.memory(
-                              widget.fileBytes!,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : Icon(
+                          ),
+                          child: Icon(
                             _getFileIcon(widget.fileName),
-                            size: 32,
+                            size: 24,
                             color: TelegramColors.accentBlue,
                           ),
-                  ),
-                  const SizedBox(width: 16),
-                  // Name and Size
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.fileName,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          ChatAttachmentService.formatFileSize(widget.fileSize),
-                          style: TextStyle(
-                            color: isDark
-                                ? TelegramColors.darkTextSecondary
-                                : TelegramColors.lightTextSecondary,
-                            fontSize: 14,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.fileName,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                ChatAttachmentService.formatFileSize(widget.fileSize),
+                                style: TextStyle(
+                                  color: isDark
+                                      ? TelegramColors.darkTextSecondary
+                                      : TelegramColors.lightTextSecondary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
-                  // Delete icon like in reference
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    onPressed: () => Navigator.pop(context),
-                    color: isDark
-                        ? TelegramColors.darkTextSecondary
-                        : TelegramColors.lightTextSecondary,
-                  ),
-                ],
-              ),
-            ),
+                ),
 
-            const SizedBox(height: 8),
+              const SizedBox(height: 12),
 
-            // Caption Field
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.sentiment_satisfied_alt_rounded),
-                    onPressed: () {},
-                    color: isDark
-                        ? TelegramColors.darkTextSecondary
-                        : TelegramColors.lightTextSecondary,
+              // Caption Field
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? TelegramColors.darkInputBg : TelegramColors.lightInputBg,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  Expanded(
-                    child: TextField(
-                      controller: _captionController,
-                      focusNode: _focusNode,
-                      decoration: const InputDecoration(
-                        hintText: 'Добавить подпись...',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 12),
+                      Icon(
+                        Icons.sentiment_satisfied_alt_rounded,
+                        color: isDark ? Colors.white54 : Colors.black45,
+                        size: 24,
                       ),
-                      onSubmitted: (_) {
-                        widget.onSend(_captionController.text.trim());
-                        Navigator.pop(context);
-                      },
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _captionController,
+                          focusNode: _focusNode,
+                          style: const TextStyle(fontSize: 16),
+                          decoration: const InputDecoration(
+                            hintText: 'Добавить подпись...',
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onSubmitted: (_) {
+                            widget.onSend(_captionController.text.trim());
+                            Navigator.pop(context);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Actions
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                child: ElevatedButton(
+                  onPressed: () {
+                    widget.onSend(_captionController.text.trim());
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TelegramColors.accentBlue,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    minimumSize: const Size(double.infinity, 54),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                ],
-              ),
-            ),
-
-            // Actions
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  ElevatedButton(
-                    onPressed: () {
-                      widget.onSend(_captionController.text.trim());
-                      Navigator.pop(context);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: TelegramColors.accentBlue,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'ОТПРАВИТЬ',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
+                  child: const Text(
+                    'ОТПРАВИТЬ',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

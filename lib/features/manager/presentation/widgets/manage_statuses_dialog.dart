@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 
-class ManageStatusesDialog extends StatefulWidget {
+class ManageStatusesDialog extends ConsumerStatefulWidget {
   const ManageStatusesDialog({super.key});
 
   static Future<void> show(BuildContext context) {
@@ -13,11 +13,10 @@ class ManageStatusesDialog extends StatefulWidget {
   }
 
   @override
-  State<ManageStatusesDialog> createState() => _ManageStatusesDialogState();
+  ConsumerState<ManageStatusesDialog> createState() => _ManageStatusesDialogState();
 }
 
-class _ManageStatusesDialogState extends State<ManageStatusesDialog> {
-  final _supabase = Supabase.instance.client;
+class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
   List<Map<String, dynamic>> _statuses = [];
   bool _loading = true;
 
@@ -30,7 +29,8 @@ class _ManageStatusesDialogState extends State<ManageStatusesDialog> {
   Future<void> _loadStatuses() async {
     setState(() => _loading = true);
     try {
-      final res = await _supabase.from('lead_statuses').select().order('sort_order', ascending: true);
+      final res = await ref.read(leadStatusesProvider.future);
+      if (!mounted) return;
       setState(() {
         _statuses = List<Map<String, dynamic>>.from(res);
         _loading = false;
@@ -49,18 +49,20 @@ class _ManageStatusesDialogState extends State<ManageStatusesDialog> {
       builder: (ctx) => const _StatusEditDialog(),
     );
     if (result != null) {
-      await _supabase.from('lead_statuses').insert({
-        'key': result['key'],
-        'label': result['label'],
-        'color': result['color'],
-        'sort_order': _statuses.length, // Put at the end
-      });
+      await ref.read(supaLeadServiceProvider).addStatus(
+        key: result['key']!,
+        label: result['label']!,
+        color: result['color']!,
+        sortOrder: _statuses.length,
+      );
+      ref.invalidate(leadStatusesProvider);
       _loadStatuses();
     }
   }
 
   Future<void> _deleteStatus(String id) async {
-    await _supabase.from('lead_statuses').delete().eq('id', id);
+    await ref.read(supaLeadServiceProvider).deleteStatus(id);
+    ref.invalidate(leadStatusesProvider);
     _loadStatuses();
   }
 
@@ -129,7 +131,7 @@ class _StatusEditDialog extends StatefulWidget {
 class _StatusEditDialogState extends State<_StatusEditDialog> {
   final _labelCtrl = TextEditingController();
   final _keyCtrl = TextEditingController();
-  String _selectedHex = '8B5CF6'; // Default purple
+  String _selectedHex = 'D4AF37'; // Default gold
 
   final List<String> _colors = [
     '8B5CF6', // Purple

@@ -1,25 +1,47 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'dart:async';
+import 'dart:io';
+
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_notifier/local_notifier.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Top-level background message handler for FCM
+// Background message handler
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // If you're going to use other Firebase services in the background,
-  // make sure you call `initializeApp` before using other Firebase services.
+  await Firebase.initializeApp();
   debugPrint("Handling a background message: ${message.messageId}");
 }
 
-final notificationServiceProvider = Provider<NotificationService>((ref) {
-  return NotificationService();
-});
+final notificationServiceProvider = Provider((ref) => NotificationService());
 
 class NotificationService {
-  FirebaseMessaging get _firebaseMessaging => FirebaseMessaging.instance;
+  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
-  Future<void> initialize() async {
+  static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
+    'high_importance_channel',
+    'High Importance Notifications',
+    description: 'This channel is used for important notifications.',
+    importance: Importance.max,
+    playSound: true,
+  );
+
+  Future<void> setupNotifications() async {
+    // 1. Desktop custom notification setup
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+      try {
+        await localNotifier.setup(appName: 'Magic Music CRM', shortcutPolicy: ShortcutPolicy.requireCreate);
+        _listenToDesktopMessages();
+      } catch (e) {
+        debugPrint('Error setting up local_notifier $e');
+      }
+      return; // Firebase messaging doesn't support Windows/Linux out of the box
+    }
+
     if (Firebase.apps.isEmpty) {
       debugPrint('Firebase is not initialized. Notifications disabled.');
       return;
@@ -27,7 +49,37 @@ class NotificationService {
 
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-    // Request permissions for iOS and web
+    // Initialize local notifications
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const DarwinInitializationSettings initializationSettingsDarwin =
+        DarwinInitializationSettings(
+      requestSoundPermission: true,
+      requestBadgePermission: true,
+      requestAlertPermission: true,
+    );
+    const InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsDarwin,
+    );
+    
+    // Explicitly using named settings as required by the analyzer
+    await _localNotifications.initialize(settings: initializationSettings);
+
+    final androidImplementation = _localNotifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImplementation != null) {
+      await androidImplementation.createNotificationChannel(_channel);
+    }
+
+    // iOS and Web
+    await _firebaseMessaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Request permissions for iOS
     NotificationSettings settings = await _firebaseMessaging.requestPermission(
       alert: true,
       announcement: false,
@@ -38,26 +90,53 @@ class NotificationService {
       sound: true,
     );
 
-    debugPrint('User granted permission: ${settings.authorizationStatus}');
-
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // Get the token each time the application loads
-      String? token = await _firebaseMessaging.getToken();
-      debugPrint('FCM Token: $token');
+      debugPrint('User granted permission');
+    } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
+      debugPrint('User granted provisional permission');
+    } else {
+      debugPrint('User declined or has not accepted permission');
+    }
 
-      // Save the initial token to the database
+    // Get the token each time the application loads
+    String? token = await _firebaseMessaging.getToken();
+    if (token != null) {
       _saveTokenToDatabase(token);
 
       // Any time the token refreshes, store this in the database too.
       _firebaseMessaging.onTokenRefresh.listen(_saveTokenToDatabase);
 
       // Handle foreground messages
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
         debugPrint('Got a message whilst in the foreground!');
         debugPrint('Message data: ${message.data}');
 
-        if (message.notification != null) {
-          debugPrint('Message also contained a notification: ${message.notification?.title}');
+        RemoteNotification? notification = message.notification;
+
+        if (notification != null) {
+          debugPrint('Message also contained a notification: ${notification.title}');
+          
+          await _localNotifications.show(
+            id: notification.hashCode,
+            title: notification.title,
+            body: notification.body,
+            notificationDetails: NotificationDetails(
+              android: AndroidNotificationDetails(
+                _channel.id,
+                _channel.name,
+                channelDescription: _channel.description,
+                icon: '@mipmap/ic_launcher',
+                importance: Importance.max,
+                priority: Priority.high,
+                playSound: true,
+              ),
+              iOS: const DarwinNotificationDetails(
+                presentAlert: true,
+                presentBadge: true,
+                presentSound: true,
+              ),
+            ),
+          );
         }
       });
       
@@ -72,64 +151,53 @@ class NotificationService {
   Future<void> _saveTokenToDatabase(String? token) async {
     if (token == null) return;
     
-    // Save token to Supabase for the current user once authenticated
-    final supabase = Supabase.instance.client;
-    final user = supabase.auth.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       try {
-        await supabase.from('fcm_tokens').upsert({
-          'user_id': user.id,
-          'token': token,
-          'updated_at': DateTime.now().toIso8601String(),
-        }, onConflict: 'token');
-        debugPrint('FCM token saved to database.');
+        await Supabase.instance.client
+            .from('profiles')
+            .update({'fcm_token': token})
+            .eq('id', user.id);
+        debugPrint('FCM Token saved to database');
       } catch (e) {
         debugPrint('Error saving FCM token: $e');
       }
     }
   }
-  Future<void> sendNotification({
-    required String userId,
-    required String templateName,
-    Map<String, String>? variables,
+
+  void _listenToDesktopMessages() {
+    // This is for local_notifier on Windows/Linux
+    // Custom implementation depends on how you want to show it
+  }
+
+  Future<void> showLocalNotification({
+    required String title,
+    required String body,
+    String? payload,
   }) async {
-    final supabase = Supabase.instance.client;
-    
-    try {
-      // 1. Fetch template
-      final templateRes = await supabase
-          .from('notification_templates')
-          .select()
-          .eq('name', templateName)
-          .maybeSingle();
-      
-      if (templateRes == null) {
-        debugPrint('Notification template not found: $templateName');
-        return;
-      }
-
-      // 2. Perform variable replacement (simple string replacement for MVP)
-      String title = templateRes['title_template'];
-      String body = templateRes['body_template'];
-      
-      variables?.forEach((key, value) {
-        title = title.replaceAll('{{$key}}', value);
-        body = body.replaceAll('{{$key}}', value);
-      });
-
-      // 3. Record the notification in a queue (or send immediately via edge function)
-      // For now, we simulate by logging and could insert into a 'notifications_queue' table
-      debugPrint('Sending notification to $userId: $title - $body');
-      
-      // await supabase.from('notifications_log').insert({
-      //   'user_id': userId,
-      //   'title': title,
-      //   'body': body,
-      //   'status': 'sent',
-      // });
-
-    } catch (e) {
-      debugPrint('Error sending notification: $e');
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+      LocalNotification notification = LocalNotification(
+        title: title,
+        body: body,
+      );
+      notification.show();
+    } else {
+      await _localNotifications.show(
+        id: 0,
+        title: title,
+        body: body,
+        notificationDetails: NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channel.id,
+            _channel.name,
+            channelDescription: _channel.description,
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+          iOS: const DarwinNotificationDetails(),
+        ),
+        payload: payload,
+      );
     }
   }
 }

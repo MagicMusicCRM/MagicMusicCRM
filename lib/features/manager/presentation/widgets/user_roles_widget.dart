@@ -282,7 +282,10 @@ class _UserRolesWidgetState extends State<UserRolesWidget> {
             child: Text('Отмена'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryPurple,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () {
               Navigator.pop(context);
               _updateRole(profileId, newRole);

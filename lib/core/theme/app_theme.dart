@@ -3,8 +3,10 @@ import 'telegram_colors.dart';
 
 class AppTheme {
   // ── Legacy brand references (kept for compatibility) ────────────────────
-  static const Color primaryPurple = TelegramColors.brandPurple;
-  static const Color secondaryGold = TelegramColors.brandGold;
+  static const Color primaryGold = TelegramColors.primaryGold;
+  static const Color secondaryGold = TelegramColors.secondaryGold;
+  static const Color softGold = TelegramColors.softGold;
+  static const Color primaryPurple = TelegramColors.primaryGold; // Alias for backward compatibility
   static const Color bgDark = TelegramColors.darkBg;
   static const Color surfaceDark = TelegramColors.darkSurface;
   static const Color cardDark = TelegramColors.darkInputBg;
@@ -19,8 +21,8 @@ class AppTheme {
   static ThemeData get dark {
     return ThemeData.dark(useMaterial3: true).copyWith(
       colorScheme: ColorScheme.dark(
-        primary: TelegramColors.accentBlue,
-        secondary: TelegramColors.brandPurple,
+        primary: TelegramColors.brandGold,
+        secondary: TelegramColors.brandGoldLight,
         surface: TelegramColors.darkSurface,
         onPrimary: Colors.white,
         onSecondary: Colors.white,
@@ -142,8 +144,8 @@ class AppTheme {
   static ThemeData get light {
     return ThemeData.light(useMaterial3: true).copyWith(
       colorScheme: ColorScheme.light(
-        primary: TelegramColors.accentBlue,
-        secondary: TelegramColors.brandPurple,
+        primary: TelegramColors.brandGold,
+        secondary: TelegramColors.brandGoldLight,
         surface: TelegramColors.lightSurface,
         onPrimary: Colors.white,
         onSecondary: Colors.white,

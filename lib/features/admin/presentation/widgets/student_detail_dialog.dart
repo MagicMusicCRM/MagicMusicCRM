@@ -199,7 +199,10 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: _saving ? null : _save,
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryPurple,
+                    foregroundColor: Colors.white,
+                  ),
                   child: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Сохранить'),
                 ),
               ],

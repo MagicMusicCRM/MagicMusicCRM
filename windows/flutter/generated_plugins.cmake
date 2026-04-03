@@ -7,12 +7,14 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   firebase_core
   just_audio_windows
+  local_notifier
   permission_handler_windows
   record_windows
   url_launcher_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  flutter_local_notifications_windows
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

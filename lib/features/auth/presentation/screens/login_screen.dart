@@ -26,38 +26,25 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
-
     try {
       await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      // Router will automatically redirect via auth state listener
     } on AuthException catch (e) {
-      if (mounted) {
-        _showError(_mapAuthError(e.message));
-      }
+      if (mounted) _showError(_mapAuthError(e.message));
     } catch (e) {
-      if (mounted) {
-        _showError('Произошла ошибка. Попробуйте снова.');
-      }
+      if (mounted) _showError('Произошла ошибка. Попробуйте снова.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   String _mapAuthError(String message) {
-    if (message.contains('Invalid login credentials')) {
-      return 'Неверный email или пароль';
-    }
-    if (message.contains('Email not confirmed')) {
-      return 'Подтвердите email перед входом';
-    }
-    if (message.contains('Too many requests')) {
-      return 'Слишком много попыток. Подождите немного';
-    }
+    if (message.contains('Invalid login credentials')) return 'Неверный email или пароль';
+    if (message.contains('Email not confirmed')) return 'Подтвердите email перед входом';
+    if (message.contains('Too many requests')) return 'Слишком много попыток. Подождите немного';
     return message;
   }
 
@@ -75,53 +62,36 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1E1A29), // Darker purple tone
-              Color(0xFF0F0C1B), // Almost black
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+      backgroundColor: AppTheme.bgDark, // Solid Deep Charcoal
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 450),
               child: Form(
                 key: _formKey,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Logo / Icon
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [AppTheme.primaryPurple, AppTheme.secondaryGold],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+                    // Logo / Icon (Solid Circle)
+                    Center(
+                      child: Container(
+                        width: 100,
+                        height: 100,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.primaryGold, // Solid Gold
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryPurple.withAlpha(80),
-                            blurRadius: 30,
-                            offset: const Offset(0, 10),
-                          )
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.music_note_rounded,
-                        size: 50,
-                        color: Colors.white,
+                        child: const Icon(
+                          Icons.music_note_rounded,
+                          size: 50,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
                     const Text(
                       'MagicMusic CRM',
                       textAlign: TextAlign.center,
@@ -138,7 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        color: Colors.white.withAlpha(160),
                       ),
                     ),
                     const SizedBox(height: 48),
@@ -153,23 +123,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: InputDecoration(
                         labelText: 'Email',
                         hintText: 'user@example.com',
-                        prefixIcon: Icon(Icons.email_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        prefixIcon: Icon(Icons.email_outlined, color: Colors.white.withAlpha(160)),
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.surface.withAlpha(200),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: AppTheme.primaryPurple, width: 2),
-                        ),
+                        fillColor: AppTheme.cardDark,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppTheme.primaryGold, width: 2)),
                       ),
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Введите email';
-                        if (!v.contains('@')) return 'Некорректный email';
-                        return null;
-                      },
                     ),
                     const SizedBox(height: 20),
 
@@ -178,57 +137,28 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _signIn(),
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: 'Пароль',
-                        prefixIcon: Icon(Icons.lock_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        prefixIcon: Icon(Icons.lock_outlined, color: Colors.white.withAlpha(160)),
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.surface.withAlpha(200),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: AppTheme.primaryPurple, width: 2),
-                        ),
+                        fillColor: AppTheme.cardDark,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppTheme.primaryGold, width: 2)),
                         suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                          onPressed: () =>
-                              setState(() => _obscurePassword = !_obscurePassword),
+                          icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Colors.white.withAlpha(160)),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                         ),
                       ),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Введите пароль';
-                        if (v.length < 6) return 'Минимум 6 символов';
-                        return null;
-                      },
                     ),
                     const SizedBox(height: 32),
 
-                    // Sign In button
+                    // Sign In button (Solid Gold)
                     Container(
                       height: 56,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
-                        gradient: const LinearGradient(
-                          colors: [AppTheme.primaryPurple, Color(0xFF9333EA)], // Purple to lighter purple
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryPurple.withAlpha(100),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          )
-                        ],
+                        color: AppTheme.primaryGold, // Solid Gold
                       ),
                       child: Material(
                         color: Colors.transparent,
@@ -237,21 +167,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           onTap: _isLoading ? null : _signIn,
                           child: Center(
                             child: _isLoading
-                                ? const SizedBox(
-                                    height: 24,
-                                    width: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
+                                ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                 : const Text(
                                     'Войти',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
+                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
                                   ),
                           ),
                         ),
@@ -260,7 +179,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     TextButton(
                       onPressed: () => context.push('/register'),
-                      child: const Text('Нет аккаунта? Зарегистрироваться', style: TextStyle(color: AppTheme.primaryPurple, fontSize: 16)),
+                      child: const Text('Нет аккаунта? Зарегистрироваться', style: TextStyle(color: AppTheme.primaryGold, fontSize: 16)),
                     ),
                   ],
                 ),
