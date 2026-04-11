@@ -121,7 +121,7 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('Нет занятий на эту дату', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                        Text('Нет занятий на эту дату', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         TextButton(
                           onPressed: () => _selectDate(context),
                           child: Text('Выбрать другую дату (${DateFormat('d MMM').format(_selectedDate)})'),
@@ -190,11 +190,11 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
             style: const TextStyle(color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Поиск по ученику, учителю или группе...',
-              hintStyle: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 13),
-              prefixIcon: Icon(Icons.search_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant, size: 20),
+              hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
+              prefixIcon: Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
               suffixIcon: _searchQuery.isNotEmpty 
                 ? IconButton(
-                    icon: Icon(Icons.close_rounded, size: 18, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+                    icon: Icon(Icons.close_rounded, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     onPressed: () {
                       _searchController.clear();
                       setState(() => _searchQuery = '');
@@ -202,7 +202,7 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
                   )
                 : null,
               filled: true,
-              fillColor: Theme.of(context!).colorScheme.surface,
+              fillColor: Theme.of(context).colorScheme.surface,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
               border: OutlineInputBorder(
@@ -257,7 +257,7 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
             ),
             SizedBox(width: 8),
             ActionChip(
-              backgroundColor: Theme.of(context!).colorScheme.surface,
+              backgroundColor: Theme.of(context).colorScheme.surface,
               avatar: Icon(Icons.calendar_today_rounded, size: 16, color: AppTheme.primaryPurple),
               label: Text(DateFormat('d MMM yyyy', 'ru').format(_selectedDate), style: const TextStyle(fontSize: 12, color: Colors.white)),
               onPressed: () => _selectDate(context),
@@ -291,7 +291,7 @@ class _FilterDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context!).colorScheme.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: value != null ? AppTheme.primaryPurple : Colors.transparent),
       ),
@@ -299,8 +299,8 @@ class _FilterDropdown extends StatelessWidget {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
-          hint: Text(label, style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
-          dropdownColor: Theme.of(context!).colorScheme.surface,
+          hint: Text(label, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          dropdownColor: Theme.of(context).colorScheme.surface,
           style: const TextStyle(fontSize: 12, color: Colors.white),
           items: [
             DropdownMenuItem(value: null, child: Text('Все $label')),
@@ -334,7 +334,7 @@ class _KanbanColumn extends StatelessWidget {
       width: 280,
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context!).colorScheme.surface.withAlpha(50),
+        color: Theme.of(context).colorScheme.surface.withAlpha(50),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -346,7 +346,7 @@ class _KanbanColumn extends StatelessWidget {
                 Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.primaryPurple, shape: BoxShape.circle)),
                 SizedBox(width: 8),
                 Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
-                Text('${lessons.length}', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                Text('${lessons.length}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
               ],
             ),
           ),
@@ -377,7 +377,7 @@ class _KanbanColumnSkeleton extends StatelessWidget {
       width: 280,
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context!).colorScheme.surface.withAlpha(50),
+        color: Theme.of(context).colorScheme.surface.withAlpha(50),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -408,7 +408,7 @@ class _LessonCardSkeleton extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context!).colorScheme.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withAlpha(10)),
       ),
@@ -492,7 +492,7 @@ class _LessonKanbanCard extends ConsumerWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
-      color: Theme.of(context!).colorScheme.surface,
+      color: Theme.of(context).colorScheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.white.withAlpha(10))),
       child: InkWell(
         onTap: () {
@@ -516,7 +516,7 @@ class _LessonKanbanCard extends ConsumerWidget {
                     children: [
                       Text(timeStr, style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w800, fontSize: 14)),
                       SizedBox(width: 8),
-                      Text(dateStr, style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 11)),
+                      Text(dateStr, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
                     ],
                   ),
                   Row(
@@ -524,10 +524,10 @@ class _LessonKanbanCard extends ConsumerWidget {
                       if (lesson['status'] == 'completed')
                         Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 16)
                       else
-                        Icon(Icons.radio_button_unchecked_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant, size: 16),
+                        Icon(Icons.radio_button_unchecked_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
                       
                       PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert_rounded, size: 16, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+                        icon: Icon(Icons.more_vert_rounded, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         onSelected: (val) {
                           if (val == 'cancel') _cancelLesson(context, ref, lesson['id']);
                           if (val == 'reschedule') _rescheduleLesson(context, ref, lesson['id'], dt);

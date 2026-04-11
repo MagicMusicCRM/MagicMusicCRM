@@ -18,7 +18,6 @@ import 'package:go_router/go_router.dart';
 import 'dart:typed_data';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:cross_file/cross_file.dart';
 import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
@@ -57,7 +56,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   RealtimeChannel? _groupMessagesChannel;
   RealtimeChannel? _typingChannel;
   String _typingText = '';
-  Map<String, String> _typists = {}; // userId -> userName
 
   @override
   void initState() {
@@ -664,13 +662,13 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       
       for (final state in states) {
         for (final presence in state.presences) {
-          final Map<String, dynamic> payload = presence.payload;
-          final typistId = payload['id']?.toString();
-          final isTyping = payload['isTyping'] == true;
+          final Map<String, dynamic> data = Map<String, dynamic>.from(presence.payload);
+          final typistId = data['id']?.toString();
+          final isTyping = data['isTyping'] == true;
           
           if (typistId != null && typistId != _userId && isTyping) {
-            final role = payload['role']?.toString();
-            final name = payload['name']?.toString() ?? 'Пользователь';
+            final role = data['role']?.toString();
+            final name = data['name']?.toString() ?? 'Пользователь';
             
             if (widget.role == 'client' && (role == 'admin' || role == 'manager')) {
               newTypists[typistId] = 'Администратор';
@@ -683,7 +681,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
       if (mounted) {
         setState(() {
-          _typists = newTypists;
           if (newTypists.isEmpty) {
             _typingText = '';
           } else if (newTypists.length == 1) {
@@ -705,7 +702,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     _typingChannel = null;
     if (mounted) {
       setState(() {
-        _typists = {};
         _typingText = '';
       });
     }
@@ -764,7 +760,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         (c) => c['id'] == _selectedChatId,
         orElse: () => {},
       );
-      receiverId = chatItem['_partner_id'] as String?;
+      receiverId = chatItem['partner_id'] as String?;
     }
 
     await _supabase.from('messages').insert({
@@ -792,7 +788,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         (c) => c['id'] == _selectedChatId,
         orElse: () => {},
       );
-      receiverId = chatItem['_partner_id'] as String?;
+      receiverId = chatItem['partner_id'] as String?;
     }
 
     await _supabase.from('messages').insert({
@@ -823,7 +819,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         (c) => c['id'] == _selectedChatId,
         orElse: () => {},
       );
-      receiverId = chatItem['_partner_id'] as String?;
+      receiverId = chatItem['partner_id'] as String?;
     }
 
     await _supabase.from('messages').insert({
@@ -854,13 +850,13 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   void _selectChat(Map<String, dynamic> item) {
     final id = item['id'] as String;
-    final type = item['_item_type'] as String;
+    final type = item['item_type'] as String;
     final avatarUrl = _getAvatarUrl(item);
             
     setState(() {
       _selectedChatId = id;
       _selectedChatType = type;
-      _selectedChatName = item['_display_name'] as String?;
+      _selectedChatName = item['display_name'] as String?;
       _selectedChatAvatarUrl = avatarUrl;
       _messages = [];
     });
@@ -900,15 +896,15 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   String? _getAvatarUrl(Map<String, dynamic> item) {
-    final type = item['_item_type'] as String?;
+    final type = item['item_type'] as String?;
     if (type == 'direct') {
-      final profile = item['_profile'];
+      final profile = item['profile'];
       return profile is Map ? profile['avatar_url']?.toString() : null;
     } else if (type == 'group') {
-      final groupData = item['_group_data'];
+      final groupData = item['group_data'];
       return groupData is Map ? groupData['avatar_url']?.toString() : null;
     } else if (type == 'channel') {
-      final channelData = item['_channel_data'];
+      final channelData = item['channel_data'];
       return channelData is Map ? channelData['avatar_url']?.toString() : null;
     }
     return null;
@@ -1113,7 +1109,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     final filteredItems = _searchQuery.isEmpty
         ? _chatItems
         : _chatItems.where((item) {
-            final name = (item['_display_name'] as String? ?? '').toLowerCase();
+            final name = (item['display_name'] as String? ?? '').toLowerCase();
             return name.contains(_searchQuery.toLowerCase());
           }).toList();
 
@@ -1175,7 +1171,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                     if (MediaQuery.of(context).size.width >= 768) {
                       setState(() => _showMyProfile = true);
                     } else {
-                      context.push('/profile');
+                      if (mounted) {
+                        context.push('/profile');
+                      }
                     }
                   } else if (value == 'theme') {
                     ref.read(themeModeProvider.notifier).toggle();
@@ -1282,12 +1280,13 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     return DropTarget(
       onDragDone: (details) async {
         if (details.files.isEmpty) return;
+        final messenger = ScaffoldMessenger.of(context);
         for (final file in details.files) {
           final bytes = await file.readAsBytes();
           final size = await file.length();
           if (size > ChatAttachmentService.maxFileSizeBytes) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 const SnackBar(
                   content: Text('Файл слишком большой (макс. 25 МБ)'),
                   backgroundColor: TelegramColors.danger,
@@ -1664,7 +1663,7 @@ class _PresenceBanner extends ConsumerWidget {
         );
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _ ) => const SizedBox.shrink(),
     );
   }
 }

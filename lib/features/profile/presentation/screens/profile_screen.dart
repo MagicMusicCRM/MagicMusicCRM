@@ -31,7 +31,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _isSaving = false;
   bool _hasChanges = false;
   
-  String? _email;
   String? _role;
 
   // Initial data for change comparison
@@ -86,8 +85,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
-      _email = user.email;
-      
       final data = await _supabase.from('profiles').select().eq('id', user.id).single();
 
       _ogFirstName = data['first_name'] ?? '';
@@ -278,7 +275,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         height: 120,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.black.withOpacity(0.4),
+                          color: Colors.black.withValues(alpha: 0.4),
                         ),
                         child: const Icon(Icons.add_a_photo_outlined, color: Colors.white, size: 36),
                       ),

@@ -96,7 +96,7 @@ class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
 
       setState(() => _loading = false);
     } catch (e) {
-      print('Error loading attendance: $e');
+      debugPrint('Error loading attendance: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка загрузки: $e')));
         Navigator.pop(context);
@@ -146,7 +146,7 @@ class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: _students.length,
-                separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
+                separatorBuilder: (_, _) => const Divider(height: 1, color: Colors.white12),
                 itemBuilder: (ctx, i) {
                   final student = _students[i];
                   final participation = _participations.firstWhere((p) => p['student_id'] == student['id']);
@@ -162,7 +162,7 @@ class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
                             Switch(
                               value: participation['is_present'],
                               onChanged: (val) => setState(() => participation['is_present'] = val),
-                              activeColor: AppTheme.success,
+                              activeThumbColor: AppTheme.success,
                             ),
                             Text(participation['is_present'] ? 'Был' : 'Н/Б', 
                                 style: TextStyle(

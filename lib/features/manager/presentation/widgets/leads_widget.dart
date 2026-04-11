@@ -1,9 +1,11 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
+import 'package:magic_music_crm/core/models/types.dart';
 import 'manage_statuses_dialog.dart';
 
 class LeadsWidget extends ConsumerStatefulWidget {
@@ -239,7 +241,7 @@ class _KanbanColumnState extends State<_KanbanColumn> {
   }
 }
 
-typedef StatusRecord = (String, String, Color);
+// Finalizing kanban column structure
 
 class _LeadCard extends ConsumerWidget {
   final Map<String, dynamic> lead;
@@ -461,7 +463,7 @@ class _LeadCard extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: selectedTeacher,
+                initialValue: selectedTeacher,
                 decoration: const InputDecoration(labelText: 'Учитель'),
                 items: teachers.map((t) => DropdownMenuItem(
                   value: t['id'].toString(),
@@ -471,7 +473,7 @@ class _LeadCard extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: selectedRoom,
+                initialValue: selectedRoom,
                 decoration: const InputDecoration(labelText: 'Кабинет'),
                 items: rooms.map((r) => DropdownMenuItem(
                   value: r['id'].toString(),

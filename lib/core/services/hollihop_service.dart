@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final hollihopServiceProvider = Provider<HolliHopService>((ref) {
@@ -20,7 +21,7 @@ class HolliHopService {
         return List<String>.from(response.data);
       }
     } catch (e) {
-      print("Error fetching disciplines: $e");
+      debugPrint("Error fetching disciplines: $e");
     }
     return [];
   }
@@ -32,7 +33,7 @@ class HolliHopService {
         return List<String>.from(response.data);
       }
     } catch (e) {
-      print("Error fetching levels: $e");
+      debugPrint("Error fetching levels: $e");
     }
     return [];
   }
@@ -45,7 +46,7 @@ class HolliHopService {
         return List<Map<String, dynamic>>.from(data['Statuses'] ?? []);
       }
     } catch (e) {
-      print("Error fetching lead statuses: $e");
+      debugPrint("Error fetching lead statuses: $e");
     }
     return [];
   }

@@ -395,7 +395,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildPaymentsTab() {
     if (_payments.isEmpty) {
-      return Center(child: Text('Оплат не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(child: Text('Оплат не найдено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -410,7 +410,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
             leading: Icon(Icons.account_balance_wallet_rounded, color: AppTheme.success),
             title: Text('${p['amount']} ₽', style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(dateStr),
-            trailing: Text(p['description'] ?? '', style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+            trailing: Text(p['description'] ?? '', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
         );
       },
@@ -419,7 +419,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildLessonsTab() {
     if (_lessons.isEmpty) {
-      return Center(child: Text('Занятий не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(child: Text('Занятий не найдено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -464,7 +464,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildInvoicesTab() {
     if (_expectedPayments.isEmpty) {
-      return Center(child: Text('Инвойсов не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(child: Text('Инвойсов не найдено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -549,7 +549,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildHistoryTab() {
     if (_tasks.isEmpty && _comments.isEmpty) {
-      return Center(child: Text('История пуста', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(child: Text('История пуста', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
     }
 
     final items = [
@@ -586,14 +586,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                         Text(isTask ? 'Задача' : 'Комментарий', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isTask ? AppTheme.warning : AppTheme.primaryPurple)),
                       ],
                     ),
-                    Text(dateStr, style: TextStyle(fontSize: 11, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                    Text(dateStr, style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   ],
                 ),
                 SizedBox(height: 8),
                 Text(isTask ? (data['title'] ?? '') : (data['content'] ?? ''), style: const TextStyle(fontSize: 14)),
                 if (isTask && data['description'] != null) ...[
                   SizedBox(height: 4),
-                  Text(data['description'], style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                  Text(data['description'], style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ],
               ],
             ),
@@ -608,7 +608,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     final progressNotes = _comments.where((c) => c['content']?.toString().startsWith('[PROGRESS]') ?? false).toList();
     
     if (progressNotes.isEmpty) {
-      return Center(child: Text('Заметок об успехах ещё нет', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(child: Text('Заметок об успехах ещё нет', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
     }
 
     return ListView.builder(
@@ -633,9 +633,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                   children: [
                     Icon(Icons.stars_rounded, color: AppTheme.success, size: 20),
                     SizedBox(width: 8),
-                    Text(dateStr, style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                    Text(dateStr, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                     const Spacer(),
-                    Text(authorName, style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                    Text(authorName, style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   ],
                 ),
                 SizedBox(height: 12),
@@ -665,13 +665,13 @@ class _InfoRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+            Icon(icon, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
             SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 11)),
+                  Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
                   Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                 ],
               ),

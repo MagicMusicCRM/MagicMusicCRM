@@ -5,7 +5,6 @@ import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/voice_recorder_widget.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:typed_data';
 
 /// Telegram-style message input bar with text field, attachment, and voice recording.
 class MessageInput extends StatefulWidget {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 class BroadcastDialog extends StatefulWidget {
   const BroadcastDialog({super.key});
@@ -37,12 +36,12 @@ class _BroadcastDialogState extends State<BroadcastDialog> {
       
       if (_target == 'all' || _target == 'students') {
         final students = await supabase.from('students').select('profile_id');
-        receiverIds.addAll(students.map((s) => s['profile_id'] as String).where((id) => id != null));
+        receiverIds.addAll(students.map((s) => s['profile_id'] as String));
       }
       
       if (_target == 'all' || _target == 'teachers') {
         final teachers = await supabase.from('teachers').select('profile_id');
-        receiverIds.addAll(teachers.map((t) => t['profile_id'] as String).where((id) => id != null));
+        receiverIds.addAll(teachers.map((t) => t['profile_id'] as String));
       }
 
       // Remove duplicates and self

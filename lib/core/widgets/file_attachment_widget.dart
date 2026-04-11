@@ -133,7 +133,7 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
                   ),
                 );
               },
-              errorBuilder: (_, __, error) => Container(
+              errorBuilder: (_, _, error) => Container(
                 height: 60,
                 width: 200,
                 alignment: Alignment.center,

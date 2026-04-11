@@ -5,10 +5,11 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
+import 'package:magic_music_crm/core/models/types.dart';
 
 class LeadDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> lead;
-  final List<(String, String, Color)> allStatuses;
+  final List<StatusRecord> allStatuses;
 
   const LeadDetailDialog({
     super.key,
@@ -226,11 +227,11 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     );
   }
 
-  Widget _buildStatusPicker((String, String, Color) current) {
+  Widget _buildStatusPicker(StatusRecord current) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
-        value: _leadData['status'],
+        initialValue: _leadData['status'],
         decoration: const InputDecoration(labelText: 'Статус'),
         items: widget.allStatuses.map((s) {
           return DropdownMenuItem(
@@ -280,7 +281,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
-        value: _leadData['branch_id'],
+        initialValue: _leadData['branch_id'],
         decoration: InputDecoration(
           labelText: label,
           filled: true,

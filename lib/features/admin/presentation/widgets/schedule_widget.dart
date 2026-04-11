@@ -240,7 +240,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         children: [
           if (_currentView == _ScheduleView.day)
             IconButton(
-              icon: Icon(Icons.arrow_back_rounded, color: Theme.of(context!).colorScheme.onSurface),
+              icon: Icon(Icons.arrow_back_rounded, color: Theme.of(context).colorScheme.onSurface),
               onPressed: () => setState(() => _currentView = _ScheduleView.month),
               tooltip: 'Назад к месяцу',
             ),
@@ -248,22 +248,22 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             child: Text(
               title,
               style: TextStyle(
-                color: Theme.of(context!).colorScheme.onSurface,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
           IconButton(
-            icon: Icon(Icons.search_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant, size: 22),
+            icon: Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 22),
             onPressed: () {},
           ),
           IconButton(
-            icon: Icon(Icons.tune_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant, size: 22),
+            icon: Icon(Icons.tune_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 22),
             onPressed: () {},
           ),
           IconButton(
-            icon: Icon(Icons.refresh_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant, size: 22),
+            icon: Icon(Icons.refresh_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 22),
             onPressed: _fetchAll,
           ),
         ],
@@ -287,7 +287,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               label: Text(
                 b['name'].toString(),
                 style: TextStyle(
-                  color: isSelected ? AppTheme.primaryPurple : Theme.of(context!).colorScheme.onSurfaceVariant,
+                  color: isSelected ? AppTheme.primaryPurple : Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   fontSize: 14,
                 ),
@@ -296,12 +296,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               onSelected: (_) {
                 setState(() => _selectedBranchId = id);
               },
-              backgroundColor: Theme.of(context!).colorScheme.surface,
+              backgroundColor: Theme.of(context).colorScheme.surface,
               selectedColor: AppTheme.primaryPurple.withAlpha(25),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(
-                  color: isSelected ? AppTheme.primaryPurple : Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(60),
+                  color: isSelected ? AppTheme.primaryPurple : Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(60),
                   width: 1,
                 ),
               ),
@@ -338,17 +338,17 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? Theme.of(context!).colorScheme.surface : Colors.transparent,
+          color: isActive ? Theme.of(context).colorScheme.surface : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isActive ? Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(80) : Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(40),
+            color: isActive ? Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80) : Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(40),
             width: 1,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isActive ? Theme.of(context!).colorScheme.onSurface : Theme.of(context!).colorScheme.onSurfaceVariant,
+            color: isActive ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
             fontSize: 13,
             fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
           ),
@@ -383,7 +383,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             borderRadius: BorderRadius.circular(20),
             child: Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.chevron_left_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant, size: 22),
+              child: Icon(Icons.chevron_left_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 22),
             ),
           ),
           Expanded(
@@ -391,7 +391,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               dateLabel,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Theme.of(context!).colorScheme.onSurface,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
@@ -402,12 +402,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(80)),
+                border: Border.all(color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80)),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
                 'сегодня',
-                style: TextStyle(color: Theme.of(context!).colorScheme.onSurface, fontSize: 13, fontWeight: FontWeight.w500),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
           ),
@@ -416,7 +416,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             borderRadius: BorderRadius.circular(20),
             child: Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.chevron_right_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant, size: 22),
+              child: Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 22),
             ),
           ),
         ],
@@ -454,7 +454,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 child: Text(
                   d,
                   style: TextStyle(
-                    color: Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(180),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(180),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -509,7 +509,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final dotColors = <Color>[];
     for (final l in lessons) {
       final rid = l['room_id']?.toString();
-      final c = rid != null ? (_roomColorMap[rid] ?? Theme.of(context!).colorScheme.onSurfaceVariant) : Theme.of(context!).colorScheme.onSurfaceVariant;
+      final c = rid != null ? (_roomColorMap[rid] ?? Theme.of(context).colorScheme.onSurfaceVariant) : Theme.of(context).colorScheme.onSurfaceVariant;
       if (!dotColors.contains(c)) dotColors.add(c);
       if (dotColors.length >= 6) break; // max 6 dots
     }
@@ -520,7 +520,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         child: Container(
           margin: const EdgeInsets.all(2),
           decoration: BoxDecoration(
-            color: isCurrentMonth ? Theme.of(context!).colorScheme.surface.withAlpha(120) : Colors.transparent,
+            color: isCurrentMonth ? Theme.of(context).colorScheme.surface.withAlpha(120) : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: isToday
                 ? Border.all(color: AppTheme.primaryPurple, width: 1.5)
@@ -546,8 +546,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     color: isToday
                         ? Colors.white
                         : isCurrentMonth
-                            ? Theme.of(context!).colorScheme.onSurface
-                            : Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(80),
+                            ? Theme.of(context).colorScheme.onSurface
+                            : Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80),
                     fontSize: 14,
                     fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
                   ),
@@ -572,7 +572,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 Text(
                   '$count зан.',
                   style: TextStyle(
-                    color: Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(180),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(180),
                     fontSize: 9,
                   ),
                 ),
@@ -595,7 +595,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         runSpacing: 6,
         children: rooms.map((r) {
           final rid = r['id'].toString();
-          final color = _roomColorMap[rid] ?? Theme.of(context!).colorScheme.onSurfaceVariant;
+          final color = _roomColorMap[rid] ?? Theme.of(context).colorScheme.onSurfaceVariant;
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -607,7 +607,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               SizedBox(width: 4),
               Text(
                 r['name']?.toString() ?? '',
-                style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 11),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11),
               ),
             ],
           );
@@ -633,7 +633,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
     if (rooms.isEmpty) {
       return Center(
-        child: Text('Нет аудиторий для выбранного филиала', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+        child: Text('Нет аудиторий для выбранного филиала', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
       );
     }
 
@@ -652,7 +652,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               SizedBox(width: 52), // time column
               ...rooms.map((r) {
                 final rid = r['id'].toString();
-                final color = _roomColorMap[rid] ?? Theme.of(context!).colorScheme.onSurfaceVariant;
+                final color = _roomColorMap[rid] ?? Theme.of(context).colorScheme.onSurfaceVariant;
                 return Expanded(
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 2),
@@ -708,7 +708,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                                 '${(startHour + i).toString().padLeft(2, '0')}:00',
                                 textAlign: TextAlign.right,
                                 style: TextStyle(
-                                  color: Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(150),
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(150),
                                   fontSize: 11,
                                 ),
                               ),
@@ -721,7 +721,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                   // Room columns
                   ...rooms.map((r) {
                     final rid = r['id'].toString();
-                    final color = _roomColorMap[rid] ?? Theme.of(context!).colorScheme.onSurfaceVariant;
+                    final color = _roomColorMap[rid] ?? Theme.of(context).colorScheme.onSurfaceVariant;
                     final roomLessons = dayLessons.where((l) => l['room_id']?.toString() == rid).toList();
 
                     return Expanded(
@@ -737,7 +737,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                                 height: hourHeight,
                                 decoration: BoxDecoration(
                                   border: Border(
-                                    top: BorderSide(color: Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(20), width: 0.5),
+                                    top: BorderSide(color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(20), width: 0.5),
                                   ),
                                 ),
                               ),
@@ -801,14 +801,14 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               if (height > 30)
                 Text(
                   studentName,
-                  style: TextStyle(color: Theme.of(context!).colorScheme.onSurface, fontSize: 10, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 10, fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               if (height > 44)
                 Text(
                   teacherName,
-                  style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(180), fontSize: 9),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(180), fontSize: 9),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -871,7 +871,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     margin: const EdgeInsets.only(right: 8),
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: isSelected ? AppTheme.primaryPurple.withAlpha(30) : Theme.of(context!).colorScheme.surface,
+                      color: isSelected ? AppTheme.primaryPurple.withAlpha(30) : Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isSelected ? AppTheme.primaryPurple : Colors.transparent,
@@ -906,7 +906,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                               Text(
                                 name,
                                 style: TextStyle(
-                                  color: isSelected ? Theme.of(context!).colorScheme.onSurface : Theme.of(context!).colorScheme.onSurfaceVariant,
+                                  color: isSelected ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -916,7 +916,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                               Text(
                                 '$lessonsCount зан.',
                                 style: TextStyle(
-                                  color: Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(150),
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(150),
                                   fontSize: 10,
                                 ),
                               ),
@@ -937,7 +937,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               ? Center(
                   child: Text(
                     _selectedTeacherId == null ? 'Выберите педагога' : 'Нет занятий на этот день',
-                    style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 )
               : ListView.builder(
@@ -963,7 +963,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final studentName = _studentNames[lesson['student_id']?.toString()] ?? 'Ученик';
     final roomId = lesson['room_id']?.toString();
     final roomName = roomId != null ? (_roomNames[roomId] ?? 'Аудитория') : 'Без аудитории';
-    final roomColor = roomId != null ? (_roomColorMap[roomId] ?? Theme.of(context!).colorScheme.onSurfaceVariant) : Theme.of(context!).colorScheme.onSurfaceVariant;
+    final roomColor = roomId != null ? (_roomColorMap[roomId] ?? Theme.of(context).colorScheme.onSurfaceVariant) : Theme.of(context).colorScheme.onSurfaceVariant;
 
     return GestureDetector(
       onTap: () => _showLessonDetails(lesson),
@@ -971,7 +971,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Theme.of(context!).colorScheme.surface,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border(
             left: BorderSide(color: roomColor, width: 4),
@@ -996,12 +996,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 children: [
                   Text(
                     studentName,
-                    style: TextStyle(color: Theme.of(context!).colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   SizedBox(height: 2),
                   Text(
                     roomName,
-                    style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant.withAlpha(180), fontSize: 12),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(180), fontSize: 12),
                   ),
                 ],
               ),
@@ -1045,7 +1045,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context!).colorScheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Информация о занятии'),
         content: Column(
@@ -1077,9 +1077,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       children: [
         Icon(icon, size: 18, color: AppTheme.primaryPurple),
         SizedBox(width: 8),
-        Text('$label: ', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 13)),
+        Text('$label: ', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
         Expanded(
-          child: Text(value, style: TextStyle(color: Theme.of(context!).colorScheme.onSurface, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Text(value, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13, fontWeight: FontWeight.w500)),
         ),
       ],
     );

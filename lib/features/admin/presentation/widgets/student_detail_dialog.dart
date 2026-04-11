@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/top_up_dialog.dart';
 
 class StudentDetailDialog extends ConsumerStatefulWidget {
@@ -32,7 +31,6 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
   final _supabase = Supabase.instance.client;
   bool _saving = false;
 
-  List<Map<String, dynamic>> _branches = [];
   bool _loadingMetadata = true;
 
   @override
@@ -47,10 +45,9 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
 
   Future<void> _fetchMetadata() async {
     try {
-      final results = await _supabase.from('branches').select('id, name');
+      await _supabase.from('branches').select('id, name');
       if (mounted) {
         setState(() {
-          _branches = List<Map<String, dynamic>>.from(results);
           _loadingMetadata = false;
         });
       }
@@ -83,7 +80,9 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
       }).eq('id', id);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e')));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -144,7 +143,7 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
                         OutlinedButton.icon(
                           onPressed: () async {
                             final res = await TopUpDialog.show(context, _studentData);
-                            if (res == true) {
+                            if (res == true && context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Баланс пополнен', style: TextStyle(color: AppTheme.success))));
                             }
                           },
@@ -225,7 +224,7 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: AppTheme.primaryPurple.withOpacity(0.7)),
+          Icon(icon, size: 16, color: AppTheme.primaryPurple.withValues(alpha: 0.7)),
           const SizedBox(width: 8),
           Text('$label: ', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
           Expanded(child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
@@ -292,7 +291,9 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
       });
       _commentCtrl.clear();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+      }
     }
   }
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 class TeacherDetailDialog extends StatefulWidget {
   final Map<String, dynamic> teacher;

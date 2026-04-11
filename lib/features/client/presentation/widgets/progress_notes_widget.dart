@@ -45,7 +45,7 @@ class ProgressNotesWidget extends ConsumerWidget {
               child: Text(
                 'Заметок об успехах пока нет. Продолжайте заниматься!',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ),
           );
@@ -77,7 +77,7 @@ class ProgressNotesWidget extends ConsumerWidget {
                     children: [
                       Icon(Icons.stars_rounded, color: AppTheme.success, size: 20),
                       SizedBox(width: 8),
-                      Text(dateStr, style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                      Text(dateStr, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                     ],
                   ),
                   SizedBox(height: 8),

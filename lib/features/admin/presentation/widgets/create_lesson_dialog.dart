@@ -96,7 +96,7 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
         }
       });
     } catch (e) {
-      print('Error loading rooms: $e');
+      debugPrint('Error loading rooms: $e');
     }
   }
 
@@ -108,14 +108,6 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
 
     setState(() => _saving = true);
     try {
-      final localTime = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _selectedTime.hour,
-        _selectedTime.minute,
-      );
-      
       // We want to save this as a timestamp with the correct offset (+03:00)
       // or convert to UTC. Given the user wants UTC+3, let's treat selected time as Moscow time.
       // If we use DateTime.toIso8601String() on a local time, it's missing the offset.
@@ -200,7 +192,7 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
 
             // Group Selection
             DropdownButtonFormField<String>(
-              value: _selectedGroupId,
+              initialValue: _selectedGroupId,
               isExpanded: true,
               dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: const InputDecoration(
@@ -248,7 +240,7 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedBranchId,
+                    initialValue: _selectedBranchId,
                     isExpanded: true,
                     dropdownColor: Theme.of(context).colorScheme.surface,
                     decoration: const InputDecoration(labelText: 'Филиал *'),
@@ -267,7 +259,7 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _selectedRoomId,
+                      initialValue: _selectedRoomId,
                       isExpanded: true,
                       dropdownColor: Theme.of(context).colorScheme.surface,
                       decoration: const InputDecoration(labelText: 'Аудитория'),

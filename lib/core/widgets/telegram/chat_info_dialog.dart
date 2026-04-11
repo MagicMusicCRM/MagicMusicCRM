@@ -365,7 +365,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
         return ListTile(
           leading: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: TelegramColors.accentBlue.withAlpha(40), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: TelegramColors.accentBlue.withValues(alpha: 40 / 255), borderRadius: BorderRadius.circular(8)),
             child: Icon(Icons.insert_drive_file, color: TelegramColors.accentBlue),
           ),
           title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -393,7 +393,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
         return ListTile(
           leading: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: TelegramColors.accentBlue.withAlpha(40), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: TelegramColors.accentBlue.withValues(alpha: 40 / 255), shape: BoxShape.circle),
             child: Icon(Icons.link, color: TelegramColors.accentBlue),
           ),
           title: Text(link, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: TelegramColors.accentBlue)),
@@ -432,7 +432,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
       subtitle = 'Телефон: ${_data?['phone'] ?? 'Нет номера'}';
     } else {
       name = _data?['name'] ?? 'Без названия';
-      subtitle = '${_members.length > 0 ? '${_members.length} участников' : 'Канал'}';
+      subtitle = _members.isNotEmpty ? '${_members.length} участников' : 'Канал';
       description = _data?['description'] ?? 'Нет описания';
     }
 
@@ -476,7 +476,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
                                 height: 100,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: Colors.black.withOpacity(0.4),
+                                  color: Colors.black.withValues(alpha: 0.4),
                                 ),
                                 child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 30),
                               ),
@@ -496,7 +496,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(subtitle!, style: TextStyle(color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary, fontSize: 13)),
+                      Text(subtitle ?? '', style: TextStyle(color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -653,7 +653,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+              color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(

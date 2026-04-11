@@ -107,7 +107,8 @@ class _CreateRoomDialogState extends State<CreateRoomDialog> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _selectedBranch,
+            initialValue: _selectedBranch,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Филиал'),
             items: _branches.map((b) => DropdownMenuItem(
               value: b['id'].toString(),

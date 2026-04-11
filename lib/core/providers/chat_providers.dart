@@ -179,21 +179,18 @@ final userGroupChatsProvider =
 final chatPresenceProvider =
     StreamProvider.family<List<String>, String>((ref, chatId) async* {
   final profile = await ref.watch(currentProfileProvider.future);
-  if (profile == null || (profile['role'] != 'admin' && profile['role'] != 'manager')) {
+  if (profile == null || (profile['role'].toString() != 'admin' && profile['role'].toString() != 'manager')) {
     yield [];
     return;
   }
 
   final channel = _supabase.channel('chat_presence:$chatId');
-  final name = '${profile['first_name']} ${profile['last_name']}';
-
   // Join Presence
   channel.subscribe((status, [error]) {
-    if (status == 'SUBSCRIBED') {
+    if (status == RealtimeSubscribeStatus.subscribed) {
       channel.track({
         'user_id': profile['id'],
-        'name': name,
-        'role': profile['role'],
+        'online_at': DateTime.now().toIso8601String(),
       });
     }
   });

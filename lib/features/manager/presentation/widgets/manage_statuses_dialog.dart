@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';

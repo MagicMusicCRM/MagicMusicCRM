@@ -195,7 +195,7 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
                           ? Center(
                               child: Text(
                                 'Нет уведомлений',
-                                style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 15),
+                                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 15),
                               ),
                             )
                           : ListView.builder(
@@ -211,7 +211,7 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
                                   decoration: BoxDecoration(
                                     color: isUnread
                                         ? AppTheme.primaryPurple.withAlpha(30)
-                                        : Theme.of(context!).colorScheme.surface.withAlpha(150),
+                                        : Theme.of(context).colorScheme.surface.withAlpha(150),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
                                       color: isUnread
@@ -255,7 +255,7 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
                                             Text(
                                               _formatDate(n['created_at']),
                                               style: TextStyle(
-                                                color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                                                color: Theme.of(context).colorScheme.onSurfaceVariant,
                                                 fontSize: 12,
                                               ),
                                             ),
