@@ -50,6 +50,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   int _selectedCrmTab = 0;
   bool _showProfilePanel = false;
   bool _showMyProfile = false;
+  int _currentLoadId = 0;
 
   // Realtime
   RealtimeChannel? _messagesChannel;
@@ -78,66 +79,78 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Future<void> _loadChatList() async {
     try {
-      final items = <Map<String, dynamic>>[];
-
-      // Load admin IDs
-      final adminsRes = await _supabase
-          .from('profiles')
-          .select('id')
-          .inFilter('role', ['admin', 'manager']);
-      _adminIds = (adminsRes as List).map((a) => a['id'].toString()).toList();
-
-      if (widget.role == 'client') {
-        await _loadClientChats(items);
-      } else {
-        await _loadStaffChats(items);
-      }
-
-      // Load group chats for all roles
-      await _loadGroupChats(items);
-
-      // Load channels
-      await _loadChannels(items);
-
-      // Load unread counts
-      await _loadUnreadCounts();
-
-      // Sort: chats first by last message time, then channels
-      items.sort((a, b) {
-        final aType = a['_item_type'] as String;
-        final bType = b['_item_type'] as String;
-        // Channels always at bottom
-        if (aType == 'channel' && bType != 'channel') return 1;
-        if (aType != 'channel' && bType == 'channel') return -1;
-        // Sort by last message time
-        final aTime = a['_last_message_time'] as String? ?? '';
-        final bTime = b['_last_message_time'] as String? ?? '';
-        if (aTime.isEmpty && bTime.isEmpty) return 0;
-        if (aTime.isEmpty) return 1;
-        if (bTime.isEmpty) return -1;
-        return bTime.compareTo(aTime);
-      });
-
-      if (mounted) {
-        setState(() {
-          _chatItems = items;
-          _loadingChats = false;
-
-          // Also update selected chat info if it's in the list
-          if (_selectedChatId != null) {
-            try {
-              final selectedItem = items.firstWhere((i) => i['id'] == _selectedChatId);
-              _selectedChatName = selectedItem['_display_name'];
-              _selectedChatAvatarUrl = _getAvatarUrl(selectedItem);
-            } catch (_) {
-              // Not found in new list, keep old or deselect
-            }
-          }
-        });
-      }
+      // Set a global timeout for the entire loading process
+      await _loadChatListInternal().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          debugPrint('Chat list loading timed out');
+          if (mounted) setState(() => _loadingChats = false);
+        },
+      );
     } catch (e) {
       debugPrint('Error loading chat list: $e');
       if (mounted) setState(() => _loadingChats = false);
+    }
+  }
+
+  Future<void> _loadChatListInternal() async {
+    final items = <Map<String, dynamic>>[];
+
+    // 1. Load admin IDs (Foundational)
+    // 2. Load all components in parallel
+    await Future.wait([
+      _supabase
+          .from('profiles')
+          .select('id, role')
+          .timeout(const Duration(seconds: 5))
+          .then((res) {
+            final list = res as List;
+            _adminIds = list
+                .where((a) => a['role'].toString() == 'admin' || a['role'].toString() == 'manager')
+                .map((a) => a['id'].toString())
+                .toList();
+          }),
+      if (widget.role == 'client')
+        _loadClientChats(items).timeout(const Duration(seconds: 10))
+      else
+        _loadStaffChats(items).timeout(const Duration(seconds: 12)),
+      _loadGroupChats(items).timeout(const Duration(seconds: 10)),
+      _loadChannels(items).timeout(const Duration(seconds: 10)),
+      _loadUnreadCounts().timeout(const Duration(seconds: 10)),
+    ]);
+
+    // Sort: chats first by last message time, then channels
+    items.sort((a, b) {
+      final aType = a['_item_type'] as String;
+      final bType = b['_item_type'] as String;
+      // Channels always at bottom
+      if (aType == 'channel' && bType != 'channel') return 1;
+      if (aType != 'channel' && bType == 'channel') return -1;
+      // Sort by last message time
+      final aTime = a['_last_message_time'] as String? ?? '';
+      final bTime = b['_last_message_time'] as String? ?? '';
+      if (aTime.isEmpty && bTime.isEmpty) return 0;
+      if (aTime.isEmpty) return 1;
+      if (bTime.isEmpty) return -1;
+      return bTime.compareTo(aTime);
+    });
+
+    if (mounted) {
+      setState(() {
+        _chatItems = items;
+        _loadingChats = false;
+
+        // Also update selected chat info if it's in the list
+        if (_selectedChatId != null) {
+          try {
+            final selectedItem = items.firstWhere((i) => i['id'] == _selectedChatId);
+            _selectedChatName = selectedItem['_display_name'];
+            _selectedChatAvatarUrl = _getAvatarUrl(selectedItem);
+          } catch (_) {
+            // Not found in new list, keep old or deselect
+          }
+        }
+      });
     }
   }
 
@@ -165,40 +178,56 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Future<void> _loadStaffChats(List<Map<String, dynamic>> items) async {
     // Admin/Manager/Teacher sees individual client conversations
-    final clientProfiles = await _supabase
+    final allProfiles = await _supabase
         .from('profiles')
         .select()
-        .eq('role', 'client')
-        .order('first_name');
+        .order('first_name')
+        .timeout(const Duration(seconds: 8));
 
-    for (final client in clientProfiles) {
-      final cid = client['id'] as String;
-      
-      // For teachers, exclude messages with receiver_id is null (Administration chat)
-      final orFilter = widget.role == 'teacher'
-          ? 'and(sender_id.eq.$cid,receiver_id.eq.$_userId),and(sender_id.eq.$_userId,receiver_id.eq.$cid)'
-          : 'and(sender_id.eq.$cid,or(receiver_id.eq.$_userId,receiver_id.is.null)),and(sender_id.eq.$_userId,receiver_id.eq.$cid)';
+    // Filter clients in memory to avoid enum-to-text comparison issues in database
+    final clientProfiles = (allProfiles as List)
+        .where((p) => p['role'].toString() == 'client')
+        .toList();
 
-      final lastMsg = await _supabase
-          .from('messages')
-          .select()
-          .or(orFilter)
-          .isFilter('group_chat_id', null)
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
+    // Run all profile message queries in parallel
+    final List<Map<String, dynamic>> enrichedItems = await Future.wait(
+      clientProfiles.map((client) async {
+        final cid = client['id'] as String;
+        
+        // For teachers, exclude messages with receiver_id is null (Administration chat)
+        final orFilter = widget.role == 'teacher'
+            ? 'and(sender_id.eq.$cid,receiver_id.eq.$_userId),and(sender_id.eq.$_userId,receiver_id.eq.$cid)'
+            : 'and(sender_id.eq.$cid,or(receiver_id.eq.$_userId,receiver_id.is.null)),and(sender_id.eq.$_userId,receiver_id.eq.$cid)';
 
-      if (lastMsg != null) {
-        final name = '${client['first_name'] ?? ''} ${client['last_name'] ?? ''}'.trim();
-        items.add({
-          'id': cid,
-          '_item_type': 'direct',
-          '_display_name': name.isEmpty ? 'Ученик' : name,
-          '_partner_id': cid,
-          '_last_message': lastMsg,
-          '_last_message_time': lastMsg['created_at'],
-          '_profile': client,
-        });
+        final lastMsg = await _supabase
+            .from('messages')
+            .select()
+            .or(orFilter)
+            .isFilter('group_chat_id', null)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+
+        if (lastMsg != null) {
+          final name = '${client['first_name'] ?? ''} ${client['last_name'] ?? ''}'.trim();
+          return {
+            'id': cid,
+            '_item_type': 'direct',
+            '_display_name': name.isEmpty ? 'Ученик' : name,
+            '_partner_id': cid,
+            '_last_message': lastMsg,
+            '_last_message_time': lastMsg['created_at'],
+            '_profile': client,
+          };
+        }
+        return <String, dynamic>{};
+      }),
+    );
+
+    // Add non-empty items to the list
+    for (var item in enrichedItems) {
+      if (item.isNotEmpty) {
+        items.add(item);
       }
     }
   }
@@ -221,25 +250,30 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           .select('*, first_responder:profiles!first_responder_id(first_name, last_name)')
           .inFilter('id', groupIds);
 
-      for (final group in groups) {
-        final gid = group['id'] as String;
-        final lastMsg = await _supabase
-            .from('messages')
-            .select()
-            .eq('group_chat_id', gid)
-            .order('created_at', ascending: false)
-            .limit(1)
-            .maybeSingle();
+      // Parallelize last message fetching for groups
+      final List<Map<String, dynamic>> enrichedGroups = await Future.wait(
+        groups.map((group) async {
+          final gid = group['id'] as String;
+          final lastMsg = await _supabase
+              .from('messages')
+              .select()
+              .eq('group_chat_id', gid)
+              .order('created_at', ascending: false)
+              .limit(1)
+              .maybeSingle();
 
-        items.add({
-          'id': gid,
-          '_item_type': 'group',
-          '_display_name': group['name'] ?? 'Группа',
-          '_last_message': lastMsg,
-          '_last_message_time': lastMsg?['created_at'],
-          '_group_data': group,
-        });
-      }
+          return {
+            'id': gid,
+            '_item_type': 'group',
+            '_display_name': group['name'] ?? 'Группа',
+            '_last_message': lastMsg,
+            '_last_message_time': lastMsg?['created_at'],
+            '_group_data': group,
+          };
+        }),
+      );
+
+      items.addAll(enrichedGroups);
     } catch (e) {
       debugPrint('Error loading group chats: $e');
     }
@@ -247,27 +281,33 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Future<void> _loadChannels(List<Map<String, dynamic>> items) async {
     try {
-      final channels = await _supabase.from('channels').select();
-      for (final ch in channels) {
-        final lastPost = await _supabase
-            .from('channel_posts')
-            .select()
-            .eq('channel_id', ch['id'])
-            .order('created_at', ascending: false)
-            .limit(1)
-            .maybeSingle();
+      final channels = await _supabase.from('channels').select().timeout(const Duration(seconds: 5));
+      
+      final List<Map<String, dynamic>> enrichedChannels = await Future.wait(
+        (channels as List).map((ch) async {
+          final lastPost = await _supabase
+              .from('channel_posts')
+              .select()
+              .eq('channel_id', ch['id'])
+              .order('created_at', ascending: false)
+              .limit(1)
+              .maybeSingle()
+              .timeout(const Duration(seconds: 5));
 
-        items.add({
-          'id': ch['id'],
-          '_item_type': 'channel',
-          '_display_name': ch['name'] ?? 'Канал',
-          '_last_message': lastPost != null
-              ? {'content': lastPost['content'], 'created_at': lastPost['created_at']}
-              : null,
-          '_last_message_time': lastPost?['created_at'],
-          '_channel_data': ch,
-        });
-      }
+          return {
+            'id': ch['id'],
+            '_item_type': 'channel',
+            '_display_name': ch['name'] ?? 'Канал',
+            '_last_message': lastPost != null
+                ? {'content': lastPost['content'], 'created_at': lastPost['created_at']}
+                : null,
+            '_last_message_time': lastPost?['created_at'],
+            '_channel_data': ch,
+          };
+        }),
+      );
+
+      items.addAll(enrichedChannels);
     } catch (e) {
       debugPrint('Error loading channels: $e');
     }
@@ -275,17 +315,23 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Future<void> _loadUnreadCounts() async {
     try {
-      final unread = await _supabase
-          .from('messages')
-          .select('sender_id, group_chat_id')
-          .eq('receiver_id', _userId)
-          .eq('is_read', false);
+      final results = await Future.wait([
+        _supabase
+            .from('messages')
+            .select('sender_id, group_chat_id')
+            .eq('receiver_id', _userId)
+            .eq('is_read', false)
+            .timeout(const Duration(seconds: 8)),
+        _supabase
+            .from('messages')
+            .select('sender_id')
+            .isFilter('receiver_id', null)
+            .eq('is_read', false)
+            .timeout(const Duration(seconds: 8)),
+      ]);
 
-      final unreadSchool = await _supabase
-          .from('messages')
-          .select('sender_id')
-          .isFilter('receiver_id', null)
-          .eq('is_read', false);
+      final unread = results[0] as List;
+      final unreadSchool = results[1] as List;
 
       final counts = <String, int>{};
 
@@ -328,7 +374,16 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Future<void> _loadMessages() async {
     if (_selectedChatId == null) return;
-    setState(() => _loadingMessages = true);
+    
+    _currentLoadId++;
+    final loadId = _currentLoadId;
+    
+    debugPrint('💬 MESSENGER: _loadMessages started for $_selectedChatId (LoadId: $loadId)');
+    
+    setState(() {
+      _loadingMessages = true;
+      _messages = [];
+    });
 
     try {
       if (_selectedChatType == 'channel') {
@@ -337,7 +392,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             .select('*, profiles:author_id(first_name, last_name)')
             .eq('channel_id', _selectedChatId!)
             .order('created_at', ascending: true)
-            .limit(500);
+            .limit(500)
+            .timeout(const Duration(seconds: 10));
+
+        if (loadId != _currentLoadId) return;
 
         if (mounted) {
           setState(() {
@@ -347,7 +405,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               'message_type': p['message_type'] ?? 'text',
               'is_read': true,
             }).toList();
-            _loadingMessages = false;
           });
         }
       } else if (_selectedChatType == 'group') {
@@ -356,35 +413,41 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             .select()
             .eq('group_chat_id', _selectedChatId!)
             .order('created_at', ascending: true)
-            .limit(500);
+            .limit(500)
+            .timeout(const Duration(seconds: 10));
+
+        if (loadId != _currentLoadId) return;
 
         if (mounted) {
           setState(() {
             _messages = List<Map<String, dynamic>>.from(msgs);
-            _loadingMessages = false;
           });
           _markMessagesRead();
         }
       } else {
         // Direct chat
-        final chatItem = _chatItems.firstWhere(
-          (c) => c['id'] == _selectedChatId,
-          orElse: () => {},
-        );
-        final partnerId = chatItem['_partner_id'] as String?;
+        final chatItemByPartnerId = _chatItems.where((c) => c['_partner_id'] == _selectedChatId).toList();
+        final chatItemById = _chatItems.where((c) => c['id'] == _selectedChatId).toList();
+        
+        final chatItem = chatItemById.isNotEmpty 
+            ? chatItemById.first 
+            : (chatItemByPartnerId.isNotEmpty ? chatItemByPartnerId.first : {});
+            
+        final partnerId = chatItem['_partner_id'] as String? ?? (chatItem['id'] != 'admin_chat' ? chatItem['id'] : null);
 
-        List<dynamic> msgs;
+        List<dynamic> msgs = [];
         if (widget.role == 'client') {
-          // Client: all messages where I'm sender or receiver, and no group_chat_id
           msgs = await _supabase
               .from('messages')
               .select()
               .or('sender_id.eq.$_userId,receiver_id.eq.$_userId')
               .isFilter('group_chat_id', null)
               .order('created_at', ascending: true)
-              .limit(500);
+              .limit(500)
+              .timeout(const Duration(seconds: 10));
 
-          // Filter to show only admin/school conversations
+          if (loadId != _currentLoadId) return;
+
           msgs = msgs.where((m) {
             final isFromMe = m['sender_id'] == _userId;
             final isToMe = m['receiver_id'] == _userId;
@@ -403,9 +466,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               .or(orFilter)
               .isFilter('group_chat_id', null)
               .order('created_at', ascending: true)
-              .limit(500);
+              .limit(500)
+              .timeout(const Duration(seconds: 10));
 
-          // Filter to only show relevant messages
+          if (loadId != _currentLoadId) return;
+
           msgs = msgs.where((m) {
             final isFromPartner = m['sender_id'] == partnerId;
             final isFromMe = m['sender_id'] == _userId;
@@ -416,21 +481,30 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             if (isFromMe) return m['receiver_id'] == partnerId;
             return false;
           }).toList();
-        } else {
-          msgs = [];
         }
 
-        if (mounted) {
+        if (mounted && loadId == _currentLoadId) {
           setState(() {
             _messages = List<Map<String, dynamic>>.from(msgs);
-            _loadingMessages = false;
           });
           _markMessagesRead();
         }
       }
-    } catch (e) {
-      debugPrint('Error loading messages: $e');
-      if (mounted) setState(() => _loadingMessages = false);
+    } on Exception catch (e) {
+      debugPrint('❌ MESSENGER ERROR [LoadId: $loadId]: $e');
+      if (mounted && loadId == _currentLoadId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка загрузки сообщений: ${e.toString()}'),
+            backgroundColor: TelegramColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted && loadId == _currentLoadId) {
+        setState(() => _loadingMessages = false);
+        debugPrint('💬 MESSENGER: _loadMessages finished (LoadId: $loadId)');
+      }
     }
   }
 
@@ -849,14 +923,16 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   // ── Chat selection ─────────────────────────────────────────────────────────
 
   void _selectChat(Map<String, dynamic> item) {
-    final id = item['id'] as String;
-    final type = item['item_type'] as String;
+    final id = (item['id'] ?? '').toString();
+    if (id == _selectedChatId && _loadingMessages) return; // Already loading this chat
+    
+    final type = (item['_item_type'] ?? item['item_type'] ?? 'individual').toString();
     final avatarUrl = _getAvatarUrl(item);
             
     setState(() {
       _selectedChatId = id;
       _selectedChatType = type;
-      _selectedChatName = item['display_name'] as String?;
+      _selectedChatName = (item['_display_name'] ?? item['display_name'] ?? 'Аноним').toString();
       _selectedChatAvatarUrl = avatarUrl;
       _messages = [];
     });
@@ -1237,9 +1313,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                         itemCount: filteredItems.length,
                         itemBuilder: (context, index) {
                           final item = filteredItems[index];
-                          final id = item['id'] as String;
-                          final type = item['_item_type'] as String;
-                          final name = item['_display_name'] as String? ?? '';
+                          final id = (item['id'] ?? '').toString();
+                          final type = (item['_item_type'] ?? item['item_type'] ?? 'individual').toString();
+                          final name = (item['_display_name'] ?? item['display_name'] ?? 'Аноним').toString();
                           final lastMsg = item['_last_message'] as Map<String, dynamic>?;
                           final unread = _unreadCounts[id] ?? 0;
                           final avatarUrl = _getAvatarUrl(item);
@@ -1525,13 +1601,28 @@ class _MessageListView extends StatefulWidget {
 
 class _MessageListViewState extends State<_MessageListView> {
   final _scrollController = ScrollController();
+  bool _showScrollToBottom = false;
   // Cache for sender names (profile lookups)
   final Map<String, String> _senderNameCache = {};
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  void _scrollListener() {
+    if (!_scrollController.hasClients) return;
+    
+    // Show button if we are more than 200px from the bottom
+    final isNearBottom = _scrollController.position.maxScrollExtent - _scrollController.offset < 200;
+    
+    if (isNearBottom && _showScrollToBottom) {
+      if (mounted) setState(() => _showScrollToBottom = false);
+    } else if (!isNearBottom && !_showScrollToBottom) {
+      if (mounted) setState(() => _showScrollToBottom = true);
+    }
   }
 
   @override
@@ -1592,31 +1683,53 @@ class _MessageListViewState extends State<_MessageListView> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: widget.messages.length,
-      itemBuilder: (context, index) {
-        final msg = widget.messages[index];
-        final isMe = msg['sender_id'] == widget.currentUserId;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Stack(
+      children: [
+        ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: widget.messages.length,
+          itemBuilder: (context, index) {
+            final msg = widget.messages[index];
+            final isMe = msg['sender_id'] == widget.currentUserId;
 
-        return Column(
-          children: [
-            if (_shouldShowDate(index))
-              DateSeparator(
-                date: DateTime.tryParse(msg['created_at'] ?? '')?.toLocal() ??
-                    DateTime.now(),
+            return Column(
+              children: [
+                if (_shouldShowDate(index))
+                  DateSeparator(
+                    date: DateTime.tryParse(msg['created_at'] ?? '')?.toLocal() ??
+                        DateTime.now(),
+                  ),
+                MessageBubble(
+                  message: msg,
+                  isMe: isMe,
+                  senderName: _getSenderName(msg),
+                  showSenderName: widget.isGroupChat || widget.isChannel,
+                  isGroupChat: widget.isGroupChat,
+                ),
+              ],
+            );
+          },
+        ),
+        if (_showScrollToBottom)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: AnimatedOpacity(
+              opacity: _showScrollToBottom ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: FloatingActionButton.small(
+                onPressed: _scrollToBottom,
+                backgroundColor: isDark ? TelegramColors.darkSidebar : Colors.white,
+                foregroundColor: TelegramColors.brandPurple,
+                elevation: 4,
+                child: const Icon(Icons.arrow_downward_rounded),
               ),
-            MessageBubble(
-              message: msg,
-              isMe: isMe,
-              senderName: _getSenderName(msg),
-              showSenderName: widget.isGroupChat || widget.isChannel,
-              isGroupChat: widget.isGroupChat,
             ),
-          ],
-        );
-      },
+          ),
+      ],
     );
   }
 } // End of _MessageListViewState

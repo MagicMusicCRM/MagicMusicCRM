@@ -13,6 +13,7 @@ import 'package:magic_music_crm/core/providers/theme_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
 import 'package:app_links/app_links.dart';
+import 'package:magic_music_crm/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,8 +21,10 @@ Future<void> main() async {
   Intl.defaultLocale = 'ru';
 
   try {
-    // Attempt to initialize Firebase. On Windows/Desktop, this might fail if not configured.
-    await Firebase.initializeApp();
+    // Attempt to initialize Firebase with platform-specific options.
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     debugPrint('Firebase initialized successfully');
   } catch (e) {
     debugPrint('Firebase initialization skipped: $e');

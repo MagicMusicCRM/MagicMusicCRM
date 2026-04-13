@@ -48,40 +48,43 @@ final clientConversationsProvider =
       .order('first_name');
 
   await for (final clients in profilesStream) {
-    final enriched = <Map<String, dynamic>>[];
-    for (final client in clients) {
+    final enriched = await Future.wait(clients.map((client) async {
       final cid = client['id'] as String;
-      // Get last message between this client and any admin/school
-      final lastMsg = await _supabase
-          .from('messages')
-          .select()
-          .or('sender_id.eq.$cid,receiver_id.eq.$cid')
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
+      // Get last message and unread count in parallel for each client
+      final results = await Future.wait([
+        _supabase
+            .from('messages')
+            .select()
+            .or('sender_id.eq.$cid,receiver_id.eq.$cid')
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle() as Future<dynamic>,
+        _supabase
+            .from('messages')
+            .select('id')
+            .eq('sender_id', cid)
+            .eq('is_read', false)
+            .or('receiver_id.is.null,receiver_id.eq.$userId') as Future<dynamic>,
+      ]);
 
-      // Get unread count for this client
-      final unreadRes = await _supabase
-          .from('messages')
-          .select('id')
-          .eq('sender_id', cid)
-          .eq('is_read', false)
-          .or('receiver_id.is.null,receiver_id.eq.$userId');
-
-      final unread = (unreadRes as List).length;
+      final lastMsg = results[0] as Map<String, dynamic>?;
+      final unread = (results[1] as List).length;
 
       if (lastMsg != null || unread > 0) {
-        enriched.add({
+        return {
           ...client,
           '_last_message': lastMsg,
           '_unread_count': unread,
           '_last_message_time': lastMsg?['created_at'],
-        });
+        };
       }
-    }
+      return <String, dynamic>{};
+    }));
+
+    final filteredEnriched = enriched.where((e) => e.isNotEmpty).toList();
 
     // Sort by last message time
-    enriched.sort((a, b) {
+    filteredEnriched.sort((a, b) {
       final aTime = a['_last_message_time'] as String?;
       final bTime = b['_last_message_time'] as String?;
       if (aTime == null && bTime == null) return 0;
@@ -90,7 +93,7 @@ final clientConversationsProvider =
       return bTime.compareTo(aTime);
     });
 
-    yield enriched;
+    yield filteredEnriched;
   }
 });
 
@@ -149,9 +152,8 @@ final userGroupChatsProvider =
         .inFilter('id', groupIds)
         .order('created_at', ascending: false);
 
-    // Enrich with last message
-    final enriched = <Map<String, dynamic>>[];
-    for (final group in groups) {
+    // Enrich with last message in parallel
+    final enriched = await Future.wait(groups.map((group) async {
       final gid = group['id'] as String;
       final lastMsg = await _supabase
           .from('messages')
@@ -161,13 +163,14 @@ final userGroupChatsProvider =
           .limit(1)
           .maybeSingle();
 
-      enriched.add({
+      return {
         ...group,
         '_last_message': lastMsg,
         '_last_message_time': lastMsg?['created_at'],
         '_type': 'group',
-      });
-    }
+      };
+    }));
+
     yield enriched;
   }
 });

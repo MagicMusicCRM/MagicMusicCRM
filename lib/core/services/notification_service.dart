@@ -19,7 +19,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 final notificationServiceProvider = Provider((ref) => NotificationService());
 
 class NotificationService {
-  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  FirebaseMessaging get _firebaseMessaging {
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+      throw UnsupportedError('Firebase Messaging is not supported on this platform');
+    }
+    return FirebaseMessaging.instance;
+  }
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
@@ -63,7 +68,7 @@ class NotificationService {
       iOS: initializationSettingsDarwin,
     );
     
-    // Explicitly using named settings as required by the analyzer
+    // Use named argument settings as required by the library
     await _localNotifications.initialize(settings: initializationSettings);
 
     final androidImplementation = _localNotifications.resolvePlatformSpecificImplementation<
