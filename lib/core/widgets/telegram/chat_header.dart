@@ -53,12 +53,15 @@ class ChatHeader extends StatelessWidget {
             ),
           if (!showBackButton) const SizedBox(width: 8),
           // Avatar
-          TelegramAvatar(
-            name: title,
-            avatarUrl: avatarUrl,
-            uniqueId: uniqueId ?? title,
-            radius: 20,
-            icon: isChannel ? Icons.campaign_rounded : null,
+          GestureDetector(
+            onTap: onTitleTap,
+            child: TelegramAvatar(
+              name: title,
+              avatarUrl: avatarUrl,
+              uniqueId: uniqueId ?? title,
+              radius: 20,
+              icon: isChannel ? Icons.campaign_rounded : null,
+            ),
           ),
           const SizedBox(width: 12),
           // Title + subtitle

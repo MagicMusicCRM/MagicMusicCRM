@@ -29,6 +29,13 @@ Renaming colors in `TelegramColors.dart` (e.g., `brandGold` -> `primaryGold`) wi
 Using `ElevatedButton` often adds default shadows and padding that clash with a "Flat" design.
 - **SOLUTION**: Use a custom `Container` + `InkWell` pattern for full control over background color, border radius, and lack of shadows.
 
+### 4. Supabase Trigger Type Safety
+PostgreSQL (especially v17) is strict about custom enums. Implicit comparisons (`role = 'admin'`) often fail in triggers.
+- **PITFALL**: Creating a "Fix" via `CREATE CAST ... AS IMPLICIT` can lead to infinite recursion and `stack depth limit exceeded`.
+- **SOLUTION**: Always use explicit casting to text: `role::text = 'admin'` or `role::text = ANY(target_roles::text[])`.
+- **SECURITY**: Use `SECURITY DEFINER` for triggers that send notifications to ensure they have access to `profiles` regardless of the initiator's RLS. Always `SET search_path = public`.
+
+
 ---
 
 ## ✅ Checklist for Future Tasks

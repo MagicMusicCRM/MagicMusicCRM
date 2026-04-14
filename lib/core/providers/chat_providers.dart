@@ -19,6 +19,22 @@ final currentRoleProvider = FutureProvider<String>((ref) async {
   return (profile?['role'] as String?) ?? 'client';
 });
 
+class MessengerNavigationState {
+  final String? partnerId;
+  final String? groupChatId;
+  const MessengerNavigationState({this.partnerId, this.groupChatId});
+}
+
+class MessengerNavigationNotifier extends Notifier<MessengerNavigationState?> {
+  @override
+  MessengerNavigationState? build() => null;
+  void navigateTo(MessengerNavigationState? newState) => state = newState;
+  void clear() => state = null;
+}
+
+final messengerNavigationProvider = NotifierProvider<MessengerNavigationNotifier, MessengerNavigationState?>(MessengerNavigationNotifier.new);
+
+
 /// List of admin and manager profile IDs (for deciding what counts as an "Administration" message).
 final adminIdsProvider = FutureProvider<List<String>>((ref) async {
   final res = await _supabase
@@ -56,6 +72,7 @@ final clientConversationsProvider =
             .from('messages')
             .select()
             .or('sender_id.eq.$cid,receiver_id.eq.$cid')
+            .isFilter('group_chat_id', null)
             .order('created_at', ascending: false)
             .limit(1)
             .maybeSingle() as Future<dynamic>,
@@ -64,6 +81,7 @@ final clientConversationsProvider =
             .select('id')
             .eq('sender_id', cid)
             .eq('is_read', false)
+            .isFilter('group_chat_id', null)
             .or('receiver_id.is.null,receiver_id.eq.$userId') as Future<dynamic>,
       ]);
 
@@ -108,18 +126,23 @@ final conversationMessagesProvider =
   var query = _supabase.from('messages').stream(primaryKey: ['id']);
 
   if (partnerId == null) {
-    // School inbox or a general thread where receiver_id is null
-    // We filter by receiver_id is null and group_chat_id is null.
-    // Note: .stream() filter capabilities are limited, so we do basic filtering here.
+    // School inbox (Administration)
     return query
-        .eq('group_chat_id', 'null') // This might not work as expected in .stream()
-        .order('created_at');
+        .order('created_at', ascending: true)
+        .map((messages) => messages.where((m) => m['group_chat_id'] == null && m['receiver_id'] == null).toList());
   }
 
-  // For direct chats, we ideally want (sender=me AND receiver=partner) OR (sender=partner AND receiver=me)
-  // Since .stream() only supports simple .eq() filters, we'll return messages where 
-  // either sender or receiver is the partner, and let RLS/Flutter handle the rest.
-  return query.order('created_at');
+  // Direct chat with partner
+  return query
+      .order('created_at', ascending: true)
+      .map((messages) => messages.where((m) {
+            final gid = m['group_chat_id'];
+            if (gid != null) return false;
+            final senderId = m['sender_id'];
+            final receiverId = m['receiver_id'];
+            return (senderId == userId && receiverId == partnerId) ||
+                   (senderId == partnerId && receiverId == userId);
+          }).toList());
 });
 
 // ── Group chats ──────────────────────────────────────────────────────────────

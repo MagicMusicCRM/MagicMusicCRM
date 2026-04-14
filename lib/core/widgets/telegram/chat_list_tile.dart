@@ -101,6 +101,16 @@ class ChatListTile extends StatelessWidget {
                             ),
                           ),
                         ),
+                          const SizedBox(width: 4),
+                          if (isMuted)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Icon(
+                                Icons.notifications_off_rounded,
+                                size: 14,
+                                color: textSecondary,
+                              ),
+                            ),
                           Text(
                             time!,
                             style: TextStyle(

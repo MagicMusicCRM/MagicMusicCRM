@@ -27,7 +27,11 @@ class MessageBubble extends StatelessWidget {
     final dt = DateTime.tryParse(message['created_at'] ?? '');
     final timeStr = dt != null ? DateFormat('HH:mm', 'ru').format(dt.toLocal()) : '';
     final messageType = message['message_type']?.toString() ?? 'text';
-    final isImageFile = messageType == 'file' &&
+    final attachmentUrl = message['attachment_url']?.toString();
+    final hasAttachment = attachmentUrl != null && attachmentUrl.isNotEmpty;
+    final isAttachmentType = messageType == 'file' || messageType == 'image' || messageType == 'photo' || messageType == 'voice';
+    
+    final isImageFile = (messageType == 'file' || messageType == 'image' || messageType == 'photo') &&
         FileAttachmentWidget.isImage(message['attachment_name']?.toString());
 
     final outgoingColor = isDark
@@ -105,22 +109,24 @@ class MessageBubble extends StatelessWidget {
                     ),
                   ),
                 // Content
-                if (messageType == 'voice')
-                  SizedBox(
-                    width: 220,
-                    child: VoicePlayerWidget(
-                      audioUrl: message['attachment_url'] ?? '',
-                      durationMs: message['voice_duration_ms'] as int?,
+                if (isAttachmentType || hasAttachment) ...[
+                  if (messageType == 'voice')
+                    SizedBox(
+                      width: 220,
+                      child: VoicePlayerWidget(
+                        audioUrl: message['attachment_url'] ?? '',
+                        durationMs: message['voice_duration_ms'] as int?,
+                        isMe: isMe,
+                      ),
+                    )
+                  else
+                    FileAttachmentWidget(
+                      fileName: message['attachment_name']?.toString(),
+                      fileUrl: message['attachment_url']?.toString(),
+                      fileSize: message['attachment_size'] as int?,
                       isMe: isMe,
                     ),
-                  )
-                else if (messageType == 'file') ...[
-                  FileAttachmentWidget(
-                    fileName: message['attachment_name']?.toString(),
-                    fileUrl: message['attachment_url']?.toString(),
-                    fileSize: message['attachment_size'] as int?,
-                    isMe: isMe,
-                  ),
+                  
                   if (message['content'] != null && 
                       message['content'].toString().isNotEmpty && 
                       !message['content'].toString().startsWith('📎'))

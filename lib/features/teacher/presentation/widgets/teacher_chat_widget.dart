@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/services/supa_message_service.dart';
 
 class TeacherChatWidget extends StatefulWidget {
   const TeacherChatWidget({super.key});
@@ -263,11 +264,24 @@ class _ChatViewState extends State<_ChatView> {
         .toList();
 
     if (unreadIds.isNotEmpty) {
-      await _supabase
-          .from('messages')
-          .update({'is_read': true, 'read_at': DateTime.now().toIso8601String()})
-          .filter('id', 'in', unreadIds);
+      await SupaMessageService.markIdsAsRead(unreadIds);
+      if (mounted) {
+        setState(() {
+          for (final mid in unreadIds) {
+            final idx = _messages.indexWhere((msg) => msg['id'] == mid);
+            if (idx != -1) _messages[idx]['is_read'] = true;
+          }
+        });
+      }
     }
+
+    // Sync with DB
+    await SupaMessageService.markMessagesAsRead(
+      currentUserId: widget.currentUserId,
+      chatId: widget.contactId,
+      chatType: 'direct',
+      isStaff: true, // Teachers are staff
+    );
   }
 
   void _scrollToBottom() {

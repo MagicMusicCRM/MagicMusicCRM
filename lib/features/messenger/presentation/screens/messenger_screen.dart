@@ -13,6 +13,10 @@ import 'package:magic_music_crm/core/widgets/telegram/date_separator.dart';
 import 'package:magic_music_crm/core/widgets/telegram/create_group_dialog.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_dialog.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
+import 'package:magic_music_crm/core/services/notification_service.dart';
+import 'package:magic_music_crm/core/services/supa_message_service.dart';
+import 'package:magic_music_crm/core/services/supa_settings_service.dart';
+import 'package:magic_music_crm/core/services/supa_messenger_service.dart';
 import 'package:magic_music_crm/core/providers/theme_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:typed_data';
@@ -21,6 +25,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
 
 
 /// Unified Telegram-style messenger screen used by all roles.
@@ -38,6 +43,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   String? _selectedChatType; // 'direct', 'group', 'channel'
   String? _selectedChatName;
   String? _selectedChatAvatarUrl;
+  String? _adminAvatarUrl;
 
   // Data
   List<Map<String, dynamic>> _chatItems = [];
@@ -51,11 +57,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   bool _showProfilePanel = false;
   bool _showMyProfile = false;
   int _currentLoadId = 0;
+  Set<String> _mutedChatIds = {};
 
   // Realtime
   RealtimeChannel? _messagesChannel;
   RealtimeChannel? _groupMessagesChannel;
   RealtimeChannel? _typingChannel;
+  RealtimeChannel? _profilesChannel;
+  RealtimeChannel? _groupsChannel;
   String _typingText = '';
 
   @override
@@ -63,12 +72,40 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     super.initState();
     _loadChatList();
     _subscribeToMessages();
+    _subscribeToProfiles();
+    _subscribeToGroups();
+  }
+
+  void _checkDeepLink() {
+    final nav = ref.read(messengerNavigationProvider);
+    if (nav != null) {
+      if (mounted) {
+        debugPrint('🎯 MESSENGER: Processing deep link for partner: ${nav.partnerId}');
+        // We find the chat in _chatItems
+        final item = _chatItems.where(
+          (c) => c['_partner_id'] == nav.partnerId || (c['id'] == 'admin_chat' && nav.partnerId == null)
+        ).firstOrNull;
+        
+        if (item != null) {
+           _selectChat(item);
+        } else {
+           debugPrint('🎯 MESSENGER: Partner not found in chat items');
+        }
+        
+        // Clear it so it doesn't trigger again
+        Future.microtask(() {
+          ref.read(messengerNavigationProvider.notifier).clear();
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     _messagesChannel?.unsubscribe();
     _groupMessagesChannel?.unsubscribe();
+    _profilesChannel?.unsubscribe();
+    _groupsChannel?.unsubscribe();
     _leaveTypingChannel();
     super.dispose();
   }
@@ -116,7 +153,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         _loadStaffChats(items).timeout(const Duration(seconds: 12)),
       _loadGroupChats(items).timeout(const Duration(seconds: 10)),
       _loadChannels(items).timeout(const Duration(seconds: 10)),
-      _loadUnreadCounts().timeout(const Duration(seconds: 10)),
+      SupaSettingsService.getAdminChatAvatar().then((url) => _adminAvatarUrl = url),
     ]);
 
     // Sort: chats first by last message time, then channels
@@ -135,9 +172,17 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       return bTime.compareTo(aTime);
     });
 
+    final unreadCounts = await SupaMessageService.getUnreadCounts(widget.role == 'admin' || widget.role == 'manager');
+    if (_selectedChatId != null) {
+      unreadCounts[_selectedChatId!] = 0;
+    }
+    final mutedIds = await SupaMessengerService.getMutedChatIds();
+
     if (mounted) {
       setState(() {
         _chatItems = items;
+        _unreadCounts = unreadCounts;
+        _mutedChatIds = mutedIds;
         _loadingChats = false;
 
         // Also update selected chat info if it's in the list
@@ -151,6 +196,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           }
         }
       });
+      // TRIGGER DEEP LINK CHECK AFTER LOADING ITEMS
+      _checkDeepLink();
     }
   }
 
@@ -172,7 +219,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       '_partner_id': null, // Messages to school
       '_last_message': lastMsg,
       '_last_message_time': lastMsg?['created_at'],
-      '_icon': Icons.support_agent_rounded,
+      '_avatar_url': _adminAvatarUrl,
+      '_icon': _adminAvatarUrl == null ? Icons.support_agent_rounded : null,
     });
   }
 
@@ -310,63 +358,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       items.addAll(enrichedChannels);
     } catch (e) {
       debugPrint('Error loading channels: $e');
-    }
-  }
-
-  Future<void> _loadUnreadCounts() async {
-    try {
-      final results = await Future.wait([
-        _supabase
-            .from('messages')
-            .select('sender_id, group_chat_id')
-            .eq('receiver_id', _userId)
-            .eq('is_read', false)
-            .timeout(const Duration(seconds: 8)),
-        _supabase
-            .from('messages')
-            .select('sender_id')
-            .isFilter('receiver_id', null)
-            .eq('is_read', false)
-            .timeout(const Duration(seconds: 8)),
-      ]);
-
-      final unread = results[0] as List;
-      final unreadSchool = results[1] as List;
-
-      final counts = <String, int>{};
-
-      for (final m in unread) {
-        final gid = m['group_chat_id']?.toString();
-        if (gid != null) {
-          counts[gid] = (counts[gid] ?? 0) + 1;
-        } else {
-          final sender = m['sender_id']?.toString() ?? '';
-          counts[sender] = (counts[sender] ?? 0) + 1;
-        }
-      }
-
-      // For client: count school unread
-      if (widget.role == 'client') {
-        int adminUnread = 0;
-        for (final m in unread) {
-          if (_adminIds.contains(m['sender_id']?.toString())) {
-            adminUnread++;
-          }
-        }
-        counts['admin_chat'] = adminUnread;
-      } else {
-        // For staff: count per client
-        for (final m in unreadSchool) {
-          final sender = m['sender_id']?.toString() ?? '';
-          if (!_adminIds.contains(sender)) {
-            counts[sender] = (counts[sender] ?? 0) + 1;
-          }
-        }
-      }
-
-      if (mounted) setState(() => _unreadCounts = counts);
-    } catch (e) {
-      debugPrint('Error loading unread counts: $e');
     }
   }
 
@@ -509,47 +500,68 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   Future<void> _markMessagesRead() async {
+    if (_selectedChatId == null) return;
     try {
-      final unreadIds = _messages
-          .where((m) =>
-              m['receiver_id'] == _userId &&
-              m['is_read'] == false)
-          .map((m) => m['id'] as String)
-          .toList();
+      final List<String> unreadIds = [];
 
-      // Also mark school messages (receiver_id null) as read for staff
-      if (widget.role != 'client' && _selectedChatType == 'direct') {
-        final chatItem = _chatItems.firstWhere(
-          (c) => c['id'] == _selectedChatId,
-          orElse: () => {},
-        );
-        final partnerId = chatItem['_partner_id'] as String?;
-        if (partnerId != null) {
-          final schoolMsgIds = _messages
-              .where((m) =>
-                  m['sender_id'] == partnerId &&
-                  m['receiver_id'] == null &&
-                  m['is_read'] == false)
-              .map((m) => m['id'] as String)
-              .toList();
-          unreadIds.addAll(schoolMsgIds);
+      // 1. Gather unread message IDs from the local list
+      for (final m in _messages) {
+        if (m['is_read'] == true) continue;
+
+        bool isMyUnread = false;
+        if (_selectedChatType == 'group') {
+          // In a group, any message that isn't from me and is unread counts
+          if (m['group_chat_id'] == _selectedChatId && m['sender_id'] != _userId) {
+            isMyUnread = true;
+          }
+        } else {
+          // Direct or Administration
+          final receiverId = m['receiver_id']?.toString();
+          final senderId = m['sender_id']?.toString();
+          
+          final isToMe = receiverId == _userId;
+          final isToAdmin = receiverId == null && widget.role != 'client';
+          
+          final chatItem = _chatItems.firstWhere((c) => c['id'] == _selectedChatId, orElse: () => {});
+          final partnerId = chatItem['_partner_id'] as String?;
+
+          if (isToMe && _selectedChatId == 'admin_chat' && widget.role == 'client') {
+            // ALL direct messages to client are considered "admin" messages in this view
+            isMyUnread = true;
+          } else if ((isToMe || isToAdmin) && senderId == partnerId) {
+            isMyUnread = true;
+          }
+        }
+
+        if (isMyUnread) {
+          unreadIds.add(m['id'] as String);
         }
       }
 
       if (unreadIds.isNotEmpty) {
-        await _supabase
-            .from('messages')
-            .update({'is_read': true, 'read_at': DateTime.now().toIso8601String()})
-            .inFilter('id', unreadIds);
-
+        await SupaMessageService.markIdsAsRead(unreadIds);
+        
         if (mounted) {
           setState(() {
+            for (final mid in unreadIds) {
+              final idx = _messages.indexWhere((msg) => msg['id'] == mid);
+              if (idx != -1) _messages[idx]['is_read'] = true;
+            }
             _unreadCounts[_selectedChatId!] = 0;
           });
         }
       }
+      
+      // Also ensure DB is synced for any messages NOT in the current _messages view
+      await SupaMessageService.markMessagesAsRead(
+        currentUserId: _userId,
+        chatId: _selectedChatId!,
+        chatType: _selectedChatType!,
+        isStaff: widget.role != 'client',
+      );
+
     } catch (e) {
-      debugPrint('Error marking messages as read: $e');
+      debugPrint('MessengerScreen: Error marking messages as read: $e');
     }
   }
 
@@ -599,22 +611,67 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
             if (addToView) {
               setState(() => _messages.add(m));
-              if (m['receiver_id'] == _userId) _markMessagesRead();
+              
+              // Trigger read status if this message is part of the currently open chat
+              bool shouldMarkRead = false;
+              if (_selectedChatType == 'group') {
+                shouldMarkRead = groupChatId == _selectedChatId && senderId != _userId;
+              } else {
+                final isToMe = receiverId == _userId;
+                final isToAdmin = receiverId == null && widget.role != 'client';
+                final chatItem = _chatItems.firstWhere((c) => c['id'] == _selectedChatId, orElse: () => {});
+                final partnerId = chatItem['_partner_id'] as String?;
+                
+                if ((isToMe || isToAdmin) && senderId == partnerId) {
+                  shouldMarkRead = true;
+                }
+              }
+
+              if (shouldMarkRead) {
+                _markMessagesRead();
+              }
             }
           }
 
           // Update unread counts
-          if (m['receiver_id'] == _userId && m['is_read'] == false) {
-            final key = groupChatId ?? senderId ?? '';
-            if (key != _selectedChatId) {
-              setState(() {
-                _unreadCounts[key] = (_unreadCounts[key] ?? 0) + 1;
-              });
+          final isUnread = m['is_read'] == false;
+          if (isUnread && senderId != _userId) {
+            bool isRelevantUnread = false;
+            if (groupChatId != null) {
+               // Group message unread count (if shared flag allows)
+               isRelevantUnread = true;
+            } else {
+               final isToMe = receiverId == _userId;
+               final isToAdmin = receiverId == null && widget.role != 'client';
+               if (isToMe || isToAdmin) isRelevantUnread = true;
+            }
+
+            if (isRelevantUnread) {
+              final key = groupChatId ?? senderId ?? '';
+              if (key != _selectedChatId) {
+                setState(() {
+                  _unreadCounts[key] = (_unreadCounts[key] ?? 0) + 1;
+                });
+              }
             }
           }
 
           // Refresh chat list item's last message
           _updateChatItemLastMessage(m);
+
+          // Trigger Desktop Notification if relevant and not current chat
+          final isFromMe = senderId == _userId;
+          if (!isFromMe) {
+            final key = groupChatId ?? senderId ?? 'admin';
+            if (key != _selectedChatId && !_mutedChatIds.contains(key)) {
+              final senderName = _chatItems.where((c) => c['id'] == key).firstOrNull?['_display_name'] ?? 'Новое сообщение';
+              NotificationService.showLocalNotification(
+                title: senderName,
+                body: m['content'] ?? (m['message_type'] == 'file' ? '📁 Файл' : 'Сообщение'),
+                payload: {'type': 'chat', 'id': key},
+              );
+            }
+          }
         }
       },
     );
@@ -651,7 +708,99 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       },
     );
 
+    _messagesChannel!.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'messages',
+      callback: (payload) {
+        final m = payload.newRecord;
+        final mid = m['id']?.toString();
+        
+        if (mounted) {
+          setState(() {
+            // Update message in the list
+            final idx = _messages.indexWhere((msg) => msg['id'] == mid);
+            if (idx != -1) {
+              _messages[idx] = m;
+            }
+            // Update unread count if it was marked read
+            if (m['is_read'] == true) {
+              final senderId = m['sender_id']?.toString();
+              final groupChatId = m['group_chat_id']?.toString();
+              final key = groupChatId ?? senderId ?? '';
+              
+              // If this message was why we had unread, maybe re-fetch or decrement
+              // Simplest is to clear it if it's the current chat or just re-load counts eventually
+              if (key == _selectedChatId) {
+                _unreadCounts[key] = 0;
+              }
+            }
+          });
+        }
+      },
+    );
+
     _messagesChannel!.subscribe();
+  }
+
+  void _subscribeToProfiles() {
+    _profilesChannel = _supabase.channel('messenger_profiles');
+    _profilesChannel!.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'profiles',
+      callback: (payload) {
+        final profile = payload.newRecord;
+        final pid = profile['id']?.toString();
+        
+        if (mounted) {
+          setState(() {
+            // Update _chatItems that contain this profile
+            for (var i = 0; i < _chatItems.length; i++) {
+              if (_chatItems[i]['id'] == pid && _chatItems[i]['_item_type'] == 'direct') {
+                _chatItems[i]['_profile'] = profile;
+                _chatItems[i]['_display_name'] = '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'.trim();
+                
+                // If it's the selected chat, update header info
+                if (_selectedChatId == pid) {
+                  _selectedChatName = _chatItems[i]['_display_name'];
+                  _selectedChatAvatarUrl = _getAvatarUrl(_chatItems[i]);
+                }
+              }
+            }
+          });
+        }
+      },
+    ).subscribe();
+  }
+
+  void _subscribeToGroups() {
+    _groupsChannel = _supabase.channel('messenger_groups');
+    _groupsChannel!.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'group_chats',
+      callback: (payload) {
+        final group = payload.newRecord;
+        final gid = group['id']?.toString();
+        
+        if (mounted) {
+          setState(() {
+            for (var i = 0; i < _chatItems.length; i++) {
+              if (_chatItems[i]['id'] == gid && _chatItems[i]['_item_type'] == 'group') {
+                _chatItems[i]['_group_data'] = group;
+                _chatItems[i]['_display_name'] = group['name'] ?? 'Группа';
+                
+                if (_selectedChatId == gid) {
+                  _selectedChatName = _chatItems[i]['_display_name'];
+                  _selectedChatAvatarUrl = _getAvatarUrl(_chatItems[i]);
+                }
+              }
+            }
+          });
+        }
+      },
+    ).subscribe();
   }
 
   void _updateChatItemLastMessage(Map<String, dynamic> msg) {
@@ -952,6 +1101,33 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     });
   }
 
+  void _onSearchInChat() {
+    setState(() => _showProfilePanel = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Поиск по сообщениям будет доступен в следующем обновлении')),
+    );
+  }
+
+  void _onMuteChat(bool isMuted) async {
+    if (_selectedChatId == null || _selectedChatType == null) return;
+    try {
+      await SupaMessengerService.setChatMuteStatus(
+        chatId: _selectedChatId!,
+        chatType: _selectedChatType!,
+        isMuted: isMuted,
+      );
+      setState(() {
+        if (isMuted) {
+          _mutedChatIds.add(_selectedChatId!);
+        } else {
+          _mutedChatIds.remove(_selectedChatId!);
+        }
+      });
+    } catch (e) {
+      debugPrint('Error muting chat: $e');
+    }
+  }
+
   // ── Check channel post permission ──────────────────────────────────────────
 
   Future<bool> _canPostToChannel(String channelId) async {
@@ -972,15 +1148,17 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   String? _getAvatarUrl(Map<String, dynamic> item) {
-    final type = item['item_type'] as String?;
+    if (item.containsKey('_avatar_url')) return item['_avatar_url'] as String?;
+    
+    final type = (item['_item_type'] ?? item['item_type']) as String?;
     if (type == 'direct') {
-      final profile = item['profile'];
+      final profile = item['_profile'] ?? item['profile'];
       return profile is Map ? profile['avatar_url']?.toString() : null;
     } else if (type == 'group') {
-      final groupData = item['group_data'];
+      final groupData = item['_group_data'] ?? item['group_data'];
       return groupData is Map ? groupData['avatar_url']?.toString() : null;
     } else if (type == 'channel') {
-      final channelData = item['channel_data'];
+      final channelData = item['_channel_data'] ?? item['channel_data'];
       return channelData is Map ? channelData['avatar_url']?.toString() : null;
     }
     return null;
@@ -1003,9 +1181,13 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   String _messagePreview(Map<String, dynamic>? msg) {
     if (msg == null) return 'Нет сообщений';
-    final type = msg['message_type']?.toString() ?? 'text';
-    if (type == 'voice') return '🎤 Голосовое';
-    if (type == 'file') return '📎 ${msg['attachment_name'] ?? 'Файл'}';
+    final messageType = msg['message_type']?.toString().toLowerCase() ?? 'text';
+    final attachmentUrl = msg['attachment_url']?.toString();
+    final hasAttachment = attachmentUrl != null && attachmentUrl.isNotEmpty;
+    
+    final isAttachmentType = messageType == 'file' || messageType == 'image' || messageType == 'photo' || messageType == 'voice';
+    final isImageFile = (messageType == 'file' || messageType == 'image' || messageType == 'photo') &&
+        FileAttachmentWidget.isImage(msg['attachment_name']?.toString());
     return msg['content']?.toString() ?? '';
   }
 
@@ -1047,6 +1229,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               userRole: widget.role,
               onClose: () => setState(() => _showProfilePanel = false),
               onUpdate: _loadChatList,
+              onSearch: _onSearchInChat,
+              onMute: _onMuteChat,
             )
           : const SizedBox.shrink(),
     );
@@ -1335,6 +1519,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                                     ? Icons.group_rounded
                                     : null,
                             onTap: () => _selectChat(item),
+                            isMuted: _mutedChatIds.contains(id),
                             statusIcon: _buildStatusIcon(item, isDark),
                             onStatusTap: () => _showStatusInfo(item),
                           );
@@ -1394,7 +1579,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             onBack: _deselectChat,
             onTitleTap: () {
               if (_selectedChatId == null || _selectedChatType == null) return;
-              if (widget.role == 'client' && _selectedChatType == 'direct') return; // Do not show school admin profile
+              // if (widget.role == 'client' && _selectedChatType == 'direct') return; // Do not show school admin profile
               
               if (MediaQuery.of(context).size.width >= 768) {
                 setState(() => _showProfilePanel = !_showProfilePanel);
@@ -1405,6 +1590,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                     chatType: _selectedChatType!,
                     userRole: widget.role,
                     onUpdate: _loadChatList,
+                    onSearch: _onSearchInChat,
+                    onMute: _onMuteChat,
                   ),
                 ));
               }

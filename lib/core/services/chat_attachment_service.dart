@@ -20,7 +20,23 @@ class ChatAttachmentService {
   }) async {
     final extension = _getExtension(originalFileName);
     final storagePath = '$senderId/${_uuid.v4()}$extension';
-    final mimeType = lookupMimeType(originalFileName) ?? 'application/octet-stream';
+    String? mimeType = lookupMimeType(originalFileName);
+    
+    // Supabase explicitly blocks certain MIME types to prevent XSS and abuse.
+    // We map them to text/plain so they can still be shared in the CRM safely.
+    final blockedMimes = [
+      'text/html', 
+      'text/xml', 
+      'application/xhtml+xml', 
+      'image/svg+xml', 
+      'application/javascript', 
+      'text/javascript'
+    ];
+    
+    if (mimeType != null && blockedMimes.contains(mimeType)) {
+      mimeType = 'application/octet-stream';
+    }
+    mimeType ??= 'application/octet-stream';
 
     await _supabase.storage.from(_bucketName).uploadBinary(
       storagePath,

@@ -68,8 +68,8 @@ class NotificationService {
       iOS: initializationSettingsDarwin,
     );
     
-    // Use named argument settings as required by the library
-    await _localNotifications.initialize(settings: initializationSettings);
+    // Use positional argument as required by the library
+    await _localNotifications.initialize(initializationSettings);
 
     final androidImplementation = _localNotifications.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
@@ -122,10 +122,10 @@ class NotificationService {
           debugPrint('Message also contained a notification: ${notification.title}');
           
           await _localNotifications.show(
-            id: notification.hashCode,
-            title: notification.title,
-            body: notification.body,
-            notificationDetails: NotificationDetails(
+            notification.hashCode,
+            notification.title,
+            notification.body,
+            NotificationDetails(
               android: AndroidNotificationDetails(
                 _channel.id,
                 _channel.name,
@@ -175,11 +175,20 @@ class NotificationService {
     // Custom implementation depends on how you want to show it
   }
 
-  Future<void> showLocalNotification({
+  static Future<void> showLocalNotification({
     required String title,
     required String body,
-    String? payload,
+    Map<String, dynamic>? payload,
   }) async {
+    const channel = AndroidNotificationChannel(
+      'high_importance_channel',
+      'High Importance Notifications',
+      description: 'This channel is used for important notifications.',
+      importance: Importance.max,
+      playSound: true,
+    );
+    final FlutterLocalNotificationsPlugin localNotifications = FlutterLocalNotificationsPlugin();
+
     if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
       LocalNotification notification = LocalNotification(
         title: title,
@@ -187,21 +196,21 @@ class NotificationService {
       );
       notification.show();
     } else {
-      await _localNotifications.show(
-        id: 0,
-        title: title,
-        body: body,
-        notificationDetails: NotificationDetails(
+      await localNotifications.show(
+        0,
+        title,
+        body,
+        NotificationDetails(
           android: AndroidNotificationDetails(
-            _channel.id,
-            _channel.name,
-            channelDescription: _channel.description,
+            channel.id,
+            channel.name,
+            channelDescription: channel.description,
             importance: Importance.max,
             priority: Priority.high,
           ),
           iOS: const DarwinNotificationDetails(),
         ),
-        payload: payload,
+        payload: payload?.toString(),
       );
     }
   }

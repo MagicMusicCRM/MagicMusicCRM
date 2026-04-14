@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:go_router/go_router.dart';
 
-class StudentDetailScreen extends StatefulWidget {
+class StudentDetailScreen extends ConsumerStatefulWidget {
   final String studentId;
   const StudentDetailScreen({super.key, required this.studentId});
 
   @override
-  State<StudentDetailScreen> createState() => _StudentDetailScreenState();
+  ConsumerState<StudentDetailScreen> createState() => _StudentDetailScreenState();
 }
 
-class _StudentDetailScreenState extends State<StudentDetailScreen> {
+class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   final _supabase = Supabase.instance.client;
   Map<String, dynamic>? _student;
   Map<String, dynamic>? _balance;
@@ -150,6 +153,26 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                 ),
             ],
           ),
+          actions: [
+            if (_student != null && _student!['profiles'] != null)
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppTheme.primaryPurple),
+                tooltip: 'Перейти в чат',
+                onPressed: () {
+                  // Set the navigation target
+                  ref.read(messengerNavigationProvider.notifier).navigateTo(
+                      MessengerNavigationState(partnerId: _student!['profiles']['id']));
+                  
+                  // Navigate back to the dashboard where MessengerScreen is hosted
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    // Fallback to dashboard if we can't pop
+                    context.go('/'); 
+                  }
+                },
+              ),
+          ],
           bottom: TabBar(
             isScrollable: true,
             labelColor: AppTheme.primaryPurple,
