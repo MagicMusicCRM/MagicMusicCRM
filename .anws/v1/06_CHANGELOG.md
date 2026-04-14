@@ -2,7 +2,7 @@
 
 Все локальные изменения в рамках архитектуры v1 фиксируются здесь. Формат основан на [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [1.0.19] - 2026-04-14
+## [1.1.0] - 2026-04-14
 
 ### Added
 - **Infrastructure**: Полный переход на Custom Domain **`api.magic-music.org`** (Cloudflare Proxy) для повышения стабильности API.
