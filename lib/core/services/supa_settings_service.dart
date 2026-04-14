@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 /// Service for managing global system settings.
 class SupaSettingsService {
@@ -22,7 +22,7 @@ class SupaSettingsService {
       // Since it's stored as a JSON value, if it's a string, it will be returned as String
       return value.toString();
     } catch (e) {
-      print('SupaSettingsService: Error getting admin avatar: $e');
+      debugPrint('SupaSettingsService: Error getting admin avatar: $e');
       return null;
     }
   }
@@ -36,7 +36,7 @@ class SupaSettingsService {
         'updated_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('SupaSettingsService: Error updating admin avatar: $e');
+      debugPrint('SupaSettingsService: Error updating admin avatar: $e');
       rethrow;
     }
   }

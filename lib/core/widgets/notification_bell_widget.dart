@@ -28,7 +28,12 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
-          table: 'notifications',
+          table: 'notification_recipients',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: _supabase.auth.currentUser?.id,
+          ),
           callback: (payload) {
             _loadNotifications();
           },
@@ -38,29 +43,48 @@ class _NotificationBellWidgetState extends State<NotificationBellWidget> {
 
   Future<void> _loadNotifications() async {
     setState(() => _isLoading = true);
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
     try {
       final data = await _supabase
-          .from('notifications')
-          .select()
+          .from('notification_recipients')
+          .select('*, notifications(*)')
+          .eq('user_id', userId)
           .order('created_at', ascending: false)
           .limit(50);
+      
       if (mounted) {
         setState(() {
-          _notifications = List<Map<String, dynamic>>.from(data);
+          // Flatten the structure for easier UI use:
+          // We put notification data into a top-level map and override is_read from recipient record.
+          _notifications = (data as List).map((item) {
+            final n = Map<String, dynamic>.from(item['notifications'] as Map);
+            return {
+              ...n,
+              'recipient_id': item['id'],
+              'is_read': item['is_read'],
+              'created_at': item['created_at'], // Use recipient's created_at or original? Usually same.
+            };
+          }).toList();
         });
       }
     } catch (e) {
-      // fail silently
+      debugPrint('Error loading notifications: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _markAllRead() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
     try {
       await _supabase
-          .from('notifications')
+          .from('notification_recipients')
           .update({'is_read': true})
+          .eq('user_id', userId)
           .eq('is_read', false);
       setState(() {
         _notifications = _notifications.map((n) => {...n, 'is_read': true}).toList();

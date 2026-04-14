@@ -1,6 +1,6 @@
 [Setup]
 AppName=MagicMusic CRM
-AppVersion=1.0.17
+AppVersion=1.1.0
 DefaultDirName={autopf}\MagicMusicCRM
 DefaultGroupName=MagicMusicCRM
 ; Изменили на простую папку в корне проекта

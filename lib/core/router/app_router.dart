@@ -15,9 +15,16 @@ import 'package:magic_music_crm/features/auth/presentation/screens/check_email_s
 
 // ── Role cache ───────────────────────────────────────────────────────────────
 String? _cachedRole;
+String? _cachedRoleUserId; // Track which user the cache belongs to
 
 Future<String> _fetchRole(String userId) async {
-  if (_cachedRole != null) return _cachedRole!;
+  // If cache is for a different user, invalidate it
+  if (_cachedRole != null && _cachedRoleUserId == userId) return _cachedRole!;
+  
+  // Clear stale cache
+  _cachedRole = null;
+  _cachedRoleUserId = null;
+  
   try {
     final profile = await Supabase.instance.client
         .from('profiles')
@@ -25,8 +32,10 @@ Future<String> _fetchRole(String userId) async {
         .eq('id', userId)
         .maybeSingle();
     _cachedRole = (profile?['role'] as String?) ?? 'client';
+    _cachedRoleUserId = userId;
   } catch (_) {
     _cachedRole = 'client';
+    _cachedRoleUserId = userId;
   }
   return _cachedRole!;
 }
@@ -73,6 +82,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     next.whenData((authState) {
       if (authState.event == AuthChangeEvent.signedOut) {
         _cachedRole = null;
+        _cachedRoleUserId = null;
+      } else if (authState.event == AuthChangeEvent.signedIn ||
+                 authState.event == AuthChangeEvent.tokenRefreshed) {
+        // Force role re-fetch for new sessions  
+        _cachedRole = null;
+        _cachedRoleUserId = null;
       }
     });
     authNotifier.value++;

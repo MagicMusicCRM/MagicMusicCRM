@@ -111,7 +111,7 @@ class _TeacherChatWidgetState extends State<TeacherChatWidget> {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return const Center(child: Text('Пожалуйста, войдите в систему'));
 
-    if (_loading) return const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple));
+    if (_loading) return const Center(child: CircularProgressIndicator(color: AppTheme.primaryGold));
 
     if (_selectedContactId != null) {
       return _ChatView(
@@ -151,9 +151,9 @@ class _TeacherChatWidgetState extends State<TeacherChatWidget> {
         
         return ListTile(
           leading: CircleAvatar(
-            backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+            backgroundColor: AppTheme.primaryGold.withAlpha(30),
             child: Text(name.isNotEmpty ? name[0] : '?',
-                style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700)),
+                style: const TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.w700)),
           ),
           title: Text(name.isEmpty ? 'Безымянный ученик' : name),
           trailing: Row(
@@ -336,9 +336,9 @@ class _ChatViewState extends State<_ChatView> {
               IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: widget.onBack),
               CircleAvatar(
                 radius: 18,
-                backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                backgroundColor: AppTheme.primaryGold.withAlpha(30),
                 child: Text(widget.contactName.isNotEmpty ? widget.contactName[0] : '?',
-                    style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700)),
+                    style: const TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.w700)),
               ),
               const SizedBox(width: 10),
               Text(widget.contactName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
@@ -347,7 +347,7 @@ class _ChatViewState extends State<_ChatView> {
         ),
         Expanded(
           child: _loading
-              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple))
+              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryGold))
               : ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(12),
@@ -364,7 +364,7 @@ class _ChatViewState extends State<_ChatView> {
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
                         decoration: BoxDecoration(
-                          color: isMe ? AppTheme.primaryPurple : Theme.of(context).colorScheme.surface,
+                          color: isMe ? AppTheme.primaryGold : Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(16),
                             topRight: const Radius.circular(16),
@@ -413,7 +413,7 @@ class _ChatViewState extends State<_ChatView> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: const Icon(Icons.send_rounded, color: AppTheme.primaryPurple),
+                icon: const Icon(Icons.send_rounded, color: AppTheme.primaryGold),
                 onPressed: _send,
               ),
             ],

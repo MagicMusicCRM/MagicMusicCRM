@@ -148,21 +148,36 @@ class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
                 ),
               ),
         const SizedBox(width: 10),
-        // Progress bar and duration
+        // Waveform and duration
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progress.clamp(0.0, 1.0),
-                  backgroundColor: trackBg,
-                  valueColor: AlwaysStoppedAnimation<Color>(trackActive),
-                  minHeight: 4,
+              // Waveform visualizer
+              SizedBox(
+                height: 24,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: List.generate(24, (index) {
+                    final normalizedProgress = progress.clamp(0.0, 1.0);
+                    final isPlayed = (index / 24) <= normalizedProgress;
+                    // Simple deterministic pseudo-random heights for the waveform
+                    final heights = [6, 10, 8, 14, 18, 12, 16, 20, 14, 10, 12, 18, 14, 20, 16, 12, 8, 14, 10, 6, 8, 12, 10, 4];
+                    final h = heights[index % heights.length].toDouble();
+                    
+                    return Container(
+                      width: 2,
+                      height: h,
+                      decoration: BoxDecoration(
+                        color: isPlayed ? trackActive : trackBg,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    );
+                  }),
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 _isPlaying || _position > Duration.zero
                     ? _formatDuration(_position)

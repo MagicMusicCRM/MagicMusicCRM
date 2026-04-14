@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/avatar_cropper_dialog.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
@@ -240,58 +241,56 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
       floatingActionButton: (isDesktop && _hasChanges) 
         ? FloatingActionButton(
-            backgroundColor: TelegramColors.accentBlue,
+            backgroundColor: AppTheme.primaryGold,
             onPressed: _isSaving ? null : _saveChanges,
             child: checkmarkIcon,
           )
         : null,
-      body: Center(
-        child: SizedBox(
-          width: isDesktop ? 500 : double.infinity,
-          child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-            children: [
-              // Avatar Section
-              Center(
-                child: GestureDetector(
-                  onTap: _pickAvatar,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      if (_newAvatarBytes != null)
-                        CircleAvatar(
-                          radius: 60,
-                          backgroundImage: MemoryImage(_newAvatarBytes!),
-                        )
-                      else
-                        TelegramAvatar(
-                          name: _ogFirstName.isNotEmpty ? '$_ogFirstName $_ogLastName' : 'Имя',
-                          avatarUrl: _ogAvatarUrl,
-                          uniqueId: _supabase.auth.currentUser?.id ?? '',
-                          radius: 60,
-                        ),
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.black.withValues(alpha: 0.4),
-                        ),
-                        child: const Icon(Icons.add_a_photo_outlined, color: Colors.white, size: 36),
+      body: ResponsiveConstraint(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          children: [
+            // Avatar Section
+            Center(
+              child: GestureDetector(
+                onTap: _pickAvatar,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (_newAvatarBytes != null)
+                      CircleAvatar(
+                        radius: 60,
+                        backgroundImage: MemoryImage(_newAvatarBytes!),
+                      )
+                    else
+                      TelegramAvatar(
+                        name: _ogFirstName.isNotEmpty ? '$_ogFirstName $_ogLastName' : 'Имя',
+                        avatarUrl: _ogAvatarUrl,
+                        uniqueId: _supabase.auth.currentUser?.id ?? '',
+                        radius: 60,
                       ),
-                    ],
-                  ),
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withAlpha(100),
+                      ),
+                      child: const Icon(Icons.add_a_photo_outlined, color: Colors.white, size: 36),
+                    ),
+                  ],
                 ),
               ),
+            ),
               const SizedBox(height: 16),
-              Center(
-                child: TextButton.icon(
-                  onPressed: _pickAvatar,
-                  icon: const Icon(Icons.photo_camera, size: 18),
-                  label: const Text('Сменить фото'),
-                  style: TextButton.styleFrom(foregroundColor: TelegramColors.accentBlue),
-                ),
+            Center(
+              child: TextButton.icon(
+                onPressed: _pickAvatar,
+                icon: const Icon(Icons.photo_camera, size: 18),
+                label: const Text('Сменить фото'),
+                style: TextButton.styleFrom(foregroundColor: AppTheme.primaryGold),
               ),
+            ),
               const SizedBox(height: 32),
 
               // Info Section
@@ -361,9 +360,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   onTap: _selectDate,
                 ),
               ),
-              const SizedBox(height: 48),
-            ],
-          ),
+            const SizedBox(height: 48),
+          ],
         ),
       ),
     );

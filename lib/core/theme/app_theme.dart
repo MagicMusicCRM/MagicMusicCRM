@@ -48,6 +48,14 @@ class AppTheme {
           letterSpacing: -0.2,
         ),
       ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
+          TargetPlatform.macOS: ZoomPageTransitionsBuilder(),
+        },
+      ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: TelegramColors.darkSurface,
         selectedItemColor: TelegramColors.accentBlue,
@@ -58,6 +66,7 @@ class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: TelegramColors.darkSurface,
         indicatorColor: TelegramColors.accentBlue.withAlpha(30),
+        elevation: 0,
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: TelegramColors.accentBlue);
@@ -91,13 +100,17 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: TelegramColors.accentBlue,
           foregroundColor: Colors.white,
+          elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: TelegramColors.accentBlue),
+        style: TextButton.styleFrom(
+          foregroundColor: TelegramColors.accentBlue,
+          elevation: 0,
+        ),
       ),
       dividerTheme: const DividerThemeData(
         color: TelegramColors.darkDivider,
@@ -122,20 +135,27 @@ class AppTheme {
         contentTextStyle: const TextStyle(color: TelegramColors.darkTextPrimary),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         behavior: SnackBarBehavior.floating,
+        elevation: 0,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: TelegramColors.accentBlue,
         foregroundColor: Colors.white,
         shape: CircleBorder(),
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        disabledElevation: 0,
+        highlightElevation: 0,
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: TelegramColors.darkSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 8,
+        elevation: 0,
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: TelegramColors.darkSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 0,
       ),
     );
   }
@@ -234,7 +254,16 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: TelegramColors.lightBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 0,
       ),
     );
+  }
+}
+
+/// A scroll behavior that removes the glow effect.
+class NoGlowScrollBehavior extends ScrollBehavior {
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+    return child;
   }
 }

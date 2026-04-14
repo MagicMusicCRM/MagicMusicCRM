@@ -95,24 +95,27 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp> with WidgetsBindi
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
 
-    return MaterialApp.router(
-      title: 'MagicMusic',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: themeMode,
-      routerConfig: router,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        SfGlobalLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('ru'),
-        Locale('en'),
-      ],
-      locale: const Locale('ru'),
+    return ScrollConfiguration(
+      behavior: NoGlowScrollBehavior(),
+      child: MaterialApp.router(
+        title: 'MagicMusic',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: themeMode,
+        routerConfig: router,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          SfGlobalLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('ru'),
+          Locale('en'),
+        ],
+        locale: const Locale('ru'),
+      ),
     );
   }
 }

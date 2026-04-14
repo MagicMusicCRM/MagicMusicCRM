@@ -11,6 +11,7 @@ class ChatListTile extends StatelessWidget {
   final bool isSelected;
   final bool isChannel;
   final bool isMuted;
+  final bool isPinned;
   final String? avatarUrl;
   final String? uniqueId;
   final VoidCallback? onTap;
@@ -28,6 +29,7 @@ class ChatListTile extends StatelessWidget {
     this.isSelected = false,
     this.isChannel = false,
     this.isMuted = false,
+    this.isPinned = false,
     this.avatarUrl,
     this.uniqueId,
     this.onTap,
@@ -172,6 +174,18 @@ class ChatListTile extends StatelessWidget {
                                 color: Colors.white,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          )
+                        else if (isPinned)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Transform.rotate(
+                              angle: 0.5,
+                              child: Icon(
+                                Icons.push_pin_rounded,
+                                size: 16,
+                                color: textSecondary.withAlpha(150),
                               ),
                             ),
                           ),

@@ -8,11 +8,14 @@ import 'package:file_picker/file_picker.dart';
 
 /// Telegram-style message input bar with text field, attachment, and voice recording.
 class MessageInput extends StatefulWidget {
-  final Future<void> Function(String text) onSendText;
+  final Future<void> Function(String text, {String? replyToId, String? editingMessageId}) onSendText;
   final Future<void> Function(Uint8List bytes, int durationMs, String ext)? onSendVoice;
   final Future<void> Function(Uint8List bytes, String fileName, int fileSize, {String? caption})? onSendFile;
   final void Function(bool isTyping)? onTyping;
   final bool enabled;
+  final Map<String, dynamic>? replyingTo;
+  final Map<String, dynamic>? editingMessage;
+  final VoidCallback? onCancelMode;
 
   const MessageInput({
     super.key,
@@ -21,6 +24,9 @@ class MessageInput extends StatefulWidget {
     this.onSendFile,
     this.onTyping,
     this.enabled = true,
+    this.replyingTo,
+    this.editingMessage,
+    this.onCancelMode,
   });
 
   @override
@@ -63,6 +69,22 @@ class _MessageInputState extends State<MessageInput> {
         }
       }
     });
+
+    if (widget.editingMessage != null) {
+      _controller.text = widget.editingMessage!['content'] ?? '';
+    }
+  }
+
+  @override
+  void didUpdateWidget(MessageInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.editingMessage != oldWidget.editingMessage && widget.editingMessage != null) {
+      _controller.text = widget.editingMessage!['content'] ?? '';
+      _focusNode.requestFocus();
+    }
+    if (widget.replyingTo != oldWidget.replyingTo && widget.replyingTo != null) {
+      _focusNode.requestFocus();
+    }
   }
 
   @override
@@ -75,12 +97,24 @@ class _MessageInputState extends State<MessageInput> {
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+    
+    final replyId = widget.replyingTo?['id']?.toString();
+    final editId = widget.editingMessage?['id']?.toString();
+
     _controller.clear();
     setState(() => _hasText = false);
-    await widget.onSendText(text);
+    
+    await widget.onSendText(text, replyToId: replyId, editingMessageId: editId);
+    
+    if (widget.onCancelMode != null && (replyId != null || editId != null)) {
+      widget.onCancelMode!();
+    }
+    
     _focusNode.requestFocus();
   }
 
+  // ... (pickAndSendFile and handleKeyEvent remain similar but check widget.enabled)
+  
   Future<void> _pickAndSendFile() async {
     if (_isSendingFile || widget.onSendFile == null) return;
     try {
@@ -146,8 +180,9 @@ class _MessageInputState extends State<MessageInput> {
       );
     }
 
+    final isModeActive = widget.replyingTo != null || widget.editingMessage != null;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: isDark ? TelegramColors.darkSurface : TelegramColors.lightBg,
         border: Border(
@@ -158,101 +193,161 @@ class _MessageInputState extends State<MessageInput> {
         ),
       ),
       child: SafeArea(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Attach button
-            if (widget.onSendFile != null)
-              IconButton(
-                icon: _isSendingFile
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: isDark
-                              ? TelegramColors.darkTextSecondary
-                              : TelegramColors.lightTextSecondary,
-                        ),
-                      )
-                    : Icon(
-                        Icons.attach_file_rounded,
-                        color: isDark
-                            ? TelegramColors.darkTextSecondary
-                            : TelegramColors.lightTextSecondary,
-                      ),
-                onPressed: _isSendingFile || !widget.enabled ? null : _pickAndSendFile,
-                splashRadius: 20,
-                tooltip: 'Прикрепить файл',
-              ),
-            // Text field
-            Expanded(
-              child: Focus(
-                onKeyEvent: _handleKeyEvent,
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  enabled: widget.enabled,
-                  maxLines: 6,
-                  minLines: 1,
-                  textInputAction: _isDesktop ? TextInputAction.newline : TextInputAction.send,
-                  onSubmitted: _isDesktop ? null : (_) => _sendMessage(),
-                  decoration: InputDecoration(
-                    hintText: 'Сообщение...',
-                    filled: true,
-                    fillColor: isDark
-                        ? TelegramColors.darkInputBg
-                        : TelegramColors.lightInputBg,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(22),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
+            if (isModeActive)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isDark ? TelegramColors.darkDivider : TelegramColors.lightDivider,
+                      width: 0.5,
                     ),
                   ),
                 ),
+                child: Row(
+                  children: [
+                    Icon(
+                      widget.replyingTo != null ? Icons.reply_rounded : Icons.edit_rounded,
+                      size: 20,
+                      color: TelegramColors.primaryGold,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.replyingTo != null ? 'Ответ пользователю' : 'Редактирование',
+                            style: const TextStyle(
+                              color: TelegramColors.primaryGold,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            (widget.replyingTo?['content'] ?? widget.editingMessage?['content'] ?? '').toString(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: widget.onCancelMode,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 4),
-            // Mic / Send button
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, animation) {
-                return ScaleTransition(scale: animation, child: child);
-              },
-              child: _hasText
-                  ? IconButton(
-                      key: const ValueKey('send'),
-                      icon: const Icon(Icons.send_rounded),
-                      color: TelegramColors.accentBlue,
-                      onPressed: widget.enabled ? _sendMessage : null,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Attach button
+                  if (widget.onSendFile != null && widget.editingMessage == null)
+                    IconButton(
+                      icon: _isSendingFile
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: isDark
+                                    ? TelegramColors.darkTextSecondary
+                                    : TelegramColors.lightTextSecondary,
+                              ),
+                            )
+                          : Icon(
+                              Icons.attach_file_rounded,
+                              color: isDark
+                                  ? TelegramColors.darkTextSecondary
+                                  : TelegramColors.lightTextSecondary,
+                            ),
+                      onPressed: _isSendingFile || !widget.enabled ? null : _pickAndSendFile,
                       splashRadius: 20,
-                      tooltip: 'Отправить',
-                    )
-                  : widget.onSendVoice != null
-                      ? IconButton(
-                          key: const ValueKey('mic'),
-                          icon: const Icon(Icons.mic_rounded),
-                          color: isDark
-                              ? TelegramColors.darkTextSecondary
-                              : TelegramColors.lightTextSecondary,
-                          onPressed: widget.enabled
-                              ? () => setState(() => _isRecording = true)
-                              : null,
-                          splashRadius: 20,
-                          tooltip: 'Голосовое сообщение',
-                        )
-                      : IconButton(
-                          key: const ValueKey('send_disabled'),
-                          icon: const Icon(Icons.send_rounded),
-                          color: isDark
-                              ? TelegramColors.darkTextSecondary
-                              : TelegramColors.lightTextSecondary,
-                          onPressed: null,
-                          splashRadius: 20,
+                      tooltip: 'Прикрепить файл',
+                    ),
+                  // Text field
+                  Expanded(
+                    child: Focus(
+                      onKeyEvent: _handleKeyEvent,
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        enabled: widget.enabled,
+                        maxLines: 6,
+                        minLines: 1,
+                        textInputAction: _isDesktop ? TextInputAction.newline : TextInputAction.send,
+                        onSubmitted: _isDesktop ? null : (_) => _sendMessage(),
+                        decoration: InputDecoration(
+                          hintText: 'Сообщение...',
+                          filled: true,
+                          fillColor: isDark
+                              ? TelegramColors.darkInputBg
+                              : TelegramColors.lightInputBg,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                         ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Mic / Send button
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    transitionBuilder: (child, animation) {
+                      return ScaleTransition(scale: animation, child: child);
+                    },
+                    child: _hasText || widget.editingMessage != null
+                        ? IconButton(
+                            key: const ValueKey('send'),
+                            icon: Icon(widget.editingMessage != null ? Icons.check_rounded : Icons.send_rounded),
+                            color: TelegramColors.accentBlue,
+                            onPressed: widget.enabled ? _sendMessage : null,
+                            splashRadius: 20,
+                            tooltip: 'Отправить',
+                          )
+                        : widget.onSendVoice != null
+                            ? IconButton(
+                                key: const ValueKey('mic'),
+                                icon: const Icon(Icons.mic_rounded),
+                                color: isDark
+                                    ? TelegramColors.darkTextSecondary
+                                    : TelegramColors.lightTextSecondary,
+                                onPressed: widget.enabled
+                                    ? () => setState(() => _isRecording = true)
+                                    : null,
+                                splashRadius: 20,
+                                tooltip: 'Голосовое сообщение',
+                              )
+                            : IconButton(
+                                key: const ValueKey('send_disabled'),
+                                icon: const Icon(Icons.send_rounded),
+                                color: isDark
+                                    ? TelegramColors.darkTextSecondary
+                                    : TelegramColors.lightTextSecondary,
+                                onPressed: null,
+                                splashRadius: 20,
+                              ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

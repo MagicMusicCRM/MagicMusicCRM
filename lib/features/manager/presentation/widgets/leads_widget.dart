@@ -74,7 +74,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
     final leadsAsync = ref.watch(leadsStreamProvider);
 
     return leadsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
+      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryGold)),
       error: (err, stack) => Center(child: Text('Ошибка: $err')),
       data: (data) {
         final grouped = <String, List<Map<String, dynamic>>>{};
@@ -292,7 +292,7 @@ class _LeadCard extends ConsumerWidget {
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: Colors.black.withAlpha(76), blurRadius: 10, spreadRadius: 2)],
+              border: Border.all(color: AppTheme.primaryGold, width: 2),
             ),
             child: Text(displayName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
