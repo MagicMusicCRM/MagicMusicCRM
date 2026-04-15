@@ -40,7 +40,7 @@ final adminIdsProvider = FutureProvider<List<String>>((ref) async {
   final res = await _supabase
       .from('profiles')
       .select('id')
-      .inFilter('role', ['admin', 'manager']);
+      .filter('role', 'in', ['admin', 'manager']);
   return (res as List).map((a) => a['id'].toString()).toList();
 });
 
@@ -72,7 +72,7 @@ final clientConversationsProvider =
             .from('messages')
             .select()
             .or('sender_id.eq.$cid,receiver_id.eq.$cid')
-            .isFilter('group_chat_id', null)
+            .filter('group_chat_id', 'is', 'null')
             .order('created_at', ascending: false)
             .limit(1)
             .maybeSingle() as Future<dynamic>,
@@ -81,7 +81,7 @@ final clientConversationsProvider =
             .select('id')
             .eq('sender_id', cid)
             .eq('is_read', false)
-            .isFilter('group_chat_id', null)
+            .filter('group_chat_id', 'is', 'null')
             .or('receiver_id.is.null,receiver_id.eq.$userId') as Future<dynamic>,
       ]);
 
@@ -172,7 +172,7 @@ final userGroupChatsProvider =
     final groups = await _supabase
         .from('group_chats')
         .select('*, first_responder:profiles!first_responder_id(first_name, last_name)')
-        .inFilter('id', groupIds)
+        .filter('id', 'in', groupIds)
         .order('created_at', ascending: false);
 
     // Enrich with last message in parallel
@@ -194,7 +194,8 @@ final userGroupChatsProvider =
       };
     }));
 
-    yield enriched;
+    // Explicitly cast to List<Map<String, dynamic>> to avoid dynamic typing errors
+    yield List<Map<String, dynamic>>.from(enriched);
   }
 });
 

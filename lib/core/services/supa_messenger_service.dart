@@ -108,6 +108,30 @@ class SupaMessengerService {
     }
   }
 
+  /// Fetches an enriched chat list using a single high-performance RPC call.
+  /// Returns a unified list of chats (direct, group, channel) with last messages and unread counts.
+  static Future<List<Map<String, dynamic>>> getEnrichedChatList({
+    required bool isStaff,
+  }) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return [];
+
+      final res = await _supabase.rpc('get_recent_chats_v3', params: {
+        'p_user_id': userId,
+        'p_is_staff': isStaff,
+      }).timeout(const Duration(seconds: 15));
+
+      if (res == null) return [];
+      
+      // Ensure it's a list of maps
+      return List<Map<String, dynamic>>.from(res as List);
+    } catch (e) {
+      debugPrint('SupaMessengerService: Error getting enriched chat list: $e');
+      return [];
+    }
+  }
+
   /// Updates the 'last_seen_at' timestamp for the current user.
   static Future<void> updateLastSeen() async {
     try {

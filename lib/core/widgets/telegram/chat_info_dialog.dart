@@ -20,6 +20,7 @@ class ChatInfoDialog extends ConsumerStatefulWidget {
   final VoidCallback? onUpdate;
   final VoidCallback? onSearch;
   final Function(bool isMuted)? onMute;
+  final Function(Map<String, dynamic> chat)? onNavigateToChat;
 
   const ChatInfoDialog({
     super.key,
@@ -30,6 +31,7 @@ class ChatInfoDialog extends ConsumerStatefulWidget {
     this.onUpdate,
     this.onSearch,
     this.onMute,
+    this.onNavigateToChat,
   });
 
   @override
@@ -134,22 +136,33 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
             .from('messages')
             .select()
             .or('sender_id.eq.$userId,receiver_id.eq.$userId')
-            .isFilter('group_chat_id', null)
-            .order('created_at', ascending: false);
+            .filter('group_chat_id', 'is', 'null')
+            .order('created_at', ascending: false)
+            .timeout(const Duration(seconds: 15));
         _parseHistory(res);
       } else if (widget.chatType == 'group') {
-        final res = await _supabase.from('messages').select().eq('group_chat_id', widget.chatId).order('created_at', ascending: false);
+        final res = await _supabase.from('messages')
+            .select()
+            .eq('group_chat_id', widget.chatId)
+            .order('created_at', ascending: false)
+            .timeout(const Duration(seconds: 15));
         _parseHistory(res);
       } else if (widget.chatType == 'channel') {
-        final res = await _supabase.from('channel_posts').select().eq('channel_id', widget.chatId).order('created_at', ascending: false);
+        final res = await _supabase.from('channel_posts')
+            .select()
+            .eq('channel_id', widget.chatId)
+            .order('created_at', ascending: false)
+            .timeout(const Duration(seconds: 15));
         _parseHistory(res);
       } else if (widget.chatType == 'direct') {
         // Staff viewing client OR direct chat between users
         // Fetch ALL messages involving this target user
-        final res = await _supabase.from('messages').select()
+        final res = await _supabase.from('messages')
+            .select()
             .or('sender_id.eq.${widget.chatId},receiver_id.eq.${widget.chatId}')
-            .isFilter('group_chat_id', null)
-            .order('created_at', ascending: false);
+            .filter('group_chat_id', 'is', 'null')
+            .order('created_at', ascending: false)
+            .timeout(const Duration(seconds: 15));
         _parseHistory(res);
       }
     } catch(e) {
@@ -566,14 +579,32 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             _buildActionButton(
                               Icons.chat_bubble_outline, 
                               'Чат', 
                               isDark,
-                              onTap: widget.onClose, // On desktop, this closes side panel
+                              onTap: () {
+                                if (widget.onNavigateToChat != null && _data != null) {
+                                  // Map _data back to a chat item format expected by _selectChat
+                                  final chatItem = {
+                                    'id': widget.chatId == 'admin_chat' ? 'admin_chat' : widget.chatId,
+                                    '_item_type': widget.chatType,
+                                    'display_name': name,
+                                    '_display_name': name,
+                                    'avatar_url': avatarUrl,
+                                    '_avatar_url': avatarUrl,
+                                    '_partner_id': widget.chatType == 'direct' ? widget.chatId : null,
+                                  };
+                                  widget.onNavigateToChat!(chatItem);
+                                  if (Navigator.canPop(context)) Navigator.pop(context);
+                                } else if (widget.onClose != null) {
+                                  widget.onClose!();
+                                }
+                              },
                             ),
+                            const SizedBox(width: 32),
                             _buildActionButton(
                               _isMuted ? Icons.notifications_off_outlined : Icons.notifications_none, 
                               _isMuted ? 'Включить' : 'Заглушить', 
@@ -590,12 +621,6 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
                                 );
                                 if (widget.onMute != null) widget.onMute!(newMuted);
                               },
-                            ),
-                            _buildActionButton(
-                              Icons.search, 
-                              'Поиск', 
-                              isDark,
-                              onTap: widget.onSearch,
                             ),
                           ],
                         ),

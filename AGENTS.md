@@ -73,13 +73,16 @@
 
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
-- **Последняя версия архитектуры**: .anws/v1 (v1.1.0)
-- **Активный список задач**: `Wave 6 — Messenger UX & Aesthetics`
+- **Последняя версия архитектуры**: .anws/v1 (v1.1.1)
+- **Активный список задач**: `Wave 7 — Messenger Functional Completeness`
 - **Количество задач к выполнению**: 0
-- **Последнее обновление**: `2026-04-14 20:50` (Messenger Stability & Aesthetics Restoration)
+- **Последнее обновление**: `2026-04-15 14:15` (Pinned Messages real-time sync & Dialog fixes)
 
 ### 🌊 Wave 6 — Messenger UX & Aesthetics
 _Текущая фаза: Исправление RLS рекурсии, поиск, пересылка и Waveform-визуализация (Завершена)_
+
+### 🌊 Wave 7 — Messenger Functional Completeness
+_Текущая фаза: Закрепленные сообщения, атрибуция пересылки и унификация прав (Завершена)_
 
 ---
 

@@ -49,6 +49,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   List<Map<String, dynamic>> _chatItems = [];
   List<Map<String, dynamic>> _messages = [];
   List<Map<String, dynamic>> _pinnedMessages = [];
+  final Set<String> _hiddenPinnedBars = {};
   Map<String, List<dynamic>> _reactionsMap = {};
   RealtimeChannel? _reactionsChannel;
   Map<String, int> _unreadCounts = {};
@@ -79,7 +80,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   RealtimeChannel? _groupsChannel;
   String _typingText = '';
   Set<String> _onlineUsers = {};
-  bool _scrollAtBottom = true;
+  StateSetter? _pinnedDialogSetState;
 
   @override
   void initState() {
@@ -172,37 +173,54 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   Future<void> _loadChatListInternal() async {
-    final items = <Map<String, dynamic>>[];
-
-    // 1. Load admin IDs (Foundational)
-    // 2. Load all components in parallel
-    await Future.wait([
+    final isStaff = widget.role == 'admin' || widget.role == 'manager' || widget.role == 'teacher';
+    
+    // 1. Fetch the unified enriched chat list in a single call
+    final rawItems = await SupaMessengerService.getEnrichedChatList(isStaff: isStaff);
+    
+    // 2. Load admin profiles & settings in parallel (Foundational)
+    final results = await Future.wait<dynamic>([
       _supabase
           .from('profiles')
           .select('id, role')
-          .timeout(const Duration(seconds: 10))
-          .then((res) {
-            final list = res as List;
-            _adminIds = list
-                .where((a) => a['role'].toString() == 'admin' || a['role'].toString() == 'manager')
-                .map((a) => a['id'].toString())
-                .toList();
-          }),
-      if (widget.role == 'client')
-        _loadClientChats(items).timeout(const Duration(seconds: 20))
-      else
-        _loadStaffChats(items).timeout(const Duration(seconds: 25)),
-      _loadGroupChats(items).timeout(const Duration(seconds: 20)),
-      _loadChannels(items).timeout(const Duration(seconds: 20)),
-      SupaSettingsService.getAdminChatAvatar().then((url) => _adminAvatarUrl = url),
+          .or('role.eq.admin,role.eq.manager'),
+      SupaSettingsService.getAdminChatAvatar(),
     ]);
+    
+    final adminProfiles = results[0] as List;
+    _adminAvatarUrl = results[1] as String?;
+    _adminIds = adminProfiles.map((a) => a['id'].toString()).toList();
+    
+    // 3. Map raw items to internal state
+    final items = <Map<String, dynamic>>[];
+    final unreadCounts = <String, int>{};
+    final mutedIds = <String>{};
+    final pinnedIds = <String>{};
 
-    final unreadCounts = await SupaMessageService.getUnreadCounts(widget.role == 'admin' || widget.role == 'manager');
+    for (final raw in rawItems) {
+      final id = raw['id'].toString();
+      
+      // Construct item for _chatItems list
+      final item = {
+        'id': id,
+        '_item_type': raw['item_type'],
+        '_display_name': raw['display_name'],
+        '_partner_id': raw['partner_id'],
+        '_last_message': raw['last_message'],
+        '_last_message_time': raw['last_message']?['created_at'],
+        '_avatar_url': raw['avatar_url'] ?? (raw['id'] == 'admin_chat' ? _adminAvatarUrl : null),
+      };
+      items.add(item);
+      
+      // Update auxiliary states
+      unreadCounts[id] = raw['unread_count'] ?? 0;
+      if (raw['is_muted'] == true) mutedIds.add(id);
+      if (raw['is_pinned'] == true) pinnedIds.add(id);
+    }
+
     if (_selectedChatId != null) {
       unreadCounts[_selectedChatId!] = 0;
     }
-    final mutedIds = await SupaMessengerService.getMutedChatIds();
-    final pinnedIds = await SupaMessengerService.getPinnedChatIds();
 
     if (mounted) {
       setState(() {
@@ -212,182 +230,22 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         _pinnedChatIds = pinnedIds;
         _loadingChats = false;
 
-        // Also update selected chat info if it's in the list
+        // Update selected chat info from list
         if (_selectedChatId != null) {
           try {
             final selectedItem = items.firstWhere((i) => i['id'] == _selectedChatId);
             _selectedChatName = selectedItem['_display_name'];
             _selectedChatAvatarUrl = _getAvatarUrl(selectedItem);
-          } catch (_) {
-            // Not found in new list, keep old or deselect
-          }
+          } catch (_) {}
         }
       });
-      // TRIGGER DEEP LINK CHECK AFTER LOADING ITEMS
       _checkDeepLink();
     }
   }
 
-  Future<void> _loadClientChats(List<Map<String, dynamic>> items) async {
-    // Client sees one "Администрация" chat
-    final lastMsg = await _supabase
-        .from('messages')
-        .select()
-        .or('sender_id.eq.$_userId,receiver_id.eq.$_userId')
-        .isFilter('group_chat_id', null)
-        .order('created_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
+  // Legacy loading methods removed in favor of RPC get_recent_chats_v3
 
-    items.add({
-      'id': 'admin_chat',
-      '_item_type': 'direct',
-      '_display_name': 'Администрация',
-      '_partner_id': null, // Messages to school
-      '_last_message': lastMsg,
-      '_last_message_time': lastMsg?['created_at'],
-      '_avatar_url': _adminAvatarUrl,
-      '_icon': _adminAvatarUrl == null ? Icons.support_agent_rounded : null,
-    });
-  }
-
-  Future<void> _loadStaffChats(List<Map<String, dynamic>> items) async {
-    // Admin/Manager/Teacher sees individual client conversations
-    final allProfiles = await _supabase
-        .from('profiles')
-        .select()
-        .order('first_name')
-        .timeout(const Duration(seconds: 15));
-
-    // Filter clients in memory to avoid enum-to-text comparison issues in database
-    final clientProfiles = (allProfiles as List)
-        .where((p) => p['role'].toString() == 'client')
-        .toList();
-
-    // Run all profile message queries in parallel
-    final List<Map<String, dynamic>> enrichedItems = await Future.wait(
-      clientProfiles.map((client) async {
-        final cid = client['id'] as String;
-        
-        // Staff see ALL communication with this specific client, regardless of which staff member sent it.
-        // This ensures teamwork visibility (Admin A sees Admin B's replies).
-        final orFilter = widget.role == 'teacher'
-            ? 'and(sender_id.eq.$cid,receiver_id.eq.$_userId),and(sender_id.eq.$_userId,receiver_id.eq.$cid)'
-            : 'sender_id.eq.$cid,receiver_id.eq.$cid';
-
-        final lastMsg = await _supabase
-            .from('messages')
-            .select()
-            .or(orFilter)
-            .isFilter('group_chat_id', null)
-            .order('created_at', ascending: false)
-            .limit(1)
-            .maybeSingle();
-
-        if (lastMsg != null) {
-          final name = '${client['first_name'] ?? ''} ${client['last_name'] ?? ''}'.trim();
-          return {
-            'id': cid,
-            '_item_type': 'direct',
-            '_display_name': name.isEmpty ? 'Ученик' : name,
-            '_partner_id': cid,
-            '_last_message': lastMsg,
-            '_last_message_time': lastMsg['created_at'],
-            '_profile': client,
-          };
-        }
-        return <String, dynamic>{};
-      }),
-    );
-
-    // Add non-empty items to the list
-    for (var item in enrichedItems) {
-      if (item.isNotEmpty) {
-        items.add(item);
-      }
-    }
-  }
-
-  Future<void> _loadGroupChats(List<Map<String, dynamic>> items) async {
-    try {
-      final memberships = await _supabase
-          .from('group_chat_members')
-          .select('group_chat_id')
-          .eq('user_id', _userId);
-
-      final groupIds = (memberships as List)
-          .map((m) => m['group_chat_id'] as String)
-          .toList();
-
-      if (groupIds.isEmpty) return;
-
-      final groups = await _supabase
-          .from('group_chats')
-          .select('*, first_responder:profiles!first_responder_id(first_name, last_name)')
-          .inFilter('id', groupIds);
-
-      // Parallelize last message fetching for groups
-      final List<Map<String, dynamic>> enrichedGroups = await Future.wait(
-        groups.map((group) async {
-          final gid = group['id'] as String;
-          final lastMsg = await _supabase
-              .from('messages')
-              .select()
-              .eq('group_chat_id', gid)
-              .order('created_at', ascending: false)
-              .limit(1)
-              .maybeSingle();
-
-          return {
-            'id': gid,
-            '_item_type': 'group',
-            '_display_name': group['name'] ?? 'Группа',
-            '_last_message': lastMsg,
-            '_last_message_time': lastMsg?['created_at'],
-            '_group_data': group,
-          };
-        }),
-      );
-
-      items.addAll(enrichedGroups);
-    } catch (e) {
-      debugPrint('Error loading group chats: $e');
-    }
-  }
-
-  Future<void> _loadChannels(List<Map<String, dynamic>> items) async {
-    try {
-      final channels = await _supabase.from('channels').select().timeout(const Duration(seconds: 10));
-      
-      final List<Map<String, dynamic>> enrichedChannels = await Future.wait(
-        (channels as List).map((ch) async {
-          final lastPost = await _supabase
-              .from('channel_posts')
-              .select()
-              .eq('channel_id', ch['id'])
-              .order('created_at', ascending: false)
-              .limit(1)
-              .maybeSingle()
-              .timeout(const Duration(seconds: 10));
-
-          return {
-            'id': ch['id'],
-            '_item_type': 'channel',
-            '_display_name': ch['name'] ?? 'Канал',
-            '_last_message': lastPost != null
-                ? {'content': lastPost['content'], 'created_at': lastPost['created_at']}
-                : null,
-            '_last_message_time': lastPost?['created_at'],
-            '_channel_data': ch,
-          };
-        }),
-      );
-
-      items.addAll(enrichedChannels);
-    } catch (e) {
-      debugPrint('Error loading channels: $e');
-    }
-  }
+  // Legacy loading methods removed in favor of RPC get_recent_chats_v3
 
   // ── Load messages for selected chat ────────────────────────────────────────
 
@@ -429,7 +287,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       } else if (_selectedChatType == 'group') {
         final msgs = await _supabase
             .from('messages')
-            .select()
+            .select('*, profiles:sender_id(first_name, last_name), forwarded_profiles:forwarded_from_id(first_name, last_name)')
             .eq('group_chat_id', _selectedChatId!)
             .order('created_at', ascending: true)
             .limit(500)
@@ -459,9 +317,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         if (widget.role == 'client') {
           msgs = await _supabase
               .from('messages')
-              .select()
+              .select('*, profiles:sender_id(first_name, last_name), forwarded_profiles:forwarded_from_id(first_name, last_name)')
               .or('sender_id.eq.$_userId,receiver_id.eq.$_userId')
-              .isFilter('group_chat_id', null)
+              .filter('group_chat_id', 'is', 'null')
               .order('created_at', ascending: true)
               .limit(500)
               .timeout(const Duration(seconds: 20));
@@ -482,9 +340,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
           msgs = await _supabase
               .from('messages')
-              .select()
+              .select('*, profiles:sender_id(first_name, last_name), forwarded_profiles:forwarded_from_id(first_name, last_name)')
               .or(orFilter)
-              .isFilter('group_chat_id', null)
+              .filter('group_chat_id', 'is', 'null')
               .order('created_at', ascending: true)
               .limit(500)
               .timeout(const Duration(seconds: 20));
@@ -749,10 +607,19 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         
         if (mounted) {
           setState(() {
-            // Update message in the list
             final idx = _messages.indexWhere((msg) => msg['id'] == mid);
+
+            // Update pinned list if this was a pin/unpin change
+            final oldMsg = idx != -1 ? _messages[idx] : null;
+            if (oldMsg != null && (oldMsg['pinned_at'] != m['pinned_at'] || oldMsg['deleted_at'] != m['deleted_at'])) {
+              _fetchPinnedMessages();
+            }
+
             if (idx != -1) {
               _messages[idx] = m;
+            } else {
+              // If message not in list but updated (might be outside buffer), still refresh pins
+              _fetchPinnedMessages();
             }
             // Update unread count if it was marked read
             if (m['is_read'] == true) {
@@ -1158,25 +1025,41 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   // ── Chat selection ─────────────────────────────────────────────────────────
 
   void _selectChat(Map<String, dynamic> item) {
-    final id = (item['id'] ?? '').toString();
-    if (id == _selectedChatId && _loadingMessages) return; // Already loading this chat
+    String id = (item['id'] ?? '').toString();
+    final type = (item['_item_type'] ?? item['item_type'] ?? 'direct').toString();
     
-    final type = (item['_item_type'] ?? item['item_type'] ?? 'individual').toString();
+    // Robust ID resolution: 
+    // If the ID looks like a user ID (e.g. from profile), try to find an existing chat session first
+    if (type == 'direct' && id.isNotEmpty) {
+      final existingChat = _chatItems.where((c) => 
+        c['id'] == id || c['_partner_id'] == id
+      ).toList();
+      
+      if (existingChat.isNotEmpty) {
+        // Use the existing chat's ID (the UUID for the conversation)
+        id = existingChat.first['id'].toString();
+      }
+    }
+
+    if (id == _selectedChatId && _loadingMessages) return; 
+    
     final avatarUrl = _getAvatarUrl(item);
+    final name = (item['_display_name'] ?? item['display_name'] ?? item['name'] ?? 'Аноним').toString();
             
     setState(() {
       _selectedChatId = id;
       _selectedChatType = type;
-      _selectedChatName = (item['_display_name'] ?? item['display_name'] ?? 'Аноним').toString();
+      _selectedChatName = name;
       _selectedChatAvatarUrl = avatarUrl;
       _messages = [];
     });
+    
     _loadMessages();
     _joinTypingChannel(id);
     _joinPresenceChannel(id);
     _joinReactionsChannel(id);
-    _loadPinnedMessage(id, type);
-    SupaMessengerService.updateLastSeen(); // Update on chat selection
+    _fetchPinnedMessages();
+    SupaMessengerService.updateLastSeen(); 
   }
 
   Future<void> _joinReactionsChannel(String chatId) async {
@@ -1193,59 +1076,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     ).subscribe();
   }
 
-  Future<void> _loadPinnedMessage(String chatId, String chatType) async {
-    try {
-      if (chatType == 'group') {
-        final chat = await _supabase.from('group_chats').select('pinned_message_id').eq('id', chatId).single();
-        final pinnedId = chat['pinned_message_id'];
-        if (pinnedId != null) {
-          final msg = await _supabase.from('messages').select().eq('id', pinnedId).single();
-          if (mounted) setState(() => _pinnedMessages = [msg]);
-        } else {
-          if (mounted) setState(() => _pinnedMessages = []);
-        }
-      } else {
-        // Individual chat: find latest pinned message
-        final res = await _supabase.from('messages')
-            .select()
-            .eq('receiver_id', chatId)
-            .not('pinned_at', 'is', null)
-            .order('pinned_at', ascending: false)
-            .limit(1)
-            .maybeSingle();
-
-        if (mounted) setState(() => _pinnedMessages = res != null ? [res] : []);
-      }
-    } catch (e) {
-      debugPrint('Error loading pinned message: $e');
-    }
-  }
-
-  void _onSearchInChat() {
-    setState(() {
-      _showProfilePanel = false;
-      _isSearchingInChat = true;
-      _searchResults = [];
-      _chatSearchController.clear();
-    });
-  }
-
-  Future<void> _performSearch(String query) async {
-    if (query.trim().isEmpty) {
-      setState(() => _searchResults = []);
-      return;
-    }
-    
-    final results = await SupaMessageService.searchMessages(
-      query: query,
-      chatId: _selectedChatId!,
-      chatType: _selectedChatType!,
-    );
-    
-    if (mounted) {
-      setState(() => _searchResults = results);
-    }
-  }
 
   Future<void> _joinPresenceChannel(String chatId) async {
     _presenceChannel?.unsubscribe();
@@ -1447,6 +1277,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               onUpdate: _loadChatList,
               onSearch: _onSearchInChat,
               onMute: _onMuteChat,
+              onNavigateToChat: (chat) {
+                setState(() {
+                  _showProfilePanel = false;
+                });
+                _selectChat(chat);
+              },
             )
           : const SizedBox.shrink(),
     );
@@ -1465,20 +1301,36 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               Expanded(
                 child: ListView.builder(
                   itemCount: _chatItems.length,
-                  itemBuilder: (context, index) {
-                    final item = _chatItems[index];
-                    final name = item['name'] ?? 'Чат';
-                    return ListTile(
-                      leading: TelegramAvatar(
-                        name: name,
-                        avatarUrl: item['avatar_url'],
-                        uniqueId: item['id'].toString(),
-                        radius: 18,
-                      ),
-                      title: Text(name),
-                      onTap: () => Navigator.pop(context, item),
-                    );
-                  },
+                   itemBuilder: (context, index) {
+                     final item = _chatItems[index];
+                     // Robust name resolution
+                     String name = 'Чат';
+                     if (item['_display_name'] != null && item['_display_name'].toString().isNotEmpty) {
+                       name = item['_display_name'].toString();
+                     } else if (item['display_name'] != null && item['display_name'].toString().isNotEmpty) {
+                       name = item['display_name'].toString();
+                     } else if (item['profiles'] != null) {
+                       final p = item['profiles'];
+                       name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+                     } else if (item['_partner_data'] != null) {
+                       final p = item['_partner_data'];
+                       name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+                     } else if (item['name'] != null) {
+                       name = item['name'].toString();
+                     }
+                     if (name.trim().isEmpty) name = 'Без имени';
+
+                     return ListTile(
+                       leading: TelegramAvatar(
+                         name: name,
+                         avatarUrl: item['_avatar_url'] ?? item['avatar_url'],
+                         uniqueId: item['id'].toString(),
+                         radius: 18,
+                       ),
+                       title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                       onTap: () => Navigator.pop(context, {...item, 'resolved_name': name}),
+                     );
+                   },
                 ),
               ),
             ],
@@ -1491,6 +1343,29 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     );
 
     if (targetChat != null) {
+      final targetName = targetChat['resolved_name'] ?? 'Чат';
+      
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Переслать сообщение?'),
+          content: Text('Переслать сообщение в чат "$targetName"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Отмена'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: TelegramColors.accentBlue),
+              child: const Text('Переслать', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true) return;
+
       final targetId = targetChat['id'].toString();
       final targetType = targetChat['_item_type'].toString();
 
@@ -1894,83 +1769,47 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               isChannel: isChannel,
               showBackButton: isMobile,
               onBack: _deselectChat,
-            onTitleTap: () {
-              if (_selectedChatId == null || _selectedChatType == null) return;
-              // if (widget.role == 'client' && _selectedChatType == 'direct') return; // Do not show school admin profile
-              
-              if (MediaQuery.of(context).size.width >= 768) {
-                setState(() => _showProfilePanel = !_showProfilePanel);
-              } else {
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => ChatInfoDialog(
-                    chatId: _selectedChatId!,
-                    chatType: _selectedChatType!,
-                    userRole: widget.role,
-                    onUpdate: _loadChatList,
-                    onSearch: _onSearchInChat,
-                    onMute: _onMuteChat,
+              actions: [
+                if (_pinnedMessages.isNotEmpty && _hiddenPinnedBars.contains(_selectedChatId))
+                  IconButton(
+                    icon: const Icon(Icons.push_pin_rounded, size: 20, color: TelegramColors.accentBlue),
+                    tooltip: 'Показать закрепленные',
+                    onPressed: () => setState(() => _hiddenPinnedBars.remove(_selectedChatId)),
                   ),
-                ));
-              }
-            },
+              ],
+              onTitleTap: () {
+                if (_selectedChatId == null || _selectedChatType == null) return;
+                
+                if (MediaQuery.of(context).size.width >= 768) {
+                  setState(() => _showProfilePanel = !_showProfilePanel);
+                } else {
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => ChatInfoDialog(
+                      chatId: _selectedChatId!,
+                      chatType: _selectedChatType!,
+                      userRole: widget.role,
+                      onUpdate: _loadChatList,
+                      onSearch: _onSearchInChat,
+                      onMute: _onMuteChat,
+                      onNavigateToChat: (chat) {
+                        Navigator.pop(context); // Close dialog
+                        _selectChat(chat);
+                      },
+                    ),
+                  ));
+                }
+              },
+              isSearchActive: _isSearchingInChat,
+              searchController: _chatSearchController,
+              onSearchToggle: _onSearchInChat,
+              onSearchChanged: (val) => _performSearch(val),
+              onSearchSubmitted: (val) => _performSearch(val, jump: true),
+              matchCount: _searchResults.length,
+              currentMatchIndex: _currentMatchIndex + 1,
+              onNextMatch: _nextSearchMatch,
+              onPrevMatch: _prevSearchMatch,
             ),
               if (_pinnedMessages.isNotEmpty) _buildPinnedBar(),
-              if (_isSearchingInChat)
-                Container(
-                  color: isDark ? TelegramColors.darkSurface : TelegramColors.lightSurface,
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: ChatSearchBar(
-                                controller: _chatSearchController,
-                                hint: 'Поиск по сообщениям...',
-                                onChanged: _performSearch,
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => setState(() {
-                                _isSearchingInChat = false;
-                                _searchResults = [];
-                              }),
-                              child: const Text('Отмена'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (_searchResults.isNotEmpty)
-                        Container(
-                          constraints: const BoxConstraints(maxHeight: 200),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: _searchResults.length,
-                            itemBuilder: (context, index) {
-                              final res = _searchResults[index];
-                              return ListTile(
-                                leading: const Icon(Icons.history_rounded, size: 16),
-                                title: Text(res['content'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
-                                subtitle: Text(
-                                  DateFormat('dd.MM HH:mm').format(DateTime.parse(res['created_at'])),
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                dense: true,
-                                onTap: () {
-                                  // In a real app, we would jump to this message ID
-                                  setState(() => _isSearchingInChat = false);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Переход к сообщению...')),
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
               _PresenceBanner(chatId: _selectedChatId),
               Expanded(
               child: _loadingMessages
@@ -2006,6 +1845,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                           ),
                         )
                       : _MessageListView(
+                        key: _messagesActionKey,
                         messages: _messages,
                         currentUserId: _userId,
                         isGroupChat: isGroup,
@@ -2156,67 +1996,182 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   // ── Pinned Bar ────────────────────────────────────────────────────────────
 
   Widget _buildPinnedBar() {
-    if (_pinnedMessages.isEmpty) return const SizedBox.shrink();
-    
-    final lastPinned = _pinnedMessages.last;
+    if (_pinnedMessages.isEmpty || _hiddenPinnedBars.contains(_selectedChatId)) return const SizedBox.shrink();
+
+    final lastPinned = _pinnedMessages.first;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final content = lastPinned['content']?.toString() ??
+        (lastPinned['message_type'] == 'file' ? '📁 Файл' : 'Вложение');
 
     return Container(
-      height: 50,
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        border: const Border(bottom: BorderSide(color: Colors.black12, width: 0.5)),
-      ),
+      width: double.infinity,
+      color: isDark ? TelegramColors.darkSurface : Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _jumpToMessage(lastPinned['id']),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Icon(Icons.push_pin_rounded, size: 18, color: TelegramColors.accentBlue),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Закрепленное сообщение',
-                        style: TextStyle(
-                          color: TelegramColors.accentBlue,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                        ),
+          onTap: () {
+            if (_pinnedMessages.length == 1) {
+              _jumpToMessage(_pinnedMessages.first['id'].toString());
+            } else {
+              _showPinnedMessagesDialog();
+            }
+          },
+          child: Row(
+            children: [
+              Container(
+                width: 2,
+                height: 35,
+                decoration: BoxDecoration(
+                  color: TelegramColors.accentBlue,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _pinnedMessages.length > 1 ? 'Закрепленные сообщения' : 'Закрепленное сообщение',
+                      style: TextStyle(
+                        color: TelegramColors.accentBlue,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
-                      Text(
-                        lastPinned['content'] ?? 'Вложение',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isDark ? Colors.white70 : Colors.black87,
-                          fontSize: 13,
-                        ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      content,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : Colors.black87,
+                        fontSize: 14,
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+              if (_pinnedMessages.length > 1)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: TelegramColors.accentBlue.withAlpha(30),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${_pinnedMessages.length}',
+                      style: TextStyle(
+                        color: TelegramColors.accentBlue,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
-                if (_pinnedMessages.length > 1)
-                  Text(
-                    '${_pinnedMessages.length}',
-                    style: TextStyle(color: TelegramColors.accentBlue, fontSize: 12),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  onPressed: () => _togglePin(lastPinned['id'], false),
-                ),
-              ],
-            ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 20),
+                tooltip: 'Скрыть панель',
+                onPressed: () {
+                  if (_selectedChatId != null) {
+                    setState(() => _hiddenPinnedBars.add(_selectedChatId!));
+                  }
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  void _showPinnedMessagesDialog() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          _pinnedDialogSetState = setDialogState;
+          
+          return AlertDialog(
+            backgroundColor: isDark ? TelegramColors.darkSurface : Colors.white,
+            title: Row(
+              children: [
+                Icon(Icons.pin_drop_rounded, color: TelegramColors.accentBlue),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Закрепленные сообщения',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: _pinnedMessages.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Text('Пусто', textAlign: TextAlign.center),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: _pinnedMessages.length,
+                      separatorBuilder: (_, __) => Divider(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                        height: 1,
+                      ),
+                      itemBuilder: (context, index) {
+                        final msg = _pinnedMessages[index];
+                        final content = msg['content']?.toString() ??
+                            (msg['message_type'] == 'file' ? '📁 Файл' : 'Сообщение');
+                        
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                          title: Text(
+                            content,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () async {
+                              await _togglePin(msg['id'].toString(), false);
+                              if (_pinnedMessages.isEmpty) {
+                                if (context.mounted) Navigator.pop(context);
+                              } else {
+                                setDialogState(() {});
+                              }
+                            },
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _jumpToMessage(msg['id'].toString());
+                          },
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  _pinnedDialogSetState = null;
+                  Navigator.pop(context);
+                },
+                child: const Text('Закрыть'),
+              ),
+            ],
+          );
+        },
+      ),
+    ).then((_) => _pinnedDialogSetState = null);
   }
 
   Future<void> _fetchPinnedMessages() async {
@@ -2228,29 +2183,95 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       );
       if (mounted) {
         setState(() => _pinnedMessages = res);
+        // Also update dialog if it's open
+        if (_pinnedDialogSetState != null) {
+          _pinnedDialogSetState!(() {});
+        }
       }
     } catch (e) {
       debugPrint('Error fetching pinned messages: $e');
     }
   }
 
+  void _onSearchInChat() {
+    setState(() {
+      _isSearchingInChat = !_isSearchingInChat;
+      if (!_isSearchingInChat) {
+        _chatSearchController.clear();
+        _searchResults.clear();
+        _currentMatchIndex = 0;
+      }
+    });
+  }
+
+  int _currentMatchIndex = 0;
+
+  void _performSearch(String query, {bool jump = false}) {
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults.clear();
+        _currentMatchIndex = 0;
+      });
+      return;
+    }
+
+    final results = _messages.where((m) => 
+      (m['content']?.toString() ?? '').toLowerCase().contains(query.toLowerCase())
+    ).toList();
+
+    setState(() {
+      _searchResults = results;
+      if (results.isNotEmpty) {
+        if (jump) {
+          _currentMatchIndex = 0;
+          _jumpToMessage(results.first['id']);
+        }
+      } else {
+        _currentMatchIndex = 0;
+      }
+    });
+  }
+
+  void _nextSearchMatch() {
+    if (_searchResults.isEmpty) return;
+    setState(() {
+      _currentMatchIndex = (_currentMatchIndex + 1) % _searchResults.length;
+      _jumpToMessage(_searchResults[_currentMatchIndex]['id']);
+    });
+  }
+
+  void _prevSearchMatch() {
+    if (_searchResults.isEmpty) return;
+    setState(() {
+      _currentMatchIndex = (_currentMatchIndex - 1 + _searchResults.length) % _searchResults.length;
+      _jumpToMessage(_searchResults[_currentMatchIndex]['id']);
+    });
+  }
+
   Future<void> _togglePin(String messageId, bool pin) async {
     try {
-      await SupaMessageService.toggleMessagePin(messageId: messageId, isPinned: pin);
+      await SupaMessageService.toggleMessagePin(
+        messageId: messageId,
+        isPinned: pin,
+        groupChatId: _selectedChatType == 'group' ? _selectedChatId : null,
+      );
       _fetchPinnedMessages();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка при закреплении: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка при закреплении: $e')),
+        );
+      }
     }
   }
 
   void _jumpToMessage(String messageId) {
-    final msgIndex = _messages.indexWhere((m) => m['id'] == messageId);
-    if (msgIndex != -1) {
-      // TODO: Implement jump
+    if (_messagesActionKey.currentState != null) {
+      _messagesActionKey.currentState!._jumpToMessage(messageId);
     }
   }
+
+  final GlobalKey<_MessageListViewState> _messagesActionKey = GlobalKey();
 } // End of _MessengerScreenState
 
 // ── Message List with Date Separators ────────────────────────────────────────
@@ -2274,6 +2295,7 @@ class _MessageListView extends StatefulWidget {
   final Map<String, List<dynamic>>? reactionsMap;
 
   const _MessageListView({
+    super.key,
     required this.messages,
     required this.currentUserId,
     required this.isGroupChat,
@@ -2296,47 +2318,108 @@ class _MessageListView extends StatefulWidget {
 }
 
 class _MessageListViewState extends State<_MessageListView> {
-  final _scrollController = ScrollController();
+  final ScrollController _scrollController = ScrollController();
   bool _showScrollToBottom = false;
+  String? _highlightedMessageId;
+  bool _isJumping = false;
+  
   // Cache for sender names (profile lookups)
   final Map<String, String> _senderNameCache = {};
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_scrollListener);
+    _scrollController.addListener(() {
+      if (_scrollController.hasClients && !_isJumping) {
+        final isNearBottom = _scrollController.position.maxScrollExtent - _scrollController.offset < 200;
+        final shouldShow = !isNearBottom;
+        if (shouldShow != _showScrollToBottom) {
+          if (mounted) setState(() => _showScrollToBottom = shouldShow);
+        }
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
-  void _scrollListener() {
-    if (!_scrollController.hasClients) return;
+  void _jumpToMessage(String messageId) {
+    if (!mounted) return;
     
-    // Show button if we are more than 200px from the bottom
-    final isNearBottom = _scrollController.position.maxScrollExtent - _scrollController.offset < 200;
-    
-    if (isNearBottom && _showScrollToBottom) {
-      if (mounted) setState(() => _showScrollToBottom = false);
-    } else if (!isNearBottom && !_showScrollToBottom) {
-      if (mounted) setState(() => _showScrollToBottom = true);
+    final index = widget.messages.indexWhere((m) => m['id'].toString() == messageId);
+    if (index == -1) return;
+
+    setState(() {
+      _isJumping = true;
+      _highlightedMessageId = null; // Reset highlight before new jump
+    });
+
+    final targetKey = GlobalObjectKey(messageId);
+    final context = targetKey.currentContext;
+
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+        alignment: 0.5,
+      );
+      _startHighlight(messageId);
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) setState(() => _isJumping = false);
+      });
+    } else {
+      // Heuristic jump to general area
+      final estimate = index * 120.0;
+      _scrollController.animateTo(
+        estimate,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOut,
+      ).then((_) {
+        if (!mounted) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final newContext = targetKey.currentContext;
+          if (newContext != null) {
+            Scrollable.ensureVisible(
+              newContext,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              alignment: 0.5,
+            );
+          }
+          _startHighlight(messageId);
+          Future.delayed(const Duration(milliseconds: 600), () {
+            if (mounted) setState(() => _isJumping = false);
+          });
+        });
+      });
     }
+  }
+
+  void _startHighlight(String messageId) {
+    setState(() => _highlightedMessageId = messageId);
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (mounted && _highlightedMessageId == messageId) {
+        setState(() => _highlightedMessageId = null);
+      }
+    });
   }
 
   @override
   void didUpdateWidget(_MessageListView old) {
     super.didUpdateWidget(old);
     if (widget.messages.length != old.messages.length) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      if (!_isJumping) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      }
     }
   }
 
   void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    }
+    if (_isJumping || !_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   String _getSenderName(Map<String, dynamic> msg) {
@@ -2361,6 +2444,22 @@ class _MessageListViewState extends State<_MessageListView> {
     return widget.selectedChatName ?? 'Пользователь';
   }
 
+  String? _getForwardedName(Map<String, dynamic> msg) {
+    if (msg['forwarded_from_id'] == null) return null;
+    
+    final forwardedId = msg['forwarded_from_id'].toString();
+    
+    // Check embedded forwarded_profiles from our enriched query
+    final fProfiles = msg['forwarded_profiles'];
+    if (fProfiles != null && fProfiles is Map) {
+      final name = '${fProfiles['first_name'] ?? ''} ${fProfiles['last_name'] ?? ''}'.trim();
+      if (name.isNotEmpty) return name;
+    }
+    
+    if (widget.adminIds.contains(forwardedId)) return 'Администрация';
+    return 'Пользователь';
+  }
+
   bool _shouldShowDate(int index) {
     if (index == 0) return true;
     final curr = DateTime.tryParse(widget.messages[index]['created_at'] ?? '');
@@ -2380,7 +2479,8 @@ class _MessageListViewState extends State<_MessageListView> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+    final canAdminDelete = widget.role == 'admin' || widget.role == 'manager';
+
     return Stack(
       children: [
         ListView.builder(
@@ -2403,6 +2503,7 @@ class _MessageListViewState extends State<_MessageListView> {
             }
 
             return Column(
+              key: GlobalObjectKey(msg['id'].toString()),
               children: [
                 if (_shouldShowDate(index))
                   DateSeparator(
@@ -2423,6 +2524,14 @@ class _MessageListViewState extends State<_MessageListView> {
                   onPin: () => widget.onPin?.call(msg),
                   onReact: (emoji) => widget.onReact?.call(msg['id'], emoji),
                   reactions: widget.reactionsMap?[msg['id'].toString()],
+                  isHighlighted: _highlightedMessageId == msg['id'].toString(),
+                  forwardedFromName: _getForwardedName(msg),
+                  onJumpToReplied: () {
+                    if (repliedMsg != null) {
+                      _jumpToMessage(repliedMsg['id'].toString());
+                    }
+                  },
+                  canDeleteOthers: canAdminDelete,
                 ),
               ],
             );

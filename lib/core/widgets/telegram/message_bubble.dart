@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
@@ -17,8 +18,12 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onForward;
   final VoidCallback? onPin;
+  final bool isHighlighted;
+  final bool canDeleteOthers;
   final Function(String)? onReact;
   final List<dynamic>? reactions;
+  final VoidCallback? onJumpToReplied;
+  final String? forwardedFromName;
 
   const MessageBubble({
     super.key,
@@ -33,8 +38,12 @@ class MessageBubble extends StatelessWidget {
     this.onDelete,
     this.onForward,
     this.onPin,
+    this.isHighlighted = false,
+    this.canDeleteOthers = false,
     this.onReact,
     this.reactions,
+    this.onJumpToReplied,
+    this.forwardedFromName,
   });
 
   @override
@@ -56,6 +65,9 @@ class MessageBubble extends StatelessWidget {
     final incomingColor = isDark
         ? TelegramColors.darkIncomingBubble
         : TelegramColors.lightIncomingBubble;
+
+    // Highlight color (Sophisticated Gold with low alpha)
+    final highlightColor = const Color(0xFFC5A059).withAlpha(isDark ? 80 : 100);
 
     final outgoingTextColor = isDark ? Colors.white : TelegramColors.lightTextPrimary;
     final incomingTextColor = isDark ? Colors.white : TelegramColors.lightTextPrimary;
@@ -80,7 +92,8 @@ class MessageBubble extends StatelessWidget {
           onLongPress: isDeleted ? null : () => _showContextMenu(context),
           onSecondaryTap: isDeleted ? null : () => _showContextMenu(context),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOut,
             constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.75,
             ),
@@ -88,13 +101,22 @@ class MessageBubble extends StatelessWidget {
                 ? const EdgeInsets.all(3)
                 : const EdgeInsets.fromLTRB(10, 6, 10, 4),
             decoration: BoxDecoration(
-              color: isMe ? outgoingColor : incomingColor,
+              color: isHighlighted 
+                  ? highlightColor 
+                  : (isMe ? outgoingColor : incomingColor),
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
                 bottomLeft: Radius.circular(isMe ? 16 : 4),
                 bottomRight: Radius.circular(isMe ? 4 : 16),
               ),
+              boxShadow: isHighlighted ? [
+                BoxShadow(
+                  color: const Color(0xFFC5A059).withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                )
+              ] : null,
             ),
             child: IntrinsicWidth(
               child: Column(
@@ -114,43 +136,72 @@ class MessageBubble extends StatelessWidget {
                       ),
                     ),
                   
+                  // Forwarded from
+                  if (forwardedFromName != null && !isDeleted)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4, left: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.forward_rounded,
+                            size: 14,
+                            color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(180),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Переслано от: $forwardedFromName',
+                            style: TextStyle(
+                              color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(180),
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  
                   // Reply Quote
                   if (repliedMessage != null && !isDeleted)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withAlpha(isDark ? 30 : 10),
-                          border: Border(
-                            left: BorderSide(
-                              color: isMe ? TelegramColors.primaryGold : TelegramColors.accentBlue,
-                              width: 2,
-                            ),
-                          ),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Ответ',
-                              style: TextStyle(
+                      child: GestureDetector(
+                        onTap: onJumpToReplied,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withAlpha(isDark ? 30 : 10),
+                            border: Border(
+                              left: BorderSide(
                                 color: isMe ? TelegramColors.primaryGold : TelegramColors.accentBlue,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
+                                width: 2,
                               ),
                             ),
-                            Text(
-                              repliedMessage!['content']?.toString() ?? 'Медиа',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: isMe ? outgoingTextColor.withAlpha(200) : incomingTextColor.withAlpha(200),
-                                fontSize: 12,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Ответ',
+                                style: TextStyle(
+                                  color: isMe ? TelegramColors.primaryGold : TelegramColors.accentBlue,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
                               ),
-                            ),
-                          ],
+                              Text(
+                                repliedMessage!['content']?.toString() ?? 'Медиа',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isMe ? outgoingTextColor.withAlpha(200) : incomingTextColor.withAlpha(200),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -216,6 +267,47 @@ class MessageBubble extends StatelessWidget {
                         spacing: 4,
                         runSpacing: 4,
                         children: _buildReactionWidgets(context, isDark),
+                      ),
+                    ),
+
+                  // Time and Edited indicator
+                  if (!isDeleted)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (message['is_edited'] == true)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Text(
+                                'изменено',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(150),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          Text(
+                            DateFormat('HH:mm').format(
+                              DateTime.tryParse(message['created_at'] ?? '')?.toLocal() ?? DateTime.now(),
+                            ),
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(150),
+                            ),
+                          ),
+                          if (isMe) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              message['is_read'] == true ? Icons.done_all_rounded : Icons.done_rounded,
+                              size: 14,
+                              color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(150),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                 ],
@@ -301,6 +393,21 @@ class MessageBubble extends StatelessWidget {
                 ),
               ),
               const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.copy_rounded),
+                title: const Text('Копировать'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Clipboard.setData(ClipboardData(text: message['content'] ?? ''));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Скопировано в буфер обмена'),
+                      duration: Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
               if (onReply != null)
                 ListTile(
                   leading: const Icon(Icons.reply_rounded),
@@ -337,7 +444,7 @@ class MessageBubble extends StatelessWidget {
                     onForward!();
                   },
                 ),
-              if (onDelete != null)
+              if (onDelete != null && (isMe || canDeleteOthers))
                 ListTile(
                   leading: const Icon(Icons.delete_outline_rounded, color: TelegramColors.danger),
                   title: const Text('Удалить', style: TextStyle(color: TelegramColors.danger)),
@@ -352,4 +459,5 @@ class MessageBubble extends StatelessWidget {
       ),
     );
   }
+
 }

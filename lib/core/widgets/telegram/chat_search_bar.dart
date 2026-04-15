@@ -28,6 +28,7 @@ class ChatSearchBar extends StatelessWidget {
           controller: controller,
           onChanged: onChanged,
           onTap: onTap,
+          keyboardType: TextInputType.text,
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,

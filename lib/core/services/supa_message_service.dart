@@ -32,7 +32,7 @@ class SupaMessageService {
                 'read_at': DateTime.now().toIso8601String(),
               })
               .eq('receiver_id', currentUserId)
-              .isFilter('group_chat_id', null)
+              .filter('group_chat_id', 'is', 'null')
               .eq('is_read', false);
         } else {
           await _supabase
@@ -52,7 +52,7 @@ class SupaMessageService {
                   'is_read': true,
                   'read_at': DateTime.now().toIso8601String(),
                 })
-                .isFilter('receiver_id', null)
+                .filter('receiver_id', 'is', 'null')
                 .eq('sender_id', chatId)
                 .eq('is_read', false);
           }
@@ -106,13 +106,14 @@ class SupaMessageService {
       List<dynamic> unreadToSchool = [];
 
       if (isStaff) {
-        final results = await Future.wait([
+        // Use Future.wait with explicit typing to avoid inference issues
+        final results = await Future.wait<dynamic>(<Future<dynamic>>[
           query1,
           _supabase
               .from('messages')
               .select('sender_id')
-              .isFilter('receiver_id', null)
-              .isFilter('group_chat_id', null)
+              .filter('receiver_id', 'is', 'null')
+              .filter('group_chat_id', 'is', 'null')
               .eq('is_read', false)
               .timeout(const Duration(seconds: 30)),
         ]);
@@ -231,7 +232,9 @@ class SupaMessageService {
         'pinned_by_id': isPinned ? user.id : null,
       }).eq('id', messageId);
 
-      if (groupChatId != null) {
+      // If it's a known group chat, we can also update the group's specific pinned reference
+      // though getPinnedMessages often relies on the message's pinned_at column instead.
+      if (groupChatId != null && groupChatId != 'admin_chat') {
         await _supabase.from('group_chats').update({
           'pinned_message_id': isPinned ? messageId : null,
         }).eq('id', groupChatId);
@@ -285,13 +288,22 @@ class SupaMessageService {
     String chatType,
   ) async {
     try {
-      final query = _supabase.from('messages').select().not('pinned_at', 'is', null);
+      final user = _supabase.auth.currentUser;
+      if (user == null) return [];
+
+      var query = _supabase.from('messages')
+          .select('*, profiles:sender_id(first_name, last_name), forwarded_profiles:forwarded_from_id(first_name, last_name)')
+          .not('pinned_at', 'is', null)
+          .filter('deleted_at', 'is', 'null');
+
       if (chatType == 'group') {
-        return await query.eq('group_chat_id', chatId);
+        return await query.eq('group_chat_id', chatId).order('pinned_at', ascending: false);
+      } else if (chatId == 'admin_chat') {
+        // Virtual admin chat for students
+        return await query.or('and(sender_id.eq.${user.id},receiver_id.is.null),receiver_id.eq.${user.id}').order('pinned_at', ascending: false);
       } else {
-        // For direct chats, we need both directions or just the specific chat context
-        // Usually, in our CRM, direct chat messages have receiver_id/sender_id
-        return await query.or('and(sender_id.eq.$chatId,receiver_id.eq.${_supabase.auth.currentUser?.id}),and(sender_id.eq.${_supabase.auth.currentUser?.id},receiver_id.eq.$chatId)');
+        // Direct chats
+        return await query.or('and(sender_id.eq.$chatId,or(receiver_id.eq.${user.id},receiver_id.is.null)),and(sender_id.eq.${user.id},receiver_id.eq.$chatId)').order('pinned_at', ascending: false);
       }
     } catch (e) {
       debugPrint('SupaMessageService: Error fetching pinned messages: $e');
@@ -306,7 +318,9 @@ class SupaMessageService {
     required String chatType,
   }) async {
     try {
-      var baseQuery = _supabase.from('messages').select().ilike('content', '%$query%');
+      var baseQuery = _supabase.from('messages')
+          .select('*, profiles:sender_id(first_name, last_name), forwarded_profiles:forwarded_from_id(first_name, last_name)')
+          .ilike('content', '%$query%');
       
       if (chatType == 'group') {
         return await baseQuery.eq('group_chat_id', chatId).order('created_at', ascending: false).limit(50);
