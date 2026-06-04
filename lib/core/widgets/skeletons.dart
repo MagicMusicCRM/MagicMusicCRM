@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 class Skeleton extends StatefulWidget {
   final double? width;
@@ -63,7 +62,7 @@ class _SkeletonState extends State<Skeleton> with SingleTickerProviderStateMixin
               colors: [
                 Theme.of(context).colorScheme.surface,
                 Theme.of(context).colorScheme.surface,
-                Theme.of(context).colorScheme.surface.withOpacity(0.5),
+                Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
                 Theme.of(context).colorScheme.surface,
                 Theme.of(context).colorScheme.surface,
               ],
@@ -84,7 +83,7 @@ class CardSkeleton extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.3),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(

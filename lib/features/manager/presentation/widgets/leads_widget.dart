@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
+import 'package:magic_music_crm/core/models/types.dart';
 import 'manage_statuses_dialog.dart';
 
 class LeadsWidget extends ConsumerStatefulWidget {
@@ -76,7 +78,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
 
     return leadsAsync.when(
       loading: () => const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
       ),
       error: (err, stack) => Center(child: Text('Ошибка: $err')),
       data: (data) {
@@ -283,7 +285,7 @@ class _KanbanColumnState extends State<_KanbanColumn> {
   }
 }
 
-typedef StatusRecord = (String, String, Color);
+// Finalizing kanban column structure
 
 class _LeadCard extends ConsumerWidget {
   final Map<String, dynamic> lead;
@@ -334,13 +336,7 @@ class _LeadCard extends ConsumerWidget {
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(76),
-                  blurRadius: 10,
-                  spreadRadius: 2,
-                ),
-              ],
+              border: Border.all(color: AppTheme.primaryGold, width: 2),
             ),
             child: Text(
               displayName,
@@ -515,14 +511,15 @@ class _LeadCard extends ConsumerWidget {
       ),
     );
     if (content != null && content.trim().isNotEmpty) {
-      final leadService = ref.read(supaLeadServiceProvider);
-      final userId = leadService.currentUserId;
+      final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId != null) {
-        await leadService.addComment(
-          leadId: lead['id'],
-          content: content.trim(),
-          authorId: userId,
-        );
+        await ref
+            .read(supaLeadServiceProvider)
+            .addComment(
+              leadId: lead['id'],
+              content: content.trim(),
+              authorId: userId,
+            );
         onRefresh();
       }
     }
@@ -551,28 +548,32 @@ class _LeadCard extends ConsumerWidget {
       ),
     );
     if (title != null && title.trim().isNotEmpty) {
-      final leadService = ref.read(supaLeadServiceProvider);
-      final userId = leadService.currentUserId;
+      final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId != null) {
-        await leadService.addLeadTask(
-          leadId: lead['id'],
-          title: title.trim(),
-          creatorId: userId,
-        );
+        await ref
+            .read(supaLeadServiceProvider)
+            .addLeadTask(
+              leadId: lead['id'],
+              title: title.trim(),
+              creatorId: userId,
+            );
         onRefresh();
       }
     }
   }
 
   Future<void> _scheduleTrial(BuildContext context, WidgetRef ref) async {
-    final leadService = ref.read(supaLeadServiceProvider);
+    final client = Supabase.instance.client;
+
+    // Quick fetching of available teachers and rooms
+    // TODO: Move teacher/room fetching to a dedicated service/provider too
     final [teachersRes, roomsRes] = await Future.wait([
-      leadService.getAvailableTeachers(),
-      leadService.getAvailableRooms(),
+      client.from('teachers').select('id, first_name, last_name'),
+      client.from('rooms').select('id, name'),
     ]);
 
-    final teachers = teachersRes;
-    final rooms = roomsRes;
+    final teachers = List<Map<String, dynamic>>.from(teachersRes);
+    final rooms = List<Map<String, dynamic>>.from(roomsRes);
 
     if (!context.mounted) return;
 
@@ -590,7 +591,7 @@ class _LeadCard extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: selectedTeacher,
+                initialValue: selectedTeacher,
                 decoration: const InputDecoration(labelText: 'Учитель'),
                 items: teachers
                     .map(
@@ -604,7 +605,7 @@ class _LeadCard extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: selectedRoom,
+                initialValue: selectedRoom,
                 decoration: const InputDecoration(labelText: 'Кабинет'),
                 items: rooms
                     .map(
@@ -629,9 +630,8 @@ class _LeadCard extends ConsumerWidget {
                     firstDate: DateTime.now(),
                     lastDate: DateTime.now().add(const Duration(days: 90)),
                   );
-                  if (picked != null) {
+                  if (picked != null)
                     setLocalState(() => selectedDate = picked);
-                  }
                 },
               ),
               ListTile(
@@ -642,9 +642,8 @@ class _LeadCard extends ConsumerWidget {
                     context: ctx,
                     initialTime: selectedTime,
                   );
-                  if (picked != null) {
+                  if (picked != null)
                     setLocalState(() => selectedTime = picked);
-                  }
                 },
               ),
             ],
@@ -672,12 +671,14 @@ class _LeadCard extends ConsumerWidget {
         selectedTime.minute,
       );
 
-      await leadService.scheduleTrial(
-        leadId: lead['id'],
-        teacherId: selectedTeacher!,
-        roomId: selectedRoom!,
-        scheduledAt: scheduledAt,
-      );
+      await ref
+          .read(supaLeadServiceProvider)
+          .scheduleTrial(
+            leadId: lead['id'],
+            teacherId: selectedTeacher!,
+            roomId: selectedRoom!,
+            scheduledAt: scheduledAt,
+          );
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

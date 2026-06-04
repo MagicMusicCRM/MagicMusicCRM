@@ -62,8 +62,8 @@ class _AdminChatDashboardState extends State<AdminChatDashboard> {
                 icon: const Icon(Icons.campaign_rounded),
                 tooltip: 'Массовая рассылка',
                 style: IconButton.styleFrom(
-                  backgroundColor: AppTheme.primaryPurple.withAlpha(30),
-                  foregroundColor: AppTheme.primaryPurple,
+                  backgroundColor: AppTheme.primaryGold.withAlpha(30),
+                  foregroundColor: AppTheme.primaryGold,
                 ),
               ),
             ],
@@ -324,10 +324,10 @@ class _StudentChatListState extends State<_StudentChatList> {
 
         return ListTile(
           leading: CircleAvatar(
-            backgroundColor: AppTheme.primaryPurple.withAlpha(40),
+            backgroundColor: AppTheme.primaryGold.withAlpha(40),
             child: Text(
               name.isNotEmpty ? name[0] : '?', 
-              style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.bold)
+              style: const TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.bold)
             ),
           ),
           title: Text(name.isEmpty ? 'Ученик' : name, style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -338,7 +338,7 @@ class _StudentChatListState extends State<_StudentChatList> {
               if (count > 0) 
                 Badge(
                   label: Text('$count'),
-                  backgroundColor: AppTheme.primaryPurple,
+                  backgroundColor: AppTheme.primaryGold,
                 ),
               const SizedBox(width: 8),
               Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -593,20 +593,13 @@ class _MessageBubble extends StatelessWidget {
                 ? const EdgeInsets.all(4)
                 : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: isMe ? AppTheme.primaryPurple : Theme.of(context).colorScheme.surface,
+              color: isMe ? AppTheme.primaryGold : Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
                 bottomLeft: Radius.circular(isMe ? 16 : 4),
                 bottomRight: Radius.circular(isMe ? 4 : 16),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(20),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -771,7 +764,7 @@ class _MessageInputWithAttachmentsState extends State<_MessageInputWithAttachmen
               icon: _isSendingFile
                   ? const SizedBox(
                       width: 20, height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryPurple),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGold),
                     )
                   : Icon(Icons.attach_file_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
               tooltip: 'Прикрепить файл',
@@ -805,7 +798,7 @@ class _MessageInputWithAttachmentsState extends State<_MessageInputWithAttachmen
             // Mic or Send button
             Container(
               decoration: const BoxDecoration(
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
                 shape: BoxShape.circle,
               ),
               child: _controller.text.trim().isEmpty

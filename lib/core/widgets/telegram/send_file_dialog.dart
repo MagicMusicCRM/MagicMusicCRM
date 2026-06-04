@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:typed_data';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 /// A Telegram-style dialog for confirming file sending with an optional caption.
 class SendFileDialog extends StatefulWidget {
@@ -96,17 +97,10 @@ class _SendFileDialogState extends State<SendFileDialog> {
         padding: EdgeInsets.only(bottom: bottomPadding),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 400),
-          decoration: BoxDecoration(
-            color: isDark ? TelegramColors.darkSurface : Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(isDark ? 50 : 20),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
+            decoration: BoxDecoration(
+              color: isDark ? TelegramColors.darkSurface : Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -160,7 +154,7 @@ class _SendFileDialogState extends State<SendFileDialog> {
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: TelegramColors.accentBlue.withAlpha(isDark ? 30 : 15),
+                      color: AppTheme.primaryGold.withAlpha(isDark ? 30 : 15),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Row(
@@ -169,13 +163,13 @@ class _SendFileDialogState extends State<SendFileDialog> {
                           width: 48,
                           height: 48,
                           decoration: BoxDecoration(
-                            color: TelegramColors.accentBlue.withAlpha(50),
+                            color: AppTheme.primaryGold.withAlpha(50),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
                             _getFileIcon(widget.fileName),
                             size: 24,
-                            color: TelegramColors.accentBlue,
+                            color: AppTheme.primaryGold,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -260,7 +254,7 @@ class _SendFileDialogState extends State<SendFileDialog> {
                     Navigator.pop(context);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: TelegramColors.accentBlue,
+                    backgroundColor: AppTheme.primaryGold,
                     foregroundColor: Colors.white,
                     elevation: 0,
                     minimumSize: const Size(double.infinity, 54),

@@ -90,7 +90,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> with
                 onChanged: (val) => setState(() => _searchQuery = val),
                 decoration: InputDecoration(
                   hintText: 'Поиск...',
-                  prefixIcon: Icon(Icons.search_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+                  prefixIcon: Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   suffixIcon: _searchQuery.isNotEmpty 
                     ? IconButton(
                         icon: Icon(Icons.close_rounded, size: 20),
@@ -101,7 +101,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> with
                       )
                     : null,
                   filled: true,
-                  fillColor: Theme.of(context!).colorScheme.surface,
+                  fillColor: Theme.of(context).colorScheme.surface,
                   contentPadding: const EdgeInsets.symmetric(vertical: 0),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -117,7 +117,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget> with
               labelPadding: const EdgeInsets.symmetric(horizontal: 16),
               indicatorColor: AppTheme.primaryPurple,
               labelColor: AppTheme.primaryPurple,
-              unselectedLabelColor: Theme.of(context!).colorScheme.onSurfaceVariant,
+              unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
               tabs: [
                 Tab(text: 'Ученики'),
                 Tab(text: 'Преподаватели'),
@@ -209,7 +209,7 @@ class _StudentsList extends ConsumerWidget {
           }).toList();
         }
 
-        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет учеников' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет учеников' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
 
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
@@ -238,8 +238,8 @@ class _StudentsList extends ConsumerWidget {
                         style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w700)),
                   ),
                   title: Text(name.isEmpty ? 'Без имени' : name),
-                  subtitle: phone.isNotEmpty ? Text(phone, style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)) : null,
-                  trailing: Icon(Icons.chevron_right_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+                  subtitle: phone.isNotEmpty ? Text(phone, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)) : null,
+                  trailing: Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               );
             },
@@ -270,7 +270,7 @@ class _TeachersList extends ConsumerWidget {
           }).toList();
         }
 
-        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет преподавателей' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет преподавателей' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
 
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
@@ -312,8 +312,8 @@ class _TeachersList extends ConsumerWidget {
                         style: const TextStyle(color: AppTheme.secondaryGold, fontWeight: FontWeight.w700)),
                   ),
                   title: Text(name.isEmpty ? 'Без имени' : name),
-                  subtitle: Text('Специализация: $spec', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
-                  trailing: Icon(Icons.chevron_right_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+                  subtitle: Text('Специализация: $spec', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  trailing: Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               );
             },
@@ -350,7 +350,7 @@ class _LessonsList extends ConsumerWidget {
       loading: () => Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
       error: (e, _) => Center(child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger))),
       data: (items) {
-        if (items.isEmpty) return Center(child: Text('Нет занятий', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+        if (items.isEmpty) return Center(child: Text('Нет занятий', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
           onRefresh: () async => ref.invalidate(entitiesProvider('lessons')),
@@ -397,9 +397,9 @@ class _LessonsList extends ConsumerWidget {
                           children: [
                             Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                             SizedBox(height: 2),
-                            Text('Ученик: $studentName', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
-                            Text('Преп.: $teacherName', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
-                            Text('Кабинет: $room', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                            Text('Ученик: $studentName', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                            Text('Преп.: $teacherName', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                            Text('Кабинет: $room', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                           ],
                         ),
                       ),
@@ -413,7 +413,7 @@ class _LessonsList extends ConsumerWidget {
                       ),
                       SizedBox(width: 4),
                       PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert_rounded, size: 20, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+                        icon: Icon(Icons.more_vert_rounded, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         onSelected: (val) {
                           if (val == 'cancel') _cancelLesson(context, ref, l['id']);
                           if (val == 'reschedule') _rescheduleLesson(context, ref, l['id'], dt);
@@ -496,7 +496,7 @@ class _GroupsList extends ConsumerWidget {
           }).toList();
         }
 
-        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет групп' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет групп' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
 
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
@@ -532,7 +532,7 @@ class _GroupsList extends ConsumerWidget {
                     child: Icon(Icons.group_rounded, color: AppTheme.primaryPurple),
                   ),
                   title: Text(name),
-                  subtitle: Text('Преп.: $teacherName • Фил.: $branchName', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  subtitle: Text('Преп.: $teacherName • Фил.: $branchName', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                 ),
               );
             },
@@ -562,7 +562,7 @@ class _RoomsList extends ConsumerWidget {
           }).toList();
         }
 
-        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет аудиторий' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+        if (filtered.isEmpty) return Center(child: Text(searchQuery.isEmpty ? 'Нет аудиторий' : 'Ничего не найдено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
 
         return RefreshIndicator(
           color: AppTheme.primaryPurple,
@@ -593,8 +593,8 @@ class _RoomsList extends ConsumerWidget {
                     child: Icon(Icons.meeting_room_rounded, color: AppTheme.primaryPurple),
                   ),
                   title: Text(name),
-                  subtitle: Text('Вместимость: $capacity чел. • Фил.: $branchName', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
-                  trailing: Icon(Icons.edit_rounded, color: Theme.of(context!).colorScheme.onSurfaceVariant, size: 18),
+                  subtitle: Text('Вместимость: $capacity чел. • Фил.: $branchName', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  trailing: Icon(Icons.edit_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
                 ),
               );
             },
@@ -628,7 +628,7 @@ class _EmployeesList extends ConsumerWidget {
         }).toList();
 
         if (filtered.isEmpty) {
-          return Center(child: Text('Нет сотрудников', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+          return Center(child: Text('Нет сотрудников', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)));
         }
 
         return ListView.builder(
@@ -657,9 +657,9 @@ class _EmployeesList extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if ((e['email'] ?? '').isNotEmpty)
-                      Text(e['email'], style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                      Text(e['email'], style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                     if ((e['phone'] ?? '').isNotEmpty)
-                      Text(e['phone'], style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 12)),
+                      Text(e['phone'], style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                   ],
                 ),
                 trailing: Container(

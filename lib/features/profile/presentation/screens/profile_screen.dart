@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/avatar_cropper_dialog.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
@@ -32,7 +33,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _isSaving = false;
   bool _hasChanges = false;
 
-  String? _email;
   String? _role;
 
   // Initial data for change comparison
@@ -87,8 +87,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
-
-      _email = user.email;
 
       final data = await _supabase
           .from('profiles')
@@ -286,210 +284,207 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
       floatingActionButton: (isDesktop && _hasChanges)
           ? FloatingActionButton(
-              backgroundColor: TelegramColors.accentBlue,
+              backgroundColor: AppTheme.primaryGold,
               onPressed: _isSaving ? null : _saveChanges,
               child: checkmarkIcon,
             )
           : null,
-      body: Center(
-        child: SizedBox(
-          width: isDesktop ? 500 : double.infinity,
-          child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-            children: [
-              // Avatar Section
-              Center(
-                child: GestureDetector(
-                  onTap: _pickAvatar,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      if (_newAvatarBytes != null)
-                        CircleAvatar(
-                          radius: 60,
-                          backgroundImage: MemoryImage(_newAvatarBytes!),
-                        )
-                      else
-                        TelegramAvatar(
-                          name: _ogFirstName.isNotEmpty
-                              ? '$_ogFirstName $_ogLastName'
-                              : 'Имя',
-                          avatarUrl: _ogAvatarUrl,
-                          uniqueId: _supabase.auth.currentUser?.id ?? '',
-                          radius: 60,
-                        ),
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.black.withOpacity(0.4),
-                        ),
-                        child: const Icon(
-                          Icons.add_a_photo_outlined,
-                          color: Colors.white,
-                          size: 36,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: TextButton.icon(
-                  onPressed: _pickAvatar,
-                  icon: const Icon(Icons.photo_camera, size: 18),
-                  label: const Text('Сменить фото'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: TelegramColors.accentBlue,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Info Section
-              Container(
-                decoration: BoxDecoration(
-                  color: surfaceColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
+      body: ResponsiveConstraint(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          children: [
+            // Avatar Section
+            Center(
+              child: GestureDetector(
+                onTap: _pickAvatar,
+                child: Stack(
+                  alignment: Alignment.center,
                   children: [
-                    _buildTelegramTextField(
-                      controller: _firstNameController,
-                      label: 'Имя (обязательно)',
-                      textColor: textColor,
-                      hintColor: secondaryTextColor,
-                    ),
-                    Divider(
-                      height: 1,
-                      color: isDark ? Colors.white10 : Colors.black12,
-                      indent: 16,
-                    ),
-                    _buildTelegramTextField(
-                      controller: _lastNameController,
-                      label: 'Фамилия (необязательно)',
-                      textColor: textColor,
-                      hintColor: secondaryTextColor,
+                    if (_newAvatarBytes != null)
+                      CircleAvatar(
+                        radius: 60,
+                        backgroundImage: MemoryImage(_newAvatarBytes!),
+                      )
+                    else
+                      TelegramAvatar(
+                        name: _ogFirstName.isNotEmpty
+                            ? '$_ogFirstName $_ogLastName'
+                            : 'Имя',
+                        avatarUrl: _ogAvatarUrl,
+                        uniqueId: _supabase.auth.currentUser?.id ?? '',
+                        radius: 60,
+                      ),
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withAlpha(100),
+                      ),
+                      child: const Icon(
+                        Icons.add_a_photo_outlined,
+                        color: Colors.white,
+                        size: 36,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // Bio or Additional Settings
-              Container(
-                decoration: BoxDecoration(
-                  color: surfaceColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  children: [
-                    _buildTelegramTextField(
-                      controller: _phoneController,
-                      label: 'Номер телефона',
-                      textColor: textColor,
-                      hintColor: secondaryTextColor,
-                      keyboardType: TextInputType.phone,
-                    ),
-                    Divider(
-                      height: 1,
-                      color: isDark ? Colors.white10 : Colors.black12,
-                      indent: 16,
-                    ),
-                    _buildTelegramTextField(
-                      controller: TextEditingController(
-                        text: _role == 'client' ? 'Ученик' : _role,
-                      ),
-                      label: 'Роль',
-                      textColor: secondaryTextColor,
-                      hintColor: secondaryTextColor,
-                      readOnly: true,
-                    ),
-                  ],
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: TextButton.icon(
+                onPressed: _pickAvatar,
+                icon: const Icon(Icons.photo_camera, size: 18),
+                label: const Text('Сменить фото'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaryGold,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: 16,
-                  top: 8,
-                  bottom: 24,
-                  right: 16,
-                ),
-                child: Text(
-                  'Ваш номер телефона и роль внутри платформы CRM.',
-                  style: TextStyle(fontSize: 12, color: secondaryTextColor),
-                ),
-              ),
+            ),
+            const SizedBox(height: 32),
 
-              // Birthday
-              Container(
-                decoration: BoxDecoration(
-                  color: surfaceColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: ListTile(
-                  leading: const Icon(Icons.card_giftcard),
-                  title: const Text('День рождения'),
-                  subtitle: Text(
-                    _dobController.text.isEmpty
-                        ? 'Не указано'
-                        : _dobController.text,
+            // Info Section
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                children: [
+                  _buildTelegramTextField(
+                    controller: _firstNameController,
+                    label: 'Имя (обязательно)',
+                    textColor: textColor,
+                    hintColor: secondaryTextColor,
                   ),
-                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                  onTap: _selectDate,
-                ),
+                  Divider(
+                    height: 1,
+                    color: isDark ? Colors.white10 : Colors.black12,
+                    indent: 16,
+                  ),
+                  _buildTelegramTextField(
+                    controller: _lastNameController,
+                    label: 'Фамилия (необязательно)',
+                    textColor: textColor,
+                    hintColor: secondaryTextColor,
+                  ),
+                ],
               ),
-              const SizedBox(height: 48),
+            ),
+            const SizedBox(height: 24),
 
-              Container(
-                decoration: BoxDecoration(
-                  color: surfaceColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.description_outlined),
-                      title: const Text('Юридические документы'),
-                      subtitle: const Text(
-                        'Политика, соглашение и удаление данных',
-                      ),
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: Colors.grey,
-                      ),
-                      onTap: () => context.push('/legal-documents'),
-                    ),
-                    Divider(
-                      height: 1,
-                      color: isDark ? Colors.white10 : Colors.black12,
-                      indent: 16,
-                    ),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.delete_forever_outlined,
-                        color: AppTheme.danger,
-                      ),
-                      title: const Text(
-                        'Удалить аккаунт',
-                        style: TextStyle(color: AppTheme.danger),
-                      ),
-                      subtitle: const Text('Отправить запрос на удаление'),
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: Colors.grey,
-                      ),
-                      onTap: () => context.push('/delete-account'),
-                    ),
-                  ],
-                ),
+            // Bio or Additional Settings
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(16),
               ),
-            ],
-          ),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                children: [
+                  _buildTelegramTextField(
+                    controller: _phoneController,
+                    label: 'Номер телефона',
+                    textColor: textColor,
+                    hintColor: secondaryTextColor,
+                    keyboardType: TextInputType.phone,
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark ? Colors.white10 : Colors.black12,
+                    indent: 16,
+                  ),
+                  _buildTelegramTextField(
+                    controller: TextEditingController(
+                      text: _role == 'client' ? 'Ученик' : _role,
+                    ),
+                    label: 'Роль',
+                    textColor: secondaryTextColor,
+                    hintColor: secondaryTextColor,
+                    readOnly: true,
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(
+                left: 16,
+                top: 8,
+                bottom: 24,
+                right: 16,
+              ),
+              child: Text(
+                'Ваш номер телефона и роль внутри платформы CRM.',
+                style: TextStyle(fontSize: 12, color: secondaryTextColor),
+              ),
+            ),
+
+            // Birthday
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.card_giftcard),
+                title: const Text('День рождения'),
+                subtitle: Text(
+                  _dobController.text.isEmpty
+                      ? 'Не указано'
+                      : _dobController.text,
+                ),
+                trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                onTap: _selectDate,
+              ),
+            ),
+            const SizedBox(height: 48),
+
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.description_outlined),
+                    title: const Text('Юридические документы'),
+                    subtitle: const Text(
+                      'Политика, соглашение и удаление данных',
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey,
+                    ),
+                    onTap: () => context.push('/legal-documents'),
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark ? Colors.white10 : Colors.black12,
+                    indent: 16,
+                  ),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.delete_forever_outlined,
+                      color: AppTheme.danger,
+                    ),
+                    title: const Text(
+                      'Удалить аккаунт',
+                      style: TextStyle(color: AppTheme.danger),
+                    ),
+                    subtitle: const Text('Отправить запрос на удаление'),
+                    trailing: const Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey,
+                    ),
+                    onTap: () => context.push('/delete-account'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

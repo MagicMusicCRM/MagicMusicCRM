@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class StudentDetailScreen extends StatefulWidget {
+class StudentDetailScreen extends ConsumerStatefulWidget {
   final String studentId;
   const StudentDetailScreen({super.key, required this.studentId});
 
   @override
-  State<StudentDetailScreen> createState() => _StudentDetailScreenState();
+  ConsumerState<StudentDetailScreen> createState() =>
+      _StudentDetailScreenState();
 }
 
-class _StudentDetailScreenState extends State<StudentDetailScreen> {
+class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   final _supabase = Supabase.instance.client;
   Map<String, dynamic>? _student;
   Map<String, dynamic>? _balance;
@@ -172,6 +176,34 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                 ),
             ],
           ),
+          actions: [
+            if (_student != null && _student!['profiles'] != null)
+              IconButton(
+                icon: const Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  color: AppTheme.primaryPurple,
+                ),
+                tooltip: 'Перейти в чат',
+                onPressed: () {
+                  // Set the navigation target
+                  ref
+                      .read(messengerNavigationProvider.notifier)
+                      .navigateTo(
+                        MessengerNavigationState(
+                          partnerId: _student!['profiles']['id'],
+                        ),
+                      );
+
+                  // Navigate back to the dashboard where MessengerScreen is hosted
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    // Fallback to dashboard if we can't pop
+                    context.go('/');
+                  }
+                },
+              ),
+          ],
           bottom: TabBar(
             isScrollable: true,
             labelColor: AppTheme.primaryPurple,
@@ -471,11 +503,10 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
             .eq('id', widget.studentId);
         _loadAllData();
       } catch (e) {
-        if (mounted) {
+        if (mounted)
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
-        }
       }
     }
   }
@@ -509,7 +540,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         child: Text(
           'Оплат не найдено',
           style: TextStyle(
-            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       );
@@ -539,7 +570,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
               p['description'] ?? '',
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -554,7 +585,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         child: Text(
           'Занятий не найдено',
           style: TextStyle(
-            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       );
@@ -623,7 +654,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         child: Text(
           'Инвойсов не найдено',
           style: TextStyle(
-            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       );
@@ -764,7 +795,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         child: Text(
           'История пуста',
           style: TextStyle(
-            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       );
@@ -833,7 +864,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                       dateStr,
                       style: TextStyle(
                         fontSize: 11,
-                        color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -849,7 +880,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                     data['description'],
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -873,7 +904,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         child: Text(
           'Заметок об успехах ещё нет',
           style: TextStyle(
-            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       );
@@ -917,7 +948,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                       dateStr,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const Spacer(),
@@ -926,7 +957,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                       style: TextStyle(
                         fontSize: 11,
                         fontStyle: FontStyle.italic,
-                        color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -969,7 +1000,7 @@ class _InfoRow extends StatelessWidget {
             Icon(
               icon,
               size: 18,
-              color: Theme.of(context!).colorScheme.onSurfaceVariant,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             SizedBox(width: 12),
             Expanded(
@@ -979,7 +1010,7 @@ class _InfoRow extends StatelessWidget {
                   Text(
                     label,
                     style: TextStyle(
-                      color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 11,
                     ),
                   ),

@@ -7,6 +7,8 @@ import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/avatar_cropper_dialog.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:magic_music_crm/core/services/supa_settings_service.dart';
+import 'package:magic_music_crm/core/services/supa_messenger_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 
@@ -16,6 +18,9 @@ class ChatInfoDialog extends ConsumerStatefulWidget {
   final String userRole; // current user role
   final VoidCallback? onClose;
   final VoidCallback? onUpdate;
+  final VoidCallback? onSearch;
+  final Function(bool isMuted)? onMute;
+  final Function(Map<String, dynamic> chat)? onNavigateToChat;
 
   const ChatInfoDialog({
     super.key,
@@ -24,6 +29,9 @@ class ChatInfoDialog extends ConsumerStatefulWidget {
     required this.userRole,
     this.onClose,
     this.onUpdate,
+    this.onSearch,
+    this.onMute,
+    this.onNavigateToChat,
   });
 
   @override
@@ -37,6 +45,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
   bool _isLoading = true;
   Map<String, dynamic>? _data;
   List<Map<String, dynamic>> _members = [];
+  bool _isMuted = false;
 
   // History parsing
   final List<Map<String, dynamic>> _mediaMessages = [];
@@ -45,6 +54,9 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
   final List<Map<String, dynamic>> _notes = [];
 
   bool get _canEdit {
+    if (widget.chatId == 'admin_chat') {
+      return widget.userRole == 'admin' || widget.userRole == 'manager';
+    }
     if (widget.chatType == 'direct') return false;
     return widget.userRole == 'admin' || widget.userRole == 'manager';
   }
@@ -73,7 +85,13 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      if (widget.chatType == 'direct') {
+      if (widget.chatId == 'admin_chat') {
+        final avatarUrl = await SupaSettingsService.getAdminChatAvatar();
+        _data = {
+          'name': 'Администрация (Чат с клиентами)',
+          'avatar_url': avatarUrl,
+        };
+      } else if (widget.chatType == 'direct') {
         final res = await _supabase.from('profiles').select().eq('id', widget.chatId).maybeSingle();
         _data = res;
       } else if (widget.chatType == 'group') {
@@ -88,6 +106,9 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
         await _loadNotes();
       }
       await _loadHistory();
+      
+      // Load mute preference
+      _isMuted = await SupaMessengerService.isChatMuted(widget.chatId);
     } catch (e) {
       debugPrint('Error loading chat info: $e');
     } finally {
@@ -106,20 +127,43 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
 
   Future<void> _loadHistory() async {
     try {
-      if (widget.chatType == 'group') {
-        final res = await _supabase.from('messages').select().eq('group_chat_id', widget.chatId).order('created_at', ascending: false);
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      if (widget.chatId == 'admin_chat') {
+        // Client viewing Administration chat history
+        final res = await _supabase
+            .from('messages')
+            .select()
+            .or('sender_id.eq.$userId,receiver_id.eq.$userId')
+            .filter('group_chat_id', 'is', 'null')
+            .order('created_at', ascending: false)
+            .timeout(const Duration(seconds: 15));
+        _parseHistory(res);
+      } else if (widget.chatType == 'group') {
+        final res = await _supabase.from('messages')
+            .select()
+            .eq('group_chat_id', widget.chatId)
+            .order('created_at', ascending: false)
+            .timeout(const Duration(seconds: 15));
         _parseHistory(res);
       } else if (widget.chatType == 'channel') {
-        final res = await _supabase.from('channel_posts').select().eq('channel_id', widget.chatId).order('created_at', ascending: false);
+        final res = await _supabase.from('channel_posts')
+            .select()
+            .eq('channel_id', widget.chatId)
+            .order('created_at', ascending: false)
+            .timeout(const Duration(seconds: 15));
         _parseHistory(res);
       } else if (widget.chatType == 'direct') {
-        final userId = _supabase.auth.currentUser?.id;
-        if (userId != null) {
-          final res = await _supabase.from('messages').select()
-              .or('and(sender_id.eq.$userId,receiver_id.eq.${widget.chatId}),and(sender_id.eq.${widget.chatId},receiver_id.eq.$userId)')
-              .order('created_at', ascending: false);
-          _parseHistory(res);
-        }
+        // Staff viewing client OR direct chat between users
+        // Fetch ALL messages involving this target user
+        final res = await _supabase.from('messages')
+            .select()
+            .or('sender_id.eq.${widget.chatId},receiver_id.eq.${widget.chatId}')
+            .filter('group_chat_id', 'is', 'null')
+            .order('created_at', ascending: false)
+            .timeout(const Duration(seconds: 15));
+        _parseHistory(res);
       }
     } catch(e) {
       debugPrint('Error loading history: $e');
@@ -131,25 +175,39 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
     final List<Map<String, dynamic>> messages = List<Map<String, dynamic>>.from(res);
     final linkRegExp = RegExp(r'(https?:\/\/[^\s]+)');
     
+    _mediaMessages.clear();
+    _fileMessages.clear();
+    _linkMessages.clear();
+
     for (final m in messages) {
-      final type = m['message_type']?.toString();
+      final type = m['message_type']?.toString().toLowerCase();
       final content = m['content']?.toString() ?? '';
-      
-      if (type == 'file') {
-        final ext = ((m['attachment_name']?.toString() ?? '').toLowerCase());
-        if (ext.endsWith('.jpg') || ext.endsWith('.png') || ext.endsWith('.jpeg') || ext.endsWith('.webp')) {
-          _mediaMessages.add(m);
-        } else {
-          _fileMessages.add(m);
-        }
-      }
-      
+      final attachmentUrl = m['attachment_url']?.toString();
+      final attachmentName = m['attachment_name']?.toString() ?? '';
+
+      // 1. Link detection (from text content)
       final links = linkRegExp.allMatches(content);
       for (final match in links) {
-        _linkMessages.add({
-          'link': match.group(0),
-          'message': m,
-        });
+        final link = match.group(0);
+        if (link != null) {
+          _linkMessages.add({
+            'link': link,
+            'message': m,
+          });
+        }
+      }
+
+      // 2. Attachment detection
+      if (attachmentUrl != null && attachmentUrl.isNotEmpty) {
+        final isImage = type == 'image' || type == 'photo' || 
+                        ['.jpg', '.jpeg', '.png', '.webp', '.gif'].any((ext) => attachmentName.toLowerCase().endsWith(ext));
+        
+        if (isImage) {
+          _mediaMessages.add(m);
+        } else if (type != 'voice') {
+          // Categorize everything else except voice as files
+          _fileMessages.add(m);
+        }
       }
     }
   }
@@ -230,17 +288,22 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
         fileName: ex,
       );
 
-      final table = widget.chatType == 'group' ? 'group_chats' : 'channels';
-      
       if (_data?['avatar_url'] != null) {
         await ChatAttachmentService.deleteAvatar(_data!['avatar_url']);
       }
-
-      await _supabase.from(table).update({'avatar_url': url}).eq('id', widget.chatId);
+      
+      if (widget.chatId == 'admin_chat') {
+        await SupaSettingsService.updateAdminChatAvatar(url);
+      } else {
+        final table = widget.chatType == 'group' ? 'group_chats' : 'channels';
+        await _supabase.from(table).update({'avatar_url': url}).eq('id', widget.chatId);
+      }
 
       _data?['avatar_url'] = url;
 
-      if (widget.chatType == 'group') {
+      if (widget.chatId == 'admin_chat') {
+        // No specific provider to invalidate
+      } else if (widget.chatType == 'group') {
         ref.invalidate(userGroupChatsProvider);
       } else {
         ref.invalidate(channelsProvider);
@@ -365,7 +428,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
         return ListTile(
           leading: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: TelegramColors.accentBlue.withAlpha(40), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: TelegramColors.accentBlue.withValues(alpha: 40 / 255), borderRadius: BorderRadius.circular(8)),
             child: Icon(Icons.insert_drive_file, color: TelegramColors.accentBlue),
           ),
           title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -393,7 +456,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
         return ListTile(
           leading: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: TelegramColors.accentBlue.withAlpha(40), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: TelegramColors.accentBlue.withValues(alpha: 40 / 255), shape: BoxShape.circle),
             child: Icon(Icons.link, color: TelegramColors.accentBlue),
           ),
           title: Text(link, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: TelegramColors.accentBlue)),
@@ -432,7 +495,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
       subtitle = 'Телефон: ${_data?['phone'] ?? 'Нет номера'}';
     } else {
       name = _data?['name'] ?? 'Без названия';
-      subtitle = '${_members.length > 0 ? '${_members.length} участников' : 'Канал'}';
+      subtitle = _members.isNotEmpty ? '${_members.length} участников' : 'Канал';
       description = _data?['description'] ?? 'Нет описания';
     }
 
@@ -476,7 +539,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
                                 height: 100,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: Colors.black.withOpacity(0.4),
+                                  color: Colors.black.withValues(alpha: 0.4),
                                 ),
                                 child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 30),
                               ),
@@ -496,7 +559,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(subtitle!, style: TextStyle(color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary, fontSize: 13)),
+                      Text(subtitle ?? '', style: TextStyle(color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -516,11 +579,49 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _buildActionButton(Icons.chat_bubble_outline, 'Чат', isDark),
-                            _buildActionButton(Icons.notifications_none, 'Заглушить', isDark),
-                            _buildActionButton(Icons.search, 'Поиск', isDark),
+                            _buildActionButton(
+                              Icons.chat_bubble_outline, 
+                              'Чат', 
+                              isDark,
+                              onTap: () {
+                                if (widget.onNavigateToChat != null && _data != null) {
+                                  // Map _data back to a chat item format expected by _selectChat
+                                  final chatItem = {
+                                    'id': widget.chatId == 'admin_chat' ? 'admin_chat' : widget.chatId,
+                                    '_item_type': widget.chatType,
+                                    'display_name': name,
+                                    '_display_name': name,
+                                    'avatar_url': avatarUrl,
+                                    '_avatar_url': avatarUrl,
+                                    '_partner_id': widget.chatType == 'direct' ? widget.chatId : null,
+                                  };
+                                  widget.onNavigateToChat!(chatItem);
+                                  if (Navigator.canPop(context)) Navigator.pop(context);
+                                } else if (widget.onClose != null) {
+                                  widget.onClose!();
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 32),
+                            _buildActionButton(
+                              _isMuted ? Icons.notifications_off_outlined : Icons.notifications_none, 
+                              _isMuted ? 'Включить' : 'Заглушить', 
+                              isDark,
+                              onTap: () async {
+                                final newMuted = !_isMuted;
+                                setState(() {
+                                  _isMuted = newMuted;
+                                });
+                                await SupaMessengerService.setChatMuteStatus(
+                                  chatId: widget.chatId,
+                                  chatType: widget.chatType,
+                                  isMuted: newMuted,
+                                );
+                                if (widget.onMute != null) widget.onMute!(newMuted);
+                              },
+                            ),
                           ],
                         ),
                       ),
@@ -589,22 +690,29 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, bool isDark) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: isDark ? TelegramColors.darkSurface : TelegramColors.lightSurface,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Icon(icon, color: isDark ? Colors.white : Colors.black),
+  Widget _buildActionButton(IconData icon, String label, bool isDark, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: isDark ? TelegramColors.darkSurface : TelegramColors.lightSurface,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: isDark ? Colors.white : Colors.black),
+            ),
+            const SizedBox(height: 8),
+            Text(label, style: TextStyle(fontSize: 12, color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary)),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(label, style: TextStyle(fontSize: 12, color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary)),
-      ],
+      ),
     );
   }
 
@@ -653,7 +761,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog> with SingleTick
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+              color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(

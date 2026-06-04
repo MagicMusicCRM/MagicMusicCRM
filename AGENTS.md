@@ -76,10 +76,13 @@
 - **Последняя версия архитектуры**: `.anws/v2` (Publication Readiness)
 - **Активный список задач**: `.anws/v2/05_TASKS.md`
 - **Количество задач к выполнению**: 0
-- **Последнее обновление**: `2026-05-30`
+- **Последнее обновление**: `2026-06-05`
 
 ### 🌊 Wave 2 — Backend Security / Auth-Legal / Messaging
-_Текущая фаза: Release candidate for Google Play готов. Supabase hardening применен, Google OAuth включен, onboarding/legal/account deletion реализованы, `Администрация` и `Объявления` реализованы, Vercel legal URL опубликован, Android AAB собран: `build/app/outputs/bundle/release/app-release.aab`. Analyzer hard errors отсутствуют, 158 legacy warning/info issues остаются._
+_Текущая фаза: Release-readiness изменения объединяются поверх GitHub `origin/main` v1.1.1. Supabase hardening применен, Google OAuth переведен на canonical Supabase host, onboarding/legal/account deletion реализованы, `Администрация` и `Объявления` реализованы, Vercel legal URL опубликован. Перед новой AAB-сборкой требуется ПК smoke-test._
+
+### 🌊 Wave 6/7 — Messenger UX & Functional Completeness
+_Из GitHub v1.1.1 сохранены исправления мессенджера: RLS recursion fix, поиск, пересылка, waveform-визуализация, закрепленные сообщения, атрибуция пересылки и real-time stability._
 
 ### Технологические решения
 - Язык/фреймворк: Dart + Flutter.

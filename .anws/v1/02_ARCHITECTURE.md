@@ -1,8 +1,8 @@
 # 02_ARCHITECTURE — MagicMusic CRM
 
 **Status**: Baseline (Updated from v1.0.17)
-**Last Verified**: 2026-04-03
-**Source**: 52 Dart files + SQL migrations analysis
+**Last Verified**: 2026-04-15
+**Source**: 58 Dart files + SQL migrations analysis (April Updates)
 
 ## 1. High-Level Technology Stack
 - **Frontend**: Flutter ^3.11.1 (Multi-target: Windows/Android/iOS)
@@ -28,7 +28,7 @@ Core tables and relationships:
 - **Entities**: `students`, `teachers`, `groups`, `leads`.
 - **Relationships**: `group_students` (many-to-many students/groups).
 - **Operations**: `lessons` (schedule), `tasks` (manager assignments), `entity_comments`.
-- **Communication**: `messages` (chat system), `group_chats` (metadata: `first_responder_id`, `responded_at`).
+- **Communication**: `messages` (updated with `forwarded_from_id` and `pinned_at`), `group_chats` (metadata: `first_responder_id`, `responded_at`).
 - **Internal Collaboration**: `profile_notes` (для заметок администраторов/менеджеров о клиентах).
 - **Integrations**: `hollihop_id` fields for external system mapping.
 

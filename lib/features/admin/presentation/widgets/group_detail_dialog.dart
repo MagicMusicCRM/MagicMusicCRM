@@ -129,12 +129,12 @@ class _GroupDetailDialogState extends State<GroupDetailDialog> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Состав группы:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                      Text('Состав группы:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       SizedBox(height: 8),
                       if (_groupStudents.isEmpty)
                         Padding(
                           padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Center(child: Text('Нет учеников', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant))),
+                          child: Center(child: Text('Нет учеников', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
                         )
                       else
                         ..._groupStudents.map((item) {
@@ -175,7 +175,7 @@ class _GroupDetailDialogState extends State<GroupDetailDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Закрыть', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+          child: Text('Закрыть', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ),
       ],
     );

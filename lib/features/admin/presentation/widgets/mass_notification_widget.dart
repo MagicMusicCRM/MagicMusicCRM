@@ -63,7 +63,7 @@ class _MassNotificationWidgetState extends State<MassNotificationWidget> {
           Text('Получатели:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            value: _selectedAudience,
+            initialValue: _selectedAudience,
             decoration: const InputDecoration(prefixIcon: Icon(Icons.group_rounded)),
             items: _audiences.map((aud) => DropdownMenuItem(value: aud, child: Text(aud))).toList(),
             onChanged: (val) { if (val != null) setState(() => _selectedAudience = val); },

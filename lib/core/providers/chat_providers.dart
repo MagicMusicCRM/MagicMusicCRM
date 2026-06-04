@@ -25,6 +25,24 @@ final currentRoleProvider = FutureProvider<String>((ref) async {
   return (profile?['role'] as String?) ?? 'client';
 });
 
+class MessengerNavigationState {
+  final String? partnerId;
+  final String? groupChatId;
+  const MessengerNavigationState({this.partnerId, this.groupChatId});
+}
+
+class MessengerNavigationNotifier extends Notifier<MessengerNavigationState?> {
+  @override
+  MessengerNavigationState? build() => null;
+  void navigateTo(MessengerNavigationState? newState) => state = newState;
+  void clear() => state = null;
+}
+
+final messengerNavigationProvider =
+    NotifierProvider<MessengerNavigationNotifier, MessengerNavigationState?>(
+      MessengerNavigationNotifier.new,
+    );
+
 /// List of admin and manager profile IDs (for deciding what counts as an "Administration" message).
 final adminIdsProvider = FutureProvider<List<String>>((ref) async {
   final res = await _supabase.from('profiles').select('id').inFilter('role', [
@@ -55,40 +73,49 @@ final clientConversationsProvider = StreamProvider<List<Map<String, dynamic>>>((
       .order('first_name');
 
   await for (final clients in profilesStream) {
-    final enriched = <Map<String, dynamic>>[];
-    for (final client in clients) {
-      final cid = client['id'] as String;
-      // Get last message between this client and any admin/school
-      final lastMsg = await _supabase
-          .from('messages')
-          .select()
-          .or('sender_id.eq.$cid,receiver_id.eq.$cid')
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
+    final enriched = await Future.wait(
+      clients.map((client) async {
+        final cid = client['id'] as String;
+        // Get last message and unread count in parallel for each client
+        final results = await Future.wait([
+          _supabase
+                  .from('messages')
+                  .select()
+                  .or('sender_id.eq.$cid,receiver_id.eq.$cid')
+                  .filter('group_chat_id', 'is', 'null')
+                  .order('created_at', ascending: false)
+                  .limit(1)
+                  .maybeSingle()
+              as Future<dynamic>,
+          _supabase
+                  .from('messages')
+                  .select('id')
+                  .eq('sender_id', cid)
+                  .eq('is_read', false)
+                  .filter('group_chat_id', 'is', 'null')
+                  .or('receiver_id.is.null,receiver_id.eq.$userId')
+              as Future<dynamic>,
+        ]);
 
-      // Get unread count for this client
-      final unreadRes = await _supabase
-          .from('messages')
-          .select('id')
-          .eq('sender_id', cid)
-          .eq('is_read', false)
-          .or('receiver_id.is.null,receiver_id.eq.$userId');
+        final lastMsg = results[0] as Map<String, dynamic>?;
+        final unread = (results[1] as List).length;
 
-      final unread = (unreadRes as List).length;
+        if (lastMsg != null || unread > 0) {
+          return {
+            ...client,
+            '_last_message': lastMsg,
+            '_unread_count': unread,
+            '_last_message_time': lastMsg?['created_at'],
+          };
+        }
+        return <String, dynamic>{};
+      }),
+    );
 
-      if (lastMsg != null || unread > 0) {
-        enriched.add({
-          ...client,
-          '_last_message': lastMsg,
-          '_unread_count': unread,
-          '_last_message_time': lastMsg?['created_at'],
-        });
-      }
-    }
+    final filteredEnriched = enriched.where((e) => e.isNotEmpty).toList();
 
     // Sort by last message time
-    enriched.sort((a, b) {
+    filteredEnriched.sort((a, b) {
       final aTime = a['_last_message_time'] as String?;
       final bTime = b['_last_message_time'] as String?;
       if (aTime == null && bTime == null) return 0;
@@ -97,7 +124,7 @@ final clientConversationsProvider = StreamProvider<List<Map<String, dynamic>>>((
       return bTime.compareTo(aTime);
     });
 
-    yield enriched;
+    yield filteredEnriched;
   }
 });
 
@@ -115,21 +142,32 @@ final conversationMessagesProvider =
       var query = _supabase.from('messages').stream(primaryKey: ['id']);
 
       if (partnerId == null) {
-        // School inbox or a general thread where receiver_id is null
-        // We filter by receiver_id is null and group_chat_id is null.
-        // Note: .stream() filter capabilities are limited, so we do basic filtering here.
+        // School inbox (Administration)
         return query
-            .eq(
-              'group_chat_id',
-              'null',
-            ) // This might not work as expected in .stream()
-            .order('created_at');
+            .order('created_at', ascending: true)
+            .map(
+              (messages) => messages
+                  .where(
+                    (m) =>
+                        m['group_chat_id'] == null && m['receiver_id'] == null,
+                  )
+                  .toList(),
+            );
       }
 
-      // For direct chats, we ideally want (sender=me AND receiver=partner) OR (sender=partner AND receiver=me)
-      // Since .stream() only supports simple .eq() filters, we'll return messages where
-      // either sender or receiver is the partner, and let RLS/Flutter handle the rest.
-      return query.order('created_at');
+      // Direct chat with partner
+      return query
+          .order('created_at', ascending: true)
+          .map(
+            (messages) => messages.where((m) {
+              final gid = m['group_chat_id'];
+              if (gid != null) return false;
+              final senderId = m['sender_id'];
+              final receiverId = m['receiver_id'];
+              return (senderId == userId && receiverId == partnerId) ||
+                  (senderId == partnerId && receiverId == userId);
+            }).toList(),
+          );
     });
 
 // ── Group chats ──────────────────────────────────────────────────────────────
@@ -167,26 +205,29 @@ final userGroupChatsProvider = StreamProvider<List<Map<String, dynamic>>>((
         .inFilter('id', groupIds)
         .order('created_at', ascending: false);
 
-    // Enrich with last message
-    final enriched = <Map<String, dynamic>>[];
-    for (final group in groups) {
-      final gid = group['id'] as String;
-      final lastMsg = await _supabase
-          .from('messages')
-          .select()
-          .eq('group_chat_id', gid)
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
+    // Enrich with last message in parallel
+    final enriched = await Future.wait(
+      groups.map((group) async {
+        final gid = group['id'] as String;
+        final lastMsg = await _supabase
+            .from('messages')
+            .select()
+            .eq('group_chat_id', gid)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
 
-      enriched.add({
-        ...group,
-        '_last_message': lastMsg,
-        '_last_message_time': lastMsg?['created_at'],
-        '_type': 'group',
-      });
-    }
-    yield enriched;
+        return {
+          ...group,
+          '_last_message': lastMsg,
+          '_last_message_time': lastMsg?['created_at'],
+          '_type': 'group',
+        };
+      }),
+    );
+
+    // Explicitly cast to List<Map<String, dynamic>> to avoid dynamic typing errors
+    yield List<Map<String, dynamic>>.from(enriched);
   }
 });
 
@@ -200,13 +241,14 @@ final chatPresenceProvider = StreamProvider.family<List<String>, String>((
 ) async* {
   final profile = await ref.watch(currentProfileProvider.future);
   if (profile == null ||
-      (profile['role'] != 'admin' && profile['role'] != 'manager')) {
+      (profile['role'].toString() != 'admin' &&
+          profile['role'].toString() != 'manager')) {
     yield [];
     return;
   }
 
   final channel = _supabase.channel('chat_presence:$chatId');
-  final name = '${profile['first_name']} ${profile['last_name']}';
+  final name = '${profile['first_name']} ${profile['last_name']}'.trim();
 
   // Join Presence
   channel.subscribe((status, [error]) {
@@ -215,6 +257,7 @@ final chatPresenceProvider = StreamProvider.family<List<String>, String>((
         'user_id': profile['id'],
         'name': name,
         'role': profile['role'],
+        'online_at': DateTime.now().toIso8601String(),
       });
     }
   });

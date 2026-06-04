@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
+import 'package:magic_music_crm/core/services/supa_message_service.dart';
 import 'package:magic_music_crm/core/widgets/voice_recorder_widget.dart';
 import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
 import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
@@ -178,24 +179,38 @@ class _ChatWidgetState extends State<ChatWidget> {
   Future<void> _markAsRead(List<Map<String, dynamic>> messages) async {
     final unreadIds = messages.where((m) {
       final isToMe = m['receiver_id'] == widget.currentUserId;
+      final senderId = m['sender_id']?.toString();
+      
       final isFromActive = _selectedReceiverId == null 
-          ? (m['sender_id'] == null || _adminIds.contains(m['sender_id']))
-          : m['sender_id'] == _selectedReceiverId;
+          ? (senderId == null || _adminIds.contains(senderId))
+          : senderId == _selectedReceiverId;
+          
       return isToMe && isFromActive && m['is_read'] == false;
     }).map((m) => m['id'] as String).toList();
 
     if (unreadIds.isNotEmpty) {
-      await _supabase
-          .from('messages')
-          .update({'is_read': true, 'read_at': DateTime.now().toIso8601String()})
-          .filter('id', 'in', unreadIds);
+      await SupaMessageService.markIdsAsRead(unreadIds);
           
       final senderKey = _selectedReceiverId ?? 'school';
       if (mounted) {
         setState(() {
           _unreadCounts[senderKey] = 0;
+          // Mark locally
+          for (final mid in unreadIds) {
+            final idx = _messages.indexWhere((msg) => msg['id'] == mid);
+            if (idx != -1) _messages[idx]['is_read'] = true;
+          }
         });
       }
+    }
+
+    // Also sync with DB for consistency
+    if (_selectedReceiverId != null) {
+      await SupaMessageService.markMessagesAsRead(
+        currentUserId: widget.currentUserId,
+        chatId: _selectedReceiverId!,
+        chatType: 'direct',
+      );
     }
   }
 
@@ -335,7 +350,7 @@ class _ChatWidgetState extends State<ChatWidget> {
   @override
   Widget build(BuildContext context) {
     if (_loading && _messages.isEmpty) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple));
+      return const Center(child: CircularProgressIndicator(color: AppTheme.primaryGold));
     }
 
     // Filter messages for current active chat
@@ -468,7 +483,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                     icon: _isSendingFile
                         ? const SizedBox(
                             width: 20, height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryPurple),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGold),
                           )
                         : Icon(Icons.attach_file_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     tooltip: 'Прикрепить файл',
@@ -496,7 +511,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                   // Mic button (when text field empty) or Send button
                   Container(
                     decoration: const BoxDecoration(
-                      color: AppTheme.primaryPurple,
+                      color: AppTheme.primaryGold,
                       shape: BoxShape.circle,
                     ),
                     child: _messageController.text.trim().isEmpty
@@ -559,20 +574,13 @@ class _MessageBubble extends StatelessWidget {
                 ? const EdgeInsets.all(4)
                 : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: isMe ? AppTheme.primaryPurple : Theme.of(context).colorScheme.surface,
+              color: isMe ? AppTheme.primaryGold : Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
                 bottomLeft: Radius.circular(isMe ? 16 : 4),
                 bottomRight: Radius.circular(isMe ? 4 : 16),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(20),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,

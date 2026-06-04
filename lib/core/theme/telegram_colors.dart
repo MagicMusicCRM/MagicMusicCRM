@@ -58,13 +58,17 @@ class TelegramColors {
 
   // ── Avatar Gradient Colors (deterministic by user ID) ──────────────────────
   static const List<List<Color>> avatarGradients = [
-    [Color(0xFFFF885E), Color(0xFFFF516A)], // Red-orange
-    [Color(0xFFFFCD6B), Color(0xFFFFA346)], // Amber
-    [brandGoldLight, brandGold], // Gold
-    [Color(0xFF5BCBE3), Color(0xFF3392CC)], // Cyan
-    [Color(0xFF82E37D), Color(0xFF2BAF49)], // Green
-    [Color(0xFFE47EDE), Color(0xFFBB60D9)], // Pink
-    [Color(0xFFFACC15), Color(0xFFCA8A04)], // Yellow
+    [Color(0xFFFF512F), Color(0xFFDD2476)], // Crimson / Pink
+    [Color(0xFF4568DC), Color(0xFFB06AB3)], // Indigo / Purple
+    [Color(0xFF00B4DB), Color(0xFF0083B0)], // Blue / Cyan
+    [Color(0xFF11998E), Color(0xFF38EF7D)], // Green / Teal
+    [Color(0xFFF09819), Color(0xFFEDDE5D)], // Orange / Yellow
+    [Color(0xFF8E2DE2), Color(0xFF4A00E0)], // Deep Purple
+    [Color(0xFFD31027), Color(0xFFEA384D)], // Red
+    [Color(0xFF000428), Color(0xFF004E92)], // Midnight Blue
+    [Color(0xFF833ab4), Color(0xFFfd1d1d)], // Instagram-like Red/Purple
+    [Color(0xFFf9d423), Color(0xFFff4e50)], // Sunset
+    [Color(0xFFC5A059), Color(0xFFBFA37E)], // Brand Gold (Last)
   ];
 
   /// Get a deterministic avatar gradient based on a string (user ID).

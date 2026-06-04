@@ -21,8 +21,20 @@ class ChatAttachmentService {
   }) async {
     final extension = _getExtension(originalFileName);
     final storagePath = '$senderId/${_uuid.v4()}$extension';
-    final mimeType =
-        lookupMimeType(originalFileName) ?? 'application/octet-stream';
+    var mimeType = lookupMimeType(originalFileName);
+    const blockedMimes = {
+      'text/html',
+      'text/xml',
+      'application/xhtml+xml',
+      'image/svg+xml',
+      'application/javascript',
+      'text/javascript',
+    };
+
+    if (mimeType != null && blockedMimes.contains(mimeType)) {
+      mimeType = 'application/octet-stream';
+    }
+    mimeType ??= 'application/octet-stream';
 
     await _supabase.storage
         .from(_bucketName)

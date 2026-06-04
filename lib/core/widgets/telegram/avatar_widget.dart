@@ -20,22 +20,40 @@ class TelegramAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (avatarUrl != null && avatarUrl!.isNotEmpty) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundImage: NetworkImage(avatarUrl!),
-      );
-    }
-
+    final hasUrl = avatarUrl != null && avatarUrl!.isNotEmpty;
     final id = uniqueId ?? name ?? 'default';
     final gradientColors = TelegramColors.avatarGradientFor(id);
     final initials = name != null ? TelegramColors.initialsFrom(name!) : '?';
 
+    Widget child;
+    if (hasUrl) {
+      child = Image.network(
+        avatarUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildInitials(gradientColors, initials),
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return _buildInitials(gradientColors, initials);
+        },
+      );
+    } else {
+      child = _buildInitials(gradientColors, initials);
+    }
+
     return Container(
       width: radius * 2,
       height: radius * 2,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+  }
+
+  Widget _buildInitials(List<Color> gradientColors, String initials) {
+    return Container(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -56,4 +74,5 @@ class TelegramAvatar extends StatelessWidget {
       ),
     );
   }
+
 }
