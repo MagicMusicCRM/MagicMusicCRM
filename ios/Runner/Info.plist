@@ -7,7 +7,18 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Magic Music Crm</string>
+	<string>Magic Music CRM</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>magiccrm-auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>magiccrm</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +26,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>magic_music_crm</string>
+	<string>Magic Music CRM</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -26,6 +37,14 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера используется для добавления фото профиля и материалов к сообщениям.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Микрофон используется для записи голосовых сообщений в чатах.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Фото и видео используются для выбора аватара и вложений в сообщениях.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Доступ к сохранению медиа используется только для выбранных пользователем файлов.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

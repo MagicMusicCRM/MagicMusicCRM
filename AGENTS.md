@@ -73,13 +73,34 @@
 
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
-- **Последняя версия архитектуры**: `.anws/v1` (v1.0.5)
-- **Активный список задач**: `Интеграция PUSH-уведомлений (T-NT.2)`
-- **Количество задач к выполнению**: 1
-- **Последнее обновление**: `2026-04-04`
+- **Последняя версия архитектуры**: `.anws/v2` (Publication Readiness)
+- **Активный список задач**: `.anws/v2/05_TASKS.md`
+- **Количество задач к выполнению**: 0
+- **Последнее обновление**: `2026-05-30`
 
-### 🌊 Wave 2 — Инструменты Коллаборации (Админ-панель)
-_Текущая фаза: Реализация инструментов взаимодействия, заметок и фикс диалогов (Завершена)_
+### 🌊 Wave 2 — Backend Security / Auth-Legal / Messaging
+_Текущая фаза: Release candidate for Google Play готов. Supabase hardening применен, Google OAuth включен, onboarding/legal/account deletion реализованы, `Администрация` и `Объявления` реализованы, Vercel legal URL опубликован, Android AAB собран: `build/app/outputs/bundle/release/app-release.aab`. Analyzer hard errors отсутствуют, 158 legacy warning/info issues остаются._
+
+### Технологические решения
+- Язык/фреймворк: Dart + Flutter.
+- Backend: Supabase Auth/Postgres/RLS/Storage/Edge Functions.
+- State: Riverpod.
+- Quality Gates: `flutter analyze`, `flutter test`, Supabase actor-matrix, Android/iOS release config checks.
+
+### Границы систем
+- **SYS-APP**: Flutter UI, routing, onboarding, messenger.
+- **SYS-DATA**: Supabase RLS, functions, views, role/profile security.
+- **SYS-MSG**: Personal `Администрация` chat and read-only `Объявления`.
+- **SYS-LEGAL**: Legal consent and account deletion flows.
+- **SYS-REL**: Android/iOS release gates and store compliance.
+
+### Активные ADR
+- ADR-001: Tech Stack and Release Quality Gates — keep Flutter/Supabase, add blocking gates.
+- ADR-002: Auth-First Onboarding and Server-Owned Roles — Google OAuth first, roles server-owned.
+- ADR-003: Messaging Model — personal `Администрация` plus read-only `Объявления`.
+- ADR-004: Legal Consent and Account Deletion — legal gate and deletion flow are required.
+- ADR-005: Supabase Security Hardening — critical/high Supabase findings block release.
+- ADR-006: Store Release Compliance — Android/iOS config and store disclosures block release.
 
 ---
 
@@ -91,6 +112,9 @@ _Текущая фаза: Реализация инструментов взаи
 lib/
 ├── core/              (Общие сервисы, провайдеры, роутер)
 └── features/          (Мобильные/ПК фичи по ролям)
+    ├── auth/          (Вход, Google OAuth, onboarding)
+    ├── profile/       (Профиль, legal, account deletion)
+    ├── messenger/     (Администрация, объявления, чаты)
     └── manager/       (Лиды, задачи, финансы)
 ```
 
@@ -100,9 +124,10 @@ lib/
 
 > **Примечание**: Поддерживается процессом `/genesis`.
 
-- **Обзор архитектуры**: `.anws/v1/02_ARCHITECTURE.md`
-- **ADR (Решения)**: `.anws/v1/03_ADR/` (Источник истины архитектурных решений)
-- **Задачи**: `.anws/v1/05_TASKS.md`
+- **Обзор архитектуры**: `.anws/v2/02_ARCHITECTURE_OVERVIEW.md`
+- **ADR (Решения)**: `.anws/v2/03_ADR/` (Источник истины архитектурных решений)
+- **Детальный дизайн**: `.anws/v2/04_SYSTEM_DESIGN/`
+- **Задачи**: `.anws/v2/05_TASKS.md`
 
 <!-- AUTO:END -->
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -21,16 +22,16 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _supabase = Supabase.instance.client;
-  
+
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _dobController = TextEditingController();
-  
+
   bool _isLoading = true;
   bool _isSaving = false;
   bool _hasChanges = false;
-  
+
   String? _email;
   String? _role;
 
@@ -48,7 +49,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void initState() {
     super.initState();
     _loadProfile();
-    
+
     _firstNameController.addListener(_checkForChanges);
     _lastNameController.addListener(_checkForChanges);
     _phoneController.addListener(_checkForChanges);
@@ -66,15 +67,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   void _checkForChanges() {
     if (_isLoading) return;
-    
+
     final fnChanges = _firstNameController.text.trim() != _ogFirstName;
     final lnChanges = _lastNameController.text.trim() != _ogLastName;
     final pChanges = _phoneController.text.trim() != _ogPhone;
     final dChanges = _dobController.text.trim() != _ogDob;
     final avatarChanges = _newAvatarBytes != null;
 
-    final hasChanges = fnChanges || lnChanges || pChanges || dChanges || avatarChanges;
-    
+    final hasChanges =
+        fnChanges || lnChanges || pChanges || dChanges || avatarChanges;
+
     if (hasChanges != _hasChanges) {
       setState(() => _hasChanges = hasChanges);
     }
@@ -87,8 +89,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (user == null) return;
 
       _email = user.email;
-      
-      final data = await _supabase.from('profiles').select().eq('id', user.id).single();
+
+      final data = await _supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .single();
 
       _ogFirstName = data['first_name'] ?? '';
       _ogLastName = data['last_name'] ?? '';
@@ -103,7 +109,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _dobController.text = _ogDob;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка загрузки: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка загрузки: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -122,10 +130,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _saveChanges() async {
     if (!_hasChanges) return;
-    
+
     // Validation
     if (_firstNameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Имя обязательно')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Имя обязательно')));
       return;
     }
 
@@ -140,7 +150,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (_newAvatarBytes != null) {
         updatedAvatarUrl = await ChatAttachmentService.uploadAvatar(
           bytes: _newAvatarBytes!,
-          fileName: 'profile_${user.id}_${DateTime.now().millisecondsSinceEpoch}.png',
+          fileName:
+              'profile_${user.id}_${DateTime.now().millisecondsSinceEpoch}.png',
         );
         // Clean up old avatar
         if (_ogAvatarUrl != null) {
@@ -149,13 +160,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
 
       // 2. Update DB
-      await _supabase.from('profiles').update({
-        'first_name': _firstNameController.text.trim(),
-        'last_name': _lastNameController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'dob': _dobController.text.trim().isEmpty ? null : _dobController.text.trim(),
-        if (_newAvatarBytes != null) 'avatar_url': updatedAvatarUrl,
-      }).eq('id', user.id);
+      await _supabase
+          .from('profiles')
+          .update({
+            'first_name': _firstNameController.text.trim(),
+            'last_name': _lastNameController.text.trim(),
+            'phone': _phoneController.text.trim(),
+            'dob': _dobController.text.trim().isEmpty
+                ? null
+                : _dobController.text.trim(),
+            if (_newAvatarBytes != null) 'avatar_url': updatedAvatarUrl,
+          })
+          .eq('id', user.id);
 
       // 3. Update local OG vars
       _ogFirstName = _firstNameController.text.trim();
@@ -164,7 +180,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _ogDob = _dobController.text.trim();
       _ogAvatarUrl = updatedAvatarUrl;
       _newAvatarBytes = null;
-      
+
       _checkForChanges();
 
       // 4. Invalidate global caches
@@ -172,10 +188,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ref.invalidate(allProfilesProvider);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Изменения сохранены', style: TextStyle(color: Colors.white)),
-          backgroundColor: Colors.green,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Изменения сохранены',
+              style: TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
 
       if (widget.onUpdate != null) {
@@ -183,7 +204,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e'), backgroundColor: AppTheme.danger));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка сохранения: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -198,7 +224,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       lastDate: DateTime.now(),
     );
     if (picked != null) {
-      final str = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      final str =
+          "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
       _dobController.text = str;
     }
   }
@@ -213,20 +240,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 600;
 
-    final backgroundColor = isDark ? TelegramColors.darkBg : TelegramColors.lightBg;
-    final surfaceColor = isDark ? TelegramColors.darkSurface : TelegramColors.lightSurface;
+    final backgroundColor = isDark
+        ? TelegramColors.darkBg
+        : TelegramColors.lightBg;
+    final surfaceColor = isDark
+        ? TelegramColors.darkSurface
+        : TelegramColors.lightSurface;
     final textColor = isDark ? Colors.white : Colors.black;
-    final secondaryTextColor = isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary;
+    final secondaryTextColor = isDark
+        ? TelegramColors.darkTextSecondary
+        : TelegramColors.lightTextSecondary;
 
-    final checkmarkIcon = _isSaving 
-        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+    final checkmarkIcon = _isSaving
+        ? const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 2,
+            ),
+          )
         : const Icon(Icons.check);
 
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        leading: widget.onBack != null 
-            ? IconButton(icon: const Icon(Icons.arrow_back), onPressed: widget.onBack)
+        leading: widget.onBack != null
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: widget.onBack,
+              )
             : null,
         title: const Text('Изменить профиль', style: TextStyle(fontSize: 18)),
         backgroundColor: surfaceColor,
@@ -238,16 +281,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onPressed: _isSaving ? null : _saveChanges,
               tooltip: 'Сохранить',
             ),
-          ]
+          ],
         ],
       ),
-      floatingActionButton: (isDesktop && _hasChanges) 
-        ? FloatingActionButton(
-            backgroundColor: TelegramColors.accentBlue,
-            onPressed: _isSaving ? null : _saveChanges,
-            child: checkmarkIcon,
-          )
-        : null,
+      floatingActionButton: (isDesktop && _hasChanges)
+          ? FloatingActionButton(
+              backgroundColor: TelegramColors.accentBlue,
+              onPressed: _isSaving ? null : _saveChanges,
+              child: checkmarkIcon,
+            )
+          : null,
       body: Center(
         child: SizedBox(
           width: isDesktop ? 500 : double.infinity,
@@ -268,7 +311,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         )
                       else
                         TelegramAvatar(
-                          name: _ogFirstName.isNotEmpty ? '$_ogFirstName $_ogLastName' : 'Имя',
+                          name: _ogFirstName.isNotEmpty
+                              ? '$_ogFirstName $_ogLastName'
+                              : 'Имя',
                           avatarUrl: _ogAvatarUrl,
                           uniqueId: _supabase.auth.currentUser?.id ?? '',
                           radius: 60,
@@ -280,7 +325,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           shape: BoxShape.circle,
                           color: Colors.black.withOpacity(0.4),
                         ),
-                        child: const Icon(Icons.add_a_photo_outlined, color: Colors.white, size: 36),
+                        child: const Icon(
+                          Icons.add_a_photo_outlined,
+                          color: Colors.white,
+                          size: 36,
+                        ),
                       ),
                     ],
                   ),
@@ -292,14 +341,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   onPressed: _pickAvatar,
                   icon: const Icon(Icons.photo_camera, size: 18),
                   label: const Text('Сменить фото'),
-                  style: TextButton.styleFrom(foregroundColor: TelegramColors.accentBlue),
+                  style: TextButton.styleFrom(
+                    foregroundColor: TelegramColors.accentBlue,
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
 
               // Info Section
               Container(
-                decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Column(
                   children: [
@@ -309,7 +363,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       textColor: textColor,
                       hintColor: secondaryTextColor,
                     ),
-                    Divider(height: 1, color: isDark ? Colors.white10 : Colors.black12, indent: 16),
+                    Divider(
+                      height: 1,
+                      color: isDark ? Colors.white10 : Colors.black12,
+                      indent: 16,
+                    ),
                     _buildTelegramTextField(
                       controller: _lastNameController,
                       label: 'Фамилия (необязательно)',
@@ -320,10 +378,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               // Bio or Additional Settings
               Container(
-                decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Column(
                   children: [
@@ -334,9 +395,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       hintColor: secondaryTextColor,
                       keyboardType: TextInputType.phone,
                     ),
-                    Divider(height: 1, color: isDark ? Colors.white10 : Colors.black12, indent: 16),
+                    Divider(
+                      height: 1,
+                      color: isDark ? Colors.white10 : Colors.black12,
+                      indent: 16,
+                    ),
                     _buildTelegramTextField(
-                      controller: TextEditingController(text: _role == 'client' ? 'Ученик' : _role),
+                      controller: TextEditingController(
+                        text: _role == 'client' ? 'Ученик' : _role,
+                      ),
                       label: 'Роль',
                       textColor: secondaryTextColor,
                       hintColor: secondaryTextColor,
@@ -346,7 +413,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(left: 16, top: 8, bottom: 24, right: 16),
+                padding: const EdgeInsets.only(
+                  left: 16,
+                  top: 8,
+                  bottom: 24,
+                  right: 16,
+                ),
                 child: Text(
                   'Ваш номер телефона и роль внутри платформы CRM.',
                   style: TextStyle(fontSize: 12, color: secondaryTextColor),
@@ -355,16 +427,67 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
               // Birthday
               Container(
-                decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: ListTile(
                   leading: const Icon(Icons.card_giftcard),
                   title: const Text('День рождения'),
-                  subtitle: Text(_dobController.text.isEmpty ? 'Не указано' : _dobController.text),
+                  subtitle: Text(
+                    _dobController.text.isEmpty
+                        ? 'Не указано'
+                        : _dobController.text,
+                  ),
                   trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: _selectDate,
                 ),
               ),
               const SizedBox(height: 48),
+
+              Container(
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.description_outlined),
+                      title: const Text('Юридические документы'),
+                      subtitle: const Text(
+                        'Политика, соглашение и удаление данных',
+                      ),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: Colors.grey,
+                      ),
+                      onTap: () => context.push('/legal-documents'),
+                    ),
+                    Divider(
+                      height: 1,
+                      color: isDark ? Colors.white10 : Colors.black12,
+                      indent: 16,
+                    ),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.delete_forever_outlined,
+                        color: AppTheme.danger,
+                      ),
+                      title: const Text(
+                        'Удалить аккаунт',
+                        style: TextStyle(color: AppTheme.danger),
+                      ),
+                      subtitle: const Text('Отправить запрос на удаление'),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: Colors.grey,
+                      ),
+                      onTap: () => context.push('/delete-account'),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),

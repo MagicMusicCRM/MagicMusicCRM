@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -25,19 +27,14 @@ Future<void> main() async {
     debugPrint('Firebase initialized successfully');
   } catch (e) {
     debugPrint('Firebase initialization skipped: $e');
-    debugPrint('Tip: Run "flutterfire configure" to enable push notifications.');
+    debugPrint(
+      'Tip: Run "flutterfire configure" to enable push notifications.',
+    );
   }
 
-  await Supabase.initialize(
-    url: Env.supabaseUrl,
-    anonKey: Env.supabaseAnonKey,
-  );
+  await Supabase.initialize(url: Env.supabaseUrl, anonKey: Env.supabaseAnonKey);
 
-  runApp(
-    const ProviderScope(
-      child: MagicMusicApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: MagicMusicApp()));
 }
 
 class MagicMusicApp extends ConsumerStatefulWidget {
@@ -47,14 +44,17 @@ class MagicMusicApp extends ConsumerStatefulWidget {
   ConsumerState<MagicMusicApp> createState() => _MagicMusicAppState();
 }
 
-class _MagicMusicAppState extends ConsumerState<MagicMusicApp> with WidgetsBindingObserver {
+class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _initDeepLinks();
-      ref.read(notificationServiceProvider).setupNotifications().catchError((e) {
+      ref.read(notificationServiceProvider).setupNotifications().catchError((
+        e,
+      ) {
         debugPrint('Notification service init error: $e');
       });
     });
@@ -62,22 +62,29 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp> with WidgetsBindi
 
   void _initDeepLinks() {
     final appLinks = AppLinks();
-    
+
     // Handle initial link (if the app was started by a link)
     appLinks.getInitialLink().then((uri) {
-      if (uri != null) _handleAuthLink(uri);
+      if (uri != null) unawaited(_handleAuthLink(uri));
     });
 
     // Handle subsequent links (if the app is already running)
     appLinks.uriLinkStream.listen((uri) {
-      _handleAuthLink(uri);
+      unawaited(_handleAuthLink(uri));
     });
   }
 
-  void _handleAuthLink(Uri uri) {
-    debugPrint('Received deep link: $uri');
-    if (uri.scheme == 'magiccrm') {
-      Supabase.instance.client.auth.getSessionFromUrl(uri);
+  Future<void> _handleAuthLink(Uri uri) async {
+    if (uri.scheme != 'magiccrm' || uri.host != 'auth-callback') {
+      debugPrint('Ignored auth deep link with unexpected origin.');
+      return;
+    }
+
+    try {
+      await Supabase.instance.client.auth.getSessionFromUrl(uri);
+      debugPrint('Auth deep link processed.');
+    } catch (e) {
+      debugPrint('Auth deep link processing failed.');
     }
   }
 
@@ -105,10 +112,7 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp> with WidgetsBindi
         GlobalCupertinoLocalizations.delegate,
         SfGlobalLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('ru'),
-        Locale('en'),
-      ],
+      supportedLocales: const [Locale('ru'), Locale('en')],
       locale: const Locale('ru'),
     );
   }

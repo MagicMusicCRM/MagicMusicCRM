@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class StudentDetailScreen extends StatefulWidget {
   final String studentId;
@@ -38,7 +39,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
           .select('*, profiles(*)')
           .eq('id', widget.studentId)
           .single();
-      
+
       // Load payments
       final paymentsRes = await _supabase
           .from('payments')
@@ -49,7 +50,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       // Load lessons
       final lessonsRes = await _supabase
           .from('lessons')
-          .select('*, teachers(first_name, last_name, profiles(first_name, last_name)), groups(name), rooms(name)')
+          .select(
+            '*, teachers(first_name, last_name, profiles(first_name, last_name)), groups(name), rooms(name)',
+          )
           .eq('student_id', widget.studentId)
           .order('scheduled_at', ascending: false);
 
@@ -57,13 +60,17 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       final tasksRes = await _supabase
           .from('tasks')
           .select('*, profiles:assigned_to(first_name, last_name)')
-          .or('student_id.eq.${widget.studentId},assigned_to.eq.${widget.studentId}')
+          .or(
+            'student_id.eq.${widget.studentId},assigned_to.eq.${widget.studentId}',
+          )
           .order('created_at', ascending: false);
 
       // Load groups student belongs to
       final groupsRes = await _supabase
           .from('group_students')
-          .select('groups(id, name, teachers(first_name, last_name, profiles(first_name, last_name)))')
+          .select(
+            'groups(id, name, teachers(first_name, last_name, profiles(first_name, last_name)))',
+          )
           .eq('student_id', widget.studentId);
 
       // Load balance from view
@@ -96,10 +103,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
           _lessons = List<Map<String, dynamic>>.from(lessonsRes);
           _tasks = List<Map<String, dynamic>>.from(tasksRes);
           _comments = List<Map<String, dynamic>>.from(commentsRes);
-          _groups = List<Map<String, dynamic>>.from(groupsRes).map((g) => g['groups'] as Map<String, dynamic>).toList();
-          _expectedPayments = List<Map<String, dynamic>>.from(expectedPaymentsRes);
-          _tasks.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
-          _comments.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+          _groups = List<Map<String, dynamic>>.from(
+            groupsRes,
+          ).map((g) => g['groups'] as Map<String, dynamic>).toList();
+          _expectedPayments = List<Map<String, dynamic>>.from(
+            expectedPaymentsRes,
+          );
+          _tasks.sort(
+            (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+          );
+          _comments.sort(
+            (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+          );
           _loading = false;
         });
       }
@@ -112,7 +127,11 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)));
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        ),
+      );
     }
 
     if (_student == null) {
@@ -124,7 +143,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     final slName = _student!['last_name']?.toString() ?? '';
     var name = '$sfName $slName'.trim();
     if (name.isEmpty && profile != null) {
-      name = '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'.trim();
+      name = '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'
+          .trim();
     }
     final displayName = name.isEmpty ? 'Без имени' : name;
     final phone = profile?['phone'] ?? '—';
@@ -144,7 +164,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                   'Баланс: ${_balance!['balance']} ₽',
                   style: TextStyle(
                     fontSize: 12,
-                    color: (_balance!['balance'] as num) < 0 ? AppTheme.danger : AppTheme.success,
+                    color: (_balance!['balance'] as num) < 0
+                        ? AppTheme.danger
+                        : AppTheme.success,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -153,7 +175,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
           bottom: TabBar(
             isScrollable: true,
             labelColor: AppTheme.primaryPurple,
-            unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
+            unselectedLabelColor: Theme.of(
+              context,
+            ).colorScheme.onSurfaceVariant,
             indicatorColor: AppTheme.primaryPurple,
             tabs: const [
               Tab(text: 'Инфо'),
@@ -182,7 +206,11 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     );
   }
 
-  Widget _buildInfoTab(String phone, String email, Map<String, dynamic> customData) {
+  Widget _buildInfoTab(
+    String phone,
+    String email,
+    Map<String, dynamic> customData,
+  ) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -192,28 +220,60 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         ]),
         SizedBox(height: 16),
         _buildInfoCard('Дополнительная информация', [
-          _InfoRow(icon: Icons.cake_rounded, label: 'День рождения', value: _student!['birthday'] ?? '—'),
-          _InfoRow(icon: Icons.person_outline_rounded, label: 'Пол', value: _student!['gender'] == 'male' ? 'Мужской' : (_student!['gender'] == 'female' ? 'Женский' : '—')),
-          _InfoRow(icon: Icons.fingerprint_rounded, label: 'Holli Hop ID', value: _student!['hollihop_id']?.toString() ?? '—'),
-          ...customData.entries.map((e) => _InfoRow(icon: Icons.info_outline_rounded, label: e.key, value: e.value?.toString() ?? '—')),
+          _InfoRow(
+            icon: Icons.cake_rounded,
+            label: 'День рождения',
+            value: _student!['birthday'] ?? '—',
+          ),
+          _InfoRow(
+            icon: Icons.person_outline_rounded,
+            label: 'Пол',
+            value: _student!['gender'] == 'male'
+                ? 'Мужской'
+                : (_student!['gender'] == 'female' ? 'Женский' : '—'),
+          ),
+          _InfoRow(
+            icon: Icons.fingerprint_rounded,
+            label: 'Holli Hop ID',
+            value: _student!['hollihop_id']?.toString() ?? '—',
+          ),
+          ...customData.entries.map(
+            (e) => _InfoRow(
+              icon: Icons.info_outline_rounded,
+              label: e.key,
+              value: e.value?.toString() ?? '—',
+            ),
+          ),
         ]),
         SizedBox(height: 16),
         _buildInfoCard('Финансовые настройки', [
           _InfoRow(
-            icon: Icons.payments_outlined, 
-            label: 'Цена инд. занятия', 
+            icon: Icons.payments_outlined,
+            label: 'Цена инд. занятия',
             value: '${_student!['individual_price'] ?? 1500} ₽',
             onEdit: () => _editPrice(),
           ),
           if (_balance != null) ...[
-            _InfoRow(icon: Icons.summarize_outlined, label: 'Всего оплачено', value: '${_balance!['total_paid']} ₽'),
-            _InfoRow(icon: Icons.history_edu_outlined, label: 'Списано за уроки', value: '${_balance!['total_cost']} ₽'),
+            _InfoRow(
+              icon: Icons.summarize_outlined,
+              label: 'Всего оплачено',
+              value: '${_balance!['total_paid']} ₽',
+            ),
+            _InfoRow(
+              icon: Icons.history_edu_outlined,
+              label: 'Списано за уроки',
+              value: '${_balance!['total_cost']} ₽',
+            ),
           ],
         ]),
         SizedBox(height: 16),
         _buildInfoCard('Группы', [
           if (_groups.isEmpty)
-            const _InfoRow(icon: Icons.group_off_rounded, label: 'Группы', value: 'Нет активных групп')
+            const _InfoRow(
+              icon: Icons.group_off_rounded,
+              label: 'Группы',
+              value: 'Нет активных групп',
+            )
           else
             ..._groups.map((g) {
               final teacher = g['teachers'];
@@ -224,12 +284,13 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                 final p = teacher['profiles'] as Map<String, dynamic>?;
                 tName = '$tfName $tlName'.trim();
                 if (tName.isEmpty && p != null) {
-                  tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+                  tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'
+                      .trim();
                 }
               }
               return _InfoRow(
-                icon: Icons.group_rounded, 
-                label: g['name'] ?? 'Группа', 
+                icon: Icons.group_rounded,
+                label: g['name'] ?? 'Группа',
                 value: 'Преп.: $tName',
               );
             }),
@@ -294,17 +355,29 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         content: TextField(
           controller: controller,
           maxLines: 3,
-          decoration: InputDecoration(hintText: isProgress ? 'Опишите успехи ученика...' : 'Введите текст...'),
+          decoration: InputDecoration(
+            hintText: isProgress
+                ? 'Опишите успехи ученика...'
+                : 'Введите текст...',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: Text('Сохранить')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: Text('Сохранить'),
+          ),
         ],
       ),
     );
 
     if (content != null && content.trim().isNotEmpty) {
-      final finalContent = isProgress ? '[PROGRESS] ${content.trim()}' : content.trim();
+      final finalContent = isProgress
+          ? '[PROGRESS] ${content.trim()}'
+          : content.trim();
       await _supabase.from('entity_comments').insert({
         'entity_id': widget.studentId,
         'entity_type': 'student',
@@ -325,14 +398,29 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Что нужно сделать?')),
+            TextField(
+              controller: titleCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Что нужно сделать?',
+              ),
+            ),
             SizedBox(height: 12),
-            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Детали'), maxLines: 2),
+            TextField(
+              controller: descCtrl,
+              decoration: const InputDecoration(labelText: 'Детали'),
+              maxLines: 2,
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Создать')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Создать'),
+          ),
         ],
       ),
     );
@@ -350,7 +438,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
   }
 
   Future<void> _editPrice() async {
-    final controller = TextEditingController(text: _student!['individual_price']?.toString());
+    final controller = TextEditingController(
+      text: _student!['individual_price']?.toString(),
+    );
     final newPrice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -361,18 +451,31 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
           decoration: const InputDecoration(labelText: 'Сумма (₽)'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: Text('Сохранить')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: Text('Сохранить'),
+          ),
         ],
       ),
     );
 
     if (newPrice != null && double.tryParse(newPrice) != null) {
       try {
-        await _supabase.from('students').update({'individual_price': double.parse(newPrice)}).eq('id', widget.studentId);
+        await _supabase
+            .from('students')
+            .update({'individual_price': double.parse(newPrice)})
+            .eq('id', widget.studentId);
         _loadAllData();
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        }
       }
     }
   }
@@ -384,7 +487,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppTheme.primaryPurple)),
+            Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: AppTheme.primaryPurple,
+              ),
+            ),
             const Divider(height: 24),
             ...children,
           ],
@@ -395,7 +505,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildPaymentsTab() {
     if (_payments.isEmpty) {
-      return Center(child: Text('Оплат не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(
+        child: Text(
+          'Оплат не найдено',
+          style: TextStyle(
+            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -403,14 +520,28 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       itemBuilder: (context, i) {
         final p = _payments[i];
         final dt = DateTime.tryParse(p['payment_date'] ?? '');
-        final dateStr = dt != null ? DateFormat('d MMM yyyy', 'ru').format(dt) : '—';
+        final dateStr = dt != null
+            ? DateFormat('d MMM yyyy', 'ru').format(dt)
+            : '—';
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            leading: Icon(Icons.account_balance_wallet_rounded, color: AppTheme.success),
-            title: Text('${p['amount']} ₽', style: const TextStyle(fontWeight: FontWeight.w700)),
+            leading: Icon(
+              Icons.account_balance_wallet_rounded,
+              color: AppTheme.success,
+            ),
+            title: Text(
+              '${p['amount']} ₽',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             subtitle: Text(dateStr),
-            trailing: Text(p['description'] ?? '', style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+            trailing: Text(
+              p['description'] ?? '',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context!).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
         );
       },
@@ -419,7 +550,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildLessonsTab() {
     if (_lessons.isEmpty) {
-      return Center(child: Text('Занятий не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(
+        child: Text(
+          'Занятий не найдено',
+          style: TextStyle(
+            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -427,7 +565,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       itemBuilder: (context, i) {
         final l = _lessons[i];
         final dt = DateTime.tryParse(l['scheduled_at'] ?? '');
-        final dateStr = dt != null ? DateFormat('d MMM, HH:mm', 'ru').format(dt) : '—';
+        final dateStr = dt != null
+            ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
+            : '—';
         final teacherData = l['teachers'] as Map<String, dynamic>?;
         String teacherName = '—';
         if (teacherData != null) {
@@ -443,17 +583,32 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            title: Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text('Преп.: $teacherName • ${l['groups']?['name'] ?? 'Инд.'}'),
+            title: Text(
+              dateStr,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              'Преп.: $teacherName • ${l['groups']?['name'] ?? 'Инд.'}',
+            ),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: (l['status'] == 'completed' ? AppTheme.success : AppTheme.primaryPurple).withAlpha(30),
+                color:
+                    (l['status'] == 'completed'
+                            ? AppTheme.success
+                            : AppTheme.primaryPurple)
+                        .withAlpha(30),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 l['status'] == 'completed' ? 'Завершено' : 'Запланировано',
-                style: TextStyle(fontSize: 11, color: l['status'] == 'completed' ? AppTheme.success : AppTheme.primaryPurple, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: l['status'] == 'completed'
+                      ? AppTheme.success
+                      : AppTheme.primaryPurple,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -464,7 +619,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
   Widget _buildInvoicesTab() {
     if (_expectedPayments.isEmpty) {
-      return Center(child: Text('Инвойсов не найдено', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(
+        child: Text(
+          'Инвойсов не найдено',
+          style: TextStyle(
+            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -472,27 +634,39 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       itemBuilder: (context, i) {
         final p = _expectedPayments[i];
         final dt = DateTime.tryParse(p['due_date'] ?? '');
-        final dateStr = dt != null ? DateFormat('d MMM yyyy', 'ru').format(dt) : '—';
+        final dateStr = dt != null
+            ? DateFormat('d MMM yyyy', 'ru').format(dt)
+            : '—';
         final status = p['status'] ?? 'pending';
-        
+
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             leading: Icon(
-              status == 'paid' ? Icons.check_circle_rounded : Icons.pending_actions_rounded,
+              status == 'paid'
+                  ? Icons.check_circle_rounded
+                  : Icons.pending_actions_rounded,
               color: status == 'paid' ? AppTheme.success : AppTheme.warning,
             ),
-            title: Text('${p['amount']} ₽', style: const TextStyle(fontWeight: FontWeight.w700)),
+            title: Text(
+              '${p['amount']} ₽',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             subtitle: Text('Срок: $dateStr • ${p['description'] ?? "Счёт"}'),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: (status == 'paid' ? AppTheme.success : AppTheme.warning).withAlpha(30),
+                color: (status == 'paid' ? AppTheme.success : AppTheme.warning)
+                    .withAlpha(30),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 status == 'paid' ? 'Оплачено' : 'Ожидает',
-                style: TextStyle(fontSize: 11, color: status == 'paid' ? AppTheme.success : AppTheme.warning, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: status == 'paid' ? AppTheme.success : AppTheme.warning,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -508,20 +682,45 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       children: [
         _buildInfoCard('Договоры и документы', [
           ListTile(
-            leading: Icon(Icons.description_rounded, color: AppTheme.primaryPurple),
+            leading: Icon(
+              Icons.description_rounded,
+              color: AppTheme.primaryPurple,
+            ),
             title: Text('Основной договор'),
             subtitle: Text(contractUrl ?? 'Не прикреплен'),
             trailing: IconButton(
-              icon: Icon(contractUrl != null ? Icons.edit_rounded : Icons.add_link_rounded),
+              icon: Icon(
+                contractUrl != null
+                    ? Icons.edit_rounded
+                    : Icons.add_link_rounded,
+              ),
               onPressed: _editContractUrl,
             ),
-            onTap: contractUrl != null ? () {
-              // TODO: Launch URL
-            } : null,
+            onTap: contractUrl != null
+                ? () => _openContractUrl(contractUrl)
+                : null,
           ),
         ]),
       ],
     );
+  }
+
+  Future<void> _openContractUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Некорректная ссылка на договор')),
+      );
+      return;
+    }
+
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось открыть договор')),
+      );
+    }
   }
 
   Future<void> _editContractUrl() async {
@@ -532,29 +731,54 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         title: Text('Ссылка на договор'),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(hintText: 'https://...', labelText: 'URL документа'),
+          decoration: const InputDecoration(
+            hintText: 'https://...',
+            labelText: 'URL документа',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: Text('Сохранить')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: Text('Сохранить'),
+          ),
         ],
       ),
     );
 
     if (newUrl != null) {
-      await _supabase.from('students').update({'contract_url': newUrl.trim()}).eq('id', widget.studentId);
+      await _supabase
+          .from('students')
+          .update({'contract_url': newUrl.trim()})
+          .eq('id', widget.studentId);
       _loadAllData();
     }
   }
 
   Widget _buildHistoryTab() {
     if (_tasks.isEmpty && _comments.isEmpty) {
-      return Center(child: Text('История пуста', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(
+        child: Text(
+          'История пуста',
+          style: TextStyle(
+            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
     }
 
     final items = [
-      ..._tasks.map((t) => {'type': 'task', 'data': t, 'date': t['created_at']}),
-      ..._comments.where((c) => !(c['content']?.toString().startsWith('[PROGRESS]') ?? false))
+      ..._tasks.map(
+        (t) => {'type': 'task', 'data': t, 'date': t['created_at']},
+      ),
+      ..._comments
+          .where(
+            (c) =>
+                !(c['content']?.toString().startsWith('[PROGRESS]') ?? false),
+          )
           .map((c) => {'type': 'comment', 'data': c, 'date': c['created_at']}),
     ];
     items.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
@@ -567,7 +791,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         final isTask = item['type'] == 'task';
         final data = item['data'] as Map<String, dynamic>;
         final dt = DateTime.tryParse(item['date'] as String? ?? '');
-        final dateStr = dt != null ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal()) : '—';
+        final dateStr = dt != null
+            ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
+            : '—';
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -581,19 +807,51 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(isTask ? Icons.task_alt_rounded : Icons.comment_rounded, size: 16, color: isTask ? AppTheme.warning : AppTheme.primaryPurple),
+                        Icon(
+                          isTask
+                              ? Icons.task_alt_rounded
+                              : Icons.comment_rounded,
+                          size: 16,
+                          color: isTask
+                              ? AppTheme.warning
+                              : AppTheme.primaryPurple,
+                        ),
                         SizedBox(width: 8),
-                        Text(isTask ? 'Задача' : 'Комментарий', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isTask ? AppTheme.warning : AppTheme.primaryPurple)),
+                        Text(
+                          isTask ? 'Задача' : 'Комментарий',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isTask
+                                ? AppTheme.warning
+                                : AppTheme.primaryPurple,
+                          ),
+                        ),
                       ],
                     ),
-                    Text(dateStr, style: TextStyle(fontSize: 11, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                    Text(
+                      dateStr,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
                 SizedBox(height: 8),
-                Text(isTask ? (data['title'] ?? '') : (data['content'] ?? ''), style: const TextStyle(fontSize: 14)),
+                Text(
+                  isTask ? (data['title'] ?? '') : (data['content'] ?? ''),
+                  style: const TextStyle(fontSize: 14),
+                ),
                 if (isTask && data['description'] != null) ...[
                   SizedBox(height: 4),
-                  Text(data['description'], style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                  Text(
+                    data['description'],
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -603,12 +861,22 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     );
   }
 
-
   Widget _buildProgressTab() {
-    final progressNotes = _comments.where((c) => c['content']?.toString().startsWith('[PROGRESS]') ?? false).toList();
-    
+    final progressNotes = _comments
+        .where(
+          (c) => c['content']?.toString().startsWith('[PROGRESS]') ?? false,
+        )
+        .toList();
+
     if (progressNotes.isEmpty) {
-      return Center(child: Text('Заметок об успехах ещё нет', style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant)));
+      return Center(
+        child: Text(
+          'Заметок об успехах ещё нет',
+          style: TextStyle(
+            color: Theme.of(context!).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
     }
 
     return ListView.builder(
@@ -616,11 +884,19 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       itemCount: progressNotes.length,
       itemBuilder: (ctx, i) {
         final note = progressNotes[i];
-        final content = (note['content'] as String).replaceFirst('[PROGRESS] ', '');
+        final content = (note['content'] as String).replaceFirst(
+          '[PROGRESS] ',
+          '',
+        );
         final dt = DateTime.tryParse(note['created_at'] ?? '');
-        final dateStr = dt != null ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal()) : '—';
+        final dateStr = dt != null
+            ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal())
+            : '—';
         final author = note['profiles'];
-        final authorName = author != null ? '${author['first_name'] ?? ''} ${author['last_name'] ?? ''}'.trim() : 'Система';
+        final authorName = author != null
+            ? '${author['first_name'] ?? ''} ${author['last_name'] ?? ''}'
+                  .trim()
+            : 'Система';
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -631,15 +907,35 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.stars_rounded, color: AppTheme.success, size: 20),
+                    Icon(
+                      Icons.stars_rounded,
+                      color: AppTheme.success,
+                      size: 20,
+                    ),
                     SizedBox(width: 8),
-                    Text(dateStr, style: TextStyle(fontSize: 12, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                    Text(
+                      dateStr,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                     const Spacer(),
-                    Text(authorName, style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Theme.of(context!).colorScheme.onSurfaceVariant)),
+                    Text(
+                      authorName,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
                 SizedBox(height: 12),
-                Text(content, style: const TextStyle(fontSize: 15, height: 1.4)),
+                Text(
+                  content,
+                  style: const TextStyle(fontSize: 15, height: 1.4),
+                ),
               ],
             ),
           ),
@@ -654,7 +950,12 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
   final VoidCallback? onEdit;
-  const _InfoRow({required this.icon, required this.label, required this.value, this.onEdit});
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onEdit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -665,19 +966,39 @@ class _InfoRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: Theme.of(context!).colorScheme.onSurfaceVariant),
+            Icon(
+              icon,
+              size: 18,
+              color: Theme.of(context!).colorScheme.onSurfaceVariant,
+            ),
             SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(color: Theme.of(context!).colorScheme.onSurfaceVariant, fontSize: 11)),
-                  Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: Theme.of(context!).colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ],
               ),
             ),
             if (onEdit != null)
-              Icon(Icons.edit_outlined, size: 14, color: AppTheme.primaryPurple),
+              Icon(
+                Icons.edit_outlined,
+                size: 14,
+                color: AppTheme.primaryPurple,
+              ),
           ],
         ),
       ),

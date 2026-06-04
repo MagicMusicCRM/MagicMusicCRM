@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/key.properties
+/android/*.jks
+/android/*.keystore
+
+# Local service state
+/supabase/.temp/
+/release-site/.vercel/
+
+# Generated local analysis/capture artifacts
+/.nexus-map/
+/docs/release/play_console/screenshots/raw/

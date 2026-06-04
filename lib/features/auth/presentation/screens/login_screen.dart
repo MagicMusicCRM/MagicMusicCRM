@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
+const _authRedirectUrl = 'magiccrm://auth-callback';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -41,17 +43,42 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      await Supabase.instance.client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: _authRedirectUrl,
+      );
+    } on AuthException catch (e) {
+      if (mounted) _showError(_mapAuthError(e.message));
+    } catch (_) {
+      if (mounted) _showError('Не удалось начать вход через Google.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   String _mapAuthError(String message) {
-    if (message.contains('Invalid login credentials')) return 'Неверный email или пароль';
-    if (message.contains('Email not confirmed')) return 'Подтвердите email перед входом';
-    if (message.contains('Too many requests')) return 'Слишком много попыток. Подождите немного';
+    if (message.contains('Invalid login credentials')) {
+      return 'Неверный email или пароль';
+    }
+    if (message.contains('Email not confirmed')) {
+      return 'Подтвердите email перед входом';
+    }
+    if (message.contains('Too many requests')) {
+      return 'Слишком много попыток. Подождите немного';
+    }
     return message;
   }
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, style: const TextStyle(fontWeight: FontWeight.w600)),
+        content: Text(
+          message,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: AppTheme.danger,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -112,6 +139,42 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 48),
+                    SizedBox(
+                      height: 54,
+                      child: OutlinedButton.icon(
+                        onPressed: _isLoading ? null : _signInWithGoogle,
+                        icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
+                        label: const Text('Войти через Google'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: BorderSide(color: Colors.white.withAlpha(70)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Divider(color: Colors.white.withAlpha(50)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'или',
+                            style: TextStyle(
+                              color: Colors.white.withAlpha(120),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Divider(color: Colors.white.withAlpha(50)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
 
                     // Email field
                     TextFormField(
@@ -123,11 +186,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: InputDecoration(
                         labelText: 'Email',
                         hintText: 'user@example.com',
-                        prefixIcon: Icon(Icons.email_outlined, color: Colors.white.withAlpha(160)),
+                        prefixIcon: Icon(
+                          Icons.email_outlined,
+                          color: Colors.white.withAlpha(160),
+                        ),
                         filled: true,
                         fillColor: AppTheme.cardDark,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppTheme.primaryGold, width: 2)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: AppTheme.primaryGold,
+                            width: 2,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -140,14 +215,33 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: 'Пароль',
-                        prefixIcon: Icon(Icons.lock_outlined, color: Colors.white.withAlpha(160)),
+                        prefixIcon: Icon(
+                          Icons.lock_outlined,
+                          color: Colors.white.withAlpha(160),
+                        ),
                         filled: true,
                         fillColor: AppTheme.cardDark,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppTheme.primaryGold, width: 2)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: AppTheme.primaryGold,
+                            width: 2,
+                          ),
+                        ),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Colors.white.withAlpha(160)),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            color: Colors.white.withAlpha(160),
+                          ),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                     ),
@@ -167,10 +261,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           onTap: _isLoading ? null : _signIn,
                           child: Center(
                             child: _isLoading
-                                ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
                                 : const Text(
                                     'Войти',
-                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
                                   ),
                           ),
                         ),
@@ -179,7 +284,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     TextButton(
                       onPressed: () => context.push('/register'),
-                      child: const Text('Нет аккаунта? Зарегистрироваться', style: TextStyle(color: AppTheme.primaryGold, fontSize: 16)),
+                      child: const Text(
+                        'Нет аккаунта? Зарегистрироваться',
+                        style: TextStyle(
+                          color: AppTheme.primaryGold,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
                   ],
                 ),

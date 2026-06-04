@@ -22,7 +22,7 @@ import 'package:cross_file/cross_file.dart';
 import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
-
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
 /// Unified Telegram-style messenger screen used by all roles.
 class MessengerScreen extends ConsumerStatefulWidget {
@@ -83,10 +83,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       final items = <Map<String, dynamic>>[];
 
       // Load admin IDs
-      final adminsRes = await _supabase
-          .from('profiles')
-          .select('id')
-          .inFilter('role', ['admin', 'manager']);
+      final adminsRes = await _supabase.from('profiles').select('id').inFilter(
+        'role',
+        ['admin', 'manager'],
+      );
       _adminIds = (adminsRes as List).map((a) => a['id'].toString()).toList();
 
       if (widget.role == 'client') {
@@ -128,7 +128,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           // Also update selected chat info if it's in the list
           if (_selectedChatId != null) {
             try {
-              final selectedItem = items.firstWhere((i) => i['id'] == _selectedChatId);
+              final selectedItem = items.firstWhere(
+                (i) => i['id'] == _selectedChatId,
+              );
               _selectedChatName = selectedItem['_display_name'];
               _selectedChatAvatarUrl = _getAvatarUrl(selectedItem);
             } catch (_) {
@@ -144,6 +146,15 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   Future<void> _loadClientChats(List<Map<String, dynamic>> items) async {
+    String? adminThreadId;
+    try {
+      adminThreadId = await ref
+          .read(supaReleaseGateServiceProvider)
+          .ensureAdminChatThread();
+    } catch (e) {
+      debugPrint('Error ensuring admin chat thread: $e');
+    }
+
     // Client sees one "Администрация" chat
     final lastMsg = await _supabase
         .from('messages')
@@ -159,6 +170,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       '_item_type': 'direct',
       '_display_name': 'Администрация',
       '_partner_id': null, // Messages to school
+      '_admin_thread_id': adminThreadId,
       '_last_message': lastMsg,
       '_last_message_time': lastMsg?['created_at'],
       '_icon': Icons.support_agent_rounded,
@@ -175,7 +187,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
     for (final client in clientProfiles) {
       final cid = client['id'] as String;
-      
+
       // For teachers, exclude messages with receiver_id is null (Administration chat)
       final orFilter = widget.role == 'teacher'
           ? 'and(sender_id.eq.$cid,receiver_id.eq.$_userId),and(sender_id.eq.$_userId,receiver_id.eq.$cid)'
@@ -191,7 +203,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           .maybeSingle();
 
       if (lastMsg != null) {
-        final name = '${client['first_name'] ?? ''} ${client['last_name'] ?? ''}'.trim();
+        final name =
+            '${client['first_name'] ?? ''} ${client['last_name'] ?? ''}'.trim();
         items.add({
           'id': cid,
           '_item_type': 'direct',
@@ -220,7 +233,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
       final groups = await _supabase
           .from('group_chats')
-          .select('*, first_responder:profiles!first_responder_id(first_name, last_name)')
+          .select(
+            '*, first_responder:profiles!first_responder_id(first_name, last_name)',
+          )
           .inFilter('id', groupIds);
 
       for (final group in groups) {
@@ -264,7 +279,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           '_item_type': 'channel',
           '_display_name': ch['name'] ?? 'Канал',
           '_last_message': lastPost != null
-              ? {'content': lastPost['content'], 'created_at': lastPost['created_at']}
+              ? {
+                  'content': lastPost['content'],
+                  'created_at': lastPost['created_at'],
+                }
               : null,
           '_last_message_time': lastPost?['created_at'],
           '_channel_data': ch,
@@ -343,12 +361,16 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
         if (mounted) {
           setState(() {
-            _messages = List<Map<String, dynamic>>.from(posts).map((p) => {
-              ...p,
-              'sender_id': p['author_id'],
-              'message_type': p['message_type'] ?? 'text',
-              'is_read': true,
-            }).toList();
+            _messages = List<Map<String, dynamic>>.from(posts)
+                .map(
+                  (p) => {
+                    ...p,
+                    'sender_id': p['author_id'],
+                    'message_type': p['message_type'] ?? 'text',
+                    'is_read': true,
+                  },
+                )
+                .toList();
             _loadingMessages = false;
           });
         }
@@ -390,8 +412,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           msgs = msgs.where((m) {
             final isFromMe = m['sender_id'] == _userId;
             final isToMe = m['receiver_id'] == _userId;
-            if (isFromMe) return m['receiver_id'] == null || _adminIds.contains(m['receiver_id']);
-            if (isToMe) return m['sender_id'] == null || _adminIds.contains(m['sender_id']);
+            if (isFromMe) {
+              return m['receiver_id'] == null ||
+                  _adminIds.contains(m['receiver_id']);
+            }
+            if (isToMe) {
+              return m['sender_id'] == null ||
+                  _adminIds.contains(m['sender_id']);
+            }
             return false;
           }).toList();
         } else if (partnerId != null) {
@@ -413,7 +441,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             final isFromMe = m['sender_id'] == _userId;
             if (isFromPartner) {
               if (widget.role == 'teacher') return m['receiver_id'] == _userId;
-              return m['receiver_id'] == null || m['receiver_id'] == _userId || _adminIds.contains(m['receiver_id']);
+              return m['receiver_id'] == null ||
+                  m['receiver_id'] == _userId ||
+                  _adminIds.contains(m['receiver_id']);
             }
             if (isFromMe) return m['receiver_id'] == partnerId;
             return false;
@@ -439,9 +469,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   Future<void> _markMessagesRead() async {
     try {
       final unreadIds = _messages
-          .where((m) =>
-              m['receiver_id'] == _userId &&
-              m['is_read'] == false)
+          .where((m) => m['receiver_id'] == _userId && m['is_read'] == false)
           .map((m) => m['id'] as String)
           .toList();
 
@@ -454,10 +482,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         final partnerId = chatItem['_partner_id'] as String?;
         if (partnerId != null) {
           final schoolMsgIds = _messages
-              .where((m) =>
-                  m['sender_id'] == partnerId &&
-                  m['receiver_id'] == null &&
-                  m['is_read'] == false)
+              .where(
+                (m) =>
+                    m['sender_id'] == partnerId &&
+                    m['receiver_id'] == null &&
+                    m['is_read'] == false,
+              )
               .map((m) => m['id'] as String)
               .toList();
           unreadIds.addAll(schoolMsgIds);
@@ -467,7 +497,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       if (unreadIds.isNotEmpty) {
         await _supabase
             .from('messages')
-            .update({'is_read': true, 'read_at': DateTime.now().toIso8601String()})
+            .update({
+              'is_read': true,
+              'read_at': DateTime.now().toIso8601String(),
+            })
             .inFilter('id', unreadIds);
 
         if (mounted) {
@@ -485,7 +518,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   void _subscribeToMessages() {
     _messagesChannel = _supabase.channel('messenger_$_userId');
-    
+
     // Listen for direct and group messages
     _messagesChannel!.onPostgresChanges(
       event: PostgresChangeEvent.insert,
@@ -498,10 +531,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         final groupChatId = m['group_chat_id']?.toString();
 
         // Check if this message is relevant to the current user
-        final isRelevant = senderId == _userId ||
+        final isRelevant =
+            senderId == _userId ||
             receiverId == _userId ||
             receiverId == null ||
-            (groupChatId != null && _chatItems.any((c) => c['id'] == groupChatId));
+            (groupChatId != null &&
+                _chatItems.any((c) => c['id'] == groupChatId));
 
         if (!isRelevant) return;
 
@@ -518,7 +553,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               );
               final partnerId = chatItem['_partner_id'] as String?;
               if (widget.role == 'client') {
-                addToView = senderId == _userId ||
+                addToView =
+                    senderId == _userId ||
                     (senderId != null && _adminIds.contains(senderId));
               } else if (partnerId != null) {
                 addToView = senderId == partnerId || senderId == _userId;
@@ -590,9 +626,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     setState(() {
       for (var i = 0; i < _chatItems.length; i++) {
         final item = _chatItems[i];
-        
-        if (isChannel && item['id'] == channelId && item['_item_type'] == 'channel') {
-           _chatItems[i] = {
+
+        if (isChannel &&
+            item['id'] == channelId &&
+            item['_item_type'] == 'channel') {
+          _chatItems[i] = {
             ...item,
             '_last_message': msg,
             '_last_message_time': msg['created_at'],
@@ -609,24 +647,24 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           break;
         } else if (groupChatId == null && !isChannel) {
           if (widget.role == 'client' && item['id'] == 'admin_chat') {
-             // Admin chat for clients - check if sender is from adminIds or it's my own message to null receiver
-             final senderId = msg['sender_id']?.toString();
-             final receiverId = msg['receiver_id']?.toString();
-             bool isRelevant = (senderId == _userId && receiverId == null) || 
-                              _adminIds.contains(senderId) || 
-                              _adminIds.contains(receiverId);
-             
-             if (isRelevant) {
-                _chatItems[i] = {
-                  ...item,
-                  '_last_message': msg,
-                  '_last_message_time': msg['created_at'],
-                };
-                break;
-             }
+            // Admin chat for clients - check if sender is from adminIds or it's my own message to null receiver
+            final senderId = msg['sender_id']?.toString();
+            final receiverId = msg['receiver_id']?.toString();
+            bool isRelevant =
+                (senderId == _userId && receiverId == null) ||
+                _adminIds.contains(senderId) ||
+                _adminIds.contains(receiverId);
+
+            if (isRelevant) {
+              _chatItems[i] = {
+                ...item,
+                '_last_message': msg,
+                '_last_message_time': msg['created_at'],
+              };
+              break;
+            }
           } else if (item['_partner_id'] == msg['sender_id'] ||
               item['_partner_id'] == msg['receiver_id']) {
-            
             // For teachers, ignore messages to "Administration" (null receiver)
             if (widget.role == 'teacher' && msg['receiver_id'] == null) {
               continue;
@@ -653,51 +691,59 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     if (user == null) return;
 
     // Get my profile for name
-    final profile = await _supabase.from('profiles').select('first_name, last_name').eq('id', user.id).maybeSingle();
-    final myName = '${profile?['first_name'] ?? ''} ${profile?['last_name'] ?? ''}'.trim();
+    final profile = await _supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', user.id)
+        .maybeSingle();
+    final myName =
+        '${profile?['first_name'] ?? ''} ${profile?['last_name'] ?? ''}'.trim();
 
     _typingChannel = _supabase.channel('typing_$chatId');
-    
-    _typingChannel!.onPresenceSync((_) {
-      final states = _typingChannel!.presenceState();
-      final Map<String, String> newTypists = {};
-      
-      for (final state in states) {
-        for (final presence in state.presences) {
-          final Map<String, dynamic> payload = presence.payload;
-          final typistId = payload['id']?.toString();
-          final isTyping = payload['isTyping'] == true;
-          
-          if (typistId != null && typistId != _userId && isTyping) {
-            final role = payload['role']?.toString();
-            final name = payload['name']?.toString() ?? 'Пользователь';
-            
-            if (widget.role == 'client' && (role == 'admin' || role == 'manager')) {
-              newTypists[typistId] = 'Администратор';
-            } else {
-              newTypists[typistId] = name;
+
+    _typingChannel!
+        .onPresenceSync((_) {
+          final states = _typingChannel!.presenceState();
+          final Map<String, String> newTypists = {};
+
+          for (final state in states) {
+            for (final presence in state.presences) {
+              final Map<String, dynamic> payload = presence.payload;
+              final typistId = payload['id']?.toString();
+              final isTyping = payload['isTyping'] == true;
+
+              if (typistId != null && typistId != _userId && isTyping) {
+                final role = payload['role']?.toString();
+                final name = payload['name']?.toString() ?? 'Пользователь';
+
+                if (widget.role == 'client' &&
+                    (role == 'admin' || role == 'manager')) {
+                  newTypists[typistId] = 'Администратор';
+                } else {
+                  newTypists[typistId] = name;
+                }
+              }
             }
           }
-        }
-      }
 
-      if (mounted) {
-        setState(() {
-          _typists = newTypists;
-          if (newTypists.isEmpty) {
-            _typingText = '';
-          } else if (newTypists.length == 1) {
-            _typingText = '${newTypists.values.first} печатает...';
-          } else {
-            _typingText = '${newTypists.length} чел. печатают...';
+          if (mounted) {
+            setState(() {
+              _typists = newTypists;
+              if (newTypists.isEmpty) {
+                _typingText = '';
+              } else if (newTypists.length == 1) {
+                _typingText = '${newTypists.values.first} печатает...';
+              } else {
+                _typingText = '${newTypists.length} чел. печатают...';
+              }
+            });
+          }
+        })
+        .subscribe((status, [error]) {
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            _trackTyping(false, myName);
           }
         });
-      }
-    }).subscribe((status, [error]) {
-      if (status == RealtimeSubscribeStatus.subscribed) {
-        _trackTyping(false, myName);
-      }
-    });
   }
 
   void _leaveTypingChannel() {
@@ -724,14 +770,18 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   void _handleTyping(bool isTyping) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
-    
-    // Get name from profile if not cached etc. 
+
+    // Get name from profile if not cached etc.
     // For performance, we could cache this, but profile select is fast with RLS
-    final profile = await _supabase.from('profiles').select('first_name').eq('id', user.id).maybeSingle();
+    final profile = await _supabase
+        .from('profiles')
+        .select('first_name')
+        .eq('id', user.id)
+        .maybeSingle();
     final name = profile?['first_name'] ?? 'Аноним';
-    
+
     await _trackTyping(isTyping, name);
-    
+
     // Auto-stop typing after 3 seconds
     if (isTyping) {
       Future.delayed(const Duration(seconds: 3), () {
@@ -744,6 +794,15 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Future<void> _sendTextMessage(String text) async {
     if (_selectedChatType == 'channel') {
+      if (!await _canPostToChannel(_selectedChatId!)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Канал доступен только для чтения')),
+          );
+        }
+        return;
+      }
+
       await _supabase.from('channel_posts').insert({
         'channel_id': _selectedChatId,
         'author_id': _userId,
@@ -776,7 +835,40 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     });
   }
 
-  Future<void> _sendVoiceMessage(Uint8List bytes, int durationMs, String ext) async {
+  Future<void> _sendVoiceMessage(
+    Uint8List bytes,
+    int durationMs,
+    String ext,
+  ) async {
+    if (_selectedChatType == 'channel') {
+      if (!await _canPostToChannel(_selectedChatId!)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Канал доступен только для чтения')),
+          );
+        }
+        return;
+      }
+
+      final url = await ChatAttachmentService.uploadVoice(
+        bytes: bytes,
+        senderId: _userId,
+        extension: ext,
+      );
+
+      await _supabase.from('channel_posts').insert({
+        'channel_id': _selectedChatId,
+        'author_id': _userId,
+        'content': '🎤 Голосовое сообщение',
+        'message_type': 'voice',
+        'attachment_url': url,
+        'attachment_size': bytes.length,
+        'voice_duration_ms': durationMs,
+      });
+      _loadMessages();
+      return;
+    }
+
     final url = await ChatAttachmentService.uploadVoice(
       bytes: bytes,
       senderId: _userId,
@@ -807,7 +899,41 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     });
   }
 
-  Future<void> _sendFileMessage(Uint8List bytes, String fileName, int fileSize, {String? caption}) async {
+  Future<void> _sendFileMessage(
+    Uint8List bytes,
+    String fileName,
+    int fileSize, {
+    String? caption,
+  }) async {
+    if (_selectedChatType == 'channel') {
+      if (!await _canPostToChannel(_selectedChatId!)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Канал доступен только для чтения')),
+          );
+        }
+        return;
+      }
+
+      final url = await ChatAttachmentService.uploadFile(
+        bytes: bytes,
+        originalFileName: fileName,
+        senderId: _userId,
+      );
+
+      await _supabase.from('channel_posts').insert({
+        'channel_id': _selectedChatId,
+        'author_id': _userId,
+        'content': caption?.isNotEmpty == true ? caption : '📎 $fileName',
+        'message_type': 'file',
+        'attachment_url': url,
+        'attachment_name': fileName,
+        'attachment_size': fileSize,
+      });
+      _loadMessages();
+      return;
+    }
+
     final url = await ChatAttachmentService.uploadFile(
       bytes: bytes,
       originalFileName: fileName,
@@ -845,7 +971,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         fileName: fileName,
         fileSize: fileSize,
         fileBytes: bytes,
-        onSend: (caption) => _sendFileMessage(bytes, fileName, fileSize, caption: caption),
+        onSend: (caption) =>
+            _sendFileMessage(bytes, fileName, fileSize, caption: caption),
       ),
     );
   }
@@ -856,7 +983,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     final id = item['id'] as String;
     final type = item['_item_type'] as String;
     final avatarUrl = _getAvatarUrl(item);
-            
+
     setState(() {
       _selectedChatId = id;
       _selectedChatType = type;
@@ -925,7 +1052,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
     if (msgDate == today) return DateFormat('HH:mm', 'ru').format(local);
     if (today.difference(msgDate).inDays == 1) return 'Вчера';
-    if (today.difference(msgDate).inDays < 7) return DateFormat('EE', 'ru').format(local);
+    if (today.difference(msgDate).inDays < 7) {
+      return DateFormat('EE', 'ru').format(local);
+    }
     return DateFormat('dd.MM', 'ru').format(local);
   }
 
@@ -967,8 +1096,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 child: _buildChatList(context, isMobile),
               ),
       ),
-      chatViewBuilder: (context, isMobile, selectedId) => _buildChatView(context, isMobile),
-      profilePanelBuilder: (context) => _selectedChatId != null && _selectedChatType != null
+      chatViewBuilder: (context, isMobile, selectedId) =>
+          _buildChatView(context, isMobile),
+      profilePanelBuilder: (context) =>
+          _selectedChatId != null && _selectedChatType != null
           ? ChatInfoDialog(
               chatId: _selectedChatId!,
               chatType: _selectedChatType!,
@@ -984,11 +1115,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   Widget build(BuildContext context) {
     if (widget.role == 'client') {
       // Clients only see the chat shell directly, no CRM navigation
-      return Scaffold(
-        body: SafeArea(
-          child: _buildMessengerShell(context),
-        ),
-      );
+      return Scaffold(body: SafeArea(child: _buildMessengerShell(context)));
     }
 
     // Staff view with CRM navigation
@@ -998,9 +1125,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     Widget bodyContent;
     if (_selectedCrmTab == 0) {
       bodyContent = _buildMessengerShell(context);
-    } else if (isDesktop && _selectedCrmTab == 4) { // 'Users' on Desktop is 4th index (0=Chat, 1=Dashboard, 2=Schedule, 3=Leads, 4=Users, 5=Finance)
+    } else if (isDesktop && _selectedCrmTab == 4) {
+      // 'Users' on Desktop is 4th index (0=Chat, 1=Dashboard, 2=Schedule, 3=Leads, 4=Users, 5=Finance)
       bodyContent = const UserRolesWidget();
-    } else if (!isDesktop && _selectedCrmTab == 3) { // 'Users' on Mobile is 3rd index (0=Chat, 1=Dashboard, 2=Schedule, 3=Users)
+    } else if (!isDesktop && _selectedCrmTab == 3) {
+      // 'Users' on Mobile is 3rd index (0=Chat, 1=Dashboard, 2=Schedule, 3=Users)
       bodyContent = const UserRolesWidget();
     } else {
       bodyContent = _buildUnderConstruction(isDark);
@@ -1011,7 +1140,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         body: Row(
           children: [
             NavigationRail(
-              backgroundColor: isDark ? TelegramColors.darkSidebar : TelegramColors.lightSidebar,
+              backgroundColor: isDark
+                  ? TelegramColors.darkSidebar
+                  : TelegramColors.lightSidebar,
               selectedIndex: _selectedCrmTab,
               useIndicator: true,
               indicatorColor: TelegramColors.brandPurple.withAlpha(51),
@@ -1021,40 +1152,60 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               destinations: const [
                 NavigationRailDestination(
                   icon: Icon(Icons.chat_bubble_outline_rounded),
-                  selectedIcon: Icon(Icons.chat_bubble_rounded, color: TelegramColors.brandPurple),
+                  selectedIcon: Icon(
+                    Icons.chat_bubble_rounded,
+                    color: TelegramColors.brandPurple,
+                  ),
                   label: Text('Чат'),
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard_rounded, color: TelegramColors.brandPurple),
+                  selectedIcon: Icon(
+                    Icons.dashboard_rounded,
+                    color: TelegramColors.brandPurple,
+                  ),
                   label: Text('Обзор'),
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.calendar_today_outlined),
-                  selectedIcon: Icon(Icons.calendar_today_rounded, color: TelegramColors.brandPurple),
+                  selectedIcon: Icon(
+                    Icons.calendar_today_rounded,
+                    color: TelegramColors.brandPurple,
+                  ),
                   label: Text('Расписание'),
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.people_outline_rounded),
-                  selectedIcon: Icon(Icons.people_rounded, color: TelegramColors.brandPurple),
+                  selectedIcon: Icon(
+                    Icons.people_rounded,
+                    color: TelegramColors.brandPurple,
+                  ),
                   label: Text('Лиды'),
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.manage_accounts_outlined),
-                  selectedIcon: Icon(Icons.manage_accounts_rounded, color: TelegramColors.brandPurple),
+                  selectedIcon: Icon(
+                    Icons.manage_accounts_rounded,
+                    color: TelegramColors.brandPurple,
+                  ),
                   label: Text('Пользователи'),
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.account_balance_wallet_outlined),
-                  selectedIcon: Icon(Icons.account_balance_wallet_rounded, color: TelegramColors.brandPurple),
+                  selectedIcon: Icon(
+                    Icons.account_balance_wallet_rounded,
+                    color: TelegramColors.brandPurple,
+                  ),
                   label: Text('Финансы'),
                 ),
               ],
             ),
             VerticalDivider(
-              thickness: 1, 
+              thickness: 1,
               width: 1,
-              color: isDark ? TelegramColors.darkDivider : TelegramColors.lightDivider,
+              color: isDark
+                  ? TelegramColors.darkDivider
+                  : TelegramColors.lightDivider,
             ),
             Expanded(child: bodyContent),
           ],
@@ -1069,16 +1220,32 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 currentIndex: _selectedCrmTab,
                 type: BottomNavigationBarType.fixed,
                 selectedItemColor: TelegramColors.brandPurple,
-                unselectedItemColor: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary,
-                backgroundColor: isDark ? TelegramColors.darkSidebar : TelegramColors.lightSidebar,
+                unselectedItemColor: isDark
+                    ? TelegramColors.darkTextSecondary
+                    : TelegramColors.lightTextSecondary,
+                backgroundColor: isDark
+                    ? TelegramColors.darkSidebar
+                    : TelegramColors.lightSidebar,
                 onTap: (idx) {
                   setState(() => _selectedCrmTab = idx);
                 },
                 items: const [
-                  BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'Чат'),
-                  BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Обзор'),
-                  BottomNavigationBarItem(icon: Icon(Icons.calendar_month_rounded), label: 'Распис.'),
-                  BottomNavigationBarItem(icon: Icon(Icons.manage_accounts_rounded), label: 'Пользов.'),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.chat_bubble_rounded),
+                    label: 'Чат',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.dashboard_rounded),
+                    label: 'Обзор',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.calendar_month_rounded),
+                    label: 'Распис.',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.manage_accounts_rounded),
+                    label: 'Пользов.',
+                  ),
                 ],
               ),
       );
@@ -1090,13 +1257,19 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.construction_rounded, size: 64, color: TelegramColors.brandPurple.withAlpha(127)),
+          Icon(
+            Icons.construction_rounded,
+            size: 64,
+            color: TelegramColors.brandPurple.withAlpha(127),
+          ),
           const SizedBox(height: 16),
           Text(
             'Данный раздел находится в разработке',
             style: TextStyle(
               fontSize: 16,
-              color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary,
+              color: isDark
+                  ? TelegramColors.darkTextSecondary
+                  : TelegramColors.lightTextSecondary,
             ),
           ),
         ],
@@ -1127,7 +1300,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             color: isDark ? TelegramColors.darkSurface : TelegramColors.lightBg,
             border: Border(
               bottom: BorderSide(
-                color: isDark ? TelegramColors.darkDivider : TelegramColors.lightDivider,
+                color: isDark
+                    ? TelegramColors.darkDivider
+                    : TelegramColors.lightDivider,
                 width: 0.5,
               ),
             ),
@@ -1152,7 +1327,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                     value: 'theme',
                     child: ListTile(
                       leading: Icon(
-                        isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                        isDark
+                            ? Icons.light_mode_rounded
+                            : Icons.dark_mode_rounded,
                       ),
                       title: Text(isDark ? 'Светлая тема' : 'Тёмная тема'),
                       dense: true,
@@ -1163,8 +1340,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                   const PopupMenuItem(
                     value: 'logout',
                     child: ListTile(
-                      leading: Icon(Icons.logout_rounded, color: TelegramColors.danger),
-                      title: Text('Выйти', style: TextStyle(color: TelegramColors.danger)),
+                      leading: Icon(
+                        Icons.logout_rounded,
+                        color: TelegramColors.danger,
+                      ),
+                      title: Text(
+                        'Выйти',
+                        style: TextStyle(color: TelegramColors.danger),
+                      ),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -1210,63 +1393,64 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           ),
         ),
         // Search
-        ChatSearchBar(
-          onChanged: (q) => setState(() => _searchQuery = q),
-        ),
+        ChatSearchBar(onChanged: (q) => setState(() => _searchQuery = q)),
         // Chat list
         Expanded(
           child: _loadingChats
               ? const Center(
-                  child: CircularProgressIndicator(color: TelegramColors.accentBlue),
+                  child: CircularProgressIndicator(
+                    color: TelegramColors.accentBlue,
+                  ),
                 )
               : filteredItems.isEmpty
-                  ? Center(
-                      child: Text(
-                        _searchQuery.isNotEmpty
-                            ? 'Ничего не найдено'
-                            : 'Нет чатов',
-                        style: TextStyle(
-                          color: isDark
-                              ? TelegramColors.darkTextSecondary
-                              : TelegramColors.lightTextSecondary,
-                        ),
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadChatList,
-                      color: TelegramColors.accentBlue,
-                      child: ListView.builder(
-                        itemCount: filteredItems.length,
-                        itemBuilder: (context, index) {
-                          final item = filteredItems[index];
-                          final id = item['id'] as String;
-                          final type = item['_item_type'] as String;
-                          final name = item['_display_name'] as String? ?? '';
-                          final lastMsg = item['_last_message'] as Map<String, dynamic>?;
-                          final unread = _unreadCounts[id] ?? 0;
-                          final avatarUrl = _getAvatarUrl(item);
-
-                          return ChatListTile(
-                            title: name,
-                            subtitle: _messagePreview(lastMsg),
-                            time: _formatTime(item['_last_message_time'] as String?),
-                            unreadCount: unread,
-                            isSelected: _selectedChatId == id,
-                            isChannel: type == 'channel',
-                            uniqueId: id,
-                            avatarUrl: avatarUrl,
-                            channelIcon: type == 'channel'
-                                ? Icons.campaign_rounded
-                                : type == 'group'
-                                    ? Icons.group_rounded
-                                    : null,
-                            onTap: () => _selectChat(item),
-                            statusIcon: _buildStatusIcon(item, isDark),
-                            onStatusTap: () => _showStatusInfo(item),
-                          );
-                        },
-                      ),
+              ? Center(
+                  child: Text(
+                    _searchQuery.isNotEmpty ? 'Ничего не найдено' : 'Нет чатов',
+                    style: TextStyle(
+                      color: isDark
+                          ? TelegramColors.darkTextSecondary
+                          : TelegramColors.lightTextSecondary,
                     ),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadChatList,
+                  color: TelegramColors.accentBlue,
+                  child: ListView.builder(
+                    itemCount: filteredItems.length,
+                    itemBuilder: (context, index) {
+                      final item = filteredItems[index];
+                      final id = item['id'] as String;
+                      final type = item['_item_type'] as String;
+                      final name = item['_display_name'] as String? ?? '';
+                      final lastMsg =
+                          item['_last_message'] as Map<String, dynamic>?;
+                      final unread = _unreadCounts[id] ?? 0;
+                      final avatarUrl = _getAvatarUrl(item);
+
+                      return ChatListTile(
+                        title: name,
+                        subtitle: _messagePreview(lastMsg),
+                        time: _formatTime(
+                          item['_last_message_time'] as String?,
+                        ),
+                        unreadCount: unread,
+                        isSelected: _selectedChatId == id,
+                        isChannel: type == 'channel',
+                        uniqueId: id,
+                        avatarUrl: avatarUrl,
+                        channelIcon: type == 'channel'
+                            ? Icons.campaign_rounded
+                            : type == 'group'
+                            ? Icons.group_rounded
+                            : null,
+                        onTap: () => _selectChat(item),
+                        statusIcon: _buildStatusIcon(item, isDark),
+                        onStatusTap: () => _showStatusInfo(item),
+                      );
+                    },
+                  ),
+                ),
         ),
       ],
     );
@@ -1282,12 +1466,21 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     return DropTarget(
       onDragDone: (details) async {
         if (details.files.isEmpty) return;
+        final messenger = ScaffoldMessenger.of(context);
+        if (isChannel && !await _canPostToChannel(_selectedChatId!)) {
+          if (mounted) {
+            messenger.showSnackBar(
+              const SnackBar(content: Text('Канал доступен только для чтения')),
+            );
+          }
+          return;
+        }
         for (final file in details.files) {
           final bytes = await file.readAsBytes();
           final size = await file.length();
           if (size > ChatAttachmentService.maxFileSizeBytes) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 const SnackBar(
                   content: Text('Файл слишком большой (макс. 25 МБ)'),
                   backgroundColor: TelegramColors.danger,
@@ -1303,130 +1496,140 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         color: isDark ? TelegramColors.darkChatBg : TelegramColors.lightChatBg,
         child: Column(
           children: [
-          ChatHeader(
-            title: _selectedChatName ?? '',
-            subtitle: isChannel
-                ? 'Канал'
-                : isGroup
-                    ? 'Группа'
-                    : widget.role == 'client'
-                        ? 'Поддержка'
-                        : 'Личный чат',
-            uniqueId: _selectedChatId,
-            avatarUrl: _selectedChatAvatarUrl,
-            isChannel: isChannel,
-            showBackButton: isMobile,
-            onBack: _deselectChat,
-            onTitleTap: () {
-              if (_selectedChatId == null || _selectedChatType == null) return;
-              if (widget.role == 'client' && _selectedChatType == 'direct') return; // Do not show school admin profile
-              
-              if (MediaQuery.of(context).size.width >= 768) {
-                setState(() => _showProfilePanel = !_showProfilePanel);
-              } else {
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => ChatInfoDialog(
-                    chatId: _selectedChatId!,
-                    chatType: _selectedChatType!,
-                    userRole: widget.role,
-                    onUpdate: _loadChatList,
-                  ),
-                ));
-              }
-            },
-          ),
-          _PresenceBanner(chatId: _selectedChatId),
-          Expanded(
-            child: _loadingMessages
-                ? const Center(
-                    child: CircularProgressIndicator(color: TelegramColors.accentBlue),
-                  )
-                : _messages.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isChannel
-                                  ? Icons.campaign_outlined
-                                  : Icons.chat_bubble_outline_rounded,
-                              size: 64,
-                              color: isDark
-                                  ? TelegramColors.darkTextSecondary.withAlpha(60)
-                                  : TelegramColors.lightTextSecondary.withAlpha(60),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              isChannel
-                                  ? 'Пока нет публикаций'
-                                  : 'Начните общение!',
-                              style: TextStyle(
-                                color: isDark
-                                    ? TelegramColors.darkTextSecondary
-                                    : TelegramColors.lightTextSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _MessageListView(
-                        messages: _messages,
-                        currentUserId: _userId,
-                        isGroupChat: isGroup,
-                        isChannel: isChannel,
-                        chatItems: _chatItems,
-                        adminIds: _adminIds,
-                        role: widget.role,
-                        selectedChatName: _selectedChatName,
+            ChatHeader(
+              title: _selectedChatName ?? '',
+              subtitle: isChannel
+                  ? 'Канал'
+                  : isGroup
+                  ? 'Группа'
+                  : widget.role == 'client'
+                  ? 'Поддержка'
+                  : 'Личный чат',
+              uniqueId: _selectedChatId,
+              avatarUrl: _selectedChatAvatarUrl,
+              isChannel: isChannel,
+              showBackButton: isMobile,
+              onBack: _deselectChat,
+              onTitleTap: () {
+                if (_selectedChatId == null || _selectedChatType == null) {
+                  return;
+                }
+                if (widget.role == 'client' && _selectedChatType == 'direct') {
+                  return; // Do not show school admin profile
+                }
+
+                if (MediaQuery.of(context).size.width >= 768) {
+                  setState(() => _showProfilePanel = !_showProfilePanel);
+                } else {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ChatInfoDialog(
+                        chatId: _selectedChatId!,
+                        chatType: _selectedChatType!,
+                        userRole: widget.role,
+                        onUpdate: _loadChatList,
                       ),
-          ),
-          // Input (not for channels unless user has permission)
-          if (!isChannel)
-            Column(
-              children: [
-                if (_typingText.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16, bottom: 4),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        _typingText,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                          color: isDark
-                              ? TelegramColors.darkTextSecondary
-                              : TelegramColors.lightTextSecondary,
+                    ),
+                  );
+                }
+              },
+            ),
+            _PresenceBanner(chatId: _selectedChatId),
+            Expanded(
+              child: _loadingMessages
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: TelegramColors.accentBlue,
+                      ),
+                    )
+                  : _messages.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isChannel
+                                ? Icons.campaign_outlined
+                                : Icons.chat_bubble_outline_rounded,
+                            size: 64,
+                            color: isDark
+                                ? TelegramColors.darkTextSecondary.withAlpha(60)
+                                : TelegramColors.lightTextSecondary.withAlpha(
+                                    60,
+                                  ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            isChannel
+                                ? 'Пока нет публикаций'
+                                : 'Начните общение!',
+                            style: TextStyle(
+                              color: isDark
+                                  ? TelegramColors.darkTextSecondary
+                                  : TelegramColors.lightTextSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _MessageListView(
+                      messages: _messages,
+                      currentUserId: _userId,
+                      isGroupChat: isGroup,
+                      isChannel: isChannel,
+                      chatItems: _chatItems,
+                      adminIds: _adminIds,
+                      role: widget.role,
+                      selectedChatName: _selectedChatName,
+                    ),
+            ),
+            // Input (not for channels unless user has permission)
+            if (!isChannel)
+              Column(
+                children: [
+                  if (_typingText.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16, bottom: 4),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _typingText,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: isDark
+                                ? TelegramColors.darkTextSecondary
+                                : TelegramColors.lightTextSecondary,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                MessageInput(
-                  onSendText: _sendTextMessage,
-                  onSendVoice: _sendVoiceMessage,
-                  onTyping: _handleTyping,
-                  onSendFile: (bytes, name, size, {caption}) async {
-                    _showSendFileDialog(bytes, name, size);
-                  },
-                ),
-              ],
-            )
-          else
-            FutureBuilder<bool>(
-              future: _canPostToChannel(_selectedChatId!),
-              builder: (context, snapshot) {
-                if (snapshot.data == true) {
-                  return MessageInput(
+                  MessageInput(
                     onSendText: _sendTextMessage,
+                    onSendVoice: _sendVoiceMessage,
                     onTyping: _handleTyping,
                     onSendFile: (bytes, name, size, {caption}) async {
                       _showSendFileDialog(bytes, name, size);
                     },
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
+                  ),
+                ],
+              )
+            else
+              FutureBuilder<bool>(
+                future: _canPostToChannel(_selectedChatId!),
+                builder: (context, snapshot) {
+                  if (snapshot.data == true) {
+                    return MessageInput(
+                      onSendText: _sendTextMessage,
+                      onTyping: _handleTyping,
+                      onSendFile: (bytes, name, size, {caption}) async {
+                        _showSendFileDialog(bytes, name, size);
+                      },
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
           ],
         ),
       ),
@@ -1439,9 +1642,17 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
     final respondedAt = item['_group_data']?['responded_at'];
     if (respondedAt == null) {
-      return Icon(Icons.help_outline_rounded, size: 18, color: Colors.amber.shade700);
+      return Icon(
+        Icons.help_outline_rounded,
+        size: 18,
+        color: Colors.amber.shade700,
+      );
     } else {
-      return const Icon(Icons.check_circle_rounded, size: 18, color: Colors.green);
+      return const Icon(
+        Icons.check_circle_rounded,
+        size: 18,
+        color: Colors.green,
+      );
     }
   }
 
@@ -1458,10 +1669,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     }
 
     final responder = groupData['first_responder'];
-    final responderName = responder != null 
-        ? '${responder['first_name'] ?? ''} ${responder['last_name'] ?? ''}'.trim()
+    final responderName = responder != null
+        ? '${responder['first_name'] ?? ''} ${responder['last_name'] ?? ''}'
+              .trim()
         : 'Неизвестно';
-    
+
     final time = DateFormat('dd.MM HH:mm').format(DateTime.parse(respondedAt));
 
     showDialog(
@@ -1473,13 +1685,19 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ListTile(
-              leading: const Icon(Icons.person_rounded, color: TelegramColors.accentBlue),
+              leading: const Icon(
+                Icons.person_rounded,
+                color: TelegramColors.accentBlue,
+              ),
               title: const Text('Ответил первым:'),
               subtitle: Text(responderName),
               contentPadding: EdgeInsets.zero,
             ),
             ListTile(
-              leading: const Icon(Icons.access_time_rounded, color: TelegramColors.accentBlue),
+              leading: const Icon(
+                Icons.access_time_rounded,
+                color: TelegramColors.accentBlue,
+              ),
               title: const Text('Время ответа:'),
               subtitle: Text(time),
               contentPadding: EdgeInsets.zero,
@@ -1564,7 +1782,9 @@ class _MessageListViewState extends State<_MessageListView> {
     // Check if message has embedded profile data
     final profiles = msg['profiles'];
     if (profiles != null && profiles is Map) {
-      final name = '${profiles['first_name'] ?? ''} ${profiles['last_name'] ?? ''}'.trim();
+      final name =
+          '${profiles['first_name'] ?? ''} ${profiles['last_name'] ?? ''}'
+              .trim();
       if (name.isNotEmpty) {
         _senderNameCache[senderId] = name;
         return name;
@@ -1578,7 +1798,9 @@ class _MessageListViewState extends State<_MessageListView> {
   bool _shouldShowDate(int index) {
     if (index == 0) return true;
     final curr = DateTime.tryParse(widget.messages[index]['created_at'] ?? '');
-    final prev = DateTime.tryParse(widget.messages[index - 1]['created_at'] ?? '');
+    final prev = DateTime.tryParse(
+      widget.messages[index - 1]['created_at'] ?? '',
+    );
     if (curr == null || prev == null) return false;
     return curr.toLocal().day != prev.toLocal().day ||
         curr.toLocal().month != prev.toLocal().month ||
@@ -1605,7 +1827,8 @@ class _MessageListViewState extends State<_MessageListView> {
           children: [
             if (_shouldShowDate(index))
               DateSeparator(
-                date: DateTime.tryParse(msg['created_at'] ?? '')?.toLocal() ??
+                date:
+                    DateTime.tryParse(msg['created_at'] ?? '')?.toLocal() ??
                     DateTime.now(),
               ),
             MessageBubble(
@@ -1629,16 +1852,16 @@ class _PresenceBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (chatId == null) return const SizedBox.shrink();
-    
+
     final presenceAsync = ref.watch(chatPresenceProvider(chatId!));
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return presenceAsync.when(
       data: (admins) {
         if (admins.isEmpty) return const SizedBox.shrink();
-        
-        final text = admins.length == 1 
-            ? '${admins.first} ведет диалог' 
+
+        final text = admins.length == 1
+            ? '${admins.first} ведет диалог'
             : '${admins.length} админа в чате';
 
         return Container(
@@ -1647,7 +1870,11 @@ class _PresenceBanner extends ConsumerWidget {
           color: Colors.amber.withAlpha(25),
           child: Row(
             children: [
-              const Icon(Icons.remove_red_eye_rounded, size: 14, color: Colors.amber),
+              const Icon(
+                Icons.remove_red_eye_rounded,
+                size: 14,
+                color: Colors.amber,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1655,7 +1882,9 @@ class _PresenceBanner extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+                    color: isDark
+                        ? Colors.amber.shade200
+                        : Colors.amber.shade900,
                   ),
                 ),
               ),

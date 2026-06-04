@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
@@ -13,7 +14,8 @@ class ManageStatusesDialog extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<ManageStatusesDialog> createState() => _ManageStatusesDialogState();
+  ConsumerState<ManageStatusesDialog> createState() =>
+      _ManageStatusesDialogState();
 }
 
 class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
@@ -37,7 +39,9 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка загрузки: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка загрузки: $e')));
         setState(() => _loading = false);
       }
     }
@@ -49,12 +53,14 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
       builder: (ctx) => const _StatusEditDialog(),
     );
     if (result != null) {
-      await ref.read(supaLeadServiceProvider).addStatus(
-        key: result['key']!,
-        label: result['label']!,
-        color: result['color']!,
-        sortOrder: _statuses.length,
-      );
+      await ref
+          .read(supaLeadServiceProvider)
+          .addStatus(
+            key: result['key']!,
+            label: result['label']!,
+            color: result['color']!,
+            sortOrder: _statuses.length,
+          );
       ref.invalidate(leadStatusesProvider);
       _loadStatuses();
     }
@@ -83,26 +89,36 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
       content: SizedBox(
         width: 400,
         height: 400,
-        child: _loading 
-            ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple))
+        child: _loading
+            ? const Center(
+                child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+              )
             : ListView.builder(
                 itemCount: _statuses.length,
                 itemBuilder: (context, index) {
                   final s = _statuses[index];
-                  final hexColor = s['color']?.toString().replaceAll('#', '') ?? '8B5CF6';
+                  final hexColor =
+                      s['color']?.toString().replaceAll('#', '') ?? '8B5CF6';
                   final c = Color(int.parse('FF$hexColor', radix: 16));
-                  
+
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
                       leading: Container(
-                        width: 16, height: 16,
-                        decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: c,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                       title: Text(s['label']),
                       subtitle: Text('Ключ: ${s['key']}'),
                       trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: AppTheme.danger),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: AppTheme.danger,
+                        ),
                         onPressed: () => _deleteStatus(s['id'].toString()),
                       ),
                     ),
@@ -158,11 +174,27 @@ class _StatusEditDialogState extends State<_StatusEditDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(controller: _labelCtrl, decoration: const InputDecoration(labelText: 'Название (напр. Переговоры)')),
+          TextField(
+            controller: _labelCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Название (напр. Переговоры)',
+            ),
+          ),
           const SizedBox(height: 12),
-          TextField(controller: _keyCtrl, decoration: const InputDecoration(labelText: 'Ключ (напр. negotiation, на англ., без пробелов)')),
+          TextField(
+            controller: _keyCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Ключ (напр. negotiation, на англ., без пробелов)',
+            ),
+          ),
           const SizedBox(height: 16),
-          Text('Цвет', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+          Text(
+            'Цвет',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -172,11 +204,14 @@ class _StatusEditDialogState extends State<_StatusEditDialog> {
               return GestureDetector(
                 onTap: () => setState(() => _selectedHex = c),
                 child: Container(
-                  width: 32, height: 32,
+                  width: 32,
+                  height: 32,
                   decoration: BoxDecoration(
                     color: color,
                     shape: BoxShape.circle,
-                    border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
+                    border: isSelected
+                        ? Border.all(color: Colors.white, width: 2)
+                        : null,
                   ),
                 ),
               );
@@ -185,10 +220,14 @@ class _StatusEditDialogState extends State<_StatusEditDialog> {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
         FilledButton(
           onPressed: () {
-            if (_labelCtrl.text.trim().isNotEmpty && _keyCtrl.text.trim().isNotEmpty) {
+            if (_labelCtrl.text.trim().isNotEmpty &&
+                _keyCtrl.text.trim().isNotEmpty) {
               Navigator.pop(context, {
                 'label': _labelCtrl.text.trim(),
                 'key': _keyCtrl.text.trim().toLowerCase(),

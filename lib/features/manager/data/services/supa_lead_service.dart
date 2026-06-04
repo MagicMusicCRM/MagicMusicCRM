@@ -1,10 +1,11 @@
-import 'dart:ui';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupaLeadService {
   final SupabaseClient _client;
 
   SupaLeadService(this._client);
+
+  String? get currentUserId => _client.auth.currentUser?.id;
 
   /// Get leads as a stream
   Stream<List<Map<String, dynamic>>> getLeadsStream() {
@@ -52,6 +53,18 @@ class SupaLeadService {
   /// Get branches for metadata
   Future<List<Map<String, dynamic>>> getBranches() async {
     return await _client.from('branches').select('id, name');
+  }
+
+  Future<List<Map<String, dynamic>>> getAvailableTeachers() async {
+    final response = await _client
+        .from('teachers')
+        .select('id, first_name, last_name');
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<List<Map<String, dynamic>>> getAvailableRooms() async {
+    final response = await _client.from('rooms').select('id, name');
+    return List<Map<String, dynamic>>.from(response);
   }
 
   /// Get lead comments as a stream
@@ -148,8 +161,8 @@ class SupaLeadService {
 
   /// Update statuses list (for ManageStatusesDialog)
   Future<void> updateStatuses(List<Map<String, dynamic>> statuses) async {
-     // This might be more complex depending on how the dialog update works,
-     // but for now we provide a way to push updates.
-     // Usually involves deleting old ones or upserting.
+    // This might be more complex depending on how the dialog update works,
+    // but for now we provide a way to push updates.
+    // Usually involves deleting old ones or upserting.
   }
 }

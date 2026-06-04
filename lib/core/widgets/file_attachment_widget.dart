@@ -25,8 +25,11 @@ class FileAttachmentWidget extends StatefulWidget {
   static bool isImage(String? name) {
     if (name == null) return false;
     final lower = name.toLowerCase();
-    return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') ||
-        lower.endsWith('.gif') || lower.endsWith('.webp');
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp');
   }
 
   @override
@@ -35,22 +38,53 @@ class FileAttachmentWidget extends StatefulWidget {
 
 class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
   bool _downloading = false;
+  String? _resolvedFileUrl;
+  bool _resolvingUrl = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveAttachmentUrl();
+  }
+
+  @override
+  void didUpdateWidget(covariant FileAttachmentWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.fileUrl != widget.fileUrl) {
+      _resolveAttachmentUrl();
+    }
+  }
 
   IconData _iconForFile(String name) {
     final lower = name.toLowerCase();
     if (lower.endsWith('.pdf')) return Icons.picture_as_pdf_rounded;
-    if (lower.endsWith('.doc') || lower.endsWith('.docx')) return Icons.description_rounded;
-    if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) return Icons.table_chart_rounded;
-    if (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.avi')) return Icons.video_file_rounded;
-    if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg')) return Icons.audio_file_rounded;
+    if (lower.endsWith('.doc') || lower.endsWith('.docx')) {
+      return Icons.description_rounded;
+    }
+    if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) {
+      return Icons.table_chart_rounded;
+    }
+    if (lower.endsWith('.mp4') ||
+        lower.endsWith('.webm') ||
+        lower.endsWith('.avi')) {
+      return Icons.video_file_rounded;
+    }
+    if (lower.endsWith('.mp3') ||
+        lower.endsWith('.wav') ||
+        lower.endsWith('.ogg')) {
+      return Icons.audio_file_rounded;
+    }
     return Icons.attach_file_rounded;
   }
 
   static bool isImage(String? name) {
     if (name == null) return false;
     final lower = name.toLowerCase();
-    return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') ||
-        lower.endsWith('.gif') || lower.endsWith('.webp');
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp');
   }
 
   Future<void> _downloadAndOpen() async {
@@ -58,17 +92,25 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
     setState(() => _downloading = true);
 
     try {
+      final url =
+          _resolvedFileUrl ??
+          await ChatAttachmentService.resolveUrl(widget.fileUrl);
+      if (url == null) return;
+
       final dir = await getTemporaryDirectory();
       final savePath = '${dir.path}/${widget.fileName ?? 'download'}';
-      
-      await Dio().download(widget.fileUrl!, savePath);
+
+      await Dio().download(url, savePath);
       await OpenFilex.open(savePath);
     } catch (e) {
       debugPrint('Download error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка скачивания: $e', style: const TextStyle(color: Colors.white)),
+            content: Text(
+              'Ошибка скачивания: $e',
+              style: const TextStyle(color: Colors.white),
+            ),
             backgroundColor: AppTheme.danger,
           ),
         );
@@ -79,8 +121,9 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
   }
 
   void _showFullScreenImage(BuildContext context) {
-    if (widget.fileUrl == null) return;
-    
+    final imageUrl = _resolvedFileUrl;
+    if (imageUrl == null) return;
+
     Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
@@ -90,7 +133,7 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
           return FadeTransition(
             opacity: animation,
             child: _FullScreenImageViewer(
-              imageUrl: widget.fileUrl!,
+              imageUrl: imageUrl,
               fileName: widget.fileName,
             ),
           );
@@ -99,12 +142,60 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
     );
   }
 
+  Future<void> _resolveAttachmentUrl() async {
+    final sourceUrl = widget.fileUrl;
+    if (sourceUrl == null || sourceUrl.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _resolvedFileUrl = null;
+          _resolvingUrl = false;
+        });
+      }
+      return;
+    }
+
+    setState(() => _resolvingUrl = true);
+    try {
+      final resolved = await ChatAttachmentService.resolveUrl(sourceUrl);
+      if (!mounted || sourceUrl != widget.fileUrl) return;
+      setState(() {
+        _resolvedFileUrl = resolved;
+        _resolvingUrl = false;
+      });
+    } catch (e) {
+      debugPrint('Attachment URL resolve error: $e');
+      if (mounted && sourceUrl == widget.fileUrl) {
+        setState(() {
+          _resolvedFileUrl = null;
+          _resolvingUrl = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = widget.fileName ?? 'Файл';
 
     // ── Image: show inline like Telegram ──
     if (isImage(name) && widget.fileUrl != null) {
+      if (_resolvingUrl || _resolvedFileUrl == null) {
+        return Container(
+          height: 120,
+          width: 200,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: (widget.isMe ? Colors.white : AppTheme.primaryPurple)
+                .withAlpha(15),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: widget.isMe ? Colors.white : AppTheme.primaryPurple,
+          ),
+        );
+      }
+
       return GestureDetector(
         onTap: () => _showFullScreenImage(context),
         child: ClipRRect(
@@ -112,7 +203,7 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 250, maxWidth: 280),
             child: Image.network(
-              widget.fileUrl!,
+              _resolvedFileUrl!,
               fit: BoxFit.cover,
               loadingBuilder: (context, child, progress) {
                 if (progress == null) return child;
@@ -121,35 +212,48 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
                   width: 200,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (widget.isMe ? Colors.white : AppTheme.primaryPurple).withAlpha(15),
+                    color: (widget.isMe ? Colors.white : AppTheme.primaryPurple)
+                        .withAlpha(15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: CircularProgressIndicator(
                     value: progress.expectedTotalBytes != null
-                        ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+                        ? progress.cumulativeBytesLoaded /
+                              progress.expectedTotalBytes!
                         : null,
                     strokeWidth: 2,
                     color: widget.isMe ? Colors.white : AppTheme.primaryPurple,
                   ),
                 );
               },
-              errorBuilder: (_, __, error) => Container(
+              errorBuilder: (context, error, stackTrace) => Container(
                 height: 60,
                 width: 200,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: (widget.isMe ? Colors.white : AppTheme.primaryPurple).withAlpha(15),
+                  color: (widget.isMe ? Colors.white : AppTheme.primaryPurple)
+                      .withAlpha(15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.broken_image_rounded, 
-                      color: widget.isMe ? Colors.white70 : Theme.of(context).colorScheme.onSurfaceVariant),
+                    Icon(
+                      Icons.broken_image_rounded,
+                      color: widget.isMe
+                          ? Colors.white70
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(height: 4),
-                    Text('Не удалось загрузить', 
-                      style: TextStyle(fontSize: 11, 
-                        color: widget.isMe ? Colors.white70 : Theme.of(context).colorScheme.onSurfaceVariant)),
+                    Text(
+                      'Не удалось загрузить',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: widget.isMe
+                            ? Colors.white70
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -162,8 +266,12 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
     // ── Non-image file: show as downloadable card ──
     final sizeStr = ChatAttachmentService.formatFileSize(widget.fileSize);
     final iconColor = widget.isMe ? Colors.white : AppTheme.primaryPurple;
-    final textCol = widget.isMe ? Colors.white : Theme.of(context).colorScheme.onSurface;
-    final subtitleCol = widget.isMe ? Colors.white.withAlpha(180) : Theme.of(context).colorScheme.onSurfaceVariant;
+    final textCol = widget.isMe
+        ? Colors.white
+        : Theme.of(context).colorScheme.onSurface;
+    final subtitleCol = widget.isMe
+        ? Colors.white.withAlpha(180)
+        : Theme.of(context).colorScheme.onSurfaceVariant;
 
     return InkWell(
       borderRadius: BorderRadius.circular(8),
@@ -171,7 +279,8 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: (widget.isMe ? Colors.white : AppTheme.primaryPurple).withAlpha(15),
+          color: (widget.isMe ? Colors.white : AppTheme.primaryPurple)
+              .withAlpha(15),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -218,7 +327,11 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
                       color: iconColor,
                     ),
                   )
-                : Icon(Icons.download_rounded, size: 18, color: iconColor.withAlpha(150)),
+                : Icon(
+                    Icons.download_rounded,
+                    size: 18,
+                    color: iconColor.withAlpha(150),
+                  ),
           ],
         ),
       ),
@@ -261,7 +374,8 @@ class _FullScreenImageViewer extends StatelessWidget {
               return Center(
                 child: CircularProgressIndicator(
                   value: progress.expectedTotalBytes != null
-                      ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+                      ? progress.cumulativeBytesLoaded /
+                            progress.expectedTotalBytes!
                       : null,
                   color: Colors.white,
                 ),

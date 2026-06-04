@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 /// Widget for playing back voice messages inside a message bubble.
@@ -25,11 +28,25 @@ class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
   bool _isLoading = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  String? _resolvedAudioUrl;
 
   @override
   void initState() {
     super.initState();
     _initPlayer();
+  }
+
+  @override
+  void didUpdateWidget(covariant VoicePlayerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.audioUrl != widget.audioUrl) {
+      _resolvedAudioUrl = null;
+      _position = Duration.zero;
+      _duration = widget.durationMs != null
+          ? Duration(milliseconds: widget.durationMs!)
+          : Duration.zero;
+      unawaited(_player.stop());
+    }
   }
 
   void _initPlayer() {
@@ -50,8 +67,9 @@ class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
       if (mounted) {
         setState(() {
           _isPlaying = state.playing;
-          _isLoading = state.processingState == ProcessingState.loading || 
-                       state.processingState == ProcessingState.buffering;
+          _isLoading =
+              state.processingState == ProcessingState.loading ||
+              state.processingState == ProcessingState.buffering;
 
           // When the audio completes
           if (state.processingState == ProcessingState.completed) {
@@ -73,7 +91,13 @@ class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
         // If not loaded yet, set the URL first
         if (_player.processingState == ProcessingState.idle) {
           setState(() => _isLoading = true);
-          await _player.setUrl(widget.audioUrl);
+          _resolvedAudioUrl ??= await ChatAttachmentService.resolveUrl(
+            widget.audioUrl,
+          );
+          if (_resolvedAudioUrl == null) {
+            throw StateError('Аудиофайл недоступен');
+          }
+          await _player.setUrl(_resolvedAudioUrl!);
         }
         await _player.play();
       }
@@ -83,7 +107,10 @@ class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка воспроизведения: $e', style: const TextStyle(color: Colors.white)),
+            content: Text(
+              'Ошибка воспроизведения: $e',
+              style: const TextStyle(color: Colors.white),
+            ),
             backgroundColor: AppTheme.danger,
           ),
         );

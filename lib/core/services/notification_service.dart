@@ -20,7 +20,8 @@ final notificationServiceProvider = Provider((ref) => NotificationService());
 
 class NotificationService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'high_importance_channel',
@@ -34,7 +35,10 @@ class NotificationService {
     // 1. Desktop custom notification setup
     if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
       try {
-        await localNotifier.setup(appName: 'Magic Music CRM', shortcutPolicy: ShortcutPolicy.requireCreate);
+        await localNotifier.setup(
+          appName: 'Magic Music CRM',
+          shortcutPolicy: ShortcutPolicy.requireCreate,
+        );
         _listenToDesktopMessages();
       } catch (e) {
         debugPrint('Error setting up local_notifier $e');
@@ -54,20 +58,23 @@ class NotificationService {
         AndroidInitializationSettings('@mipmap/ic_launcher');
     const DarwinInitializationSettings initializationSettingsDarwin =
         DarwinInitializationSettings(
-      requestSoundPermission: true,
-      requestBadgePermission: true,
-      requestAlertPermission: true,
-    );
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsDarwin,
-    );
-    
+          requestSoundPermission: true,
+          requestBadgePermission: true,
+          requestAlertPermission: true,
+        );
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsDarwin,
+        );
+
     // Explicitly using named settings as required by the analyzer
     await _localNotifications.initialize(settings: initializationSettings);
 
-    final androidImplementation = _localNotifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final androidImplementation = _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidImplementation != null) {
       await androidImplementation.createNotificationChannel(_channel);
     }
@@ -92,7 +99,8 @@ class NotificationService {
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       debugPrint('User granted permission');
-    } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
+    } else if (settings.authorizationStatus ==
+        AuthorizationStatus.provisional) {
       debugPrint('User granted provisional permission');
     } else {
       debugPrint('User declined or has not accepted permission');
@@ -101,10 +109,12 @@ class NotificationService {
     // Get the token each time the application loads
     String? token = await _firebaseMessaging.getToken();
     if (token != null) {
-      _saveTokenToDatabase(token);
+      await _saveTokenToDatabase(token);
 
       // Any time the token refreshes, store this in the database too.
-      _firebaseMessaging.onTokenRefresh.listen(_saveTokenToDatabase);
+      _firebaseMessaging.onTokenRefresh.listen((refreshedToken) {
+        unawaited(_saveTokenToDatabase(refreshedToken));
+      });
 
       // Handle foreground messages
       FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
@@ -114,8 +124,10 @@ class NotificationService {
         RemoteNotification? notification = message.notification;
 
         if (notification != null) {
-          debugPrint('Message also contained a notification: ${notification.title}');
-          
+          debugPrint(
+            'Message also contained a notification: ${notification.title}',
+          );
+
           await _localNotifications.show(
             id: notification.hashCode,
             title: notification.title,
@@ -139,7 +151,7 @@ class NotificationService {
           );
         }
       });
-      
+
       // Handle when app is opened from a notification (background state)
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         debugPrint('A new onMessageOpenedApp event was published!');
@@ -150,19 +162,29 @@ class NotificationService {
 
   Future<void> _saveTokenToDatabase(String? token) async {
     if (token == null) return;
-    
+
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       try {
-        await Supabase.instance.client
-            .from('profiles')
-            .update({'fcm_token': token})
-            .eq('id', user.id);
+        await Supabase.instance.client.rpc(
+          'upsert_fcm_token',
+          params: {'p_token': token, 'p_platform': _platformName},
+        );
         debugPrint('FCM Token saved to database');
       } catch (e) {
         debugPrint('Error saving FCM token: $e');
       }
     }
+  }
+
+  String get _platformName {
+    if (kIsWeb) return 'web';
+    if (Platform.isAndroid) return 'android';
+    if (Platform.isIOS) return 'ios';
+    if (Platform.isMacOS) return 'macos';
+    if (Platform.isWindows) return 'windows';
+    if (Platform.isLinux) return 'linux';
+    return 'unknown';
   }
 
   void _listenToDesktopMessages() {

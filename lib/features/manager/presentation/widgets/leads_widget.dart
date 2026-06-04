@@ -1,5 +1,5 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -33,7 +33,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
       final color = Color(int.parse('FF$hexColor', radix: 16));
       statuses.add((key, label, color));
     }
-    
+
     if (!mounted) return;
     setState(() => _activeStatuses = statuses);
   }
@@ -44,11 +44,13 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
       builder: (_) => const _LeadDialog(),
     );
     if (result != null) {
-      await ref.read(supaLeadServiceProvider).addLead(
-        name: result['name']!,
-        phone: result['phone']!,
-        source: result['source']!,
-      );
+      await ref
+          .read(supaLeadServiceProvider)
+          .addLead(
+            name: result['name']!,
+            phone: result['phone']!,
+            source: result['source']!,
+          );
     }
   }
 
@@ -63,7 +65,8 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   void _openDetail(Map<String, dynamic> lead) async {
     await showDialog<bool>(
       context: context,
-      builder: (_) => LeadDetailDialog(lead: lead, allStatuses: _activeStatuses),
+      builder: (_) =>
+          LeadDetailDialog(lead: lead, allStatuses: _activeStatuses),
     );
   }
 
@@ -72,12 +75,14 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
     final leadsAsync = ref.watch(leadsStreamProvider);
 
     return leadsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
+      loading: () => const Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+      ),
       error: (err, stack) => Center(child: Text('Ошибка: $err')),
       data: (data) {
         final grouped = <String, List<Map<String, dynamic>>>{};
         final foundStatuses = <String>{};
-        
+
         for (final s in _activeStatuses) {
           grouped[s.$1] = [];
         }
@@ -105,11 +110,20 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
           body: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Воронка продаж', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Воронка продаж',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     OutlinedButton.icon(
                       onPressed: () async {
                         await ManageStatusesDialog.show(context);
@@ -124,7 +138,10 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: active.map((s) {
@@ -182,7 +199,8 @@ class _KanbanColumnState extends State<_KanbanColumn> {
       ),
       child: DragTarget<String>(
         onWillAcceptWithDetails: (details) => true,
-        onAcceptWithDetails: (details) => widget.onMove(details.data, widget.status.$1),
+        onAcceptWithDetails: (details) =>
+            widget.onMove(details.data, widget.status.$1),
         builder: (context, candidateData, rejectedData) {
           return Column(
             children: [
@@ -190,14 +208,40 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Container(width: 8, height: 8, decoration: BoxDecoration(color: widget.status.$3, shape: BoxShape.circle)),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: widget.status.$3,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                     const SizedBox(width: 8),
-                    Text(widget.status.$2, style: TextStyle(color: widget.status.$3, fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(
+                      widget.status.$2,
+                      style: TextStyle(
+                        color: widget.status.$3,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10)),
-                      child: Text('${widget.leads.length}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${widget.leads.length}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -290,9 +334,21 @@ class _LeadCard extends ConsumerWidget {
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: Colors.black.withAlpha(76), blurRadius: 10, spreadRadius: 2)],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(76),
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                ),
+              ],
             ),
-            child: Text(displayName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text(
+              displayName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ),
       ),
@@ -300,7 +356,9 @@ class _LeadCard extends ConsumerWidget {
         onTap: onTap,
         child: Card(
           margin: const EdgeInsets.only(bottom: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -310,11 +368,20 @@ class _LeadCard extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
-                      child: Text(displayName,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      child: Text(
+                        displayName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                     PopupMenuButton<String>(
-                      icon: Icon(Icons.more_horiz_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
+                      icon: Icon(
+                        Icons.more_horiz_rounded,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        size: 18,
+                      ),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(minWidth: 150),
                       onSelected: (v) {
@@ -333,15 +400,33 @@ class _LeadCard extends ConsumerWidget {
                       itemBuilder: (_) => [
                         ...allStatuses
                             .where((s) => s.$1 != currentStatus)
-                            .map((s) => PopupMenuItem(value: s.$1, child: Text('→ ${s.$2}'))),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem(value: 'comment', child: Text('Добавить комментарий')),
-                        const PopupMenuItem(value: 'task', child: Text('Создать задачу')),
-                        const PopupMenuItem(value: 'trial', child: Text('Назначить пробный')),
+                            .map(
+                              (s) => PopupMenuItem(
+                                value: s.$1,
+                                child: Text('→ ${s.$2}'),
+                              ),
+                            ),
                         const PopupMenuDivider(),
                         const PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Удалить', style: TextStyle(color: AppTheme.danger))),
+                          value: 'comment',
+                          child: Text('Добавить комментарий'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'task',
+                          child: Text('Создать задачу'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'trial',
+                          child: Text('Назначить пробный'),
+                        ),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            'Удалить',
+                            style: TextStyle(color: AppTheme.danger),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -349,17 +434,31 @@ class _LeadCard extends ConsumerWidget {
                 if (phone.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text(phone, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                    child: Text(
+                      phone,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     if (discipline.isNotEmpty)
-                      _InfoBadge(text: discipline, color: AppTheme.primaryPurple.withAlpha(51), textColor: AppTheme.primaryPurple),
+                      _InfoBadge(
+                        text: discipline,
+                        color: AppTheme.primaryPurple.withAlpha(51),
+                        textColor: AppTheme.primaryPurple,
+                      ),
                     if (level.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
-                        child: _InfoBadge(text: level, color: AppTheme.warning.withAlpha(51), textColor: AppTheme.warning),
+                        child: _InfoBadge(
+                          text: level,
+                          color: AppTheme.warning.withAlpha(51),
+                          textColor: AppTheme.warning,
+                        ),
                       ),
                   ],
                 ),
@@ -368,8 +467,20 @@ class _LeadCard extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     if (source.isNotEmpty)
-                      Text(source, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
-                    Text(dateStr, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
+                      Text(
+                        source,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 10,
+                        ),
+                      ),
+                    Text(
+                      dateStr,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 10,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -386,17 +497,28 @@ class _LeadCard extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Комментарий к лиду'),
-        content: TextField(controller: controller, maxLines: 3, decoration: const InputDecoration(hintText: 'Текст...')),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          decoration: const InputDecoration(hintText: 'Текст...'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Сохранить')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Сохранить'),
+          ),
         ],
       ),
     );
     if (content != null && content.trim().isNotEmpty) {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final leadService = ref.read(supaLeadServiceProvider);
+      final userId = leadService.currentUserId;
       if (userId != null) {
-        await ref.read(supaLeadServiceProvider).addComment(
+        await leadService.addComment(
           leadId: lead['id'],
           content: content.trim(),
           authorId: userId,
@@ -412,17 +534,27 @@ class _LeadCard extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Задача по лиду'),
-        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Что сделать?')),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Что сделать?'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Создать')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Создать'),
+          ),
         ],
       ),
     );
     if (title != null && title.trim().isNotEmpty) {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final leadService = ref.read(supaLeadServiceProvider);
+      final userId = leadService.currentUserId;
       if (userId != null) {
-        await ref.read(supaLeadServiceProvider).addLeadTask(
+        await leadService.addLeadTask(
           leadId: lead['id'],
           title: title.trim(),
           creatorId: userId,
@@ -433,17 +565,14 @@ class _LeadCard extends ConsumerWidget {
   }
 
   Future<void> _scheduleTrial(BuildContext context, WidgetRef ref) async {
-    final client = Supabase.instance.client;
-    
-    // Quick fetching of available teachers and rooms
-    // TODO: Move teacher/room fetching to a dedicated service/provider too
+    final leadService = ref.read(supaLeadServiceProvider);
     final [teachersRes, roomsRes] = await Future.wait([
-      client.from('teachers').select('id, first_name, last_name'),
-      client.from('rooms').select('id, name'),
+      leadService.getAvailableTeachers(),
+      leadService.getAvailableRooms(),
     ]);
-    
-    final teachers = List<Map<String, dynamic>>.from(teachersRes);
-    final rooms = List<Map<String, dynamic>>.from(roomsRes);
+
+    final teachers = teachersRes;
+    final rooms = roomsRes;
 
     if (!context.mounted) return;
 
@@ -463,25 +592,35 @@ class _LeadCard extends ConsumerWidget {
               DropdownButtonFormField<String>(
                 value: selectedTeacher,
                 decoration: const InputDecoration(labelText: 'Учитель'),
-                items: teachers.map((t) => DropdownMenuItem(
-                  value: t['id'].toString(),
-                  child: Text('${t['first_name']} ${t['last_name']}'),
-                )).toList(),
+                items: teachers
+                    .map(
+                      (t) => DropdownMenuItem(
+                        value: t['id'].toString(),
+                        child: Text('${t['first_name']} ${t['last_name']}'),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (v) => setLocalState(() => selectedTeacher = v),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: selectedRoom,
                 decoration: const InputDecoration(labelText: 'Кабинет'),
-                items: rooms.map((r) => DropdownMenuItem(
-                  value: r['id'].toString(),
-                  child: Text(r['name']),
-                )).toList(),
+                items: rooms
+                    .map(
+                      (r) => DropdownMenuItem(
+                        value: r['id'].toString(),
+                        child: Text(r['name']),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (v) => setLocalState(() => selectedRoom = v),
               ),
               const SizedBox(height: 12),
               ListTile(
-                title: Text('Дата: ${DateFormat('dd.MM.yyyy').format(selectedDate)}'),
+                title: Text(
+                  'Дата: ${DateFormat('dd.MM.yyyy').format(selectedDate)}',
+                ),
                 trailing: const Icon(Icons.calendar_today_rounded),
                 onTap: () async {
                   final picked = await showDatePicker(
@@ -490,7 +629,9 @@ class _LeadCard extends ConsumerWidget {
                     firstDate: DateTime.now(),
                     lastDate: DateTime.now().add(const Duration(days: 90)),
                   );
-                  if (picked != null) setLocalState(() => selectedDate = picked);
+                  if (picked != null) {
+                    setLocalState(() => selectedDate = picked);
+                  }
                 },
               ),
               ListTile(
@@ -501,14 +642,22 @@ class _LeadCard extends ConsumerWidget {
                     context: ctx,
                     initialTime: selectedTime,
                   );
-                  if (picked != null) setLocalState(() => selectedTime = picked);
+                  if (picked != null) {
+                    setLocalState(() => selectedTime = picked);
+                  }
                 },
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Назначить')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Назначить'),
+            ),
           ],
         ),
       ),
@@ -523,7 +672,7 @@ class _LeadCard extends ConsumerWidget {
         selectedTime.minute,
       );
 
-      await ref.read(supaLeadServiceProvider).scheduleTrial(
+      await leadService.scheduleTrial(
         leadId: lead['id'],
         teacherId: selectedTeacher!,
         roomId: selectedRoom!,
@@ -545,14 +694,28 @@ class _InfoBadge extends StatelessWidget {
   final Color color;
   final Color textColor;
 
-  const _InfoBadge({required this.text, required this.color, required this.textColor});
+  const _InfoBadge({
+    required this.text,
+    required this.color,
+    required this.textColor,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
-      child: Text(text, style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }
@@ -585,15 +748,30 @@ class _LeadDialogState extends State<_LeadDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Имя')),
+          TextField(
+            controller: _nameCtrl,
+            decoration: const InputDecoration(labelText: 'Имя'),
+          ),
           const SizedBox(height: 10),
-          TextField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: 'Телефон'), keyboardType: TextInputType.phone),
+          TextField(
+            controller: _phoneCtrl,
+            decoration: const InputDecoration(labelText: 'Телефон'),
+            keyboardType: TextInputType.phone,
+          ),
           const SizedBox(height: 10),
-          TextField(controller: _sourceCtrl, decoration: const InputDecoration(labelText: 'Источник (ВКонтакте, сайт...)')),
+          TextField(
+            controller: _sourceCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Источник (ВКонтакте, сайт...)',
+            ),
+          ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
         FilledButton(
           onPressed: () {
             if (_nameCtrl.text.trim().isNotEmpty) {

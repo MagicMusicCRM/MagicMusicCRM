@@ -7,10 +7,16 @@ final _supabase = Supabase.instance.client;
 // ── Current user info ────────────────────────────────────────────────────────
 
 /// Current user's profile data.
-final currentProfileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+final currentProfileProvider = FutureProvider<Map<String, dynamic>?>((
+  ref,
+) async {
   final user = _supabase.auth.currentUser;
   if (user == null) return null;
-  return await _supabase.from('profiles').select().eq('id', user.id).maybeSingle();
+  return await _supabase
+      .from('profiles')
+      .select()
+      .eq('id', user.id)
+      .maybeSingle();
 });
 
 /// Current user's role.
@@ -21,10 +27,10 @@ final currentRoleProvider = FutureProvider<String>((ref) async {
 
 /// List of admin and manager profile IDs (for deciding what counts as an "Administration" message).
 final adminIdsProvider = FutureProvider<List<String>>((ref) async {
-  final res = await _supabase
-      .from('profiles')
-      .select('id')
-      .inFilter('role', ['admin', 'manager']);
+  final res = await _supabase.from('profiles').select('id').inFilter('role', [
+    'admin',
+    'manager',
+  ]);
   return (res as List).map((a) => a['id'].toString()).toList();
 });
 
@@ -32,8 +38,9 @@ final adminIdsProvider = FutureProvider<List<String>>((ref) async {
 
 /// Provides list of conversations for admin/manager.
 /// Returns profiles of all clients who have sent messages.
-final clientConversationsProvider =
-    StreamProvider<List<Map<String, dynamic>>>((ref) async* {
+final clientConversationsProvider = StreamProvider<List<Map<String, dynamic>>>((
+  ref,
+) async* {
   final userId = _supabase.auth.currentUser?.id;
   if (userId == null) {
     yield [];
@@ -98,32 +105,39 @@ final clientConversationsProvider =
 
 /// Messages between current user and a specific user (or school/null receiver).
 final conversationMessagesProvider =
-    StreamProvider.family<List<Map<String, dynamic>>, String?>((ref, partnerId) {
-  final userId = _supabase.auth.currentUser?.id;
-  if (userId == null) return Stream.value([]);
+    StreamProvider.family<List<Map<String, dynamic>>, String?>((
+      ref,
+      partnerId,
+    ) {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return Stream.value([]);
 
-  var query = _supabase.from('messages').stream(primaryKey: ['id']);
+      var query = _supabase.from('messages').stream(primaryKey: ['id']);
 
-  if (partnerId == null) {
-    // School inbox or a general thread where receiver_id is null
-    // We filter by receiver_id is null and group_chat_id is null.
-    // Note: .stream() filter capabilities are limited, so we do basic filtering here.
-    return query
-        .eq('group_chat_id', 'null') // This might not work as expected in .stream()
-        .order('created_at');
-  }
+      if (partnerId == null) {
+        // School inbox or a general thread where receiver_id is null
+        // We filter by receiver_id is null and group_chat_id is null.
+        // Note: .stream() filter capabilities are limited, so we do basic filtering here.
+        return query
+            .eq(
+              'group_chat_id',
+              'null',
+            ) // This might not work as expected in .stream()
+            .order('created_at');
+      }
 
-  // For direct chats, we ideally want (sender=me AND receiver=partner) OR (sender=partner AND receiver=me)
-  // Since .stream() only supports simple .eq() filters, we'll return messages where 
-  // either sender or receiver is the partner, and let RLS/Flutter handle the rest.
-  return query.order('created_at');
-});
+      // For direct chats, we ideally want (sender=me AND receiver=partner) OR (sender=partner AND receiver=me)
+      // Since .stream() only supports simple .eq() filters, we'll return messages where
+      // either sender or receiver is the partner, and let RLS/Flutter handle the rest.
+      return query.order('created_at');
+    });
 
 // ── Group chats ──────────────────────────────────────────────────────────────
 
 /// Group chats the current user belongs to.
-final userGroupChatsProvider =
-    StreamProvider<List<Map<String, dynamic>>>((ref) async* {
+final userGroupChatsProvider = StreamProvider<List<Map<String, dynamic>>>((
+  ref,
+) async* {
   final userId = _supabase.auth.currentUser?.id;
   if (userId == null) {
     yield [];
@@ -137,7 +151,9 @@ final userGroupChatsProvider =
       .eq('user_id', userId);
 
   await for (final memberships in membershipsStream) {
-    final groupIds = memberships.map((m) => m['group_chat_id'] as String).toList();
+    final groupIds = memberships
+        .map((m) => m['group_chat_id'] as String)
+        .toList();
     if (groupIds.isEmpty) {
       yield [];
       continue;
@@ -145,7 +161,9 @@ final userGroupChatsProvider =
 
     final groups = await _supabase
         .from('group_chats')
-        .select('*, first_responder:profiles!first_responder_id(first_name, last_name)')
+        .select(
+          '*, first_responder:profiles!first_responder_id(first_name, last_name)',
+        )
         .inFilter('id', groupIds)
         .order('created_at', ascending: false);
 
@@ -176,10 +194,13 @@ final userGroupChatsProvider =
 
 /// Presence state for a specific chat.
 /// Listens to a channel and returns list of active admin names.
-final chatPresenceProvider =
-    StreamProvider.family<List<String>, String>((ref, chatId) async* {
+final chatPresenceProvider = StreamProvider.family<List<String>, String>((
+  ref,
+  chatId,
+) async* {
   final profile = await ref.watch(currentProfileProvider.future);
-  if (profile == null || (profile['role'] != 'admin' && profile['role'] != 'manager')) {
+  if (profile == null ||
+      (profile['role'] != 'admin' && profile['role'] != 'manager')) {
     yield [];
     return;
   }
@@ -189,7 +210,7 @@ final chatPresenceProvider =
 
   // Join Presence
   channel.subscribe((status, [error]) {
-    if (status == 'SUBSCRIBED') {
+    if (status == RealtimeSubscribeStatus.subscribed) {
       channel.track({
         'user_id': profile['id'],
         'name': name,
@@ -200,19 +221,20 @@ final chatPresenceProvider =
 
   // Listen to sync
   final stream = StreamController<List<String>>();
-  
+
   channel.onPresenceSync((payload) {
     final state = channel.presenceState();
     final activeAdmins = <String>[];
-    
+
     for (final presence in state) {
       final p = (presence as dynamic).payload;
       // Only show other admins
-      if (p['user_id'] != profile['id'] && (p['role'] == 'admin' || p['role'] == 'manager')) {
+      if (p['user_id'] != profile['id'] &&
+          (p['role'] == 'admin' || p['role'] == 'manager')) {
         activeAdmins.add(p['name'] as String);
       }
     }
-    
+
     stream.add(activeAdmins.toSet().toList());
   });
 
@@ -226,23 +248,29 @@ final chatPresenceProvider =
 
 /// Real-time messages for a group chat.
 final groupMessagesProvider =
-    StreamProvider.family<List<Map<String, dynamic>>, String>((ref, groupChatId) {
-  return _supabase
-      .from('messages')
-      .stream(primaryKey: ['id'])
-      .eq('group_chat_id', groupChatId)
-      .order('created_at', ascending: true);
-});
+    StreamProvider.family<List<Map<String, dynamic>>, String>((
+      ref,
+      groupChatId,
+    ) {
+      return _supabase
+          .from('messages')
+          .stream(primaryKey: ['id'])
+          .eq('group_chat_id', groupChatId)
+          .order('created_at', ascending: true);
+    });
 
 /// Members of a group chat with profile info.
 final groupMembersProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, String>((ref, groupChatId) async {
-  final members = await _supabase
-      .from('group_chat_members')
-      .select('*, profiles(*)')
-      .eq('group_chat_id', groupChatId);
-  return List<Map<String, dynamic>>.from(members);
-});
+    FutureProvider.family<List<Map<String, dynamic>>, String>((
+      ref,
+      groupChatId,
+    ) async {
+      final members = await _supabase
+          .from('group_chat_members')
+          .select('*, profiles(*)')
+          .eq('group_chat_id', groupChatId);
+      return List<Map<String, dynamic>>.from(members);
+    });
 
 // ── Channels ─────────────────────────────────────────────────────────────────
 
@@ -257,43 +285,48 @@ final channelsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
 /// Real-time posts for a channel.
 final channelPostsProvider =
     StreamProvider.family<List<Map<String, dynamic>>, String>((ref, channelId) {
-  return _supabase
-      .from('channel_posts')
-      .stream(primaryKey: ['id'])
-      .eq('channel_id', channelId)
-      .order('created_at', ascending: true);
-});
+      return _supabase
+          .from('channel_posts')
+          .stream(primaryKey: ['id'])
+          .eq('channel_id', channelId)
+          .order('created_at', ascending: true);
+    });
 
 /// Current user's permissions for a channel.
 final channelUserPermissionProvider =
-    FutureProvider.family<Map<String, dynamic>?, String>((ref, channelId) async {
-  final userId = _supabase.auth.currentUser?.id;
-  if (userId == null) return null;
-  return await _supabase
-      .from('channel_permissions')
-      .select()
-      .eq('channel_id', channelId)
-      .eq('user_id', userId)
-      .maybeSingle();
-});
+    FutureProvider.family<Map<String, dynamic>?, String>((
+      ref,
+      channelId,
+    ) async {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return null;
+      return await _supabase
+          .from('channel_permissions')
+          .select()
+          .eq('channel_id', channelId)
+          .eq('user_id', userId)
+          .maybeSingle();
+    });
 
 /// All permissions for a channel (for manager to manage).
 final channelAllPermissionsProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, String>((ref, channelId) async {
-  final res = await _supabase
-      .from('channel_permissions')
-      .select('*, profiles:user_id(first_name, last_name, role)')
-      .eq('channel_id', channelId);
-  return List<Map<String, dynamic>>.from(res);
-});
+    FutureProvider.family<List<Map<String, dynamic>>, String>((
+      ref,
+      channelId,
+    ) async {
+      final res = await _supabase
+          .from('channel_permissions')
+          .select('*, profiles:user_id(first_name, last_name, role)')
+          .eq('channel_id', channelId);
+      return List<Map<String, dynamic>>.from(res);
+    });
 
 // ── All profiles (for group creation) ────────────────────────────────────────
 
 /// All profiles for admin group creation.
-final allProfilesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final res = await _supabase
-      .from('profiles')
-      .select()
-      .order('first_name');
+final allProfilesProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final res = await _supabase.from('profiles').select().order('first_name');
   return List<Map<String, dynamic>>.from(res);
 });

@@ -4,14 +4,18 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/login_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/registration_screen.dart';
+import 'package:magic_music_crm/features/auth/presentation/screens/onboarding_screen.dart';
+import 'package:magic_music_crm/features/auth/presentation/screens/legal_consent_screen.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/student_detail_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
+import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_screen.dart';
+import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_status_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/check_email_screen.dart';
-
 
 // ── Role cache ───────────────────────────────────────────────────────────────
 String? _cachedRole;
@@ -94,14 +98,42 @@ final routerProvider = Provider<GoRouter>((ref) {
       final session = Supabase.instance.client.auth.currentSession;
       final isAuth = session != null;
       final loc = state.matchedLocation;
-      final isAuthRoute = loc == '/login' || loc == '/register' || loc == '/check-email';
+      final isAuthRoute =
+          loc == '/login' || loc == '/register' || loc == '/check-email';
+      final isGateRoute =
+          loc == '/onboarding' ||
+          loc == '/legal-consent' ||
+          loc == '/account-deletion-status';
 
       if (!isAuth) {
         return isAuthRoute ? null : '/login';
       }
 
-      final role = await _fetchRole(session.user.id);
+      final gateStatus = await ref
+          .read(supaReleaseGateServiceProvider)
+          .getGateStatus();
+      final role = gateStatus.role.isEmpty
+          ? await _fetchRole(session.user.id)
+          : gateStatus.role;
       final roleRoute = _roleToRoute(role);
+
+      if (gateStatus.deletionPending) {
+        return loc == '/account-deletion-status'
+            ? null
+            : '/account-deletion-status';
+      }
+
+      if (!gateStatus.profileComplete) {
+        return loc == '/onboarding' ? null : '/onboarding';
+      }
+
+      if (!gateStatus.legalAccepted) {
+        return loc == '/legal-consent' ? null : '/legal-consent';
+      }
+
+      if (isGateRoute) {
+        return roleRoute;
+      }
 
       if (isAuthRoute || loc == '/') {
         return roleRoute;
@@ -116,14 +148,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const SizedBox.shrink(),
-      ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const SizedBox.shrink()),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegistrationScreen(),
@@ -134,6 +160,23 @@ final routerProvider = Provider<GoRouter>((ref) {
           final email = state.extra as String? ?? '';
           return CheckEmailScreen(email: email);
         },
+      ),
+      GoRoute(
+        path: '/onboarding',
+        builder: (context, state) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/legal-consent',
+        builder: (context, state) => const LegalConsentScreen(),
+      ),
+      GoRoute(
+        path: '/legal-documents',
+        builder: (context, state) =>
+            const LegalConsentScreen(requireAcceptance: false),
+      ),
+      GoRoute(
+        path: '/account-deletion-status',
+        builder: (context, state) => const AccountDeletionStatusScreen(),
       ),
       GoRoute(
         path: '/client',
@@ -161,6 +204,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/delete-account',
+        builder: (context, state) => const AccountDeletionScreen(),
       ),
     ],
   );
