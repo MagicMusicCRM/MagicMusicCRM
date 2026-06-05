@@ -1,86 +1,204 @@
 # Magic Music CRM
 
-Профессиональная CRM-система для музыкальных школ, построенная на стеке **Flutter + Supabase**. Система предназначена для управления расписанием, учениками, педагогами, финансами и лидами.
+Flutter CRM for Magic Music school operations: schedules, clients, teachers, leads, finance, messenger, onboarding, legal consent and Google Play release workflows.
 
----
+## Current Release
 
-## 🚀 Основной технологический стек
-- **Frontend**: Flutter (Riverpod для управления состоянием, GoRouter для навигации).
-- **Backend**: Supabase (PostgreSQL, Auth, Storage, Realtime).
-- **Design**: Современная темная тема с использованием фиолетовых и золотых акцентов, элементы Glassmorphism.
+- App version: `1.1.5+115`
+- Android package: `magic.crm`
+- Primary branch: `main`
+- Active backend: Supabase project `xblpnywnlhfgofskbdxb`
+- App Supabase URL: `https://api.magic-music.org`
 
----
+## GitHub And Linear
 
-## 🛠 Текущее состояние и возможности
+Repository:
 
-### 1. Система аутентификации и профилей
-- **Полная регистрация**: Сбор ФИО, телефона, Email, даты рождения и пароля.
-- **Верификация**: Подтверждение через Email OTP (6-значный код).
-- **Декаплинг (Auth Decoupling)**: Профили пользователей в таблице `profiles` отделены от сущностей CRM. Удаление профиля не приводит к каскадному удалению данных в CRM (используется `SET NULL`).
-- **Автоматическая привязка**: Postgres-триггер автоматически связывает нового зарегистрированного пользователя с существующей записью в `students`, `teachers` или `employees` по совпадению Email или телефона.
+```text
+MagicMusicCRM/MagicMusicCRM
+```
 
-### 2. Расписание и ресурсы
-- **Управление филиалами**: Поддержка нескольких локаций (например, Сокол, Спортивная).
-- **Управление кабинетами**: Создание, редактирование и удаление аудиторий с указанием вместимости.
-- **Уроки**: Назначение уроков в конкретные кабинеты с привязкой педагога и учеников.
-- **Календарные виды**: Поддержка видов на день, неделю и месяц.
+Current development branch for release fixes:
 
-### 3. CRM и управление данными
-- **Лиды (Канбан)**: Гибкая настройка этапов воронки (добавление, удаление, редактирование колонок).
-- **Управление сотрудниками**: Отдельный интерфейс для создания Администраторов и Управляющих.
-- **Баланс**: Ручное пополнение баланса учеников.
+```text
+codex/release-main-merge
+```
 
-### 4. Уведомления и Роли
-- **Real-time уведомления**: Колокольчик в AppBar для Администраторов и Управляющих (уведомления о новых регистрациях и т.д.).
-- **Управление ролями**: Только Управляющий может изменять роли пользователей (Ученик, Преподаватель, Администратор, Управляющий).
+For Linear documentation and issue tracking, add the GitHub account `aleks10sadu` as a collaborator or member with access to this repository, then connect the same repository in the Linear GitHub integration.
 
----
+## Product Scope
 
-## 🧠 Инструкция для LLM и разработчиков (Context)
+The app is an internal operational CRM. It supports:
 
-### Архитектура данных
-- `profiles`: Центральная таблица пользователей. Поле `role` определяет права доступа.
-- `students`, `teachers`, `employees`: Сущности CRM, ссылающиеся на `profiles.id` через `profile_id`.
-- **Важно**: При работе с БД всегда проверяйте Row Level Security (RLS) политики в Supabase.
+- client, teacher, manager and admin dashboards;
+- schedule, lessons, rooms, branches and groups;
+- leads, tasks, payments and reports;
+- personal `Администрация` chat and read-only `Объявления`;
+- file, image and voice attachments in messenger;
+- profile editing, auth methods, legal consent and account deletion;
+- Google OAuth, email/password login and optional email-code step after password.
 
-### Типичные ошибки и их решения
-1. **Async Context (BuildContext)**: Не используйте `context` после `await` без проверки `context.mounted`.
-2. **Provider Invalidation**: После создания новой сущности в БД (например, студента), не забывайте вызывать `ref.invalidate(entitiesProvider('students'))` для обновления списка.
-3. **Database Constraints**: Всегда используйте `ON DELETE SET NULL` для ссылок на `profiles`, чтобы не потерять историю CRM при удалении аккаунта пользователя.
-4. **Phone Formatting**: В базе номера хранятся как строки, при сравнении/поиске лучше приводить к единому формату.
-5. **Realtime Channels**: При использовании `Supabase.instance.client.channel()` всегда вызывайте `.subscribe()` и убедитесь, что вы не создаете дублирующие подписки при перестроении виджетов (используйте `useEffect` или аналоги в Riverpod).
+## Architecture
 
-### Правила разработки
-1. **Стилизация**: Используйте константы из `AppTheme`. Не хардкодьте цвета, если это не обосновано дизайном.
-2. **Навигация**: Используйте `context.go()` или `context.push()` через `go_router`.
-3. **Анимации**: Приветствуются микро-анимации и плавные переходы (используйте `AnimatedContainer`, `Hero` и т.д.).
-4. **Документация**: Если вы добавляете новую таблицу или фичу, обновите этот README.
+```text
+lib/
+├── core/
+│   ├── constants/       environment constants
+│   ├── providers/       shared Riverpod providers
+│   ├── router/          GoRouter auth/profile/legal gates
+│   ├── services/        Supabase-backed services
+│   ├── theme/           app colors and Material themes
+│   └── widgets/         shared UI and messenger widgets
+└── features/
+    ├── admin/
+    ├── auth/
+    ├── client/
+    ├── manager/
+    ├── messenger/
+    ├── profile/
+    └── teacher/
+```
 
----
+Backend boundaries:
 
-## ⚙️ Запуск и настройка
-1. **Flutter**: Убедитесь, что установлен Flutter SDK.
-2. **Supabase**: 
-   - Настройте проект в Supabase.
-   - Создайте таблицы на основе миграций (см. `walkthrough.md` или логи последних задач).
-   - Вставьте `SUPABASE_URL` и `SUPABASE_ANON_KEY` в инициализацию `main.dart`.
-3. **Команда**: `flutter run` (поддерживаются Windows, Android, iOS).
+- Supabase Auth for email/password, OTP and Google identity.
+- Postgres with RLS for CRM data and role isolation.
+- Storage for avatars and chat attachments.
+- Realtime for messenger and operational updates.
+- Edge Functions for push notification dispatch.
 
----
+Architecture docs live in `.anws/v2/`.
 
-## ⚡ Автоматизация (Database Triggers)
-В Supabase реализована логика на уровне БД для обеспечения целостности данных:
-- `create_profile_for_new_user`: Триггер на `auth.users`, который создает запись в `profiles` при регистрации.
-- **Логика связывания**: При создании профиля система ищет совпадения по Email/Телефону в таблицах `students`, `teachers`, `employees`. Если находит — прописывает `profile_id` в соответствующую таблицу. Это позволяет заранее создать запись сотрудника/ученика, а когда он зарегистрируется — данные "схлопнутся" автоматически.
+## Auth
 
----
+Google OAuth is configured through Supabase Auth. The Supabase Google provider must keep the Web OAuth client first, followed by Android clients:
 
-## 🔜 Планы по развитию
-- [ ] Оптимизация производительности чатов.
-- [ ] Интеграция эквайринга для автоматического приема платежей.
-- [x] Экран "Редактировать профиль" для всех пользователей (Био, Смена пароля).
-- [ ] Расширенная отчетность и аналитика для Управляющих.
+```text
+WEB_CLIENT_ID,ANDROID_DEBUG_CLIENT_ID,ANDROID_UPLOAD_CLIENT_ID,ANDROID_PLAY_SIGNING_CLIENT_ID
+```
 
----
+Current Web Client ID used by Flutter builds:
 
-*Этот проект развивается с акцентом на UX и визуальную эстетику. При добавлении новых UI-компонентов старайтесь сделать их "Wow".*
+```text
+1038036512599-vg813c70pl4qjv7kmtse94mgkorfatg6.apps.googleusercontent.com
+```
+
+Android release builds must pass it explicitly:
+
+```powershell
+flutter build appbundle --release --dart-define=GOOGLE_WEB_CLIENT_ID=1038036512599-vg813c70pl4qjv7kmtse94mgkorfatg6.apps.googleusercontent.com
+```
+
+Email OTP is 6 numeric digits. Supabase Auth generates the token; Resend only delivers the email. Set `OTP length = 6` in Supabase Auth email provider settings.
+
+## Storage URL Policy
+
+Do not store absolute Supabase Storage URLs in database columns. Use stable references:
+
+```text
+storage://avatars/<path>
+storage://chat-attachments/<path>
+```
+
+`ChatAttachmentService` resolves those references through the current Supabase host. This prevents old `*.supabase.co` links from leaking into UI after switching to `https://api.magic-music.org`.
+
+Relevant migration:
+
+```text
+supabase/migrations/20260605123145_normalize_storage_urls_for_custom_domain.sql
+```
+
+## Custom Domain Notes
+
+`https://api.magic-music.org` is a Supabase custom domain. It still points to Supabase infrastructure. If a mobile operator blocks the route to Supabase/Cloudflare IPs, the custom domain alone may not restore access.
+
+Useful checks from a phone without VPN:
+
+```text
+https://api.magic-music.org/rest/v1/
+https://xblpnywnlhfgofskbdxb.supabase.co/rest/v1/
+```
+
+Expected successful backend reachability is a Supabase JSON error such as `UNAUTHORIZED_MISSING_API_KEY`, not a rendered web page.
+
+## Local Setup
+
+Prerequisites:
+
+- Flutter SDK
+- Android Studio / Android SDK
+- Supabase CLI
+- release signing file `android/key.properties`
+- upload keystore referenced by `android/key.properties`
+
+Install dependencies:
+
+```powershell
+flutter pub get
+```
+
+Run locally:
+
+```powershell
+flutter run --dart-define=GOOGLE_WEB_CLIENT_ID=1038036512599-vg813c70pl4qjv7kmtse94mgkorfatg6.apps.googleusercontent.com
+```
+
+Build Android App Bundle:
+
+```powershell
+flutter build appbundle --release --dart-define=GOOGLE_WEB_CLIENT_ID=1038036512599-vg813c70pl4qjv7kmtse94mgkorfatg6.apps.googleusercontent.com
+```
+
+Output:
+
+```text
+build/app/outputs/bundle/release/app-release.aab
+```
+
+## Verification
+
+Run before release:
+
+```powershell
+flutter test
+flutter analyze --no-fatal-warnings --no-fatal-infos
+```
+
+Current analyzer baseline has legacy info-level findings in archived scripts and older messenger/admin/manager files. Error-level analyzer failures are release blockers.
+
+## Supabase Operations
+
+Check migration state:
+
+```powershell
+supabase migration list
+```
+
+Be careful with `supabase db push`: local and remote migration histories may differ. For narrow data fixes, use reviewed SQL with:
+
+```powershell
+supabase db query --linked --file <path-to-sql>
+```
+
+Do not expose service-role keys in Flutter. New Supabase-facing app services should use the `Supa` prefix and stay outside widget `build()` methods.
+
+## Release Checklist
+
+1. Update `pubspec.yaml` version and build number.
+2. Confirm Google OAuth clients in Supabase Auth.
+3. Confirm Firebase `google-services.json` contains Android clients for debug, upload and Play signing SHA-1.
+4. Run `flutter test`.
+5. Run `flutter analyze --no-fatal-warnings --no-fatal-infos`.
+6. Build AAB with `GOOGLE_WEB_CLIENT_ID`.
+7. Upload AAB to Google Play testing track.
+8. Smoke-test Google login, onboarding/legal gate, messenger, attachments and profile avatars without VPN.
+
+## Documentation Index
+
+- `.anws/v2/05_TASKS.md` - release task blueprint.
+- `docs/release/google_oauth_setup.md` - Google OAuth setup.
+- `docs/release/resend_supabase_otp_setup.md` - Resend and Supabase OTP setup.
+- `docs/release/supabase_email_templates_ru.md` - Russian email templates.
+- `docs/supabase_custom_domain_setup_guide.md` - custom domain notes.
+- `docs/release/google_play_console_status.md` - Play Console status.
+- `docs/legal/` - legal documents.
