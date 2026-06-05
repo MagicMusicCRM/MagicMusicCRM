@@ -449,6 +449,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Column(
                 children: [
                   ListTile(
+                    leading: const Icon(Icons.login_outlined),
+                    title: const Text('Способы входа'),
+                    subtitle: const Text('Пароль и привязка Google'),
+                    trailing: const Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey,
+                    ),
+                    onTap: () => context.push('/auth-methods'),
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark ? Colors.white10 : Colors.black12,
+                    indent: 16,
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.description_outlined),
                     title: const Text('Юридические документы'),
                     subtitle: const Text(

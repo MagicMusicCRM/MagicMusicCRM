@@ -295,7 +295,7 @@ begin
     'receiver_id', new.data->>'receiver_id'
   );
 
-  v_url := 'https://xblpnywnlhfgofskbdxb.supabase.co/functions/v1/send-notification';
+  v_url := 'https://api.magic-music.org/functions/v1/send-notification';
   v_anon_key := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHBueXdubGhmZ29mc2tiZHhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDA5ODcsImV4cCI6MjA4ODcxNjk4N30.qRuC_TQ8rlz68fzi0geqqdbkA7ABRBEyw3GyMkMJJxg';
 
   perform net.http_post(

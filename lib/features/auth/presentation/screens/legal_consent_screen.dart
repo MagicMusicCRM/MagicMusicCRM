@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/auth/data/services/supa_release_gate_service.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class LegalConsentScreen extends ConsumerStatefulWidget {
   final bool requireAcceptance;
@@ -44,6 +45,36 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
     }
   }
 
+  Future<void> _openDocument(LegalDocument document) async {
+    final publicUrl = document.publicUrl;
+    if (publicUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Для документа не задана публичная ссылка'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final opened = await launchUrl(
+        Uri.parse(publicUrl),
+        mode: LaunchMode.inAppBrowserView,
+      );
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось открыть документ')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось открыть документ: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final docsAsync = ref.watch(currentLegalDocumentsProvider);
@@ -81,6 +112,7 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
                           !widget.requireAcceptance ||
                           _acceptedIds.contains(doc.id),
                       showCheckbox: widget.requireAcceptance,
+                      onOpen: () => _openDocument(doc),
                       onChanged: (value) {
                         setState(() {
                           if (value) {
@@ -122,12 +154,14 @@ class _LegalDocumentTile extends StatelessWidget {
   final LegalDocument document;
   final bool accepted;
   final bool showCheckbox;
+  final VoidCallback onOpen;
   final ValueChanged<bool> onChanged;
 
   const _LegalDocumentTile({
     required this.document,
     required this.accepted,
     this.showCheckbox = true,
+    required this.onOpen,
     required this.onChanged,
   });
 
@@ -149,6 +183,15 @@ class _LegalDocumentTile extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(document.content),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.open_in_browser_outlined),
+                  label: const Text('Открыть опубликованную версию'),
+                ),
               ),
             ],
           ),

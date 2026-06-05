@@ -1,12 +1,12 @@
 # Google OAuth Setup
 
-Дата проверки: 2026-05-30
+Дата проверки: 2026-06-05
 
 ## Supabase
 
 Для проекта `xblpnywnlhfgofskbdxb` уже настроены:
 
-- Flutter client `supabaseUrl`: `https://xblpnywnlhfgofskbdxb.supabase.co`
+- Flutter client `supabaseUrl`: `https://api.magic-music.org`
 - `site_url`: `https://magicmusiccrm-legal.vercel.app/`
 - `uri_allow_list`: `magiccrm://auth-callback,https://magicmusiccrm-legal.vercel.app/,https://magicmusiccrm-legal.vercel.app/*`
 - Google provider включен в Supabase Auth config.
@@ -22,9 +22,18 @@
 - Google Auth Platform создан владельцем аккаунта.
 - OAuth client type: `Web application`.
 - Authorized JavaScript origin: `https://magicmusiccrm-legal.vercel.app`
-- Authorized redirect URI: `https://xblpnywnlhfgofskbdxb.supabase.co/auth/v1/callback`
+- Authorized redirect URI: `https://api.magic-music.org/auth/v1/callback`
 - Publishing status: `In production`.
 - Scopes: `.../auth/userinfo.email`, `.../auth/userinfo.profile`, `openid`.
+
+Нужно для нативного Android-входа:
+
+- OAuth client type: `Android`.
+- Package name: `magic.crm`.
+- SHA-1 certificate fingerprints: debug, release/upload key and Play App Signing key.
+- Web Client ID передается в сборку Flutter через `--dart-define=GOOGLE_WEB_CLIENT_ID=...`.
+- Web и Android OAuth client IDs должны быть добавлены в Supabase Auth Google provider.
+- Play App Signing OAuth client ID: `1038036512599-jhrk2bbfj1ftf4eaq06nnbckgi04ihr4.apps.googleusercontent.com`.
 
 Публичные URL для OAuth consent:
 
@@ -38,13 +47,13 @@
 Проверено 2026-05-30:
 
 - Supabase OAuth endpoint возвращает `302` на `accounts.google.com`.
-- OAuth request использует callback `https://xblpnywnlhfgofskbdxb.supabase.co/auth/v1/callback`.
+- OAuth request использует callback `https://api.magic-music.org/auth/v1/callback`.
 - Client ID в Supabase Auth совпадает с созданным Google OAuth client.
 - `workers.dev` proxy не используется для Supabase Auth/OAuth: он может отдать HTML Google Sign-In под proxy-доменом и сломать кнопку `Далее`.
 
 Остальная ручная проверка перед релизом:
 
 1. Выйти из приложения.
-2. Нажать `Войти через Google`.
-3. Завершить OAuth.
+2. Нажать `Войти через Google` на Android.
+3. Проверить, что открывается нативный выбор Google аккаунта, а не web-страница.
 4. Проверить, что приложение получает session, затем показывает onboarding, legal consent и client dashboard.

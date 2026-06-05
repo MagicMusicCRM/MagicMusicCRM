@@ -15,7 +15,8 @@ import 'package:magic_music_crm/features/admin/presentation/screens/student_deta
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_status_screen.dart';
-import 'package:magic_music_crm/features/auth/presentation/screens/check_email_screen.dart';
+import 'package:magic_music_crm/features/profile/presentation/screens/auth_methods_screen.dart';
+import 'package:magic_music_crm/features/auth/presentation/screens/email_otp_screen.dart';
 
 // ── Role cache ───────────────────────────────────────────────────────────────
 String? _cachedRole;
@@ -24,11 +25,11 @@ String? _cachedRoleUserId; // Track which user the cache belongs to
 Future<String> _fetchRole(String userId) async {
   // If cache is for a different user, invalidate it
   if (_cachedRole != null && _cachedRoleUserId == userId) return _cachedRole!;
-  
+
   // Clear stale cache
   _cachedRole = null;
   _cachedRoleUserId = null;
-  
+
   try {
     final profile = await Supabase.instance.client
         .from('profiles')
@@ -88,8 +89,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         _cachedRole = null;
         _cachedRoleUserId = null;
       } else if (authState.event == AuthChangeEvent.signedIn ||
-                 authState.event == AuthChangeEvent.tokenRefreshed) {
-        // Force role re-fetch for new sessions  
+          authState.event == AuthChangeEvent.tokenRefreshed) {
+        // Force role re-fetch for new sessions
         _cachedRole = null;
         _cachedRoleUserId = null;
       }
@@ -114,7 +115,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAuth = session != null;
       final loc = state.matchedLocation;
       final isAuthRoute =
-          loc == '/login' || loc == '/register' || loc == '/check-email';
+          loc == '/login' || loc == '/register' || loc == '/email-otp';
       final isGateRoute =
           loc == '/onboarding' ||
           loc == '/legal-consent' ||
@@ -170,10 +171,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const RegistrationScreen(),
       ),
       GoRoute(
-        path: '/check-email',
+        path: '/email-otp',
         builder: (context, state) {
-          final email = state.extra as String? ?? '';
-          return CheckEmailScreen(email: email);
+          final extra = state.extra;
+          final data = extra is EmailOtpRouteData
+              ? extra
+              : EmailOtpRouteData(
+                  email: extra is String ? extra : '',
+                  purpose: EmailOtpPurpose.passwordMfa,
+                );
+          return EmailOtpScreen(data: data);
         },
       ),
       GoRoute(
@@ -219,6 +226,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/auth-methods',
+        builder: (context, state) => const AuthMethodsScreen(),
       ),
       GoRoute(
         path: '/delete-account',

@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
+import 'package:magic_music_crm/features/auth/presentation/screens/email_otp_screen.dart';
+import 'package:magic_music_crm/features/auth/providers/supa_auth_provider.dart';
 
-const _authRedirectUrl = 'magiccrm://auth-callback';
-
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -31,10 +32,26 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: _emailController.text.trim(),
+      final email = _emailController.text.trim();
+      final service = ref.read(supaAuthServiceProvider);
+      await service.signInWithPassword(
+        email: email,
         password: _passwordController.text,
       );
+      final requiresEmailOtp = await service
+          .isEmailOtpMfaEnabledForCurrentUser();
+      if (requiresEmailOtp) {
+        await service.beginEmailOtpMfaChallenge(email: email);
+        if (mounted) {
+          context.go(
+            '/email-otp',
+            extra: EmailOtpRouteData(
+              email: email,
+              purpose: EmailOtpPurpose.passwordMfa,
+            ),
+          );
+        }
+      }
     } on AuthException catch (e) {
       if (mounted) _showError(_mapAuthError(e.message));
     } catch (e) {
@@ -47,10 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      await Supabase.instance.client.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: _authRedirectUrl,
-      );
+      await ref.read(supaAuthServiceProvider).signInWithGoogle();
     } on AuthException catch (e) {
       if (mounted) _showError(_mapAuthError(e.message));
     } catch (_) {
@@ -60,13 +74,20 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  bool _isValidEmail(String value) {
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
+  }
+
   String _mapAuthError(String message) {
-    if (message.contains('Invalid login credentials'))
+    if (message.contains('Invalid login credentials')) {
       return 'Неверный email или пароль';
-    if (message.contains('Email not confirmed'))
+    }
+    if (message.contains('Email not confirmed')) {
       return 'Подтвердите email перед входом';
-    if (message.contains('Too many requests'))
+    }
+    if (message.contains('Too many requests')) {
       return 'Слишком много попыток. Подождите немного';
+    }
     return message;
   }
 
@@ -193,6 +214,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+                  validator: (value) => _isValidEmail(value?.trim() ?? '')
+                      ? null
+                      : 'Введите корректный email',
                 ),
                 const SizedBox(height: 20),
 
@@ -232,8 +256,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
+                  validator: (value) => (value == null || value.isEmpty)
+                      ? 'Введите пароль'
+                      : null,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
 
                 // Sign In button (Solid Gold)
                 Container(

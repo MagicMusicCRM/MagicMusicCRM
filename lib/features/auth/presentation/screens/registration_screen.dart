@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
+import 'package:magic_music_crm/features/auth/presentation/screens/email_otp_screen.dart';
+import 'package:magic_music_crm/features/auth/providers/supa_auth_provider.dart';
 
-const _authRedirectUrl = 'magiccrm://auth-callback';
-
-class RegistrationScreen extends StatefulWidget {
+class RegistrationScreen extends ConsumerStatefulWidget {
   const RegistrationScreen({super.key});
 
   @override
-  State<RegistrationScreen> createState() => _RegistrationScreenState();
+  ConsumerState<RegistrationScreen> createState() => _RegistrationScreenState();
 }
 
-class _RegistrationScreenState extends State<RegistrationScreen> {
+class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -35,13 +36,27 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      await Supabase.instance.client.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        data: {'full_name': _nameController.text.trim()},
-      );
-      if (mounted)
-        context.go('/check-email', extra: _emailController.text.trim());
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      final response = await ref
+          .read(supaAuthServiceProvider)
+          .signUpWithPassword(
+            email: _emailController.text.trim(),
+            password: password,
+            fullName: _nameController.text.trim(),
+          );
+      if (!mounted) return;
+      if (response.session != null) {
+        context.go('/');
+      } else {
+        context.go(
+          '/email-otp',
+          extra: EmailOtpRouteData(
+            email: email,
+            purpose: EmailOtpPurpose.signup,
+          ),
+        );
+      }
     } on AuthException catch (e) {
       if (mounted) _showError(e.message);
     } catch (e) {
@@ -54,10 +69,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      await Supabase.instance.client.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: _authRedirectUrl,
-      );
+      await ref.read(supaAuthServiceProvider).signInWithGoogle();
     } on AuthException catch (e) {
       if (mounted) _showError(e.message);
     } catch (_) {
@@ -131,7 +143,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
-                        'email и пароль временно доступны',
+                        'email и пароль',
                         style: TextStyle(
                           color: Colors.white.withAlpha(120),
                           fontSize: 12,
@@ -236,6 +248,36 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   ),
                   validator: (v) =>
                       (v == null || v.length < 6) ? 'Минимум 6 символов' : null,
+                ),
+                const SizedBox(height: 20),
+
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: _obscurePassword,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Повторите пароль',
+                    prefixIcon: Icon(
+                      Icons.lock_reset_outlined,
+                      color: Colors.white.withAlpha(160),
+                    ),
+                    filled: true,
+                    fillColor: AppTheme.cardDark,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(
+                        color: AppTheme.primaryGold,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  validator: (v) => v != _passwordController.text
+                      ? 'Пароли не совпадают'
+                      : null,
                 ),
                 const SizedBox(height: 32),
 

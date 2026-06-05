@@ -38,6 +38,19 @@ class LegalDocument {
     required this.content,
   });
 
+  String? get publicUrl {
+    switch (type) {
+      case 'privacy_policy':
+        return 'https://magicmusiccrm-legal.vercel.app/privacy/';
+      case 'terms_of_use':
+        return 'https://magicmusiccrm-legal.vercel.app/terms/';
+      case 'account_deletion':
+        return 'https://magicmusiccrm-legal.vercel.app/account-deletion/';
+      default:
+        return null;
+    }
+  }
+
   factory LegalDocument.fromJson(Map<String, dynamic> json) {
     return LegalDocument(
       id: json['id'].toString(),

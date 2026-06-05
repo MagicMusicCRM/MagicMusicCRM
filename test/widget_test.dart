@@ -49,24 +49,60 @@ void main() {
       final googleServices =
           jsonDecode(readProjectFile('android/app/google-services.json'))
               as Map<String, dynamic>;
-      final androidClient =
-          (googleServices['client'] as List<dynamic>).first
-              as Map<String, dynamic>;
+      final androidClient = (googleServices['client'] as List<dynamic>)
+          .cast<Map<String, dynamic>>()
+          .firstWhere((client) {
+            final clientInfo = client['client_info'] as Map<String, dynamic>;
+            final androidInfo =
+                clientInfo['android_client_info'] as Map<String, dynamic>;
+            return androidInfo['package_name'] == 'magic.crm';
+          });
       final androidInfo = androidClient['client_info'] as Map<String, dynamic>;
       final androidPackage =
           androidInfo['android_client_info'] as Map<String, dynamic>;
       final iosPlist = readProjectFile('ios/Runner/GoogleService-Info.plist');
 
       expect(androidPackage['package_name'], 'magic.crm');
+      expect(
+        androidClient['oauth_client'].toString(),
+        contains('1038036512599-vg813c70pl4qjv7kmtse94mgkorfatg6'),
+      );
       expect(iosPlist, contains('<key>BUNDLE_ID</key>'));
       expect(iosPlist, contains('<string>magic.crm</string>'));
     });
 
-    test('Supabase Auth uses the canonical project host for OAuth', () {
+    test('Supabase Auth uses the custom project host for Auth', () {
       final env = readProjectFile('lib/core/constants/env.dart');
 
-      expect(env, contains('https://xblpnywnlhfgofskbdxb.supabase.co'));
+      expect(env, contains('https://api.magic-music.org'));
       expect(env, isNot(contains('workers.dev')));
+    });
+
+    test('email OTP UI is locked to 6 numeric digits', () {
+      final otpScreen = readProjectFile(
+        'lib/features/auth/presentation/screens/email_otp_screen.dart',
+      );
+      final loginScreen = readProjectFile(
+        'lib/features/auth/presentation/screens/login_screen.dart',
+      );
+
+      expect(otpScreen, contains('const int emailOtpCodeLength = 6'));
+      expect(otpScreen, contains('FilteringTextInputFormatter.digitsOnly'));
+      expect(otpScreen, contains("hintText: '000000'"));
+      expect(otpScreen, isNot(contains("hintText: '00000000'")));
+      expect(loginScreen, isNot(contains('Войти без пароля по email-коду')));
+      expect(loginScreen, isNot(contains('EmailOtpPurpose.passwordlessLogin')));
+    });
+
+    test('Google sign-in falls back to Supabase OAuth redirect', () {
+      final authService = readProjectFile(
+        'lib/features/auth/data/services/supa_auth_service.dart',
+      );
+
+      expect(authService, contains('_signInWithSupabaseGoogleOAuth'));
+      expect(authService, contains('_shouldFallbackToSupabaseOAuth'));
+      expect(authService, contains('redirectTo: Env.authRedirectUrl'));
+      expect(authService, contains('OAuthProvider.google'));
     });
 
     test('store legal artifacts include privacy, terms, and deletion URLs', () {
