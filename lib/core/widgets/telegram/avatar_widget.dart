@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 
 /// Telegram-style circular avatar with gradient background and initials fallback.
-class TelegramAvatar extends StatelessWidget {
+class TelegramAvatar extends StatefulWidget {
   final String? name;
   final String? avatarUrl;
   final String? uniqueId;
@@ -19,18 +20,63 @@ class TelegramAvatar extends StatelessWidget {
   });
 
   @override
+  State<TelegramAvatar> createState() => _TelegramAvatarState();
+}
+
+class _TelegramAvatarState extends State<TelegramAvatar> {
+  String? _resolvedAvatarUrl;
+  String? _sourceAvatarUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveAvatarUrl();
+  }
+
+  @override
+  void didUpdateWidget(covariant TelegramAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.avatarUrl != widget.avatarUrl) {
+      _resolveAvatarUrl();
+    }
+  }
+
+  Future<void> _resolveAvatarUrl() async {
+    final sourceUrl = widget.avatarUrl;
+    _sourceAvatarUrl = sourceUrl;
+    if (sourceUrl == null || sourceUrl.isEmpty) {
+      setState(() => _resolvedAvatarUrl = null);
+      return;
+    }
+
+    try {
+      final resolved = await ChatAttachmentService.resolveUrl(sourceUrl);
+      if (!mounted || sourceUrl != _sourceAvatarUrl) return;
+      setState(() => _resolvedAvatarUrl = resolved);
+    } catch (error) {
+      debugPrint('Avatar URL resolve error: $error');
+      if (mounted && sourceUrl == _sourceAvatarUrl) {
+        setState(() => _resolvedAvatarUrl = null);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final hasUrl = avatarUrl != null && avatarUrl!.isNotEmpty;
-    final id = uniqueId ?? name ?? 'default';
+    final hasUrl = _resolvedAvatarUrl != null && _resolvedAvatarUrl!.isNotEmpty;
+    final id = widget.uniqueId ?? widget.name ?? 'default';
     final gradientColors = TelegramColors.avatarGradientFor(id);
-    final initials = name != null ? TelegramColors.initialsFrom(name!) : '?';
+    final initials = widget.name != null
+        ? TelegramColors.initialsFrom(widget.name!)
+        : '?';
 
     Widget child;
     if (hasUrl) {
       child = Image.network(
-        avatarUrl!,
+        _resolvedAvatarUrl!,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => _buildInitials(gradientColors, initials),
+        errorBuilder: (context, error, stackTrace) =>
+            _buildInitials(gradientColors, initials),
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
           return _buildInitials(gradientColors, initials);
@@ -41,11 +87,9 @@ class TelegramAvatar extends StatelessWidget {
     }
 
     return Container(
-      width: radius * 2,
-      height: radius * 2,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-      ),
+      width: widget.radius * 2,
+      height: widget.radius * 2,
+      decoration: const BoxDecoration(shape: BoxShape.circle),
       clipBehavior: Clip.antiAlias,
       child: child,
     );
@@ -61,18 +105,17 @@ class TelegramAvatar extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: icon != null
-            ? Icon(icon, color: Colors.white, size: radius * 0.9)
+        child: widget.icon != null
+            ? Icon(widget.icon, color: Colors.white, size: widget.radius * 0.9)
             : Text(
                 initials,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: radius * 0.7,
+                  fontSize: widget.radius * 0.7,
                   fontWeight: FontWeight.w600,
                 ),
               ),
       ),
     );
   }
-
 }

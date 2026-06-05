@@ -105,6 +105,30 @@ void main() {
       expect(authService, contains('OAuthProvider.google'));
     });
 
+    test('Storage URLs are resolved through current Supabase host', () {
+      final attachmentService = readProjectFile(
+        'lib/core/services/chat_attachment_service.dart',
+      );
+      final avatarWidget = readProjectFile(
+        'lib/core/widgets/telegram/avatar_widget.dart',
+      );
+      final migration = readProjectFile(
+        'supabase/migrations/20260605123145_normalize_storage_urls_for_custom_domain.sql',
+      );
+      final customDomainGuide = readProjectFile(
+        'docs/supabase_custom_domain_setup_guide.md',
+      );
+
+      expect(attachmentService, contains('normalizeSupabaseUrl'));
+      expect(attachmentService, contains('xblpnywnlhfgofskbdxb.supabase.co'));
+      expect(attachmentService, contains('storage://'));
+      expect(avatarWidget, contains('ChatAttachmentService.resolveUrl'));
+      expect(migration, contains('storage://avatars/'));
+      expect(migration, contains('storage://chat-attachments/'));
+      expect(customDomainGuide, contains('xblpnywnlhfgofskbdxb.supabase.co'));
+      expect(customDomainGuide, isNot(contains('xbnywnlhfgofskbdxb')));
+    });
+
     test('store legal artifacts include privacy, terms, and deletion URLs', () {
       final privacy = readProjectFile('release-site/privacy/index.html');
       final terms = readProjectFile('release-site/terms/index.html');

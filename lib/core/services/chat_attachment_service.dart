@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:magic_music_crm/core/constants/env.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:mime/mime.dart';
@@ -7,6 +8,7 @@ import 'package:mime/mime.dart';
 class ChatAttachmentService {
   static const String _bucketName = 'chat-attachments';
   static const String _storageReferencePrefix = 'storage://';
+  static const String _projectSupabaseHost = 'xblpnywnlhfgofskbdxb.supabase.co';
   static const int maxFileSizeBytes = 25 * 1024 * 1024; // 25 MB
 
   static final _supabase = Supabase.instance.client;
@@ -73,7 +75,7 @@ class ChatAttachmentService {
   }
 
   /// Upload an avatar image (bytes) to the avatars bucket.
-  /// Returns the public URL of the uploaded image.
+  /// Returns a storage reference; the UI resolves it through the current API host.
   static Future<String> uploadAvatar({
     required Uint8List bytes,
     required String fileName,
@@ -95,7 +97,7 @@ class ChatAttachmentService {
           fileOptions: FileOptions(contentType: mimeType),
         );
 
-    return _supabase.storage.from(avatarBucket).getPublicUrl(storagePath);
+    return _storageReference(avatarBucket, storagePath);
   }
 
   /// Delete an avatar from the avatars bucket.
@@ -124,11 +126,26 @@ class ChatAttachmentService {
     if (value == null || value.isEmpty) return null;
 
     final reference = _parseStorageReference(value);
-    if (reference == null) return value;
+    if (reference == null) return normalizeSupabaseUrl(value);
 
     return _supabase.storage
         .from(reference.bucket)
         .createSignedUrl(reference.path, expiresIn);
+  }
+
+  static String normalizeSupabaseUrl(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return value;
+    if (!_isKnownSupabaseHost(uri.host)) return value;
+
+    final current = Uri.parse(Env.supabaseUrl);
+    return uri
+        .replace(
+          scheme: current.scheme,
+          host: current.host,
+          port: current.hasPort ? current.port : null,
+        )
+        .toString();
   }
 
   static String? storagePathFromUrl(String value, String bucket) {
@@ -179,6 +196,11 @@ class ChatAttachmentService {
     }
 
     return null;
+  }
+
+  static bool _isKnownSupabaseHost(String host) {
+    final currentHost = Uri.parse(Env.supabaseUrl).host;
+    return host == currentHost || host == _projectSupabaseHost;
   }
 
   static String _getExtension(String fileName) {
