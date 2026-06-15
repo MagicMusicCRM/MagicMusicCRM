@@ -50,14 +50,31 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDeleted = message['deleted_at'] != null;
-    
+    final isPending = message['_pending'] == true;
+
     final messageType = message['message_type']?.toString() ?? 'text';
-    final attachmentUrl = message['attachment_url']?.toString();
-    final hasAttachment = attachmentUrl != null && attachmentUrl.isNotEmpty && !isDeleted;
-    final isAttachmentType = (messageType == 'file' || messageType == 'image' || messageType == 'photo' || messageType == 'voice') && !isDeleted;
-    
-    final isImageFile = (messageType == 'file' || messageType == 'image' || messageType == 'photo') &&
-        FileAttachmentWidget.isImage(message['attachment_name']?.toString());
+    final attachmentUrl =
+        message['attachment_url']?.toString() ??
+        message['attachment_file_id']?.toString();
+    final attachmentName = message['attachment_name']?.toString();
+    final attachmentMimeType = message['attachment_mime_type']?.toString();
+    final hasAttachment =
+        attachmentUrl != null && attachmentUrl.isNotEmpty && !isDeleted;
+    final isAttachmentType =
+        (messageType == 'file' ||
+            messageType == 'image' ||
+            messageType == 'photo' ||
+            messageType == 'voice') &&
+        !isDeleted;
+
+    final isImageFile =
+        (messageType == 'file' ||
+            messageType == 'image' ||
+            messageType == 'photo') &&
+        FileAttachmentWidget.isImage(
+          attachmentName,
+          mimeType: attachmentMimeType,
+        );
 
     final outgoingColor = isDark
         ? TelegramColors.darkOutgoingBubble
@@ -69,13 +86,18 @@ class MessageBubble extends StatelessWidget {
     // Highlight color (Sophisticated Gold with low alpha)
     final highlightColor = const Color(0xFFC5A059).withAlpha(isDark ? 80 : 100);
 
-    final outgoingTextColor = isDark ? Colors.white : TelegramColors.lightTextPrimary;
-    final incomingTextColor = isDark ? Colors.white : TelegramColors.lightTextPrimary;
+    final outgoingTextColor = isDark
+        ? Colors.white
+        : TelegramColors.lightTextPrimary;
+    final incomingTextColor = isDark
+        ? Colors.white
+        : TelegramColors.lightTextPrimary;
 
     Color? senderColor;
     if (showSenderName && senderName != null && !isMe) {
       final gradientColors = TelegramColors.avatarGradientFor(
-          message['sender_id']?.toString() ?? senderName!);
+        message['sender_id']?.toString() ?? senderName!,
+      );
       senderColor = gradientColors.first;
     }
 
@@ -101,8 +123,8 @@ class MessageBubble extends StatelessWidget {
                 ? const EdgeInsets.all(3)
                 : const EdgeInsets.fromLTRB(10, 6, 10, 4),
             decoration: BoxDecoration(
-              color: isHighlighted 
-                  ? highlightColor 
+              color: isHighlighted
+                  ? highlightColor
                   : (isMe ? outgoingColor : incomingColor),
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
@@ -110,13 +132,15 @@ class MessageBubble extends StatelessWidget {
                 bottomLeft: Radius.circular(isMe ? 16 : 4),
                 bottomRight: Radius.circular(isMe ? 4 : 16),
               ),
-              boxShadow: isHighlighted ? [
-                BoxShadow(
-                  color: const Color(0xFFC5A059).withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  spreadRadius: 2,
-                )
-              ] : null,
+              boxShadow: isHighlighted
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFFC5A059).withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
             ),
             child: IntrinsicWidth(
               child: Column(
@@ -135,7 +159,7 @@ class MessageBubble extends StatelessWidget {
                         ),
                       ),
                     ),
-                  
+
                   // Forwarded from
                   if (forwardedFromName != null && !isDeleted)
                     Padding(
@@ -146,13 +170,17 @@ class MessageBubble extends StatelessWidget {
                           Icon(
                             Icons.forward_rounded,
                             size: 14,
-                            color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(180),
+                            color:
+                                (isMe ? outgoingTextColor : incomingTextColor)
+                                    .withAlpha(180),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             'Переслано от: $forwardedFromName',
                             style: TextStyle(
-                              color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(180),
+                              color:
+                                  (isMe ? outgoingTextColor : incomingTextColor)
+                                      .withAlpha(180),
                               fontSize: 12,
                               fontStyle: FontStyle.italic,
                               fontWeight: FontWeight.w500,
@@ -161,7 +189,7 @@ class MessageBubble extends StatelessWidget {
                         ],
                       ),
                     ),
-                  
+
                   // Reply Quote
                   if (repliedMessage != null && !isDeleted)
                     Padding(
@@ -169,12 +197,17 @@ class MessageBubble extends StatelessWidget {
                       child: GestureDetector(
                         onTap: onJumpToReplied,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withAlpha(isDark ? 30 : 10),
                             border: Border(
                               left: BorderSide(
-                                color: isMe ? TelegramColors.primaryGold : TelegramColors.accentBlue,
+                                color: isMe
+                                    ? TelegramColors.primaryGold
+                                    : TelegramColors.accentBlue,
                                 width: 2,
                               ),
                             ),
@@ -186,17 +219,22 @@ class MessageBubble extends StatelessWidget {
                               Text(
                                 'Ответ',
                                 style: TextStyle(
-                                  color: isMe ? TelegramColors.primaryGold : TelegramColors.accentBlue,
+                                  color: isMe
+                                      ? TelegramColors.primaryGold
+                                      : TelegramColors.accentBlue,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
                                 ),
                               ),
                               Text(
-                                repliedMessage!['content']?.toString() ?? 'Медиа',
+                                repliedMessage!['content']?.toString() ??
+                                    'Медиа',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: isMe ? outgoingTextColor.withAlpha(200) : incomingTextColor.withAlpha(200),
+                                  color: isMe
+                                      ? outgoingTextColor.withAlpha(200)
+                                      : incomingTextColor.withAlpha(200),
                                   fontSize: 12,
                                 ),
                               ),
@@ -211,7 +249,8 @@ class MessageBubble extends StatelessWidget {
                     Text(
                       'Сообщение удалено',
                       style: TextStyle(
-                        color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(150),
+                        color: (isMe ? outgoingTextColor : incomingTextColor)
+                            .withAlpha(150),
                         fontSize: 15,
                         fontStyle: FontStyle.italic,
                       ),
@@ -221,24 +260,29 @@ class MessageBubble extends StatelessWidget {
                       SizedBox(
                         width: 220,
                         child: VoicePlayerWidget(
-                          audioUrl: message['attachment_url'] ?? '',
+                          audioUrl: attachmentUrl ?? '',
                           durationMs: message['voice_duration_ms'] as int?,
                           isMe: isMe,
                         ),
                       )
                     else
                       FileAttachmentWidget(
-                        fileName: message['attachment_name']?.toString(),
-                        fileUrl: message['attachment_url']?.toString(),
+                        fileName: attachmentName,
+                        fileUrl: attachmentUrl,
                         fileSize: message['attachment_size'] as int?,
+                        mimeType: attachmentMimeType,
                         isMe: isMe,
                       ),
-                    
-                    if (message['content'] != null && 
-                        message['content'].toString().isNotEmpty && 
+
+                    if (message['content'] != null &&
+                        message['content'].toString().isNotEmpty &&
                         !message['content'].toString().startsWith('📎'))
                       Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 2, right: 2),
+                        padding: const EdgeInsets.only(
+                          top: 4,
+                          left: 2,
+                          right: 2,
+                        ),
                         child: Text(
                           message['content'].toString(),
                           style: TextStyle(
@@ -248,8 +292,7 @@ class MessageBubble extends StatelessWidget {
                           ),
                         ),
                       ),
-                  ]
-                  else
+                  ] else
                     Text(
                       message['content'] ?? '',
                       style: TextStyle(
@@ -285,26 +328,41 @@ class MessageBubble extends StatelessWidget {
                                 'изменено',
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(150),
+                                  color:
+                                      (isMe
+                                              ? outgoingTextColor
+                                              : incomingTextColor)
+                                          .withAlpha(150),
                                   fontStyle: FontStyle.italic,
                                 ),
                               ),
                             ),
                           Text(
-                            DateFormat('HH:mm').format(
-                              DateTime.tryParse(message['created_at'] ?? '')?.toLocal() ?? DateTime.now(),
-                            ),
+                            isPending
+                                ? 'отправка'
+                                : DateFormat('HH:mm').format(
+                                    DateTime.tryParse(
+                                          message['created_at'] ?? '',
+                                        )?.toLocal() ??
+                                        DateTime.now(),
+                                  ),
                             style: TextStyle(
                               fontSize: 10.5,
-                              color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(150),
+                              color:
+                                  (isMe ? outgoingTextColor : incomingTextColor)
+                                      .withAlpha(150),
                             ),
                           ),
-                          if (isMe) ...[
+                          if (isMe && !isPending) ...[
                             const SizedBox(width: 4),
                             Icon(
-                              message['is_read'] == true ? Icons.done_all_rounded : Icons.done_rounded,
+                              message['is_read'] == true
+                                  ? Icons.done_all_rounded
+                                  : Icons.done_rounded,
                               size: 14,
-                              color: (isMe ? outgoingTextColor : incomingTextColor).withAlpha(150),
+                              color:
+                                  (isMe ? outgoingTextColor : incomingTextColor)
+                                      .withAlpha(150),
                             ),
                           ],
                         ],
@@ -334,10 +392,14 @@ class MessageBubble extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(10),
+            color: isDark
+                ? Colors.white.withAlpha(20)
+                : Colors.black.withAlpha(10),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(20),
+              color: isDark
+                  ? Colors.white.withAlpha(20)
+                  : Colors.black.withAlpha(20),
               width: 0.5,
             ),
           ),
@@ -380,15 +442,20 @@ class MessageBubble extends StatelessWidget {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: ['👍', '❤️', '🔥', '😂', '😮', '😢', '🙏', '💯'].map((emoji) {
-                      return IconButton(
-                        icon: Text(emoji, style: const TextStyle(fontSize: 24)),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          onReact?.call(emoji);
-                        },
-                      );
-                    }).toList(),
+                    children: ['👍', '❤️', '🔥', '😂', '😮', '😢', '🙏', '💯']
+                        .map((emoji) {
+                          return IconButton(
+                            icon: Text(
+                              emoji,
+                              style: const TextStyle(fontSize: 24),
+                            ),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              onReact?.call(emoji);
+                            },
+                          );
+                        })
+                        .toList(),
                   ),
                 ),
               ),
@@ -398,7 +465,9 @@ class MessageBubble extends StatelessWidget {
                 title: const Text('Копировать'),
                 onTap: () {
                   Navigator.pop(context);
-                  Clipboard.setData(ClipboardData(text: message['content'] ?? ''));
+                  Clipboard.setData(
+                    ClipboardData(text: message['content'] ?? ''),
+                  );
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Скопировано в буфер обмена'),
@@ -446,8 +515,14 @@ class MessageBubble extends StatelessWidget {
                 ),
               if (onDelete != null && (isMe || canDeleteOthers))
                 ListTile(
-                  leading: const Icon(Icons.delete_outline_rounded, color: TelegramColors.danger),
-                  title: const Text('Удалить', style: TextStyle(color: TelegramColors.danger)),
+                  leading: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: TelegramColors.danger,
+                  ),
+                  title: const Text(
+                    'Удалить',
+                    style: TextStyle(color: TelegramColors.danger),
+                  ),
                   onTap: () {
                     Navigator.pop(context);
                     onDelete!();
@@ -459,5 +534,4 @@ class MessageBubble extends StatelessWidget {
       ),
     );
   }
-
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/voice_recorder_widget.dart';
@@ -62,7 +62,7 @@ class _MessageInputState extends State<MessageInput> {
       // Typing indicator logic
       if (widget.onTyping != null && text.isNotEmpty) {
         final now = DateTime.now();
-        if (_lastTypingTime == null || 
+        if (_lastTypingTime == null ||
             now.difference(_lastTypingTime!) > const Duration(seconds: 2)) {
           _lastTypingTime = now;
           widget.onTyping!(true);
@@ -97,35 +97,34 @@ class _MessageInputState extends State<MessageInput> {
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
-    
+
     final replyId = widget.replyingTo?['id']?.toString();
     final editId = widget.editingMessage?['id']?.toString();
 
     _controller.clear();
     setState(() => _hasText = false);
-    
+
     await widget.onSendText(text, replyToId: replyId, editingMessageId: editId);
-    
+
     if (widget.onCancelMode != null && (replyId != null || editId != null)) {
       widget.onCancelMode!();
     }
-    
+
     _focusNode.requestFocus();
   }
 
   // ... (pickAndSendFile and handleKeyEvent remain similar but check widget.enabled)
-  
+
   Future<void> _pickAndSendFile() async {
     if (_isSendingFile || widget.onSendFile == null) return;
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
-        withData: true,
+        withData: false,
         allowMultiple: false,
       );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
-      if (file.bytes == null) return;
       if (file.size > ChatAttachmentService.maxFileSizeBytes) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -137,8 +136,10 @@ class _MessageInputState extends State<MessageInput> {
         }
         return;
       }
+      final bytes = file.bytes ?? await _readPickedFileBytes(file);
+      if (bytes == null) return;
       setState(() => _isSendingFile = true);
-      await widget.onSendFile!(file.bytes!, file.name, file.size);
+      await widget.onSendFile!(bytes, file.name, file.size);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -151,6 +152,22 @@ class _MessageInputState extends State<MessageInput> {
     } finally {
       if (mounted) setState(() => _isSendingFile = false);
     }
+  }
+
+  Future<Uint8List?> _readPickedFileBytes(PlatformFile file) async {
+    final path = file.path;
+    if (path == null || path.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Не удалось прочитать файл'),
+            backgroundColor: TelegramColors.danger,
+          ),
+        );
+      }
+      return null;
+    }
+    return File(path).readAsBytes();
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {

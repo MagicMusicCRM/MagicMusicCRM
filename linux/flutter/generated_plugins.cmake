@@ -4,9 +4,10 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
-  gtk
+  flutter_secure_storage_linux
   local_notifier
   record_linux
+  sentry_flutter
   url_launcher_linux
 )
 

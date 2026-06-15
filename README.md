@@ -1,204 +1,218 @@
 # Magic Music CRM
 
-Flutter CRM for Magic Music school operations: schedules, clients, teachers, leads, finance, messenger, onboarding, legal consent and Google Play release workflows.
+Flutter CRM for Magic Music school operations: clients, teachers, managers,
+admins, schedules, leads, payments, messenger, files, notifications, legal
+consent and account deletion.
 
-## Current Release
+## Current State
 
-- App version: `1.1.5+115`
-- Android package: `magic.crm`
-- Primary branch: `main`
-- Active backend: Supabase project `xblpnywnlhfgofskbdxb`
-- App Supabase URL: `https://api.magic-music.org`
+- Client: Flutter / Dart, Riverpod, Russian UI.
+- Backend: owned NestJS API, PostgreSQL, Redis, private file storage and
+  Socket.IO realtime.
+- Staging API: `https://api.phantom-net.ru/api`.
+- Android package: `magic.crm`.
+- Active architecture docs: `.anws/v3`.
+- Active Linear context: `Magic Music CRM`, `KVA-117` stabilization and cutover.
 
-## GitHub And Linear
+Supabase runtime access has been removed from the active Flutter app. The client
+uses the v3 API through `MagicApiClient`, `MagicAuthService`,
+`MagicCrmService`, `MagicMessengerService`, `MagicRealtimeService`,
+`MagicNotificationsService` and the private v3 File API.
 
-Repository:
-
-```text
-MagicMusicCRM/MagicMusicCRM
-```
-
-Current development branch for release fixes:
-
-```text
-codex/release-main-merge
-```
-
-For Linear documentation and issue tracking, add the GitHub account `aleks10sadu` as a collaborator or member with access to this repository, then connect the same repository in the Linear GitHub integration.
-
-## Product Scope
-
-The app is an internal operational CRM. It supports:
-
-- client, teacher, manager and admin dashboards;
-- schedule, lessons, rooms, branches and groups;
-- leads, tasks, payments and reports;
-- personal `Администрация` chat and read-only `Объявления`;
-- file, image and voice attachments in messenger;
-- profile editing, auth methods, legal consent and account deletion;
-- Google OAuth, email/password login and optional email-code step after password.
-
-## Architecture
+## Repository Layout
 
 ```text
-lib/
-├── core/
-│   ├── constants/       environment constants
-│   ├── providers/       shared Riverpod providers
-│   ├── router/          GoRouter auth/profile/legal gates
-│   ├── services/        Supabase-backed services
-│   ├── theme/           app colors and Material themes
-│   └── widgets/         shared UI and messenger widgets
-└── features/
-    ├── admin/
-    ├── auth/
-    ├── client/
-    ├── manager/
-    ├── messenger/
-    ├── profile/
-    └── teacher/
+lib/                  Flutter client
+server/               NestJS v3 backend
+server/db/migrations  PostgreSQL migrations
+infra/                Docker Compose, Caddy, backup and restore scripts
+docs/                 runbooks and import notes
+.anws/v3/             architecture, ADRs, tasks and release evidence
+scripts/              smoke/import helper scripts
+integration_test/     Flutter integration smoke
 ```
 
-Backend boundaries:
+## Backend
 
-- Supabase Auth for email/password, OTP and Google identity.
-- Postgres with RLS for CRM data and role isolation.
-- Storage for avatars and chat attachments.
-- Realtime for messenger and operational updates.
-- Edge Functions for push notification dispatch.
-
-Architecture docs live in `.anws/v2/`.
-
-## Auth
-
-Google OAuth is configured through Supabase Auth. The Supabase Google provider must keep the Web OAuth client first, followed by Android clients:
+The staging backend runs on Selectel under Docker Compose:
 
 ```text
-WEB_CLIENT_ID,ANDROID_DEBUG_CLIENT_ID,ANDROID_UPLOAD_CLIENT_ID,ANDROID_PLAY_SIGNING_CLIENT_ID
+api.phantom-net.ru -> Caddy -> NestJS API -> PostgreSQL / Redis
 ```
 
-Current Web Client ID used by Flutter builds:
+Core backend capabilities:
+
+- password signup/login, email OTP verification, password reset and refresh
+  rotation with reuse detection;
+- RBAC and audit events;
+- CRM APIs for profiles, students, teachers, staff, rooms, groups, lessons,
+  leads, payments, reports, balances, tasks and comments;
+- messenger REST plus Socket.IO realtime at `/realtime`;
+- private file uploads and one-time download tokens;
+- notifications device registration, in-app notifications and provider fallback;
+- legal document gate and account deletion flow;
+- HolliHop metadata/read/import path owned by the backend.
+
+## Frontend
+
+Default API base URL:
 
 ```text
-1038036512599-vg813c70pl4qjv7kmtse94mgkorfatg6.apps.googleusercontent.com
+https://api.phantom-net.ru/api
 ```
 
-Android release builds must pass it explicitly:
+Override for local builds:
 
 ```powershell
-flutter build appbundle --release --dart-define=GOOGLE_WEB_CLIENT_ID=1038036512599-vg813c70pl4qjv7kmtse94mgkorfatg6.apps.googleusercontent.com
+flutter run --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
 ```
 
-Email OTP is 6 numeric digits. Supabase Auth generates the token; Resend only delivers the email. Set `OTP length = 6` in Supabase Auth email provider settings.
+The app displays a branded loading gate while auth/session/legal state is being
+checked. Login clears stale local sessions before storing a new v3 session, and
+API token refresh is single-flight to avoid invalidating refresh token families
+with parallel requests.
 
-## Storage URL Policy
+## Staging Deploy
 
-Do not store absolute Supabase Storage URLs in database columns. Use stable references:
+Ignored server env files are required on the host:
 
 ```text
-storage://avatars/<path>
-storage://chat-attachments/<path>
+/opt/magicmusiccrm/infra/staging/.env
+/opt/magicmusiccrm/infra/staging/.backup.env
 ```
 
-`ChatAttachmentService` resolves those references through the current Supabase host. This prevents old `*.supabase.co` links from leaking into UI after switching to `https://api.magic-music.org`.
+Deploy from the staging host:
 
-Relevant migration:
-
-```text
-supabase/migrations/20260605123145_normalize_storage_urls_for_custom_domain.sql
+```bash
+cd /opt/magicmusiccrm/infra/staging
+docker compose --env-file .env config -q
+docker compose --env-file .env up -d --build
+docker compose --env-file .env ps
 ```
 
-## Custom Domain Notes
+Apply/check migrations:
 
-`https://api.magic-music.org` is a Supabase custom domain. It still points to Supabase infrastructure. If a mobile operator blocks the route to Supabase/Cloudflare IPs, the custom domain alone may not restore access.
-
-Useful checks from a phone without VPN:
-
-```text
-https://api.magic-music.org/rest/v1/
-https://xblpnywnlhfgofskbdxb.supabase.co/rest/v1/
+```bash
+docker compose --env-file .env exec api node dist/db/migrate.js up
 ```
 
-Expected successful backend reachability is a Supabase JSON error such as `UNAUTHORIZED_MISSING_API_KEY`, not a rendered web page.
+Health checks:
 
-## Local Setup
+```bash
+curl -fsS https://api.phantom-net.ru/api/health
+curl -fsS https://api.phantom-net.ru/api/health/ready
+```
 
-Prerequisites:
+Create an encrypted staging backup before DB-affecting deploy/import work:
 
-- Flutter SDK
-- Android Studio / Android SDK
-- Supabase CLI
-- release signing file `android/key.properties`
-- upload keystore referenced by `android/key.properties`
+```bash
+cd /opt/magicmusiccrm/infra/staging
+bash /opt/magicmusiccrm/infra/scripts/backup-staging.sh
+```
 
-Install dependencies:
+Latest verified staging sync in this branch:
+
+- backup: `magicmusiccrm-staging-20260615T232343Z.tgz.enc`;
+- backup SHA-256:
+  `3cc61a3400b05d761392a8e5ef395f19eb204b494c5e151656ab22a619b0bfb6`;
+- applied migrations through `0020_runtime_migration_read_grant`;
+- `/api/health` and `/api/health/ready` returned `ok`;
+- public realtime smoke passed against `https://api.phantom-net.ru/api`.
+
+## HolliHop Import
+
+HolliHop access is backend-only. Keys must stay in ignored env files or transient
+process env, never in Flutter, Git, Linear or logs.
+
+Run guarded archive/live dry-runs from the repo root:
+
+```powershell
+.\scripts\hollihop_staging_dry_run.ps1 `
+  -BackupEvidencePath .supergoal\hollihop-crm-import-adaptation-loading-ux-Guw3IO\evidence\<backup-evidence-file>
+```
+
+The staging live apply completed with:
+
+- source counts: `1025` students, `1946` leads, `3167` payments;
+- stored HolliHop counts after apply: `1946` students, `1946` leads,
+  `3166` payments, `2330` duplicate candidates;
+- known warnings: `tasks_source_missing` and `timeline_sources_missing`.
+
+## Local Development
+
+Install Flutter and Node.js, then:
 
 ```powershell
 flutter pub get
+cd server
+npm install
 ```
 
-Run locally:
+Run Flutter checks:
 
 ```powershell
-flutter run --dart-define=GOOGLE_WEB_CLIENT_ID=1038036512599-vg813c70pl4qjv7kmtse94mgkorfatg6.apps.googleusercontent.com
+flutter analyze
+flutter test
 ```
 
-Build Android App Bundle:
+Run backend checks:
 
 ```powershell
-flutter build appbundle --release --dart-define=GOOGLE_WEB_CLIENT_ID=1038036512599-vg813c70pl4qjv7kmtse94mgkorfatg6.apps.googleusercontent.com
+cd server
+npm run typecheck
+npm test
+npm run build
+npm audit --audit-level=moderate
 ```
 
-Output:
+Run realtime smoke against staging:
+
+```powershell
+cd server
+npm run smoke:realtime
+```
+
+For users created by the smoke script, email verification may need a staging DB
+test helper or a real OTP flow before login.
+
+## Release Artifacts
+
+Windows release ZIPs are built from:
+
+```powershell
+flutter build windows --release
+```
+
+Current verified local Windows ZIP:
 
 ```text
-build/app/outputs/bundle/release/app-release.aab
+build/releases/MagicMusicCRM-Windows-x64-auth-refreshfix-20260616-020617.zip
+SHA256 81416A8E37189F9BC768C6F6A44E5F41D2CFC6C86AC156037494A4B8772B4B65
 ```
 
-## Verification
+Android debug smoke artifact:
 
-Run before release:
-
-```powershell
-flutter test
-flutter analyze --no-fatal-warnings --no-fatal-infos
+```text
+build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-Current analyzer baseline has legacy info-level findings in archived scripts and older messenger/admin/manager files. Error-level analyzer failures are release blockers.
+Build outputs are intentionally ignored by Git.
 
-## Supabase Operations
+## Remaining Launch Gates
 
-Check migration state:
-
-```powershell
-supabase migration list
-```
-
-Be careful with `supabase db push`: local and remote migration histories may differ. For narrow data fixes, use reviewed SQL with:
-
-```powershell
-supabase db query --linked --file <path-to-sql>
-```
-
-Do not expose service-role keys in Flutter. New Supabase-facing app services should use the `Supa` prefix and stay outside widget `build()` methods.
-
-## Release Checklist
-
-1. Update `pubspec.yaml` version and build number.
-2. Confirm Google OAuth clients in Supabase Auth.
-3. Confirm Firebase `google-services.json` contains Android clients for debug, upload and Play signing SHA-1.
-4. Run `flutter test`.
-5. Run `flutter analyze --no-fatal-warnings --no-fatal-infos`.
-6. Build AAB with `GOOGLE_WEB_CLIENT_ID`.
-7. Upload AAB to Google Play testing track.
-8. Smoke-test Google login, onboarding/legal gate, messenger, attachments and profile avatars without VPN.
+- Real Android device smoke for private file upload/download.
+- Real Android device smoke for account deletion.
+- Production host hardening evidence.
+- Credential rotation for exposed migration-era credentials.
+- History-aware secret scan, external SAST and container scan.
+- Production cutover rehearsal and production cutover window.
 
 ## Documentation Index
 
-- `.anws/v2/05_TASKS.md` - release task blueprint.
-- `docs/release/google_oauth_setup.md` - Google OAuth setup.
-- `docs/release/resend_supabase_otp_setup.md` - Resend and Supabase OTP setup.
-- `docs/release/supabase_email_templates_ru.md` - Russian email templates.
-- `docs/supabase_custom_domain_setup_guide.md` - custom domain notes.
-- `docs/release/google_play_console_status.md` - Play Console status.
-- `docs/legal/` - legal documents.
+- `.anws/v3/05_TASKS.md` - v3 task blueprint.
+- `.anws/v3/09_S7_RELEASE_EVIDENCE.md` - release evidence.
+- `docs/runbooks/hollihop-staging-dry-run.md` - guarded HolliHop dry-run.
+- `docs/runbooks/android-real-device-smoke.md` - remaining Android smoke.
+- `docs/runbooks/v3-staging-rollback.md` - staging rollback.
+- `docs/import/` - HolliHop import mapping and gap reports.
+- `infra/staging/README.md` - staging deployment notes.

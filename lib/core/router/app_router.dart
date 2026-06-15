@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/login_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/registration_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/onboarding_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/legal_consent_screen.dart';
+import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
+import 'package:magic_music_crm/features/auth/data/services/magic_auth_service.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashboard_screen.dart';
@@ -17,36 +22,11 @@ import 'package:magic_music_crm/features/profile/presentation/screens/account_de
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_status_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/auth_methods_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/email_otp_screen.dart';
-
-// ── Role cache ───────────────────────────────────────────────────────────────
-String? _cachedRole;
-String? _cachedRoleUserId; // Track which user the cache belongs to
-
-Future<String> _fetchRole(String userId) async {
-  // If cache is for a different user, invalidate it
-  if (_cachedRole != null && _cachedRoleUserId == userId) return _cachedRole!;
-
-  // Clear stale cache
-  _cachedRole = null;
-  _cachedRoleUserId = null;
-
-  try {
-    final profile = await Supabase.instance.client
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle();
-    _cachedRole = (profile?['role'] as String?) ?? 'client';
-    _cachedRoleUserId = userId;
-  } catch (_) {
-    _cachedRole = 'client';
-    _cachedRoleUserId = userId;
-  }
-  return _cachedRole!;
-}
+import 'package:magic_music_crm/features/auth/presentation/screens/password_reset_screen.dart';
 
 String _roleToRoute(String role) {
   switch (role) {
+    case 'system_admin':
     case 'admin':
       return '/admin';
     case 'manager':
@@ -58,79 +38,117 @@ String _roleToRoute(String role) {
   }
 }
 
-// ── Role Stream ────────────────────────────────────────────────────────────────
-final _roleStreamProvider = StreamProvider<String>((ref) {
-  final session = Supabase.instance.client.auth.currentSession;
-  if (session == null) return Stream.value('client');
-  return Supabase.instance.client
-      .from('profiles')
-      .stream(primaryKey: ['id'])
-      .eq('id', session.user.id)
-      .map((event) {
-        if (event.isNotEmpty) {
-          return (event.first['role'] as String?) ?? 'client';
-        }
-        return 'client';
-      });
+enum _RouteGatePhase { authLoading, signedOut, gateLoading, gateError, ready }
+
+class _RouteGateState {
+  final _RouteGatePhase phase;
+  final ReleaseGateStatus? gateStatus;
+  final Object? error;
+
+  const _RouteGateState._(this.phase, {this.gateStatus, this.error});
+
+  const _RouteGateState.authLoading() : this._(_RouteGatePhase.authLoading);
+
+  const _RouteGateState.signedOut() : this._(_RouteGatePhase.signedOut);
+
+  const _RouteGateState.gateLoading() : this._(_RouteGatePhase.gateLoading);
+
+  const _RouteGateState.gateError(Object error)
+    : this._(_RouteGatePhase.gateError, error: error);
+
+  const _RouteGateState.ready(ReleaseGateStatus gateStatus)
+    : this._(_RouteGatePhase.ready, gateStatus: gateStatus);
+}
+
+final _routeGateStateProvider = Provider<_RouteGateState>((ref) {
+  final authState = ref.watch(magicAuthStateProvider);
+  final currentSession = authState.asData?.value;
+
+  if (authState.isLoading && currentSession == null) {
+    return const _RouteGateState.authLoading();
+  }
+  if (authState.hasError || currentSession == null) {
+    return const _RouteGateState.signedOut();
+  }
+
+  final gateState = ref.watch(releaseGateStatusProvider);
+  return gateState.when(
+    data: _RouteGateState.ready,
+    error: (error, _) => _RouteGateState.gateError(error),
+    loading: () => const _RouteGateState.gateLoading(),
+  );
 });
 
-// ── Auth state notifier ───────────────────────────────────────────────────────
-final _authStateProvider = StreamProvider<AuthState>((ref) {
-  return Supabase.instance.client.auth.onAuthStateChange;
-});
+bool _isUnauthorizedRouteError(Object? error) {
+  return error is MagicApiException && error.isUnauthorized;
+}
 
 // ── Router ───────────────────────────────────────────────────────────────────
 final routerProvider = Provider<GoRouter>((ref) {
-  final authNotifier = ValueNotifier<int>(0);
+  final routerRefreshNotifier = ValueNotifier<int>(0);
+  ref.onDispose(routerRefreshNotifier.dispose);
 
-  ref.listen(_authStateProvider, (_, next) {
-    next.whenData((authState) {
-      if (authState.event == AuthChangeEvent.signedOut) {
-        _cachedRole = null;
-        _cachedRoleUserId = null;
-      } else if (authState.event == AuthChangeEvent.signedIn ||
-          authState.event == AuthChangeEvent.tokenRefreshed) {
-        // Force role re-fetch for new sessions
-        _cachedRole = null;
-        _cachedRoleUserId = null;
-      }
-    });
-    authNotifier.value++;
+  void refreshRouter() {
+    routerRefreshNotifier.value++;
+  }
+
+  ref.listen<AsyncValue<MagicAuthSession?>>(magicAuthStateProvider, (
+    previous,
+    next,
+  ) {
+    final previousAccessToken = previous?.asData?.value?.accessToken;
+    final nextAccessToken = next.asData?.value?.accessToken;
+    if (previousAccessToken != nextAccessToken) {
+      ref.invalidate(releaseGateStatusProvider);
+    }
+    refreshRouter();
   });
 
-  ref.listen(_roleStreamProvider, (_, next) {
-    next.whenData((role) {
-      if (_cachedRole != role) {
-        _cachedRole = role;
-        authNotifier.value++;
-      }
-    });
+  ref.listen<_RouteGateState>(_routeGateStateProvider, (_, _) {
+    refreshRouter();
+  });
+
+  ref.listen<_RouteGateState>(_routeGateStateProvider, (_, next) {
+    if (next.phase == _RouteGatePhase.gateError &&
+        _isUnauthorizedRouteError(next.error)) {
+      unawaited(ref.read(magicAuthServiceProvider).signOut());
+    }
   });
 
   return GoRouter(
     initialLocation: '/',
-    refreshListenable: authNotifier,
-    redirect: (context, state) async {
-      final session = Supabase.instance.client.auth.currentSession;
-      final isAuth = session != null;
+    refreshListenable: routerRefreshNotifier,
+    redirect: (context, state) {
       final loc = state.matchedLocation;
       final isAuthRoute =
-          loc == '/login' || loc == '/register' || loc == '/email-otp';
+          loc == '/login' ||
+          loc == '/register' ||
+          loc == '/email-otp' ||
+          loc == '/password-reset';
+
       final isGateRoute =
           loc == '/onboarding' ||
           loc == '/legal-consent' ||
           loc == '/account-deletion-status';
 
-      if (!isAuth) {
-        return isAuthRoute ? null : '/login';
+      final routeGateState = ref.read(_routeGateStateProvider);
+      switch (routeGateState.phase) {
+        case _RouteGatePhase.authLoading:
+        case _RouteGatePhase.gateLoading:
+          return loc == '/' ? null : '/';
+        case _RouteGatePhase.signedOut:
+          return isAuthRoute ? null : '/login';
+        case _RouteGatePhase.gateError:
+          if (_isUnauthorizedRouteError(routeGateState.error)) {
+            return isAuthRoute ? null : '/login';
+          }
+          return loc == '/' ? null : '/';
+        case _RouteGatePhase.ready:
+          break;
       }
 
-      final gateStatus = await ref
-          .read(supaReleaseGateServiceProvider)
-          .getGateStatus();
-      final role = gateStatus.role.isEmpty
-          ? await _fetchRole(session.user.id)
-          : gateStatus.role;
+      final gateStatus = routeGateState.gateStatus!;
+      final role = gateStatus.role.isEmpty ? 'client' : gateStatus.role;
       final roleRoute = _roleToRoute(role);
 
       if (gateStatus.deletionPending) {
@@ -155,8 +173,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         return roleRoute;
       }
 
-      // Proactive role-path enforcement
-      if (loc.startsWith('/admin') && role != 'admin') return roleRoute;
+      // Proactive role-path enforcement.
+      if (loc.startsWith('/admin') &&
+          role != 'admin' &&
+          role != 'system_admin') {
+        return roleRoute;
+      }
       if (loc.startsWith('/manager') && role != 'manager') return roleRoute;
       if (loc.startsWith('/teacher') && role != 'teacher') return roleRoute;
       if (loc.startsWith('/client') && role != 'client') return roleRoute;
@@ -164,7 +186,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: '/', builder: (context, state) => const SizedBox.shrink()),
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const _AppGateLoadingScreen(),
+      ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/register',
@@ -182,6 +207,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 );
           return EmailOtpScreen(data: data);
         },
+      ),
+      GoRoute(
+        path: '/password-reset',
+        builder: (context, state) => const PasswordResetScreen(),
       ),
       GoRoute(
         path: '/onboarding',
@@ -238,3 +267,101 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+class _AppGateLoadingScreen extends ConsumerWidget {
+  const _AppGateLoadingScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final gateState = ref.watch(_routeGateStateProvider);
+    final isGateError =
+        gateState.phase == _RouteGatePhase.gateError &&
+        !_isUnauthorizedRouteError(gateState.error);
+
+    return Scaffold(
+      backgroundColor: colors.surface,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 450),
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: colors.primary,
+                    ),
+                    child: Icon(
+                      Icons.music_note_rounded,
+                      color: colors.onPrimary,
+                      size: 42,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Text(
+                    'Magic Music CRM',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    isGateError
+                        ? 'Не удалось проверить доступ'
+                        : 'Проверяем сессию и доступ',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  if (isGateError) ...[
+                    Text(
+                      gateState.error?.toString() ??
+                          'Проверьте подключение и попробуйте снова.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () =>
+                            ref.invalidate(releaseGateStatusProvider),
+                        child: const Text('Повторить'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () =>
+                          ref.read(magicAuthServiceProvider).signOut(),
+                      child: const Text('Выйти'),
+                    ),
+                  ] else
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        minHeight: 4,
+                        backgroundColor: colors.primary.withValues(alpha: 0.16),
+                        color: colors.primary,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

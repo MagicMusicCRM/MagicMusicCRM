@@ -3,13 +3,14 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  app_links
   desktop_drop
   firebase_core
+  flutter_secure_storage_windows
   just_audio_windows
   local_notifier
   permission_handler_windows
   record_windows
+  sentry_flutter
   url_launcher_windows
 )
 

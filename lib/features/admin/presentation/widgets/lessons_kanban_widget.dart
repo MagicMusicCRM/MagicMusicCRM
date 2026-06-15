@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/providers/realtime_providers.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 class LessonsKanbanWidget extends ConsumerStatefulWidget {
   const LessonsKanbanWidget({super.key});
 
   @override
-  ConsumerState<LessonsKanbanWidget> createState() => _LessonsKanbanWidgetState();
+  ConsumerState<LessonsKanbanWidget> createState() =>
+      _LessonsKanbanWidgetState();
 }
 
 class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
@@ -41,18 +41,18 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
   }
 
   Future<void> _loadMetadata() async {
-    final supabase = ref.read(supabaseProvider);
+    final crm = ref.read(magicCrmServiceProvider);
     final results = await Future.wait([
-      supabase.from('rooms').select('id, name').order('name'),
-      supabase.from('teachers').select('id, first_name, last_name, profiles(first_name, last_name)').order('last_name', referencedTable: 'profiles'),
-      supabase.from('students').select('id, first_name, last_name, profiles(first_name, last_name)').order('last_name', referencedTable: 'profiles'),
+      crm.listRooms(limit: 100),
+      crm.listTeachers(limit: 100),
+      crm.listStudents(limit: 100),
     ]);
 
     if (mounted) {
       setState(() {
-        _rooms = List<Map<String, dynamic>>.from(results[0]);
-        _teachers = List<Map<String, dynamic>>.from(results[1]);
-        _students = List<Map<String, dynamic>>.from(results[2]);
+        _rooms = results[0];
+        _teachers = results[1];
+        _students = results[2];
       });
     }
   }
@@ -72,7 +72,7 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final lessonsAsync = ref.watch(lessonsStreamProvider(_selectedDate));
+    final lessonsAsync = ref.watch(lessonsFilteredProvider(_selectedDate));
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -83,36 +83,51 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
             child: lessonsAsync.when(
               data: (lessons) {
                 var filtered = lessons;
-                if (_selectedRoomId != null) filtered = filtered.where((l) => l['room_id'].toString() == _selectedRoomId).toList();
-                if (_selectedTeacherId != null) filtered = filtered.where((l) => l['teacher_id'].toString() == _selectedTeacherId).toList();
-                if (_selectedStudentId != null) filtered = filtered.where((l) => l['student_id'].toString() == _selectedStudentId).toList();
+                if (_selectedRoomId != null) {
+                  filtered = filtered
+                      .where((l) => l['room_id'].toString() == _selectedRoomId)
+                      .toList();
+                }
+                if (_selectedTeacherId != null) {
+                  filtered = filtered
+                      .where(
+                        (l) => l['teacher_id'].toString() == _selectedTeacherId,
+                      )
+                      .toList();
+                }
+                if (_selectedStudentId != null) {
+                  filtered = filtered
+                      .where(
+                        (l) => l['student_id'].toString() == _selectedStudentId,
+                      )
+                      .toList();
+                }
 
                 if (_searchQuery.isNotEmpty) {
                   final q = _searchQuery.toLowerCase();
                   filtered = filtered.where((l) {
-                    final student = l['students'];
-                    String studentName = 'Без ученика';
-                    if (student != null) {
-                      final sf = student['first_name'] ?? student['profiles']?['first_name'] ?? '';
-                      final sl = student['last_name'] ?? student['profiles']?['last_name'] ?? '';
-                      studentName = '$sf $sl'.trim();
-                      if (studentName.isEmpty) studentName = 'Без имени';
-                    }
+                    final studentName =
+                        (l['student_name'] ??
+                                '${l['student_first_name'] ?? ''} ${l['student_last_name'] ?? ''}')
+                            .toString()
+                            .trim();
                     final sName = studentName.toLowerCase();
-                    
-                    final teacher = l['teachers'];
-                    String teacherName = 'Без преподавателя';
-                    if (teacher != null) {
-                      final tf = teacher['first_name'] ?? teacher['profiles']?['first_name'] ?? '';
-                      final tl = teacher['last_name'] ?? teacher['profiles']?['last_name'] ?? '';
-                      teacherName = '$tf $tl'.trim();
-                      if (teacherName.isEmpty) teacherName = 'Без имени';
-                    }
+
+                    final teacherName =
+                        (l['teacher_name'] ??
+                                '${l['teacher_first_name'] ?? ''} ${l['teacher_last_name'] ?? ''}')
+                            .toString()
+                            .trim();
                     final tName = teacherName.toLowerCase();
-                    
-                    final gName = (l['groups']?['name'] as String? ?? '').toLowerCase();
-                    
-                    return sName.contains(q) || tName.contains(q) || gName.contains(q);
+
+                    final gName =
+                        (l['group_name'] ?? l['groups']?['name'] ?? '')
+                            .toString()
+                            .toLowerCase();
+
+                    return sName.contains(q) ||
+                        tName.contains(q) ||
+                        gName.contains(q);
                   }).toList();
                 }
 
@@ -121,10 +136,19 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('Нет занятий на эту дату', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        Text(
+                          'Нет занятий на эту дату',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                         TextButton(
                           onPressed: () => _selectDate(context),
-                          child: Text('Выбрать другую дату (${DateFormat('d MMM').format(_selectedDate)})'),
+                          child: Text(
+                            'Выбрать другую дату (${DateFormat('d MMM').format(_selectedDate)})',
+                          ),
                         ),
                       ],
                     ),
@@ -138,26 +162,36 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
                   grouped.putIfAbsent(roomId, () => []).add(l);
                 }
 
-                final sortedRooms = [..._rooms]..sort((a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''));
+                final sortedRooms = [
+                  ..._rooms,
+                ]..sort((a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''));
 
                 return ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.all(12),
                   children: [
-                    ...sortedRooms.where((r) => grouped.containsKey(r['id']) || _selectedRoomId == null).map((room) {
-                      final roomLessons = grouped[room['id']] ?? [];
-                      if (roomLessons.isEmpty && _selectedRoomId != null) return const SizedBox.shrink();
-                      return _KanbanColumn(
-                        title: room['name'] ?? 'Без названия', 
-                        lessons: roomLessons,
-                        teachers: _teachers,
-                        students: _students,
-                        selectedDate: _selectedDate,
-                      );
-                    }),
+                    ...sortedRooms
+                        .where(
+                          (r) =>
+                              grouped.containsKey(r['id']) ||
+                              _selectedRoomId == null,
+                        )
+                        .map((room) {
+                          final roomLessons = grouped[room['id']] ?? [];
+                          if (roomLessons.isEmpty && _selectedRoomId != null) {
+                            return const SizedBox.shrink();
+                          }
+                          return _KanbanColumn(
+                            title: room['name'] ?? 'Без названия',
+                            lessons: roomLessons,
+                            teachers: _teachers,
+                            students: _students,
+                            selectedDate: _selectedDate,
+                          );
+                        }),
                     if (grouped.containsKey('unassigned'))
                       _KanbanColumn(
-                        title: 'Без аудитории', 
+                        title: 'Без аудитории',
                         lessons: grouped['unassigned']!,
                         teachers: _teachers,
                         students: _students,
@@ -169,7 +203,10 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
               loading: () => ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(12),
-                children: List.generate(3, (i) => const _KanbanColumnSkeleton()),
+                children: List.generate(
+                  3,
+                  (i) => const _KanbanColumnSkeleton(),
+                ),
               ),
               error: (e, _) => Center(child: Text('Ошибка: $e')),
             ),
@@ -190,17 +227,28 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
             style: const TextStyle(color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Поиск по ученику, учителю или группе...',
-              hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
-              prefixIcon: Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
-              suffixIcon: _searchQuery.isNotEmpty 
-                ? IconButton(
-                    icon: Icon(Icons.close_rounded, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _searchQuery = '');
-                    },
-                  )
-                : null,
+              hintStyle: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+              prefixIcon: Icon(
+                Icons.search_rounded,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                size: 20,
+              ),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
               filled: true,
               fillColor: Theme.of(context).colorScheme.surface,
               isDense: true,
@@ -216,61 +264,78 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(
-          children: [
-            _FilterDropdown(
-              label: 'Аудитория',
-              value: _selectedRoomId,
-              items: _rooms,
-              onChanged: (v) => setState(() => _selectedRoomId = v),
-            ),
-            SizedBox(width: 8),
-            _FilterDropdown(
-              label: 'Преподаватель',
-              value: _selectedTeacherId,
-              items: _teachers.map((t) {
-                final tfName = t['first_name']?.toString() ?? '';
-                final tlName = t['last_name']?.toString() ?? '';
-                final p = t['profiles'] as Map<String, dynamic>?;
-                var name = '$tfName $tlName'.trim();
-                if (name.isEmpty && p != null) {
-                  name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-                }
-                return {'id': t['id'], 'name': name.isEmpty ? 'Без имени' : name};
-              }).toList(),
-              onChanged: (v) => setState(() => _selectedTeacherId = v),
-            ),
-            SizedBox(width: 8),
-            _FilterDropdown(
-              label: 'Ученик',
-              value: _selectedStudentId,
-              items: _students.map((s) {
-                final sfName = s['first_name']?.toString() ?? '';
-                final slName = s['last_name']?.toString() ?? '';
-                final p = s['profiles'] as Map<String, dynamic>?;
-                var name = '$sfName $slName'.trim();
-                if (name.isEmpty && p != null) {
-                  name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-                }
-                return {'id': s['id'], 'name': name.isEmpty ? 'Без имени' : name};
-              }).toList(),
-              onChanged: (v) => setState(() => _selectedStudentId = v),
-            ),
-            SizedBox(width: 8),
-            ActionChip(
-              backgroundColor: Theme.of(context).colorScheme.surface,
-              avatar: Icon(Icons.calendar_today_rounded, size: 16, color: AppTheme.primaryPurple),
-              label: Text(DateFormat('d MMM yyyy', 'ru').format(_selectedDate), style: const TextStyle(fontSize: 12, color: Colors.white)),
-              onPressed: () => _selectDate(context),
-            ),
-            if (_selectedRoomId != null || _selectedTeacherId != null || _selectedStudentId != null)
-              IconButton(
-                icon: Icon(Icons.clear_rounded, color: AppTheme.danger),
-                onPressed: () => setState(() {
-                  _selectedRoomId = null;
-                  _selectedTeacherId = null;
-                  _selectedStudentId = null;
-                }),
+            children: [
+              _FilterDropdown(
+                label: 'Аудитория',
+                value: _selectedRoomId,
+                items: _rooms,
+                onChanged: (v) => setState(() => _selectedRoomId = v),
               ),
+              SizedBox(width: 8),
+              _FilterDropdown(
+                label: 'Преподаватель',
+                value: _selectedTeacherId,
+                items: _teachers.map((t) {
+                  final tfName = t['first_name']?.toString() ?? '';
+                  final tlName = t['last_name']?.toString() ?? '';
+                  final p = t['profiles'] as Map<String, dynamic>?;
+                  var name = '$tfName $tlName'.trim();
+                  if (name.isEmpty && p != null) {
+                    name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'
+                        .trim();
+                  }
+                  return {
+                    'id': t['id'],
+                    'name': name.isEmpty ? 'Без имени' : name,
+                  };
+                }).toList(),
+                onChanged: (v) => setState(() => _selectedTeacherId = v),
+              ),
+              SizedBox(width: 8),
+              _FilterDropdown(
+                label: 'Ученик',
+                value: _selectedStudentId,
+                items: _students.map((s) {
+                  final sfName = s['first_name']?.toString() ?? '';
+                  final slName = s['last_name']?.toString() ?? '';
+                  final p = s['profiles'] as Map<String, dynamic>?;
+                  var name = '$sfName $slName'.trim();
+                  if (name.isEmpty && p != null) {
+                    name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'
+                        .trim();
+                  }
+                  return {
+                    'id': s['id'],
+                    'name': name.isEmpty ? 'Без имени' : name,
+                  };
+                }).toList(),
+                onChanged: (v) => setState(() => _selectedStudentId = v),
+              ),
+              SizedBox(width: 8),
+              ActionChip(
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                avatar: Icon(
+                  Icons.calendar_today_rounded,
+                  size: 16,
+                  color: AppTheme.primaryPurple,
+                ),
+                label: Text(
+                  DateFormat('d MMM yyyy', 'ru').format(_selectedDate),
+                  style: const TextStyle(fontSize: 12, color: Colors.white),
+                ),
+                onPressed: () => _selectDate(context),
+              ),
+              if (_selectedRoomId != null ||
+                  _selectedTeacherId != null ||
+                  _selectedStudentId != null)
+                IconButton(
+                  icon: Icon(Icons.clear_rounded, color: AppTheme.danger),
+                  onPressed: () => setState(() {
+                    _selectedRoomId = null;
+                    _selectedTeacherId = null;
+                    _selectedStudentId = null;
+                  }),
+                ),
             ],
           ),
         ),
@@ -285,7 +350,12 @@ class _FilterDropdown extends StatelessWidget {
   final List<dynamic> items;
   final Function(String?) onChanged;
 
-  const _FilterDropdown({required this.label, required this.value, required this.items, required this.onChanged});
+  const _FilterDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -293,18 +363,31 @@ class _FilterDropdown extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: value != null ? AppTheme.primaryPurple : Colors.transparent),
+        border: Border.all(
+          color: value != null ? AppTheme.primaryPurple : Colors.transparent,
+        ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
-          hint: Text(label, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          hint: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
           dropdownColor: Theme.of(context).colorScheme.surface,
           style: const TextStyle(fontSize: 12, color: Colors.white),
           items: [
             DropdownMenuItem(value: null, child: Text('Все $label')),
-            ...items.map((i) => DropdownMenuItem(value: i['id'].toString(), child: Text(i['name'] ?? 'Неизвестно'))),
+            ...items.map(
+              (i) => DropdownMenuItem(
+                value: i['id'].toString(),
+                child: Text(i['name'] ?? 'Неизвестно'),
+              ),
+            ),
           ],
           onChanged: onChanged,
         ),
@@ -321,7 +404,7 @@ class _KanbanColumn extends StatelessWidget {
   final DateTime selectedDate;
 
   const _KanbanColumn({
-    required this.title, 
+    required this.title,
     required this.lessons,
     required this.teachers,
     required this.students,
@@ -343,10 +426,31 @@ class _KanbanColumn extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.primaryPurple, shape: BoxShape.circle)),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.primaryPurple,
+                    shape: BoxShape.circle,
+                  ),
+                ),
                 SizedBox(width: 8),
-                Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
-                Text('${lessons.length}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${lessons.length}',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
           ),
@@ -459,7 +563,10 @@ class _LessonKanbanCard extends ConsumerWidget {
 
     String studentName = '—';
     if (studentId != null) {
-      final s = students.firstWhere((e) => e['id'].toString() == studentId, orElse: () => {});
+      final s = students.firstWhere(
+        (e) => e['id'].toString() == studentId,
+        orElse: () => {},
+      );
       if (s.isNotEmpty) {
         final sfName = s['first_name']?.toString() ?? '';
         final slName = s['last_name']?.toString() ?? '';
@@ -474,7 +581,10 @@ class _LessonKanbanCard extends ConsumerWidget {
 
     String teacherName = '—';
     if (teacherId != null) {
-      final t = teachers.firstWhere((e) => e['id'].toString() == teacherId, orElse: () => {});
+      final t = teachers.firstWhere(
+        (e) => e['id'].toString() == teacherId,
+        orElse: () => {},
+      );
       if (t.isNotEmpty) {
         final tfName = t['first_name']?.toString() ?? '';
         final tlName = t['last_name']?.toString() ?? '';
@@ -486,14 +596,19 @@ class _LessonKanbanCard extends ConsumerWidget {
         teacherName = name.isEmpty ? 'Без имени' : name;
       }
     }
-    
-    final groupName = 'Индивидуально'; // Need group stream if joins are missing
+
+    final groupName =
+        (lesson['group_name'] ?? lesson['groups']?['name'] ?? 'Индивидуально')
+            .toString();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.white.withAlpha(10))),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.white.withAlpha(10)),
+      ),
       child: InkWell(
         onTap: () {
           LessonAttendanceDialog.show(context, lesson);
@@ -514,28 +629,71 @@ class _LessonKanbanCard extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      Text(timeStr, style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.w800, fontSize: 14)),
+                      Text(
+                        timeStr,
+                        style: const TextStyle(
+                          color: AppTheme.primaryPurple,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
                       SizedBox(width: 8),
-                      Text(dateStr, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                      Text(
+                        dateStr,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                   Row(
                     children: [
                       if (lesson['status'] == 'completed')
-                        Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 16)
+                        Icon(
+                          Icons.check_circle_rounded,
+                          color: AppTheme.success,
+                          size: 16,
+                        )
                       else
-                        Icon(Icons.radio_button_unchecked_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
-                      
+                        Icon(
+                          Icons.radio_button_unchecked_rounded,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          size: 16,
+                        ),
+
                       PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert_rounded, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        icon: Icon(
+                          Icons.more_vert_rounded,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                         onSelected: (val) {
-                          if (val == 'cancel') _cancelLesson(context, ref, lesson['id']);
-                          if (val == 'reschedule') _rescheduleLesson(context, ref, lesson['id'], dt);
+                          if (val == 'cancel') {
+                            _cancelLesson(context, ref, lesson['id']);
+                          }
+                          if (val == 'reschedule') {
+                            _rescheduleLesson(context, ref, lesson['id'], dt);
+                          }
                         },
                         padding: EdgeInsets.zero,
                         itemBuilder: (ctx) => [
-                          const PopupMenuItem(value: 'cancel', textStyle: TextStyle(fontSize: 13, color: Colors.white), child: Text('Отменить')),
-                          const PopupMenuItem(value: 'reschedule', textStyle: TextStyle(fontSize: 13, color: Colors.white), child: Text('Перенести')),
+                          const PopupMenuItem(
+                            value: 'cancel',
+                            textStyle: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white,
+                            ),
+                            child: Text('Отменить'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'reschedule',
+                            textStyle: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white,
+                            ),
+                            child: Text('Перенести'),
+                          ),
                         ],
                       ),
                     ],
@@ -543,10 +701,26 @@ class _LessonKanbanCard extends ConsumerWidget {
                 ],
               ),
               SizedBox(height: 8),
-              Text(groupName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                groupName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               SizedBox(height: 4),
-              _buildEntityRow(context, Icons.person_outline_rounded, 'Уч.: $studentName'),
-              _buildEntityRow(context, Icons.school_outlined, 'Пр.: $teacherName'),
+              _buildEntityRow(
+                context,
+                Icons.person_outline_rounded,
+                'Уч.: $studentName',
+              ),
+              _buildEntityRow(
+                context,
+                Icons.school_outlined,
+                'Пр.: $teacherName',
+              ),
             ],
           ),
         ),
@@ -559,34 +733,65 @@ class _LessonKanbanCard extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         children: [
-          Icon(icon, size: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           SizedBox(width: 4),
-          Expanded(child: Text(text, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 11,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Future<void> _cancelLesson(BuildContext context, WidgetRef ref, String lessonId) async {
+  Future<void> _cancelLesson(
+    BuildContext context,
+    WidgetRef ref,
+    String lessonId,
+  ) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Отменить занятие?'),
         content: Text('Статус занятия будет изменен на "Отменено".'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Назад')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Отменить', style: TextStyle(color: AppTheme.danger))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Назад'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Отменить', style: TextStyle(color: AppTheme.danger)),
+          ),
         ],
       ),
     );
 
     if (confirm == true) {
-      await Supabase.instance.client.from('lessons').update({'status': 'cancelled'}).eq('id', lessonId);
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateLesson(lessonId, status: 'cancelled');
       ref.invalidate(lessonsFilteredProvider(selectedDate));
     }
   }
 
-  Future<void> _rescheduleLesson(BuildContext context, WidgetRef ref, String lessonId, DateTime? current) async {
+  Future<void> _rescheduleLesson(
+    BuildContext context,
+    WidgetRef ref,
+    String lessonId,
+    DateTime? current,
+  ) async {
     final date = await showDatePicker(
       context: context,
       initialDate: current ?? DateTime.now(),
@@ -601,26 +806,38 @@ class _LessonKanbanCard extends ConsumerWidget {
     );
     if (time == null || !context.mounted) return;
 
-    final newDateTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    
-    await Supabase.instance.client.from('lessons').update({
-      'scheduled_at': newDateTime.toIso8601String(),
-    }).eq('id', lessonId);
+    final newDateTime = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+
+    await ref
+        .read(magicCrmServiceProvider)
+        .updateLesson(lessonId, scheduledAt: newDateTime.toIso8601String());
     ref.invalidate(lessonsFilteredProvider(selectedDate));
   }
 }
 
-final lessonsFilteredProvider = FutureProvider.family<List<Map<String, dynamic>>, DateTime>((ref, date) async {
-  final supabase = Supabase.instance.client;
-  final startOfDay = DateTime(date.year, date.month, date.day).toIso8601String();
-  final endOfDay = DateTime(date.year, date.month, date.day).add(const Duration(days: 1)).toIso8601String();
+final lessonsFilteredProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, DateTime>((
+      ref,
+      date,
+    ) async {
+      final startOfDay = DateTime(
+        date.year,
+        date.month,
+        date.day,
+      ).toIso8601String();
+      final endOfDay = DateTime(
+        date.year,
+        date.month,
+        date.day,
+      ).add(const Duration(days: 1)).toIso8601String();
 
-  final res = await supabase
-      .from('lessons')
-      .select('*, students(first_name, last_name, profiles(first_name, last_name)), groups(name), teachers(first_name, last_name, profiles(first_name, last_name)), rooms(name), branches(name)')
-      .gte('scheduled_at', startOfDay)
-      .lt('scheduled_at', endOfDay)
-      .order('scheduled_at');
-  
-  return List<Map<String, dynamic>>.from(res);
-});
+      return ref
+          .read(magicCrmServiceProvider)
+          .listLessons(from: startOfDay, to: endOfDay, limit: 200);
+    });

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
-class CreateTeacherDialog extends StatefulWidget {
+class CreateTeacherDialog extends ConsumerStatefulWidget {
   const CreateTeacherDialog({super.key});
 
   @override
-  State<CreateTeacherDialog> createState() => _CreateTeacherDialogState();
+  ConsumerState<CreateTeacherDialog> createState() =>
+      _CreateTeacherDialogState();
 }
 
-class _CreateTeacherDialogState extends State<CreateTeacherDialog> {
+class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -29,17 +31,20 @@ class _CreateTeacherDialogState extends State<CreateTeacherDialog> {
     setState(() => _saving = true);
 
     try {
-      await Supabase.instance.client.from('teachers').insert({
-        'first_name': firstName,
-        'last_name': _lastNameController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'status': 'active', // default status
-      });
+      await ref
+          .read(magicCrmServiceProvider)
+          .createTeacher(
+            firstName: firstName,
+            lastName: _lastNameController.text,
+            phone: _phoneController.text,
+          );
 
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -72,10 +77,19 @@ class _CreateTeacherDialogState extends State<CreateTeacherDialog> {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
         FilledButton(
           onPressed: _saving ? null : _save,
-          child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Сохранить'),
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Сохранить'),
         ),
       ],
     );

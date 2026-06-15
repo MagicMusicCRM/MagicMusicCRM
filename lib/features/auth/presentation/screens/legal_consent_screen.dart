@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/features/auth/data/services/supa_release_gate_service.dart';
+import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -24,9 +24,7 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
 
     setState(() => _isSaving = true);
     try {
-      await ref
-          .read(supaReleaseGateServiceProvider)
-          .acceptCurrentLegalDocuments();
+      await ref.read(releaseGateServiceProvider).acceptCurrentLegalDocuments();
       ref.invalidate(releaseGateStatusProvider);
       ref.invalidate(currentLegalDocumentsProvider);
 

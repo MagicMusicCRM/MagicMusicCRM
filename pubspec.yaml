@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.5+115
+version: 1.1.7+117
 
 environment:
   sdk: ^3.11.1
@@ -37,16 +37,16 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  supabase_flutter: ^2.12.0
   flutter_riverpod: ^3.3.1
   go_router: ^17.1.0
-  google_sign_in: ^6.2.2
   google_fonts: ^8.0.2
   firebase_core: ^3.9.0
   firebase_messaging: ^15.2.0
+  flutter_secure_storage: ^9.2.4
   intl: ^0.20.2
   package_info_plus: ^9.0.0
   dio: ^5.9.2
+  http_parser: ^4.1.2
   path_provider: ^2.1.5
   open_filex: ^4.7.0
   permission_handler: ^12.0.1
@@ -63,14 +63,17 @@ dependencies:
   image: ^4.8.0
   desktop_drop: ^0.7.0
   cross_file: ^0.3.5+2
-  app_links: ^7.0.0
   flutter_local_notifications: ^20.1.0
   local_notifier: ^0.1.6
+  socket_io_client: ^3.1.5
+  sentry_flutter: ^8.14.2
 dependency_overrides:
   record_linux: ^1.3.0
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
-import 'package:magic_music_crm/features/auth/providers/supa_auth_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:magic_music_crm/features/auth/data/services/magic_auth_service.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 class AuthMethodsScreen extends ConsumerStatefulWidget {
   const AuthMethodsScreen({super.key});
@@ -19,7 +20,6 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
 
   late Future<_AuthMethodsData> _authMethodsFuture;
   bool _isSavingPassword = false;
-  bool _isLinkingGoogle = false;
   bool _isSavingMfa = false;
   bool _obscurePassword = true;
 
@@ -37,11 +37,13 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
   }
 
   Future<_AuthMethodsData> _loadAuthMethods() async {
-    final service = ref.read(supaAuthServiceProvider);
+    final service = ref.read(magicAuthServiceProvider);
+    final profile = await service.currentProfile();
     final identities = await service.getUserIdentities();
     final emailOtpMfaEnabled = await service
         .isEmailOtpMfaEnabledForCurrentUser();
     return _AuthMethodsData(
+      email: profile.email,
       identities: identities,
       emailOtpMfaEnabled: emailOtpMfaEnabled,
     );
@@ -59,17 +61,17 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
     setState(() => _isSavingPassword = true);
     try {
       await ref
-          .read(supaAuthServiceProvider)
+          .read(magicAuthServiceProvider)
           .setPassword(_passwordController.text);
       _passwordController.clear();
       _confirmPasswordController.clear();
       _refreshAuthMethods();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пароль для email-входа сохранен')),
+          const SnackBar(content: Text('Пароль для входа по почте сохранен')),
         );
       }
-    } on AuthException catch (error) {
+    } on MagicApiException catch (error) {
       if (mounted) _showError(_mapAuthError(error.message));
     } catch (_) {
       if (mounted) _showError('Не удалось сохранить пароль.');
@@ -78,60 +80,34 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
     }
   }
 
-  Future<void> _linkGoogle() async {
-    setState(() => _isLinkingGoogle = true);
-    try {
-      await ref.read(supaAuthServiceProvider).linkGoogleIdentity();
-      _refreshAuthMethods();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Google аккаунт привязан')),
-        );
-      }
-    } on AuthException catch (error) {
-      if (mounted) _showError(_mapAuthError(error.message));
-    } catch (_) {
-      if (mounted) _showError('Не удалось привязать Google аккаунт.');
-    } finally {
-      if (mounted) setState(() => _isLinkingGoogle = false);
-    }
-  }
-
   Future<void> _setEmailOtpMfa(bool enabled) async {
     setState(() => _isSavingMfa = true);
     try {
-      await ref.read(supaAuthServiceProvider).setEmailOtpMfaEnabled(enabled);
+      await ref.read(magicAuthServiceProvider).setEmailOtpMfaEnabled(enabled);
       _refreshAuthMethods();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               enabled
-                  ? 'Email-код для входа включен'
-                  : 'Email-код для входа выключен',
+                  ? 'Код из письма для входа включен'
+                  : 'Код из письма для входа выключен',
             ),
           ),
         );
       }
-    } on AuthException catch (error) {
+    } on MagicApiException catch (error) {
       if (mounted) _showError(_mapAuthError(error.message));
     } catch (_) {
-      if (mounted) _showError('Не удалось изменить настройку 2FA.');
+      if (mounted) {
+        _showError('Не удалось изменить настройку двухфакторной защиты.');
+      }
     } finally {
       if (mounted) setState(() => _isSavingMfa = false);
     }
   }
 
   String _mapAuthError(String message) {
-    if (message.contains('same email')) {
-      return 'Этот Google аккаунт уже связан с пользователем с таким email.';
-    }
-    if (message.contains('GOOGLE_WEB_CLIENT_ID')) {
-      return 'Google OAuth не настроен в сборке приложения.';
-    }
-    if (message.contains('Manual Linking is Disabled')) {
-      return 'В Supabase Auth выключена ручная привязка аккаунтов.';
-    }
     if (message.contains('Password should be at least')) {
       return 'Пароль слишком короткий.';
     }
@@ -150,8 +126,6 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final userEmail = Supabase.instance.client.auth.currentUser?.email ?? '';
-
     return Scaffold(
       appBar: AppBar(title: const Text('Способы входа')),
       body: ResponsiveConstraint(
@@ -159,10 +133,8 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
           future: _authMethodsFuture,
           builder: (context, snapshot) {
             final data = snapshot.data;
-            final identities = data?.identities ?? const <UserIdentity>[];
-            final hasGoogle = identities.any(
-              (item) => item.provider == 'google',
-            );
+            final identities = data?.identities ?? const <MagicAuthIdentity>[];
+            final userEmail = data?.email ?? '';
             final hasEmail = identities.any((item) => item.provider == 'email');
             final emailOtpMfaEnabled = data?.emailOtpMfaEnabled ?? false;
 
@@ -178,11 +150,11 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                   child: SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     secondary: const Icon(Icons.verified_user_outlined),
-                    title: const Text('Email-код для входа'),
+                    title: const Text('Код из письма для входа'),
                     subtitle: Text(
                       hasEmail
                           ? 'После пароля приложение попросит 6-значный код из письма'
-                          : 'Сначала установите пароль для email-входа',
+                          : 'Сначала установите пароль для входа по почте',
                     ),
                     value: emailOtpMfaEnabled,
                     onChanged: hasEmail && !_isSavingMfa
@@ -196,20 +168,11 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                     children: [
                       _IdentityRow(
                         icon: Icons.email_outlined,
-                        title: 'Email и пароль',
+                        title: 'Почта и пароль',
                         subtitle: hasEmail
-                            ? 'Можно входить по email и паролю'
+                            ? 'Можно входить по почте и паролю'
                             : 'Пароль еще не установлен',
                         enabled: hasEmail,
-                      ),
-                      const Divider(height: 1),
-                      _IdentityRow(
-                        icon: Icons.g_mobiledata_rounded,
-                        title: 'Google',
-                        subtitle: hasGoogle
-                            ? 'Google аккаунт привязан'
-                            : 'Можно привязать текущий Google аккаунт',
-                        enabled: hasGoogle,
                       ),
                     ],
                   ),
@@ -244,8 +207,8 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                             ),
                           ),
                           validator: (value) =>
-                              (value == null || value.length < 8)
-                              ? 'Минимум 8 символов'
+                              (value == null || value.length < 10)
+                              ? 'Минимум 10 символов'
                               : null,
                         ),
                         const SizedBox(height: 12),
@@ -281,20 +244,6 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: hasGoogle || _isLinkingGoogle ? null : _linkGoogle,
-                  icon: _isLinkingGoogle
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.g_mobiledata_rounded),
-                  label: Text(
-                    hasGoogle ? 'Google уже привязан' : 'Привязать Google',
-                  ),
-                ),
               ],
             );
           },
@@ -305,10 +254,12 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
 }
 
 class _AuthMethodsData {
-  final List<UserIdentity> identities;
+  final String email;
+  final List<MagicAuthIdentity> identities;
   final bool emailOtpMfaEnabled;
 
   const _AuthMethodsData({
+    required this.email,
     required this.identities,
     required this.emailOtpMfaEnabled,
   });

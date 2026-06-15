@@ -3,7 +3,7 @@ import urllib.request
 import urllib.parse
 import time
 
-AUTH_KEY = 'L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n'
+AUTH_KEY = 'REDACTED_HOLLIHOP_AUTH_KEY'
 BASE_URL = "https://sokol.t8s.ru/Api/V2/"
 
 def test_schedule():

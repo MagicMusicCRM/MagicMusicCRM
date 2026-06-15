@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/email_otp_screen.dart';
-import 'package:magic_music_crm/features/auth/providers/supa_auth_provider.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 class RegistrationScreen extends ConsumerStatefulWidget {
   const RegistrationScreen({super.key});
@@ -39,14 +39,14 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
       final response = await ref
-          .read(supaAuthServiceProvider)
+          .read(magicAuthServiceProvider)
           .signUpWithPassword(
             email: _emailController.text.trim(),
             password: password,
             fullName: _nameController.text.trim(),
           );
       if (!mounted) return;
-      if (response.session != null) {
+      if (response.hasSession) {
         context.go('/');
       } else {
         context.go(
@@ -57,23 +57,10 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
           ),
         );
       }
-    } on AuthException catch (e) {
+    } on MagicApiException catch (e) {
       if (mounted) _showError(e.message);
     } catch (e) {
       if (mounted) _showError('Произошла ошибка при регистрации');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-    try {
-      await ref.read(supaAuthServiceProvider).signInWithGoogle();
-    } on AuthException catch (e) {
-      if (mounted) _showError(e.message);
-    } catch (_) {
-      if (mounted) _showError('Не удалось начать регистрацию через Google');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -113,7 +100,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Войдите через Google, затем заполните профиль',
+                  'Зарегистрируйтесь по почте и подтвердите код из письма',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
@@ -121,39 +108,6 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                   ),
                 ),
                 const SizedBox(height: 48),
-                SizedBox(
-                  height: 54,
-                  child: OutlinedButton.icon(
-                    onPressed: _isLoading ? null : _signInWithGoogle,
-                    icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-                    label: const Text('Продолжить через Google'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.white.withAlpha(70)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: Colors.white.withAlpha(50))),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        'email и пароль',
-                        style: TextStyle(
-                          color: Colors.white.withAlpha(120),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    Expanded(child: Divider(color: Colors.white.withAlpha(50))),
-                  ],
-                ),
-                const SizedBox(height: 24),
 
                 TextFormField(
                   controller: _nameController,
@@ -187,7 +141,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                   controller: _emailController,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    labelText: 'Email',
+                    labelText: 'Электронная почта',
                     prefixIcon: Icon(
                       Icons.email_outlined,
                       color: Colors.white.withAlpha(160),
@@ -207,7 +161,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                     ),
                   ),
                   validator: (v) => (v == null || !v.contains('@'))
-                      ? 'Некорректный email'
+                      ? 'Некорректная почта'
                       : null,
                 ),
                 const SizedBox(height: 20),

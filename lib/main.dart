@@ -5,23 +5,57 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:magic_music_crm/core/constants/env.dart';
 import 'package:magic_music_crm/core/router/app_router.dart';
 import 'package:magic_music_crm/core/services/notification_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/providers/theme_provider.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
-import 'package:app_links/app_links.dart';
 import 'package:magic_music_crm/firebase_options.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+
+final Stopwatch _startupStopwatch = Stopwatch();
 
 Future<void> main() async {
+  if (Env.sentryEnabled) {
+    await SentryFlutter.init((options) {
+      options.dsn = Env.sentryDsn;
+      options.environment = Env.sentryEnvironment;
+      if (Env.sentryRelease.isNotEmpty) {
+        options.release = Env.sentryRelease;
+      }
+      options.tracesSampleRate = Env.sentryTracesSampleRate;
+      options.sendDefaultPii = false;
+      options.beforeSend = (event, hint) {
+        final apiHost = Uri.tryParse(Env.magicApiBaseUrl)?.host;
+        return event.copyWith(
+          tags: {
+            ...?event.tags,
+            if (apiHost != null && apiHost.isNotEmpty) 'api_base_url': apiHost,
+          },
+        );
+      };
+    }, appRunner: _bootstrap);
+    return;
+  }
+
+  await _bootstrap();
+}
+
+Future<void> _bootstrap() async {
+  _startupStopwatch
+    ..reset()
+    ..start();
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('ru', null);
   Intl.defaultLocale = 'ru';
 
+  runApp(const ProviderScope(child: MagicMusicApp()));
+}
+
+Future<void> _initializeFirebase() async {
   try {
     // Attempt to initialize Firebase with platform-specific options.
     await Firebase.initializeApp(
@@ -34,10 +68,6 @@ Future<void> main() async {
       'Tip: Run "flutterfire configure" to enable push notifications.',
     );
   }
-
-  await Supabase.initialize(url: Env.supabaseUrl, anonKey: Env.supabaseAnonKey);
-
-  runApp(const ProviderScope(child: MagicMusicApp()));
 }
 
 class MagicMusicApp extends ConsumerStatefulWidget {
@@ -54,41 +84,26 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      _initDeepLinks();
-      ref.read(notificationServiceProvider).setupNotifications().catchError((
-        e,
-      ) {
-        debugPrint('Notification service init error: $e');
-      });
+      _startupStopwatch.stop();
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          category: 'app.startup',
+          level: SentryLevel.info,
+          data: {'firstFrameMs': _startupStopwatch.elapsedMilliseconds},
+        ),
+      );
+      unawaited(
+        _initializeRuntimeServices().catchError(
+          (e) => debugPrint('Notification service init error: $e'),
+        ),
+      );
     });
   }
 
-  void _initDeepLinks() {
-    final appLinks = AppLinks();
-
-    // Handle initial link (if the app was started by a link)
-    appLinks.getInitialLink().then((uri) {
-      if (uri != null) unawaited(_handleAuthLink(uri));
-    });
-
-    // Handle subsequent links (if the app is already running)
-    appLinks.uriLinkStream.listen((uri) {
-      unawaited(_handleAuthLink(uri));
-    });
-  }
-
-  Future<void> _handleAuthLink(Uri uri) async {
-    if (uri.scheme != 'magiccrm' || uri.host != 'auth-callback') {
-      debugPrint('Ignored auth deep link with unexpected origin.');
-      return;
-    }
-
-    try {
-      await Supabase.instance.client.auth.getSessionFromUrl(uri);
-      debugPrint('Auth deep link processed.');
-    } catch (e) {
-      debugPrint('Auth deep link processing failed.');
-    }
+  Future<void> _initializeRuntimeServices() async {
+    await initializeDateFormatting('ru', null);
+    await _initializeFirebase();
+    await ref.read(notificationServiceProvider).setupNotifications();
   }
 
   @override
@@ -99,6 +114,16 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(magicAuthStateProvider, (previous, next) {
+      next.whenData((session) {
+        if (session != null) {
+          unawaited(
+            ref.read(notificationServiceProvider).syncCurrentDeviceToken(),
+          );
+        }
+      });
+    });
+
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
 

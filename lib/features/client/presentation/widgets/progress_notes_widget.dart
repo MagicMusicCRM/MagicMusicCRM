@@ -1,30 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
-final progressNotesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final supabase = Supabase.instance.client;
-  final user = supabase.auth.currentUser;
-  if (user == null) return [];
+final progressNotesProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final studentIdAsync = ref.watch(magicCurrentStudentIdProvider);
+  final studentId = studentIdAsync.asData?.value;
+  if (studentId == null) return [];
 
-  final studentRes = await supabase
-      .from('students')
-      .select('id')
-      .eq('profile_id', user.id)
-      .maybeSingle();
-  if (studentRes == null) return [];
-
-  final notes = await supabase
-      .from('entity_comments')
-      .select('*, profiles(first_name, last_name)')
-      .eq('entity_id', studentRes['id'])
-      .eq('entity_type', 'student')
-      .like('content', '[PROGRESS]%')
-      .order('created_at', ascending: false);
-
-  return List<Map<String, dynamic>>.from(notes);
+  return ref
+      .watch(magicCrmServiceProvider)
+      .listProgressNotes(studentId: studentId);
 });
 
 class ProgressNotesWidget extends ConsumerWidget {
@@ -35,8 +24,15 @@ class ProgressNotesWidget extends ConsumerWidget {
     final notesAsync = ref.watch(progressNotesProvider);
 
     return notesAsync.when(
-      loading: () => Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
-      error: (err, _) => Center(child: Text('Ошибка загрузки: $err', style: const TextStyle(color: AppTheme.danger))),
+      loading: () => Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+      ),
+      error: (err, _) => Center(
+        child: Text(
+          'Ошибка загрузки: $err',
+          style: const TextStyle(color: AppTheme.danger),
+        ),
+      ),
       data: (notes) {
         if (notes.isEmpty) {
           return Center(
@@ -45,7 +41,9 @@ class ProgressNotesWidget extends ConsumerWidget {
               child: Text(
                 'Заметок об успехах пока нет. Продолжайте заниматься!',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           );
@@ -58,9 +56,14 @@ class ProgressNotesWidget extends ConsumerWidget {
           itemCount: notes.length,
           itemBuilder: (context, index) {
             final note = notes[index];
-            final content = (note['content'] as String).replaceFirst('[PROGRESS] ', '');
+            final content = (note['content'] as String).replaceFirst(
+              '[PROGRESS] ',
+              '',
+            );
             final dt = DateTime.tryParse(note['created_at'] ?? '');
-            final dateStr = dt != null ? DateFormat('d MMMM yyyy', 'ru').format(dt.toLocal()) : '';
+            final dateStr = dt != null
+                ? DateFormat('d MMMM yyyy', 'ru').format(dt.toLocal())
+                : '';
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -75,15 +78,29 @@ class ProgressNotesWidget extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.stars_rounded, color: AppTheme.success, size: 20),
+                      Icon(
+                        Icons.stars_rounded,
+                        color: AppTheme.success,
+                        size: 20,
+                      ),
                       SizedBox(width: 8),
-                      Text(dateStr, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                      Text(
+                        dateStr,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                   SizedBox(height: 8),
                   Text(
                     content,
-                    style: const TextStyle(fontSize: 14, height: 1.4, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),

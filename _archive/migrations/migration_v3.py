@@ -5,9 +5,9 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 API_URL = "https://sokol.t8s.ru/Api/V2/"
-AUTH_KEY = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n"
+AUTH_KEY = "REDACTED_HOLLIHOP_AUTH_KEY"
 SUPABASE_URL = 'https://xblpnywnlhfgofskbdxb.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHBueXdubGhmZ29mc2tiZHhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDA5ODcsImV4cCI6MjA4ODcxNjk4N30.qRuC_TQ8rlz68fzi0geqqdbkA7ABRBEyw3GyMkMJJxg'
+SUPABASE_KEY = 'REDACTED_LEGACY_SUPABASE_ANON_KEY'
 
 # --- HELPERS ---
 def fetch_hh(endpoint, params=None):
@@ -31,7 +31,7 @@ def fetch_paginated(endpoint, key_name, take=500):
     while True:
         print(f"[HH] Fetching {endpoint} (skip={skip}, take={take})...", flush=True)
         res = fetch_hh(endpoint, {"skip": skip, "take": take})
-        if not res or key_name not in res: 
+        if not res or key_name not in res:
             print(f"[HH] {endpoint} returned no data for key {key_name}", flush=True)
             break
         chunk = res[key_name]
@@ -43,7 +43,7 @@ def fetch_paginated(endpoint, key_name, take=500):
     return all_data
 
 def upsert_sb(table, data, conflict="hollihop_id"):
-    if not data: 
+    if not data:
         print(f"[SB] No data to upsert for {table}", flush=True)
         return
     url = f"{SUPABASE_URL}/rest/v1/{table}"
@@ -90,7 +90,7 @@ def get_sb_map(table, key_col="hollihop_id", val_col="id"):
         except Exception as e:
             print(f"[SB]   Exception during map fetch: {e}", flush=True)
             break
-    
+
     mapping = {item[key_col]: item[val_col] for item in all_items if item.get(key_col) is not None}
     print(f"[SB] Found {len(mapping)} items for {table} map", flush=True)
     return mapping
@@ -98,12 +98,12 @@ def get_sb_map(table, key_col="hollihop_id", val_col="id"):
 # --- MAIN ---
 def main():
     print("--- Starting Final Migration Phase (v4) ---", flush=True)
-    
+
     # 1. Maps
     groups_map = get_sb_map("groups")
     students_map = get_sb_map("students")
     teachers_map = get_sb_map("teachers")
-    
+
     print("[HH] Mapping ClientId to StudentId...", flush=True)
     hh_students = fetch_paginated("GetStudents", "Students")
     client_id_map = {s["ClientId"]: students_map.get(s["Id"]) for s in hh_students if "ClientId" in s}
@@ -119,14 +119,14 @@ def main():
         client_id = m.get("StudentClientId")
         group_uuid = groups_map.get(group_id)
         student_uuid = client_id_map.get(client_id)
-        
+
         if group_uuid and student_uuid:
             mems_payload.append({
                 "group_id": group_uuid,
                 "student_id": student_uuid,
                 "created_at": m.get("BeginDate") or datetime.now().isoformat()
             })
-    
+
     if mems_payload:
         print(f"[SB] Sending {len(mems_payload)} group memberships to DB...", flush=True)
         # Use upsert_sb with unique constraint if any (group_id, student_id)
@@ -165,21 +165,21 @@ def main():
     for u in units:
         group_uuid = groups_map.get(u["Id"])
         if not group_uuid: continue
-        
+
         for s in u.get("ScheduleItems", []):
             teacher_uuid = None
             if s.get("TeacherId"):
                 teacher_uuid = teachers_map.get(s["TeacherId"])
-            
+
             lessons_payload.append({
                 "group_id": group_uuid,
                 "teacher_id": teacher_uuid,
-                "scheduled_at": u.get("BeginDate") or s.get("BeginDate"), 
+                "scheduled_at": u.get("BeginDate") or s.get("BeginDate"),
                 "status": "planned",
-                "hollihop_id": f"rec_{s['Id']}", 
+                "hollihop_id": f"rec_{s['Id']}",
                 "custom_data": {"classroom": s.get("ClassroomName"), "weekdays": s.get("Weekdays"), "time": f"{s.get('BeginTime')}-{s.get('EndTime')}"}
             })
-    
+
     if lessons_payload:
         print(f"[SB] Upserting {len(lessons_payload)} lessons...", flush=True)
         upsert_sb("lessons", lessons_payload, conflict="hollihop_id")

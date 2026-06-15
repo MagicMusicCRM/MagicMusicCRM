@@ -1,29 +1,44 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:intl/intl.dart';
 
-class CreateLessonDialog extends StatefulWidget {
+class CreateLessonDialog extends ConsumerStatefulWidget {
   final DateTime? initialDate;
   final String? initialRoomId;
   final String? initialBranchId;
 
-  const CreateLessonDialog({super.key, this.initialDate, this.initialRoomId, this.initialBranchId});
+  const CreateLessonDialog({
+    super.key,
+    this.initialDate,
+    this.initialRoomId,
+    this.initialBranchId,
+  });
 
-  static Future<bool?> show(BuildContext context, {DateTime? initialDate, String? initialRoomId, String? initialBranchId}) {
+  static Future<bool?> show(
+    BuildContext context, {
+    DateTime? initialDate,
+    String? initialRoomId,
+    String? initialBranchId,
+  }) {
     return showDialog<bool>(
       context: context,
-      builder: (ctx) => CreateLessonDialog(initialDate: initialDate, initialRoomId: initialRoomId, initialBranchId: initialBranchId),
+      builder: (ctx) => CreateLessonDialog(
+        initialDate: initialDate,
+        initialRoomId: initialRoomId,
+        initialBranchId: initialBranchId,
+      ),
     );
   }
 
   @override
-  State<CreateLessonDialog> createState() => _CreateLessonDialogState();
+  ConsumerState<CreateLessonDialog> createState() => _CreateLessonDialogState();
 }
 
-class _CreateLessonDialogState extends State<CreateLessonDialog> {
-  final _supabase = Supabase.instance.client;
+class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   bool _loading = false;
   bool _saving = false;
 
@@ -58,26 +73,36 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
     _loadData();
   }
 
+  MagicCrmService get _crm => ref.read(magicCrmServiceProvider);
+
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
       final results = await Future.wait([
-        _supabase.from('teachers').select('id, first_name, last_name, profiles(first_name, last_name)'),
-        _supabase.from('groups').select('id, name'),
-        _supabase.from('students').select('id, first_name, last_name, profiles(first_name, last_name)'),
-        _supabase.from('branches').select('id, name'),
+        _crm.listTeachers(limit: 100),
+        _crm.listGroups(limit: 100),
+        _crm.listStudents(limit: 100),
+        ref.read(magicCrmReferenceCacheProvider).branches(),
       ]);
 
       setState(() {
-        _teachers = List<Map<String, dynamic>>.from(results[0]);
-        _groups = List<Map<String, dynamic>>.from(results[1]);
-        _students = List<Map<String, dynamic>>.from(results[2]);
-        _branches = List<Map<String, dynamic>>.from(results[3]);
+        _teachers = results[0];
+        _groups = results[1];
+        _students = results[2];
+        _branches = results[3];
         _loading = false;
       });
+      final branchId =
+          _selectedBranchId ?? _branches.firstOrNull?['id']?.toString();
+      if (branchId != null) {
+        if (mounted) setState(() => _selectedBranchId ??= branchId);
+        await _loadRooms(branchId);
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка загрузки данных: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка загрузки данных: $e')));
         Navigator.pop(context);
       }
     }
@@ -85,13 +110,13 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
 
   Future<void> _loadRooms(String branchId) async {
     try {
-      final r = await _supabase
-          .from('rooms')
-          .select('id, name')
-          .eq('branch_id', branchId);
+      final rooms = await ref
+          .read(magicCrmReferenceCacheProvider)
+          .rooms(branchId: branchId);
       setState(() {
-        _rooms = List<Map<String, dynamic>>.from(r);
-        if (_selectedRoomId != null && !_rooms.any((room) => room['id'].toString() == _selectedRoomId)) {
+        _rooms = rooms;
+        if (_selectedRoomId != null &&
+            !_rooms.any((room) => room['id'].toString() == _selectedRoomId)) {
           _selectedRoomId = null;
         }
       });
@@ -101,8 +126,12 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
   }
 
   Future<void> _save() async {
-    if (_selectedTeacherId == null || (_selectedGroupId == null && _selectedStudentId == null) || _selectedBranchId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Заполните обязательные поля')));
+    if (_selectedTeacherId == null ||
+        (_selectedGroupId == null && _selectedStudentId == null) ||
+        _selectedBranchId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Заполните обязательные поля')),
+      );
       return;
     }
 
@@ -119,26 +148,30 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
         _selectedTime.hour - 3, // Subtract 3 to get UTC
         _selectedTime.minute,
       );
-      
+
       final scheduledAt = moscowTime.toIso8601String();
 
-      await _supabase.from('lessons').insert({
-        'teacher_id': _selectedTeacherId,
-        'group_id': _selectedGroupId,
-        'student_id': _selectedStudentId,
-        'branch_id': _selectedBranchId,
-        'room_id': _selectedRoomId, // Can be null
-        'scheduled_at': scheduledAt,
-        'status': 'planned',
-      });
+      await _crm.createLesson(
+        teacherId: _selectedTeacherId,
+        groupId: _selectedGroupId,
+        studentId: _selectedStudentId,
+        branchId: _selectedBranchId,
+        roomId: _selectedRoomId,
+        scheduledAt: scheduledAt,
+        status: 'scheduled',
+      );
 
       if (mounted) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Занятие создано')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Занятие создано')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -174,9 +207,12 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
               onTap: () {
                 final items = _teachers.map((t) {
                   final name = _getTeacherNameFromData(t);
-                  return SearchableSelectItem(id: t['id'].toString(), label: name);
+                  return SearchableSelectItem(
+                    id: t['id'].toString(),
+                    label: name,
+                  );
                 }).toList();
-                
+
                 SearchableSelect.show(
                   context: context,
                   title: 'Выберите преподавателя',
@@ -184,7 +220,8 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                   items: items,
                   selectedId: _selectedTeacherId,
                   isNullable: false,
-                  onSelected: (item) => setState(() => _selectedTeacherId = item?.id),
+                  onSelected: (item) =>
+                      setState(() => _selectedTeacherId = item?.id),
                 );
               },
             ),
@@ -200,8 +237,16 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                 prefixIcon: Icon(Icons.group_rounded),
               ),
               items: [
-                const DropdownMenuItem(value: null, child: Text('Индивидуально')),
-                ..._groups.map((g) => DropdownMenuItem(value: g['id'].toString(), child: Text(g['name']?.toString() ?? 'Без названия'))),
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('Индивидуально'),
+                ),
+                ..._groups.map(
+                  (g) => DropdownMenuItem(
+                    value: g['id'].toString(),
+                    child: Text(g['name']?.toString() ?? 'Без названия'),
+                  ),
+                ),
               ],
               onChanged: (val) => setState(() {
                 _selectedGroupId = val;
@@ -218,9 +263,12 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                 onTap: () {
                   final items = _students.map((s) {
                     final name = _getStudentNameFromData(s);
-                    return SearchableSelectItem(id: s['id'].toString(), label: name);
+                    return SearchableSelectItem(
+                      id: s['id'].toString(),
+                      label: name,
+                    );
                   }).toList();
-                  
+
                   SearchableSelect.show(
                     context: context,
                     title: 'Выберите ученика',
@@ -228,7 +276,8 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                     items: items,
                     selectedId: _selectedStudentId,
                     isNullable: false,
-                    onSelected: (item) => setState(() => _selectedStudentId = item?.id),
+                    onSelected: (item) =>
+                        setState(() => _selectedStudentId = item?.id),
                   );
                 },
               ),
@@ -244,7 +293,14 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                     isExpanded: true,
                     dropdownColor: Theme.of(context).colorScheme.surface,
                     decoration: const InputDecoration(labelText: 'Филиал *'),
-                    items: _branches.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name']?.toString() ?? ''))).toList(),
+                    items: _branches
+                        .map(
+                          (b) => DropdownMenuItem(
+                            value: b['id'].toString(),
+                            child: Text(b['name']?.toString() ?? ''),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (val) {
                       setState(() {
                         _selectedBranchId = val;
@@ -263,9 +319,21 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                       isExpanded: true,
                       dropdownColor: Theme.of(context).colorScheme.surface,
                       decoration: const InputDecoration(labelText: 'Аудитория'),
-                      items: _rooms.isEmpty 
-                        ? [const DropdownMenuItem(value: null, child: Text('Нет доступных'))]
-                        : _rooms.map((r) => DropdownMenuItem(value: r['id'].toString(), child: Text(r['name']?.toString() ?? ''))).toList(),
+                      items: _rooms.isEmpty
+                          ? [
+                              const DropdownMenuItem(
+                                value: null,
+                                child: Text('Нет доступных'),
+                              ),
+                            ]
+                          : _rooms
+                                .map(
+                                  (r) => DropdownMenuItem(
+                                    value: r['id'].toString(),
+                                    child: Text(r['name']?.toString() ?? ''),
+                                  ),
+                                )
+                                .toList(),
                       onChanged: (val) => setState(() => _selectedRoomId = val),
                     ),
                   ),
@@ -281,7 +349,9 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                       final d = await showDatePicker(
                         context: context,
                         initialDate: _selectedDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                        firstDate: DateTime.now().subtract(
+                          const Duration(days: 30),
+                        ),
                         lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
                       if (d != null) setState(() => _selectedDate = d);
@@ -295,11 +365,13 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                   child: OutlinedButton.icon(
                     onPressed: () async {
                       final t = await showTimePicker(
-                        context: context, 
+                        context: context,
                         initialTime: _selectedTime,
                         builder: (BuildContext context, Widget? child) {
                           return MediaQuery(
-                            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                            data: MediaQuery.of(
+                              context,
+                            ).copyWith(alwaysUse24HourFormat: true),
                             child: child!,
                           );
                         },
@@ -318,11 +390,22 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Отмена', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          child: Text(
+            'Отмена',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         ),
         FilledButton(
           onPressed: _saving ? null : _save,
-          child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Создать'),
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Создать'),
         ),
       ],
     );
@@ -330,7 +413,10 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
 
   String _getTeacherName(String? id) {
     if (id == null) return 'Не выбран';
-    final t = _teachers.firstWhere((element) => element['id'].toString() == id, orElse: () => {});
+    final t = _teachers.firstWhere(
+      (element) => element['id'].toString() == id,
+      orElse: () => {},
+    );
     if (t.isEmpty) return 'Не выбран';
     return _getTeacherNameFromData(t);
   }
@@ -339,7 +425,7 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
     final fn = t['first_name']?.toString() ?? '';
     final ln = t['last_name']?.toString() ?? '';
     final p = t['profiles'] as Map<String, dynamic>?;
-    
+
     var name = '$fn $ln'.trim();
     if (name.isEmpty && p != null) {
       name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
@@ -349,7 +435,10 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
 
   String _getStudentName(String? id) {
     if (id == null) return 'Не выбран';
-    final s = _students.firstWhere((element) => element['id'].toString() == id, orElse: () => {});
+    final s = _students.firstWhere(
+      (element) => element['id'].toString() == id,
+      orElse: () => {},
+    );
     if (s.isEmpty) return 'Не выбран';
     return _getStudentNameFromData(s);
   }
@@ -358,7 +447,7 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
     final fn = s['first_name']?.toString() ?? '';
     final ln = s['last_name']?.toString() ?? '';
     final p = s['profiles'] as Map<String, dynamic>?;
-    
+
     var name = '$fn $ln'.trim();
     if (name.isEmpty && p != null) {
       name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
@@ -384,7 +473,13 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+            Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
+            ),
             const SizedBox(height: 4),
             Row(
               children: [
@@ -392,12 +487,17 @@ class _CreateLessonDialogState extends State<CreateLessonDialog> {
                   child: Text(
                     value,
                     style: TextStyle(
-                      color: value == 'Не выбран' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
+                      color: value == 'Не выбран'
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : Theme.of(context).colorScheme.onSurface,
                       fontSize: 15,
                     ),
                   ),
                 ),
-                Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                Icon(
+                  Icons.arrow_drop_down,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ],
             ),
           ],

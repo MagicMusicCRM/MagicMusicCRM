@@ -4,7 +4,7 @@ import requests
 from pathlib import Path
 
 SUPABASE_URL = 'https://xblpnywnlhfgofskbdxb.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHBueXdubGhmZ29mc2tiZHhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDA5ODcsImV4cCI6MjA4ODcxNjk4N30.qRuC_TQ8rlz68fzi0geqqdbkA7ABRBEyw3GyMkMJJxg'
+SUPABASE_KEY = 'REDACTED_LEGACY_SUPABASE_ANON_KEY'
 
 # The path to the latest backup folder
 project_dir = Path("c:/Users/User/Kvazar Projects/MagicMusicCRM")
@@ -42,7 +42,7 @@ def upsert_data(table_name, payload, conflict_column="hollihop_id"):
 print("Importing Branches...")
 with open(data_dir / 'offices.json', encoding='utf-8') as f:
     offices_data = json.load(f).get('Offices', [])
-    
+
 branches_payload = []
 for o in offices_data:
     branches_payload.append({
@@ -100,12 +100,12 @@ leads_payload = []
 for l in leads_data:
     hh_status_id = l.get("StatusId")
     status_text = status_map.get(hh_status_id, "new") if hh_status_id else "new"
-    
+
     branch_id = None
     offices = l.get("OfficesAndCompanies", [])
     if offices:
         branch_id = branches_map.get(offices[0]["Id"])
-        
+
     leads_payload.append({
         "hollihop_id": l["Id"],
         "name": l.get("FirstName", ""),
@@ -131,12 +131,12 @@ with open(data_dir / 'ed_units.json', encoding='utf-8') as f:
 groups_payload = []
 for e in edunits_data:
     branch_id = branches_map.get(e.get("OfficeOrCompanyId"))
-    
+
     teacher_id = None
     assignee = e.get("Assignee")
     if assignee:
         teacher_id = teachers_map.get(assignee["Id"])
-        
+
     groups_payload.append({
         "hollihop_id": e["Id"],
         "name": e.get("Name", "Unnamed"),
@@ -170,14 +170,14 @@ def process_logs(filename, entity_type, id_key, id_map):
     path = data_dir / filename
     if not os.path.exists(path):
         return
-    
+
     with open(path, encoding='utf-8') as f:
         logs_data = json.load(f).get('Logs', [])
-    
+
     for log in logs_data:
         hh_entity_id = log.get(id_key)
         supabase_id = id_map.get(hh_entity_id)
-        
+
         if supabase_id and log.get('Comment'):
             comments_payload.append({
                 "entity_id": supabase_id,
@@ -192,8 +192,8 @@ process_logs('lead_logs.json', 'lead', 'LeadIdSubj', leads_map)
 
 if comments_payload:
     # We use a custom upsert strategy for comments to avoid duplicates
-    # Since comments don't have unique IDs in our schema from HH easily, 
-    # we just insert them. If this script is run multiple times, 
+    # Since comments don't have unique IDs in our schema from HH easily,
+    # we just insert them. If this script is run multiple times,
     # it might duplicate unless we add a hash or HH log ID.
     # For now, let's just insert.
     url = f"{SUPABASE_URL}/rest/v1/entity_comments"

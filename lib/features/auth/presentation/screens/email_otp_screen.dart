@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
-import 'package:magic_music_crm/features/auth/providers/supa_auth_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 const int emailOtpCodeLength = 6;
 
@@ -46,14 +46,20 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final service = ref.read(supaAuthServiceProvider);
+      final service = ref.read(magicAuthServiceProvider);
       if (widget.data.purpose == EmailOtpPurpose.signup) {
         await service.verifySignupOtp(email: widget.data.email, token: code);
       } else {
         await service.verifyEmailOtp(email: widget.data.email, token: code);
       }
-      if (mounted) context.go('/');
-    } on AuthException catch (error) {
+      if (mounted) {
+        if (widget.data.purpose == EmailOtpPurpose.signup) {
+          context.go('/login');
+        } else {
+          context.go('/');
+        }
+      }
+    } on MagicApiException catch (error) {
       if (mounted) _showError(_mapAuthError(error.message));
     } catch (_) {
       if (mounted) _showError('Не удалось проверить код.');
@@ -65,7 +71,7 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
   Future<void> _resendCode() async {
     setState(() => _isLoading = true);
     try {
-      final service = ref.read(supaAuthServiceProvider);
+      final service = ref.read(magicAuthServiceProvider);
       if (widget.data.purpose == EmailOtpPurpose.signup) {
         await service.resendSignupOtp(email: widget.data.email);
       } else {
@@ -76,10 +82,10 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Новый код отправлен на email')),
+          const SnackBar(content: Text('Новый код отправлен на почту')),
         );
       }
-    } on AuthException catch (error) {
+    } on MagicApiException catch (error) {
       if (mounted) _showError(_mapAuthError(error.message));
     } catch (_) {
       if (mounted) _showError('Не удалось отправить новый код.');
@@ -114,8 +120,8 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
   @override
   Widget build(BuildContext context) {
     final title = switch (widget.data.purpose) {
-      EmailOtpPurpose.signup => 'Подтвердите email',
-      EmailOtpPurpose.passwordMfa => 'Введите код 2FA',
+      EmailOtpPurpose.signup => 'Подтвердите почту',
+      EmailOtpPurpose.passwordMfa => 'Введите код двухфакторной защиты',
     };
     final description = switch (widget.data.purpose) {
       EmailOtpPurpose.signup =>

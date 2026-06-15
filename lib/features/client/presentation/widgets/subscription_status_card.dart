@@ -1,29 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/providers/realtime_providers.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 
 final subscriptionProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  final studentIdAsync = ref.watch(currentStudentIdProvider);
+  final studentIdAsync = ref.watch(magicCurrentStudentIdProvider);
   final studentId = studentIdAsync.asData?.value;
-  
+
   if (studentId == null) return null;
 
-  // Watch the stream to trigger re-fetches
-  ref.watch(studentSubscriptionsStreamProvider(studentId));
+  final subscriptions = await ref
+      .watch(magicCrmServiceProvider)
+      .listSubscriptions(studentId: studentId, limit: 1);
 
-  final supabase = ref.watch(supabaseProvider);
-  final subRes = await supabase
-      .from('subscriptions')
-      .select()
-      .eq('student_id', studentId)
-      .order('valid_until', ascending: false)
-      .limit(1)
-      .maybeSingle();
-
-  return subRes;
+  return subscriptions.firstOrNull;
 });
 
 class SubscriptionStatusCard extends ConsumerWidget {
@@ -44,12 +36,17 @@ class SubscriptionStatusCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
-                    width: 64, height: 64,
+                    width: 64,
+                    height: 64,
                     decoration: BoxDecoration(
                       color: AppTheme.warning.withAlpha(25),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.warning_rounded, size: 32, color: AppTheme.warning),
+                    child: const Icon(
+                      Icons.warning_rounded,
+                      size: 32,
+                      color: AppTheme.warning,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   const Text(
@@ -60,7 +57,9 @@ class SubscriptionStatusCard extends ConsumerWidget {
                   const SizedBox(height: 8),
                   Text(
                     'Пожалуйста, свяжитесь с администратором для приобретения или продления абонемента.',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -69,7 +68,8 @@ class SubscriptionStatusCard extends ConsumerWidget {
           );
         }
 
-        final courseName = (subscription['type']?.toString() ?? 'Абонемент').toUpperCase();
+        final courseName = (subscription['type']?.toString() ?? 'Абонемент')
+            .toUpperCase();
         final lessonsTotal = subscription['lessons_total'] as int? ?? 0;
         final lessonsUsed = subscription['lessons_used'] as int? ?? 0;
         final remainingClasses = lessonsTotal - lessonsUsed;
@@ -93,21 +93,32 @@ class SubscriptionStatusCard extends ConsumerWidget {
                     Expanded(
                       child: Text(
                         courseName,
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: isExpiringSoon ? AppTheme.danger.withAlpha(25) : AppTheme.success.withAlpha(25),
+                        color: isExpiringSoon
+                            ? AppTheme.danger.withAlpha(25)
+                            : AppTheme.success.withAlpha(25),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         'Осталось: $remainingClasses',
                         style: TextStyle(
-                            color: isExpiringSoon ? AppTheme.danger : AppTheme.success,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13),
+                          color: isExpiringSoon
+                              ? AppTheme.danger
+                              : AppTheme.success,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ],
@@ -115,10 +126,18 @@ class SubscriptionStatusCard extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Icon(Icons.calendar_month_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
+                    Icon(
+                      Icons.calendar_month_rounded,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
-                    Text('Действует до: ${DateFormat('d MMMM yyyy', 'ru').format(endDate)}',
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    Text(
+                      'Действует до: ${DateFormat('d MMMM yyyy', 'ru').format(endDate)}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
                 if (isExpiringSoon) ...[
@@ -132,14 +151,21 @@ class SubscriptionStatusCard extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.error_outline_rounded, color: AppTheme.danger),
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: AppTheme.danger,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             remainingClasses <= 0
                                 ? 'Абонемент закончился. Пожалуйста, продлите его.'
                                 : 'Абонемент скоро закончится! Не забудьте продлить.',
-                            style: const TextStyle(color: AppTheme.danger, fontWeight: FontWeight.w600, fontSize: 13),
+                            style: const TextStyle(
+                              color: AppTheme.danger,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ],
@@ -152,7 +178,12 @@ class SubscriptionStatusCard extends ConsumerWidget {
         );
       },
       loading: () => const _SubscriptionSkeleton(),
-      error: (err, _) => Center(child: Text('Ошибка: $err', style: const TextStyle(color: AppTheme.danger))),
+      error: (err, _) => Center(
+        child: Text(
+          'Ошибка: $err',
+          style: const TextStyle(color: AppTheme.danger),
+        ),
+      ),
       skipLoadingOnRefresh: true,
       skipLoadingOnReload: true,
     );
@@ -189,9 +220,9 @@ class _SubscriptionSkeleton extends StatelessWidget {
               ),
               child: const Row(
                 children: [
-                   Skeleton(width: 24, height: 24),
-                   SizedBox(width: 12),
-                   Skeleton(width: 180, height: 14),
+                  Skeleton(width: 24, height: 24),
+                  SizedBox(width: 12),
+                  Skeleton(width: 180, height: 14),
                 ],
               ),
             ),

@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: magiccrm-v3-postgres-test
+    environment:
+      POSTGRES_DB: magiccrm
+      POSTGRES_USER: magiccrm_owner
+      POSTGRES_PASSWORD: magiccrm_owner
+    ports:
+      - "127.0.0.1:54329:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U magiccrm_owner -d magiccrm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

@@ -1,0 +1,10 @@
+drop table if exists app.refresh_sessions;
+drop table if exists app.user_identities;
+drop table if exists app.oauth_states;
+drop table if exists app.password_reset_tokens;
+drop table if exists app.otp_challenges;
+drop table if exists app.email_verification_tokens;
+drop table if exists app.audit_events;
+drop table if exists app.users;
+drop type if exists app.user_role;
+drop schema if exists app;

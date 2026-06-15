@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
+import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 
 /// Dialog for creating a new group chat.
-/// Admins can add clients, other admins, managers, and teachers.
+/// Staff can add clients, admins, managers, system admins, and teachers.
 class CreateGroupChatDialog extends ConsumerStatefulWidget {
   const CreateGroupChatDialog({super.key});
 
@@ -17,13 +18,13 @@ class CreateGroupChatDialog extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<CreateGroupChatDialog> createState() => _CreateGroupChatDialogState();
+  ConsumerState<CreateGroupChatDialog> createState() =>
+      _CreateGroupChatDialogState();
 }
 
 class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
   final _nameController = TextEditingController();
   final _searchController = TextEditingController();
-  final _supabase = Supabase.instance.client;
 
   List<Map<String, dynamic>> _allUsers = [];
   List<Map<String, dynamic>> _filteredUsers = [];
@@ -39,15 +40,21 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
 
   Future<void> _loadUsers() async {
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      final res = await _supabase
-          .from('profiles')
-          .select()
-          .neq('id', userId ?? '')
-          .order('first_name');
+      final res = await ref
+          .read(magicProfileAdminServiceProvider)
+          .listProfiles(limit: 200);
       if (mounted) {
         setState(() {
-          _allUsers = List<Map<String, dynamic>>.from(res);
+          _allUsers = res
+              .where((user) => user['user_id'] != null)
+              .map(
+                (user) => {
+                  ...user,
+                  'id': user['user_id'],
+                  'profile_id': user['id'],
+                },
+              )
+              .toList();
           _filteredUsers = _allUsers;
           _loading = false;
         });
@@ -61,7 +68,8 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
     final q = query.toLowerCase();
     setState(() {
       _filteredUsers = _allUsers.where((u) {
-        final name = '${u['first_name'] ?? ''} ${u['last_name'] ?? ''}'.toLowerCase();
+        final name = '${u['first_name'] ?? ''} ${u['last_name'] ?? ''}'
+            .toLowerCase();
         final email = (u['email'] ?? '').toString().toLowerCase();
         return name.contains(q) || email.contains(q);
       }).toList();
@@ -74,41 +82,11 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
 
     setState(() => _creating = true);
     try {
-      final userId = _supabase.auth.currentUser!.id;
+      final group = await ref
+          .read(magicMessengerServiceProvider)
+          .createGroup(name: name, memberUserIds: _selectedUserIds.toList());
 
-      // Create group
-      final groupRes = await _supabase
-          .from('group_chats')
-          .insert({
-            'name': name,
-            'created_by': userId,
-          })
-          .select()
-          .single();
-
-      final groupId = groupRes['id'] as String;
-
-      // Add creator as admin
-      final members = <Map<String, dynamic>>[
-        {
-          'group_chat_id': groupId,
-          'user_id': userId,
-          'role': 'admin',
-        },
-      ];
-
-      // Add selected users
-      for (final uid in _selectedUserIds) {
-        members.add({
-          'group_chat_id': groupId,
-          'user_id': uid,
-          'role': 'member',
-        });
-      }
-
-      await _supabase.from('group_chat_members').insert(members);
-
-      if (mounted) Navigator.of(context).pop(groupId);
+      if (mounted) Navigator.of(context).pop(group['id']?.toString());
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -125,21 +103,35 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
 
   String _getRoleLabel(String? role) {
     switch (role) {
-      case 'admin': return 'Администратор';
-      case 'manager': return 'Управляющий';
-      case 'teacher': return 'Преподаватель';
-      case 'client': return 'Ученик';
-      default: return '';
+      case 'admin':
+        return 'Администратор';
+      case 'system_admin':
+        return 'Администратор системы';
+      case 'manager':
+        return 'Управляющий';
+      case 'teacher':
+        return 'Преподаватель';
+      case 'client':
+        return 'Ученик';
+      default:
+        return '';
     }
   }
 
   Color _getRoleColor(String? role) {
     switch (role) {
-      case 'admin': return TelegramColors.accentBlue;
-      case 'manager': return TelegramColors.brandGold;
-      case 'teacher': return TelegramColors.success;
-      case 'client': return TelegramColors.brandPurple;
-      default: return TelegramColors.darkTextSecondary;
+      case 'admin':
+        return TelegramColors.accentBlue;
+      case 'system_admin':
+        return TelegramColors.brandGold;
+      case 'manager':
+        return TelegramColors.brandGold;
+      case 'teacher':
+        return TelegramColors.success;
+      case 'client':
+        return TelegramColors.brandPurple;
+      default:
+        return TelegramColors.darkTextSecondary;
     }
   }
 
@@ -218,15 +210,25 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: _selectedUserIds.map((uid) {
-                    final user = _allUsers.firstWhere((u) => u['id'] == uid, orElse: () => {});
-                    final name = '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'.trim();
+                    final user = _allUsers.firstWhere(
+                      (u) => u['id'] == uid,
+                      orElse: () => {},
+                    );
+                    final name =
+                        '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'
+                            .trim();
                     return Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: Chip(
-                        avatar: TelegramAvatar(name: name, uniqueId: uid, radius: 12),
+                        avatar: TelegramAvatar(
+                          name: name,
+                          uniqueId: uid,
+                          radius: 12,
+                        ),
                         label: Text(name, style: const TextStyle(fontSize: 12)),
                         deleteIcon: const Icon(Icons.close, size: 16),
-                        onDeleted: () => setState(() => _selectedUserIds.remove(uid)),
+                        onDeleted: () =>
+                            setState(() => _selectedUserIds.remove(uid)),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
@@ -244,7 +246,9 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
                       itemBuilder: (context, index) {
                         final user = _filteredUsers[index];
                         final uid = user['id'] as String;
-                        final name = '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'.trim();
+                        final name =
+                            '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'
+                                .trim();
                         final role = user['role']?.toString();
                         final isSelected = _selectedUserIds.contains(uid);
 
@@ -266,12 +270,16 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
                             ),
                           ),
                           trailing: isSelected
-                              ? const Icon(Icons.check_circle_rounded,
-                                  color: TelegramColors.accentBlue)
-                              : Icon(Icons.circle_outlined,
+                              ? const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: TelegramColors.accentBlue,
+                                )
+                              : Icon(
+                                  Icons.circle_outlined,
                                   color: isDark
                                       ? TelegramColors.darkTextSecondary
-                                      : TelegramColors.lightTextSecondary),
+                                      : TelegramColors.lightTextSecondary,
+                                ),
                           onTap: () {
                             setState(() {
                               if (isSelected) {
@@ -297,7 +305,8 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
-                    onPressed: _nameController.text.trim().isNotEmpty &&
+                    onPressed:
+                        _nameController.text.trim().isNotEmpty &&
                             _selectedUserIds.isNotEmpty &&
                             !_creating
                         ? _createGroup
@@ -312,9 +321,7 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
                             ),
                           )
                         : const Icon(Icons.group_add_rounded, size: 18),
-                    label: Text(
-                      'Создать (${_selectedUserIds.length})',
-                    ),
+                    label: Text('Создать (${_selectedUserIds.length})'),
                   ),
                 ],
               ),

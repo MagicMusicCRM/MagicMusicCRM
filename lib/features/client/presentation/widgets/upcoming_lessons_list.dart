@@ -1,66 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/providers/realtime_providers.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 
 // Provider for the active tab (0: Upcoming, 1: History)
 
-final upcomingLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final supabase = ref.watch(supabaseProvider);
-  final user = supabase.auth.currentUser;
-  if (user == null) return [];
-
-  final studentRes = await supabase
-      .from('students')
-      .select('id')
-      .eq('profile_id', user.id)
-      .maybeSingle();
-  if (studentRes == null) return [];
-
-  // Watch for any changes in the real-time stream to trigger a re-fetch
-  ref.watch(studentLessonsStreamProvider(studentRes['id']));
-
-  final lessons = await supabase
-      .from('v_student_lessons_all')
-      .select('*')
-      .eq('filter_student_id', studentRes['id'])
-      .gte('scheduled_at', DateTime.now().toIso8601String())
-      .order('scheduled_at', ascending: true)
-      .limit(20);
-
-  return List<Map<String, dynamic>>.from(lessons);
+final upcomingLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  return ref
+      .watch(magicCrmServiceProvider)
+      .listLessons(from: DateTime.now().toIso8601String(), limit: 20);
 });
 
-final pastLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final supabase = ref.watch(supabaseProvider);
-  final user = supabase.auth.currentUser;
-  if (user == null) return [];
-
-  final studentRes = await supabase
-      .from('students')
-      .select('id')
-      .eq('profile_id', user.id)
-      .maybeSingle();
-  if (studentRes == null) return [];
-
-  final lessons = await supabase
-      .from('v_student_lessons_all')
-      .select('*')
-      .eq('filter_student_id', studentRes['id'])
-      .lt('scheduled_at', DateTime.now().toIso8601String())
-      .order('scheduled_at', ascending: false)
-      .limit(50);
-
-  return List<Map<String, dynamic>>.from(lessons);
+final pastLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  return ref
+      .watch(magicCrmServiceProvider)
+      .listLessons(to: DateTime.now().toIso8601String(), limit: 50);
 });
 
 class UpcomingLessonsList extends ConsumerStatefulWidget {
   const UpcomingLessonsList({super.key});
 
   @override
-  ConsumerState<UpcomingLessonsList> createState() => _UpcomingLessonsListState();
+  ConsumerState<UpcomingLessonsList> createState() =>
+      _UpcomingLessonsListState();
 }
 
 class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
@@ -68,17 +36,23 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
 
   String _statusLabel(String? s) {
     switch (s) {
-      case 'completed': return 'Завершено';
-      case 'cancelled': return 'Отменено';
-      default: return 'Запланировано';
+      case 'completed':
+        return 'Завершено';
+      case 'cancelled':
+        return 'Отменено';
+      default:
+        return 'Запланировано';
     }
   }
 
   Color _statusColor(String? s) {
     switch (s) {
-      case 'completed': return AppTheme.success;
-      case 'cancelled': return AppTheme.danger;
-      default: return AppTheme.primaryPurple;
+      case 'completed':
+        return AppTheme.success;
+      case 'cancelled':
+        return AppTheme.danger;
+      default:
+        return AppTheme.primaryPurple;
     }
   }
 
@@ -120,7 +94,12 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
               padding: EdgeInsets.all(12),
               child: ListSkeleton(count: 5),
             ),
-            error: (err, _) => Center(child: Text('Ошибка: $err', style: const TextStyle(color: AppTheme.danger))),
+            error: (err, _) => Center(
+              child: Text(
+                'Ошибка: $err',
+                style: const TextStyle(color: AppTheme.danger),
+              ),
+            ),
             data: (lessons) {
               if (lessons.isEmpty) {
                 return Center(
@@ -128,14 +107,23 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        _activeTab == 0 ? Icons.calendar_today_rounded : Icons.history_rounded, 
-                        size: 64, 
-                        color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80)
+                        _activeTab == 0
+                            ? Icons.calendar_today_rounded
+                            : Icons.history_rounded,
+                        size: 64,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withAlpha(80),
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        _activeTab == 0 ? 'Нет предстоящих занятий' : 'История занятий пуста', 
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 16)
+                        _activeTab == 0
+                            ? 'Нет предстоящих занятий'
+                            : 'История занятий пуста',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 16,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextButton.icon(
@@ -162,23 +150,33 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                   itemCount: lessons.length,
                   itemBuilder: (context, index) {
                     final lesson = lessons[index];
-                    final branchName = lesson['branch_name'] as String? ?? 'Без филиала';
-                    
+                    final branchName =
+                        lesson['branch_name'] as String? ?? 'Без филиала';
+
                     // Unified name resolution from flattened fields
-                    var teacherFirst = lesson['teacher_first_name'] as String? ?? '';
-                    var teacherLast = lesson['teacher_last_name'] as String? ?? '';
+                    var teacherFirst =
+                        lesson['teacher_first_name'] as String? ?? '';
+                    var teacherLast =
+                        lesson['teacher_last_name'] as String? ?? '';
                     if (teacherFirst.isEmpty && teacherLast.isEmpty) {
-                      teacherFirst = lesson['teacher_profile_first_name'] as String? ?? '';
-                      teacherLast = lesson['teacher_profile_last_name'] as String? ?? '';
+                      teacherFirst =
+                          lesson['teacher_profile_first_name'] as String? ?? '';
+                      teacherLast =
+                          lesson['teacher_profile_last_name'] as String? ?? '';
                     }
                     final teacherName = '$teacherFirst $teacherLast'.trim();
-                    
+
                     final room = lesson['room_name'] as String? ?? '';
                     final status = lesson['status'] as String?;
-                    final dt = DateTime.tryParse(lesson['scheduled_at'] as String? ?? '');
-                    
+                    final dt = DateTime.tryParse(
+                      lesson['scheduled_at'] as String? ?? '',
+                    );
+
                     final dateStr = dt != null
-                        ? DateFormat('EEEE, d MMMM · HH:mm', 'ru').format(dt.toUtc().add(const Duration(hours: 3)))
+                        ? DateFormat(
+                            'EEEE, d MMMM · HH:mm',
+                            'ru',
+                          ).format(dt.toUtc().add(const Duration(hours: 3)))
                         : '—';
                     final duration = lesson['duration_minutes'] as int? ?? 60;
 
@@ -195,37 +193,104 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                                 color: AppTheme.primaryPurple.withAlpha(25),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.music_note_rounded, color: AppTheme.primaryPurple),
+                              child: const Icon(
+                                Icons.music_note_rounded,
+                                color: AppTheme.primaryPurple,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                  Text(
+                                    dateStr,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                   const SizedBox(height: 2),
-                                  Text('Преподаватель: ${teacherName.isEmpty ? 'Не назначен' : teacherName}',
-                                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
-                                  Row(children: [
-                                    Text('Филиал: $branchName', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
-                                    if (room.isNotEmpty) ...[
-                                      Text(' · ', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
-                                      Text(room, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                                  Text(
+                                    'Преподаватель: ${teacherName.isEmpty ? 'Не назначен' : teacherName}',
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Филиал: $branchName',
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      if (room.isNotEmpty) ...[
+                                        Text(
+                                          ' · ',
+                                          style: TextStyle(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        Text(
+                                          room,
+                                          style: TextStyle(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                      Text(
+                                        ' · ',
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      Text(
+                                        '$duration мин',
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      ),
                                     ],
-                                    Text(' · ', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
-                                    Text('$duration мин', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
-                                  ]),
+                                  ),
                                 ],
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: _statusColor(status).withAlpha(25),
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: Text(_statusLabel(status),
-                                  style: TextStyle(color: _statusColor(status), fontSize: 10, fontWeight: FontWeight.w600)),
+                              child: Text(
+                                _statusLabel(status),
+                                style: TextStyle(
+                                  color: _statusColor(status),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -247,7 +312,11 @@ class _TabButton extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  const _TabButton({required this.label, required this.isActive, required this.onTap});
+  const _TabButton({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -263,7 +332,9 @@ class _TabButton extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
+              color: isActive
+                  ? Colors.white
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               fontSize: 13,
             ),

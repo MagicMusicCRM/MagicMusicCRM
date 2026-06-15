@@ -1,7 +1,7 @@
 # AGENTS.md — Протокол ИИ-взаимодействия
 
 > **"Если вы читаете этот документ, вы — это Интеллект (The Intelligence)."**
-> 
+>
 > Этот файл — ваш **Якорь (Anchor)**. Он определяет законы проекта, карту территории и протоколы памяти.
 > Когда вы пробуждаетесь (начинаете новую сессию), **первым делом прочтите этот файл**.
 
@@ -73,37 +73,62 @@
 
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
-- **Последняя версия архитектуры**: `.anws/v2` (Publication Readiness)
-- **Активный список задач**: `.anws/v2/05_TASKS.md`
-- **Количество задач к выполнению**: 0
-- **Последнее обновление**: `2026-06-05`
+- **Последняя версия архитектуры**: `.anws/v3` (Backend Independence)
+- **Активный список задач**: `.anws/v3/05_TASKS.md`
+- **Количество задач к выполнению**: 4
+- **Последнее обновление**: `2026-06-15`
 
-### 🌊 Wave 2 — Backend Security / Auth-Legal / Messaging
-_Текущая фаза: Release-readiness изменения объединяются поверх GitHub `origin/main` v1.1.1. Supabase hardening применен, Google OAuth переведен на canonical Supabase host, onboarding/legal/account deletion реализованы, `Администрация` и `Объявления` реализованы, Vercel legal URL опубликован. Перед новой AAB-сборкой требуется ПК smoke-test._
+### 🌊 Wave v3/S0 — Architecture and Linear Backlog
+_Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 
-### 🌊 Wave 6/7 — Messenger UX & Functional Completeness
-_Из GitHub v1.1.1 сохранены исправления мессенджера: RLS recursion fix, поиск, пересылка, waveform-визуализация, закрепленные сообщения, атрибуция пересылки и real-time stability._
+### 🌊 Wave v3/S2-S3 — Backend Core and Auth Boundary
+_Локальный NestJS backend scaffold создан. `S2` и `S3` закрыты после local gates и staging smoke: request-id/log redaction, health, audit, RBAC, password signup/login, refresh rotation/reuse detection, logout-all, OTP/password reset и optional Google OAuth fail-closed проверены. Следующая волна: `S4` Feature APIs._
+
+### 🌊 Wave v3/S1 — Staging Infrastructure Rehearsal
+_Selectel staging server `161.104.50.105` поднят для `api.phantom-net.ru`: Docker Compose, Caddy TLS, PostgreSQL, Redis и NestJS API работают. `S1` закрыт: firewall/listeners, encrypted backup/off-server copy, destructive restore drill, monitoring timer, forced alert drill и rollback restart smoke проверены._
+
+### 🌊 Wave v3/S4 — Feature APIs
+_`S4` закрыта: Profile/CRM, Messenger REST/WebSocket, private File API, Legal/Account Deletion API, Notifications provider fallback and full Feature API smoke completed on `api.phantom-net.ru`. Migrations `0002`-`0006`, role-scoped policies, audit evidence and log secret checks passed. Следующий шаг: `S5` migration pipeline from Supabase export._
+
+### 🌊 Wave v3/S5 — Migration Pipeline
+_`S5` закрыта. `T5.1` подтверждена реальным Supabase export через session pooler `aws-1-eu-central-2.pooler.supabase.com:6543`: `69` tables, `23,188` rows, `36` storage objects, `0` warnings. `T5.2` закрыта после dry-run на Selectel staging v3 PostgreSQL: `22,709` source rows, `25,002` planned rows, `1,105/1,105` messages, rollback confirmed. `T5.3` закрыта: storage/file_objects dry-run скачал `36/36` объектов, signed download API smoke прошёл. `INT-S5` закрыт после второго full dry-run and `.anws/v3/08_CUTOVER_READINESS_REPORT.md`. Следующий шаг: `S6` Flutter cutover._
+
+### 🌊 Wave v3/S6 — Flutter Cutover
+_Последнее обновление 2026-06-15: `INT-S6` частично проверен against `api.phantom-net.ru/api`. `flutter doctor -v` clean, Android licenses accepted, Android/Windows debug builds passed, Windows runtime smoke kept the fresh `magic_music_crm.exe` alive for 20 seconds. Real Android device `I2405` on Android 15 previously passed login, onboarding, legal consent, dashboard chat list, Administration chat open and message send; message `AndroidSmokeMessage` was confirmed through v3 API as `f73a5583-14f5-42b5-901e-a9c472e3dd8e`, and logcat had no Flutter/Dart/Fatal app errors. Added no-secret `integration_test/app_launch_smoke_test.dart` plus `docs/runbooks/flutter-integration-smoke.md`; Windows runner smoke starts with in-memory token store/no-op notifications, reaches the Russian login gate, validates empty login errors, checks the fake authenticated account-deletion form and reaches `Запрос принят`. Added `docs/runbooks/android-real-device-smoke.md` and `scripts/android_real_device_smoke.ps1` for the remaining stable-device private file, real-backend deletion, CRM workflow, log evidence and cleanup checklist; helper `-CheckOnly` passes. Milestone остается открытым: run integration smoke/helper on a stable Android target, then real-device Android private file upload/download and account deletion against the real backend._
+_Последнее обновление 2026-06-12: `T6.4/KVA-108` закрыт. Добавлен `npm run smoke:realtime` harness, который через публичный `api.phantom-net.ru/api` проверяет health, signup/login, administration chat, Socket.IO `/realtime`, `room.join`, REST send and `message.created` event match. Staging smoke passed: user `b51deb51-60c2-4013-8ef9-5dd18488d755`, chat `3dfdd20a-00cc-4156-a7d3-95d88ff79071`, message/event `8c3324d2-b8f6-4f07-97ca-fd370d2aa698`; temp users soft-deleted. Проверки: backend `npm run typecheck`, `npm test` (`28` suites, `120` tests), `npm run build`, log secret grep clean except benign route names. Следующий шаг: `INT-S6` Android/Windows smoke._
+_Последнее обновление 2026-06-12: `T6.5/KVA-108` закрыт. `ChatAttachmentService` переведен с Supabase Storage SDK на v3 `/files` multipart upload and one-time download tokens; migrated messenger/profile flows теперь используют `attachment_file_id` / `avatarFileId`; backend profile update validates own `profile_avatar`, and FilesPolicy allows chat members to read chat-bound files. Проверки: backend `npm run typecheck`, `npm test` (`28` suites, `120` tests), `npm run build`; Flutter `flutter test` (`52` tests), targeted analyze clean, full `dart analyze` только с `9` archive info-lints; staging deploy on `api.phantom-net.ru/api` passed after backup `magicmusiccrm-staging-20260612T172231Z.tgz.enc`, file smoke passed with byte match and one-time token reuse `404`. Следующий шаг: close remaining `T6.4` realtime smoke gap, then `INT-S6` Android/Windows smoke._
+_Последнее обновление 2026-06-12: `T6.4/KVA-108` продвинут legacy screen slice. `messenger_screen.dart` переведен с Supabase Auth/DB/realtime and `SupaMessageService`/`SupaMessengerService` на v3 auth/profile, `MagicMessengerService` and `MagicRealtimeService`; `CreateGroupChatDialog` переведен на `/admin/profiles` + `/messenger/groups`; full Flutter tests pass (`47`). Следующий срез: `chat_info_dialog.dart` v3 contract, затем `T6.5` private file/voice attachments._
+_Последнее обновление 2026-06-12: `T6.4/KVA-108` продвинут shared provider slice. `chat_providers.dart` переведен с Supabase Auth/DB/realtime на v3 `MagicAuthService` + `MagicProfileAdminService` + `MagicMessengerService`; `MagicMessengerService` расширен group/channel/post контрактами; targeted analyze/tests and full Flutter tests passed. Следующий срез: migrate legacy `messenger_screen.dart` / `chat_info_dialog.dart` onto v3 realtime/API state._
+_T6.4 стартовал: добавлен `MagicRealtimeService` over Socket.IO `/realtime`, `socket_io_client 3.1.5`, unit tests for auth/path/join/typing/presence/event mapping, and `TeacherChatWidget` now consumes v3 `message.created/message.updated` realtime events after REST direct-chat bootstrap. Следующий срез: migrate legacy `messenger_screen.dart` and `admin_chat_dashboard.dart` from Supabase realtime/DB to `MagicMessengerService` + `MagicRealtimeService`._
+_Последнее обновление 2026-06-12: `T6.3/KVA-108` закрыт после teacher chat slice. `MagicMessengerService` добавлен, `TeacherChatWidget` переведен на v3 `/crm` + `/messenger`, local Flutter tests and staging direct-chat smoke passed. Следующий шаг: `T6.4` messenger realtime flows, затем `T6.5` file/storage flows._
+_`T6.1` и `T6.2` закрыты. `T6.3` в работе (`KVA-108`): добавлен `MagicCrmService`, client lessons/homework/subscription/progress переведены на `/crm`, profile load/save переведён на `/profile/me`; backend CRM contract расширен для `/crm/branches`, `/crm/rooms` read/write, `/crm/groups`, `/crm/students/:id/groups`, `/crm/lead-statuses` read/write, `/crm/subscriptions`, `/crm/comments` read/write, `/crm/expected-payments`, `/crm/lessons/:id/attendance`, `/crm/overview`, `/crm/leads` read/write/delete, `/crm/payments`, `/crm/tasks`, `/crm/student-balances`, `/crm/reports/finance`, `/settings/admin-chat-avatar`, `/admin/settings/admin-chat-avatar`, lesson `branchId/roomId/isTrial/leadId`; `PATCH /crm/students/:id` added for manager/admin student profile/custom-data updates with audit; `app.expenses`, `app.system_settings`, migrations `0009_lesson_attendance` and `0010_lead_management` добавлены для migration-compatible reports/settings/attendance/leads; `CreateLessonDialog`, `ScheduleWidget`, `TeacherScheduleWidget`, `TeacherStudentsWidget`, `AdminOverviewWidget`, `ManagerOverviewWidget`, `ConversionTrackingWidget`, `UserRolesWidget`, `LessonsKanbanWidget`, `LessonAttendanceDialog`, `LeadsWidget`, `LeadDetailDialog`, `ManageStatusesDialog`, `FinanceWidget`, `TopUpDialog`, `TasksWidget`, `DebtorsWidget`, `ReportsWidget`, `FinancialDashboardWidget`, `CreateRoomDialog`, `SupaSettingsService`, `ManageEntitiesWidget`, `StudentDetailDialog` и `StudentDetailScreen` переведены с прямого Supabase на v3 API. Backend разрешает assigned teacher обновлять только `status/notes` своего lesson and attendance on own lessons; attendance contract persists `present/absent` plus `passReason`; lead contract supports status create/delete, lead create/list/update/soft-delete, lead comments/tasks and lead-only trial lessons; finance contract поддерживает `from/to/studentId/limit` и student summary; task contract поддерживает `status/studentId` filters and display names; student balance contract computes paid/cost/balance server-side; report contract computes monthly revenue/expenses/attendance, teacher revenue and room load server-side; room write contract supports manager/admin create/update/soft-delete with audit; settings contract supports authenticated admin-avatar read and admin-only validated write; entity management reads students/teachers/lessons/groups/rooms/staff via v3 services and updates lesson cancel/reschedule via `/crm/lessons/:id`; student detail dialog loads/saves student and comments through v3 one-shot APIs; full student detail screen now loads student, payments, lessons, tasks, active groups, balance, comments and expected payments through v3 APIs and saves comments, tasks, individual price and contract URL through backend writes. Проверки: backend `npm run typecheck`, `npm test` (`28` suites, `119` tests), `npm run build`; Flutter `flutter test` (`34` tests), targeted `dart analyze` clean; full `flutter analyze` has pre-existing info-level lints outside this slice. Staging deploy/smoke on `api.phantom-net.ru/api` passed after encrypted backups: health, reference endpoints, subscriptions, seeded progress comments, authenticated `/crm/overview`, unauth `401`, `/crm/leads`, `/crm/lessons?isTrial=true`, `/admin/profiles`, admin role update, `/crm/payments` list/create/filter, client payment write `403`, `/crm/tasks` create/list/filter/status update, client task write `403`, `/crm/student-balances?debtOnly=true`, client balance list `403`, migration `0007_expenses_reports`, `/crm/reports/finance` admin `200` with monthly/teacher/room aggregates, unauth report `401`, client report `403`, cleanup `1/1/1/1/1/1/2/2`, `/crm/rooms` create/list/update/delete smoke with unauth `401`, client write `403`, room cleanup, migration `0008_system_settings`, settings smoke with unauth `401`, manager write `403`, invalid URL `400`, setting cleanup/restore, `PATCH /crm/students/:id` + `POST/GET /crm/comments` smoke with audit events `crm.student_updated`/`crm.comment_created`, `/crm/students/:id/groups` + `/crm/expected-payments` smoke returned `1/1`, migration `0009_lesson_attendance` applied (`1/1`), `/crm/lessons/:id/attendance` read/save smoke returned `2/2`, migration `0010_lead_management` applied (`1/1/1/1`), lead status/lead/comment/task/lead trial smoke passed, temporary smoke cleanup `users=0/leads=0/lessons=0`, and strict API log secret grep found only benign route/module names. Следующий шаг: teacher chat, T6.4 messenger и T6.5 files._
+
+### 🌊 Wave v3/S7 — Security and Launch
+_`S7` pre-release gate completed 2026-06-12 and evidence is in `.anws/v3/09_S7_RELEASE_EVIDENCE.md`. Codex Security repository pass generated `C:\tmp\codex-security-scans\MagicMusicCRM\c683807_20260612T204722\report.md` and `report.html`; official validator passed. Fixed in working tree: `server/exports`/`server/storage` excluded from Git and Docker context, chat attachment IDOR closed via `assertCanReadChat`, login and OTP verify lockouts added with migration `0011`, SSH bootstrap now disables root/password login by default, and test PostgreSQL bind is localhost-only. Current gates passed: backend `npm run typecheck`, `npm test` (`28` suites, `123` tests), `npm run build`, `npm audit --audit-level=moderate`; Flutter `flutter analyze` (`No issues found`) and `flutter test` (`52` tests); staging health and `npm run smoke:realtime`; `npm run security:gate` returned `7` pass, `4` warning, `0` fail. Google Play AAB `v1.1.6+116` built at `build/app/outputs/bundle/release/app-release.aab`, SHA-256 `D6E0BE113070FC62F41171F403351702A39ABE1C5291A0882247D04106C5DF5D`. Последнее обновление 2026-06-15: guarded HolliHop staging dry-run helper теперь безопасно подхватывает ignored env-файлы и прошёл архивный DB-backed dry-run на staging после backup `magicmusiccrm-staging-20260615T131610Z.tgz.enc`; report `hollihop-import-2026-06-15T13-40-42-091Z.json`, batch `3c4fc480-74a7-4801-a0e2-45c26972004a`, warnings `tasks_source_missing`/`timeline_sources_missing`, secret grep clean. Live HolliHop validate-only также прошёл (`1,025` students, `1,944` leads, `3,166` payments), но live DB-backed `-UseLiveApi` dry-run всё ещё падает на connection/client stage до report. Remaining launch blockers: user-owned S6 Android file/deletion smoke, live DB-backed HolliHop dry-run, staging email-provider smoke, rotate exposed credentials, run history-aware secrets/SAST/container scans with external tools, final production host hardening, and deferred T7.3/T7.4 production rehearsal/cutover._
 
 ### Технологические решения
-- Язык/фреймворк: Dart + Flutter.
-- Backend: Supabase Auth/Postgres/RLS/Storage/Edge Functions.
+- Язык/фреймворк: Dart + Flutter client, NestJS + TypeScript backend.
+- Backend: Owned HTTPS/WebSocket API, PostgreSQL, Redis, private local storage, workers.
 - State: Riverpod.
-- Quality Gates: `flutter analyze`, `flutter test`, Supabase actor-matrix, Android/iOS release config checks.
+- Quality Gates: `flutter analyze`, `flutter test`, backend unit/integration/security tests, actor-matrix, secrets/dependency/container scans, migration dry-runs, backup restore drill.
 
 ### Границы систем
-- **SYS-APP**: Flutter UI, routing, onboarding, messenger.
-- **SYS-DATA**: Supabase RLS, functions, views, role/profile security.
-- **SYS-MSG**: Personal `Администрация` chat and read-only `Объявления`.
-- **SYS-LEGAL**: Legal consent and account deletion flows.
-- **SYS-REL**: Android/iOS release gates and store compliance.
+- **SYS-APP**: Flutter client, Russian UI, Riverpod state, API/WebSocket integration.
+- **SYS-API**: NestJS REST API, validation, auth guards, RBAC, audit.
+- **SYS-AUTH**: Email/password, OTP, refresh rotation, password reset, optional Google OAuth.
+- **SYS-DATA**: PostgreSQL schema, migrations, scoped repositories, constraints.
+- **SYS-MSG**: Messenger REST plus WebSocket realtime.
+- **SYS-FILES**: Private file storage and signed downloads.
+- **SYS-OPS**: Docker runtime, reverse proxy, TLS, backups, monitoring, runbooks.
+- **SYS-SEC**: Security gates, actor matrix, scans and launch evidence.
 
 ### Активные ADR
-- ADR-001: Tech Stack and Release Quality Gates — keep Flutter/Supabase, add blocking gates.
-- ADR-002: Auth-First Onboarding and Server-Owned Roles — Google OAuth first, roles server-owned.
-- ADR-003: Messaging Model — personal `Администрация` plus read-only `Объявления`.
-- ADR-004: Legal Consent and Account Deletion — legal gate and deletion flow are required.
-- ADR-005: Supabase Security Hardening — critical/high Supabase findings block release.
-- ADR-006: Store Release Compliance — Android/iOS config and store disclosures block release.
+- ADR-001: Backend Stack — NestJS + TypeScript, PostgreSQL, Redis, Docker Compose.
+- ADR-002: Own Auth and Session Model — email/password primary, OTP, refresh rotation, optional Google OAuth.
+- ADR-003: Private File Storage — local NVMe storage behind backend authorization plus external encrypted backups.
+- ADR-004: Realtime and Messaging — owned WebSocket gateway with per-room authorization.
+- ADR-005: Deployment and Recovery — Moscow primary, external backups, restore drill and rollback runbook.
+- ADR-006: Security Gates — scans, actor matrix, 50-point checklist and release evidence block cutover.
 
 ---
 
@@ -112,13 +137,14 @@ _Из GitHub v1.1.1 сохранены исправления мессендже
 > **Примечание**: Поддерживается процессом `/genesis`.
 
 ```text
-lib/
-├── core/              (Общие сервисы, провайдеры, роутер)
-└── features/          (Мобильные/ПК фичи по ролям)
-    ├── auth/          (Вход, Google OAuth, onboarding)
-    ├── profile/       (Профиль, legal, account deletion)
-    ├── messenger/     (Администрация, объявления, чаты)
-    └── manager/       (Лиды, задачи, финансы)
+.
+├── lib/                  (Flutter client)
+├── server/               (v3 NestJS backend; planned)
+│   ├── apps/api/         (HTTPS/WebSocket API)
+│   ├── modules/          (auth, profile, crm, messenger, files, legal)
+│   └── db/               (PostgreSQL migrations; planned)
+├── infra/                (Docker/reverse proxy/backups; planned)
+└── .anws/v3/             (Backend Independence architecture)
 ```
 
 ---
@@ -127,10 +153,13 @@ lib/
 
 > **Примечание**: Поддерживается процессом `/genesis`.
 
-- **Обзор архитектуры**: `.anws/v2/02_ARCHITECTURE_OVERVIEW.md`
-- **ADR (Решения)**: `.anws/v2/03_ADR/` (Источник истины архитектурных решений)
-- **Детальный дизайн**: `.anws/v2/04_SYSTEM_DESIGN/`
-- **Задачи**: `.anws/v2/05_TASKS.md`
+- **Обзор архитектуры**: `.anws/v3/02_ARCHITECTURE_OVERVIEW.md`
+- **ADR (Решения)**: `.anws/v3/03_ADR/` (Источник истины архитектурных решений)
+- **Детальный дизайн**: `.anws/v3/04_SYSTEM_DESIGN/`
+- **Задачи**: `.anws/v3/05_TASKS.md`
+- **Challenge Report**: `.anws/v3/07_CHALLENGE_REPORT.md`
+- **Cutover Readiness**: `.anws/v3/08_CUTOVER_READINESS_REPORT.md`
+- **S7 Release Evidence**: `.anws/v3/09_S7_RELEASE_EVIDENCE.md`
 
 <!-- AUTO:END -->
 
@@ -140,12 +169,12 @@ lib/
 
 > [!IMPORTANT]
 > **Принципы разработки в этом проекте (v1):**
-> 
+>
 > 1. **Префиксная Сервисная Модель**: Все новые сервисы, работающие напрямую с Supabase, ДОЛЖНЫ иметь префикс `Supa` (например: `SupaStudentService.dart`, `SupaLessonService.dart`).
 > 2. **Декомпозиция Виджетов**: Запрещено писать SQL-подобные запросы (`Supabase.instance.client.from(...)`) напрямую в методах `build()` или обработчиках событий виджетов. Логика должна быть вынесена в провайдеры (Riverpod) или `Supa`-сервисы.
 > 3. **Стейт-менеджмент**: Основной инструмент — **Riverpod**. Не используйте `StatefulWidget` для хранения глобальных данных, работайте через провайдеры.
 > 4. **Языковой стандарт**: Весь UI-текст должен быть на русском языке (`ru`). Комментарии и код — на английском.
-> 5. **Дизайн-код (Flat Magic)**: 
+> 5. **Дизайн-код (Flat Magic)**:
 >    - Придерживайтесь схемы **Deep Charcoal & Sophisticated Gold** (`#C5A059`).
 >    - **ЗАПРЕЩЕНО** использовать свечение (`boxShadow`), яркие градиенты и эффект глянца для основных кнопок. Стиль должен быть плоским (Flat) и матовым.
 >    - Для Desktop используйте `ConstrainedBox(maxWidth: 450)` для центрирования контента.

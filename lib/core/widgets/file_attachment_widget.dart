@@ -4,6 +4,8 @@ import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import 'dart:async';
+import 'dart:io';
 
 /// Widget for displaying a file attachment inside a message bubble.
 /// Images are displayed inline; other files show as downloadable cards.
@@ -11,6 +13,7 @@ class FileAttachmentWidget extends StatefulWidget {
   final String? fileName;
   final String? fileUrl;
   final int? fileSize;
+  final String? mimeType;
   final bool isMe;
 
   const FileAttachmentWidget({
@@ -18,13 +21,18 @@ class FileAttachmentWidget extends StatefulWidget {
     this.fileName,
     this.fileUrl,
     this.fileSize,
+    this.mimeType,
     required this.isMe,
   });
 
-  /// Check if a filename is an image.
-  static bool isImage(String? name) {
+  /// Check if an attachment should be shown as an image preview.
+  static bool isImage(String? name, {String? mimeType}) {
+    final normalizedMime = mimeType?.toLowerCase().trim();
+    if (normalizedMime != null && normalizedMime.startsWith('image/')) {
+      return true;
+    }
     if (name == null) return false;
-    final lower = name.toLowerCase();
+    final lower = name.toLowerCase().split('?').first;
     return lower.endsWith('.jpg') ||
         lower.endsWith('.jpeg') ||
         lower.endsWith('.png') ||
@@ -44,13 +52,28 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
   @override
   void initState() {
     super.initState();
-    _resolveAttachmentUrl();
+    if (FileAttachmentWidget.isImage(
+      widget.fileName,
+      mimeType: widget.mimeType,
+    )) {
+      _resolveAttachmentUrl();
+    }
   }
 
   @override
   void didUpdateWidget(covariant FileAttachmentWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.fileUrl != widget.fileUrl) {
+    if (oldWidget.fileUrl != widget.fileUrl ||
+        oldWidget.fileName != widget.fileName ||
+        oldWidget.mimeType != widget.mimeType) {
+      _resolvedFileUrl = null;
+      _resolvingUrl = false;
+      if (!FileAttachmentWidget.isImage(
+        widget.fileName,
+        mimeType: widget.mimeType,
+      )) {
+        return;
+      }
       _resolveAttachmentUrl();
     }
   }
@@ -77,31 +100,30 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
     return Icons.attach_file_rounded;
   }
 
-  static bool isImage(String? name) {
-    if (name == null) return false;
-    final lower = name.toLowerCase();
-    return lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.png') ||
-        lower.endsWith('.gif') ||
-        lower.endsWith('.webp');
-  }
-
   Future<void> _downloadAndOpen() async {
     if (_downloading || widget.fileUrl == null) return;
     setState(() => _downloading = true);
 
     try {
-      final url =
-          _resolvedFileUrl ??
-          await ChatAttachmentService.resolveUrl(widget.fileUrl);
+      final url = await ChatAttachmentService.resolveUrl(widget.fileUrl);
       if (url == null) return;
 
-      final dir = await getTemporaryDirectory();
-      final savePath = '${dir.path}/${widget.fileName ?? 'download'}';
+      final dir = await _preferredDownloadDirectory();
+      final safeFileName = ChatAttachmentService.safeDownloadFileName(
+        widget.fileName,
+      );
+      final savePath = await _uniqueDownloadPath(dir, safeFileName);
 
       await Dio().download(url, savePath);
       await OpenFilex.open(savePath);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Файл сохранён: $savePath'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
     } catch (e) {
       debugPrint('Download error: $e');
       if (mounted) {
@@ -120,9 +142,46 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
     }
   }
 
-  void _showFullScreenImage(BuildContext context) {
-    final imageUrl = _resolvedFileUrl;
+  Future<Directory> _preferredDownloadDirectory() async {
+    final downloads = await getDownloadsDirectory();
+    if (downloads != null) {
+      await downloads.create(recursive: true);
+      return downloads;
+    }
+
+    if (Platform.isAndroid) {
+      final external = await getExternalStorageDirectory();
+      if (external != null) {
+        final fallback = Directory('${external.path}/Download');
+        await fallback.create(recursive: true);
+        return fallback;
+      }
+    }
+
+    final temp = await getTemporaryDirectory();
+    await temp.create(recursive: true);
+    return temp;
+  }
+
+  Future<String> _uniqueDownloadPath(Directory dir, String fileName) async {
+    final separator = Platform.pathSeparator;
+    final basePath = '${dir.path}$separator$fileName';
+    if (!await File(basePath).exists()) return basePath;
+
+    final dotIndex = fileName.lastIndexOf('.');
+    final stem = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+    final ext = dotIndex > 0 ? fileName.substring(dotIndex) : '';
+    for (var i = 1; i < 1000; i++) {
+      final candidate = '${dir.path}$separator$stem ($i)$ext';
+      if (!await File(candidate).exists()) return candidate;
+    }
+    return '${dir.path}$separator${DateTime.now().millisecondsSinceEpoch}_$fileName';
+  }
+
+  Future<void> _showFullScreenImage(BuildContext context) async {
+    final imageUrl = await ChatAttachmentService.resolveUrl(widget.fileUrl);
     if (imageUrl == null) return;
+    if (!context.mounted) return;
 
     Navigator.of(context).push(
       PageRouteBuilder(
@@ -178,7 +237,8 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
     final name = widget.fileName ?? 'Файл';
 
     // ── Image: show inline like Telegram ──
-    if (isImage(name) && widget.fileUrl != null) {
+    if (FileAttachmentWidget.isImage(name, mimeType: widget.mimeType) &&
+        widget.fileUrl != null) {
       if (_resolvingUrl || _resolvedFileUrl == null) {
         return Container(
           height: 120,
@@ -197,7 +257,7 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
       }
 
       return GestureDetector(
-        onTap: () => _showFullScreenImage(context),
+        onTap: () => unawaited(_showFullScreenImage(context)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: ConstrainedBox(

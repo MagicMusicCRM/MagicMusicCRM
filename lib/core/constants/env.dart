@@ -1,13 +1,22 @@
 class Env {
-  static const String supabaseUrl = 'https://api.magic-music.org';
-  static const String supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHBueXdubGhmZ29mc2tiZHhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDA5ODcsImV4cCI6MjA4ODcxNjk4N30.qRuC_TQ8rlz68fzi0geqqdbkA7ABRBEyw3GyMkMJJxg';
+  static const String magicApiBaseUrl = String.fromEnvironment(
+    'MAGIC_API_BASE_URL',
+    defaultValue: 'https://api.phantom-net.ru/api',
+  );
 
-  static const String authRedirectUrl = 'magiccrm://auth-callback';
-  static const String googleWebClientId = String.fromEnvironment(
-    'GOOGLE_WEB_CLIENT_ID',
+  static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
+  static const String sentryEnvironment = String.fromEnvironment(
+    'SENTRY_ENVIRONMENT',
+    defaultValue: 'production',
   );
-  static const String googleIosClientId = String.fromEnvironment(
-    'GOOGLE_IOS_CLIENT_ID',
+  static const String sentryRelease = String.fromEnvironment('SENTRY_RELEASE');
+  static const String sentryTracesSampleRateRaw = String.fromEnvironment(
+    'SENTRY_TRACES_SAMPLE_RATE',
+    defaultValue: '0',
   );
+
+  static bool get sentryEnabled => sentryDsn.trim().isNotEmpty;
+
+  static double get sentryTracesSampleRate =>
+      double.tryParse(sentryTracesSampleRateRaw) ?? 0;
 }

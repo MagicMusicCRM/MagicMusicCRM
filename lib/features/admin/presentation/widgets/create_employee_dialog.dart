@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
-class CreateEmployeeDialog extends StatefulWidget {
+class CreateEmployeeDialog extends ConsumerStatefulWidget {
   const CreateEmployeeDialog({super.key});
 
   @override
-  State<CreateEmployeeDialog> createState() => _CreateEmployeeDialogState();
+  ConsumerState<CreateEmployeeDialog> createState() =>
+      _CreateEmployeeDialogState();
 }
 
-class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
+class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -42,15 +44,15 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
     final email = _emailController.text.trim();
 
     try {
-      // Insert into `employees` table. If the user registers later with the same
-      // email or phone, the DB trigger will automatically link them.
-      await Supabase.instance.client.from('employees').insert({
-        'first_name': firstName,
-        'last_name': lastName,
-        'phone': phone.isEmpty ? null : phone,
-        'email': email.isEmpty ? null : email,
-        'role': _selectedRole,
-      });
+      await ref
+          .read(magicCrmServiceProvider)
+          .createStaff(
+            firstName: firstName,
+            lastName: lastName,
+            phone: phone,
+            email: email,
+            role: _selectedRole,
+          );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -61,7 +63,9 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
             ),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
         Navigator.pop(context, true);
@@ -96,7 +100,11 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           labelText: required ? '$label *' : label,
-          prefixIcon: Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
+          prefixIcon: Icon(
+            icon,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            size: 20,
+          ),
           filled: true,
           fillColor: Theme.of(context).colorScheme.surface,
           border: OutlineInputBorder(
@@ -105,14 +113,24 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppTheme.primaryPurple, width: 2),
+            borderSide: const BorderSide(
+              color: AppTheme.primaryPurple,
+              width: 2,
+            ),
           ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 14,
+            horizontal: 12,
+          ),
         ),
-        validator: validator ?? (v) {
-          if (required && (v == null || v.trim().isEmpty)) return 'Обязательное поле';
-          return null;
-        },
+        validator:
+            validator ??
+            (v) {
+              if (required && (v == null || v.trim().isEmpty)) {
+                return 'Обязательное поле';
+              }
+              return null;
+            },
       ),
     );
   }
@@ -140,8 +158,12 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Заполните данные. Сотрудник сможет позже зарегистрироваться по email или телефону',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13, height: 1.4),
+                'Заполните данные. Сотрудник сможет позже зарегистрироваться по почте или телефону',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
               ),
               const SizedBox(height: 20),
               _field(
@@ -164,12 +186,16 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
               ),
               _field(
                 controller: _emailController,
-                label: 'Email',
+                label: 'Электронная почта',
                 icon: Icons.email_outlined,
+                required: true,
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) {
-                  if (v != null && v.isNotEmpty && !v.contains('@')) {
-                    return 'Некорректный email';
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Обязательное поле';
+                  }
+                  if (!v.contains('@')) {
+                    return 'Некорректная почта';
                   }
                   return null;
                 },
@@ -180,7 +206,13 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Роль', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
+                    Text(
+                      'Роль',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: _roles.map((role) {
@@ -189,17 +221,23 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
                           child: Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: GestureDetector(
-                              onTap: () => setState(() => _selectedRole = role['value']!),
+                              onTap: () => setState(
+                                () => _selectedRole = role['value']!,
+                              ),
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 decoration: BoxDecoration(
                                   color: isSelected
                                       ? AppTheme.primaryPurple.withAlpha(40)
                                       : Theme.of(context).colorScheme.surface,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: isSelected ? AppTheme.primaryPurple : Colors.white12,
+                                    color: isSelected
+                                        ? AppTheme.primaryPurple
+                                        : Colors.white12,
                                     width: isSelected ? 2 : 1,
                                   ),
                                 ),
@@ -207,8 +245,12 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
                                   role['label']!,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    color: isSelected ? AppTheme.primaryPurple : Colors.white70,
-                                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                                    color: isSelected
+                                        ? AppTheme.primaryPurple
+                                        : Colors.white70,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w400,
                                     fontSize: 13,
                                   ),
                                 ),
@@ -236,7 +278,9 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primaryPurple,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: _saving ? null : _save,
@@ -249,7 +293,10 @@ class _CreateEmployeeDialogState extends State<CreateEmployeeDialog> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Добавить', style: TextStyle(fontWeight: FontWeight.w700)),
+                          : const Text(
+                              'Добавить',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
                     ),
                   ),
                 ],

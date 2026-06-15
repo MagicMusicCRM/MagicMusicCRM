@@ -3,7 +3,7 @@ import requests
 
 API_URL_V1 = "https://sokol.t8s.ru/Api/V1/"
 API_URL_V2 = "https://sokol.t8s.ru/Api/V2/"
-AUTH_KEY = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n"
+AUTH_KEY = "REDACTED_HOLLIHOP_AUTH_KEY"
 
 def test_endpoint(base_url, endpoint):
     params = {'authkey': AUTH_KEY, "dateFrom": "2024-03-01", "dateTo": "2024-03-07"}

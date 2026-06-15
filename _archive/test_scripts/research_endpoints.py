@@ -3,7 +3,7 @@ import json
 import urllib.parse
 from datetime import datetime, timedelta
 
-AUTH_KEY = 'L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n'
+AUTH_KEY = 'REDACTED_HOLLIHOP_AUTH_KEY'
 BASE_URL = "https://sokol.t8s.ru/Api/V2/"
 
 # Test scenarios
@@ -24,7 +24,7 @@ def test_endpoint(name, params):
     full_params['authkey'] = AUTH_KEY
     query_string = urllib.parse.urlencode(full_params)
     url = f"{BASE_URL}{name}?{query_string}"
-    
+
     print(f"Testing {name} with params {params}...")
     try:
         req = urllib.request.Request(url)

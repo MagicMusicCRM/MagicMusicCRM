@@ -31,13 +31,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     setState(() => _isSaving = true);
     try {
-      final service = ref.read(supaReleaseGateServiceProvider);
+      final service = ref.read(releaseGateServiceProvider);
       await service.completeOnboarding(
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
         phone: _phoneController.text.trim(),
       );
-      await service.ensureAdminChatThread();
+      try {
+        await service.ensureAdminChatThread();
+      } catch (error) {
+        debugPrint('Не удалось создать чат администрации: $error');
+      }
       ref.invalidate(releaseGateStatusProvider);
 
       if (mounted) context.go('/legal-consent');

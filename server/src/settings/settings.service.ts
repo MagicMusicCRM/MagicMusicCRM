@@ -1,0 +1,375 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
+import { AuditService } from "../audit/audit.service";
+import {
+  ActorContext,
+  isAdminRole,
+} from "../common/security/actor-context";
+import { DatabaseService } from "../db/database.service";
+import {
+  CRM_CUSTOM_FIELD_ENTITIES,
+  CRM_CUSTOM_FIELD_TYPES,
+  CrmCustomFieldDefinitionDto,
+} from "./dto/update-crm-custom-fields.dto";
+
+interface SettingRow {
+  key: string;
+  value_text: string | null;
+  updated_at: Date | string;
+}
+
+interface JsonSettingRow {
+  key: string;
+  value: unknown;
+  updated_at: Date | string;
+}
+
+type CrmCustomFieldDefinition = Required<
+  Pick<CrmCustomFieldDefinitionDto, "entity" | "key" | "label" | "type">
+> &
+  Pick<CrmCustomFieldDefinitionDto, "hint" | "options"> & {
+    required: boolean;
+  };
+
+const ADMIN_CHAT_AVATAR_KEY = "admin_chat_avatar_url";
+const CRM_CUSTOM_FIELDS_KEY = "crm_custom_fields";
+
+const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
+  {
+    entity: "students",
+    key: "hollihopId",
+    label: "ID в HolliHop",
+    type: "text",
+    required: false,
+    hint: "Идентификатор ученика в HolliHop после миграции",
+  },
+  {
+    entity: "students",
+    key: "middleName",
+    label: "Отчество",
+    type: "text",
+    required: false,
+  },
+  {
+    entity: "students",
+    key: "discipline",
+    label: "Направление",
+    type: "select",
+    required: false,
+    options: ["Вокал", "Фортепиано", "Гитара", "Барабаны"],
+  },
+  {
+    entity: "students",
+    key: "level",
+    label: "Уровень",
+    type: "select",
+    required: false,
+    options: ["Начинающий", "Средний", "Продвинутый"],
+  },
+  {
+    entity: "students",
+    key: "individualPrice",
+    label: "Индивидуальная цена",
+    type: "number",
+    required: false,
+  },
+  {
+    entity: "leads",
+    key: "source",
+    label: "Источник заявки",
+    type: "select",
+    required: false,
+    options: ["Сайт", "Рекомендация", "Соцсети", "HolliHop"],
+  },
+  {
+    entity: "leads",
+    key: "discipline",
+    label: "Интересующее направление",
+    type: "select",
+    required: false,
+    options: ["Вокал", "Фортепиано", "Гитара", "Барабаны"],
+  },
+  {
+    entity: "teachers",
+    key: "discipline",
+    label: "Основное направление",
+    type: "select",
+    required: false,
+    options: ["Вокал", "Фортепиано", "Гитара", "Барабаны"],
+  },
+];
+
+@Injectable()
+export class SettingsService {
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly audit: AuditService,
+  ) {}
+
+  async getAdminChatAvatar(_actor: ActorContext) {
+    const result = await this.database.query<SettingRow>(
+      `
+        select key, value #>> '{}' as value_text, updated_at
+        from app.system_settings
+        where key = $1
+        limit 1
+      `,
+      [ADMIN_CHAT_AVATAR_KEY],
+    );
+    const row = result.rows[0];
+    return {
+      key: ADMIN_CHAT_AVATAR_KEY,
+      value: row?.value_text ?? null,
+      updatedAt: row?.updated_at ?? null,
+    };
+  }
+
+  async updateAdminChatAvatar(actor: ActorContext, url?: string | null) {
+    if (!isAdminRole(actor.role)) {
+      throw new ForbiddenException(
+        "Только администратор может менять глобальные настройки.",
+      );
+    }
+    const normalized = this.normalizeAdminAvatarUrl(url);
+    const result = await this.database.query<SettingRow>(
+      `
+        insert into app.system_settings (key, value, updated_by)
+        values ($1, $2::jsonb, $3)
+        on conflict (key) do update
+        set value = excluded.value,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning key, value #>> '{}' as value_text, updated_at
+      `,
+      [
+        ADMIN_CHAT_AVATAR_KEY,
+        normalized === null ? "null" : JSON.stringify(normalized),
+        actor.userId,
+      ],
+    );
+    const row = result.rows[0];
+    await this.audit.record({
+      actor,
+      action: "settings.admin_chat_avatar_updated",
+      entityType: "setting",
+      entityId: ADMIN_CHAT_AVATAR_KEY,
+      metadata: { cleared: normalized === null },
+    });
+    return {
+      key: ADMIN_CHAT_AVATAR_KEY,
+      value: row?.value_text ?? null,
+      updatedAt: row?.updated_at ?? null,
+    };
+  }
+
+  async getCrmCustomFields(_actor: ActorContext) {
+    const result = await this.database.query<JsonSettingRow>(
+      `
+        select key, value, updated_at
+        from app.system_settings
+        where key = $1
+        limit 1
+      `,
+      [CRM_CUSTOM_FIELDS_KEY],
+    );
+    const row = result.rows[0];
+    return {
+      key: CRM_CUSTOM_FIELDS_KEY,
+      fields: this.normalizeCustomFields(
+        Array.isArray(row?.value) ? row.value : DEFAULT_CRM_CUSTOM_FIELDS,
+      ),
+      updatedAt: row?.updated_at ?? null,
+    };
+  }
+
+  async updateCrmCustomFields(
+    actor: ActorContext,
+    fields: CrmCustomFieldDefinitionDto[],
+  ) {
+    if (!isAdminRole(actor.role)) {
+      throw new ForbiddenException(
+        "Только администратор может менять глобальные настройки.",
+      );
+    }
+    const normalized = this.normalizeCustomFields(fields);
+    const result = await this.database.query<JsonSettingRow>(
+      `
+        insert into app.system_settings (key, value, updated_by)
+        values ($1, $2::jsonb, $3)
+        on conflict (key) do update
+        set value = excluded.value,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning key, value, updated_at
+      `,
+      [CRM_CUSTOM_FIELDS_KEY, JSON.stringify(normalized), actor.userId],
+    );
+    const row = result.rows[0];
+    await this.audit.record({
+      actor,
+      action: "settings.crm_custom_fields_updated",
+      entityType: "setting",
+      entityId: CRM_CUSTOM_FIELDS_KEY,
+      metadata: { fieldCount: normalized.length },
+    });
+    return {
+      key: CRM_CUSTOM_FIELDS_KEY,
+      fields: this.normalizeCustomFields(row?.value),
+      updatedAt: row?.updated_at ?? null,
+    };
+  }
+
+  private normalizeAdminAvatarUrl(url?: string | null): string | null {
+    const value = url?.trim();
+    if (!value) return null;
+    if (value.startsWith("storage://avatars/")) return value;
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === "https:") return value;
+    } catch {
+      // Fall through to the public validation error.
+    }
+    throw new BadRequestException("Некорректная ссылка на аватар.");
+  }
+
+  private normalizeCustomFields(value: unknown): CrmCustomFieldDefinition[] {
+    if (!Array.isArray(value)) {
+      throw new BadRequestException("Некорректная схема дополнительных полей.");
+    }
+
+    const seen = new Set<string>();
+    return value.map((field) => {
+      if (!field || typeof field !== "object" || Array.isArray(field)) {
+        throw new BadRequestException(
+          "Некорректная схема дополнительных полей.",
+        );
+      }
+      const raw = field as Record<string, unknown>;
+      const entity = this.normalizeEnumValue(
+        raw.entity,
+        CRM_CUSTOM_FIELD_ENTITIES,
+        "Некорректная сущность дополнительного поля.",
+      );
+      const type = this.normalizeEnumValue(
+        raw.type,
+        CRM_CUSTOM_FIELD_TYPES,
+        "Некорректный тип дополнительного поля.",
+      );
+      const key = this.normalizeFieldKey(raw.key);
+      const label = this.normalizeText(
+        raw.label,
+        80,
+        "Название дополнительного поля обязательно.",
+      );
+      const duplicateKey = `${entity}:${key}`;
+      if (seen.has(duplicateKey)) {
+        throw new BadRequestException(
+          "Ключ дополнительного поля должен быть уникальным внутри сущности.",
+        );
+      }
+      seen.add(duplicateKey);
+
+      const normalized: CrmCustomFieldDefinition = {
+        entity,
+        key,
+        label,
+        type,
+        required: raw.required === true,
+      };
+      const hint = this.normalizeOptionalText(raw.hint, 160);
+      if (hint) normalized.hint = hint;
+      if (type === "select") {
+        normalized.options = this.normalizeOptions(raw.options);
+      }
+      return normalized;
+    });
+  }
+
+  private normalizeFieldKey(value: unknown): string {
+    const key = this.normalizeText(
+      value,
+      64,
+      "Ключ дополнительного поля обязателен.",
+    );
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(key)) {
+      throw new BadRequestException(
+        "Ключ поля должен начинаться с латинской буквы и содержать только латиницу, цифры и подчёркивание.",
+      );
+    }
+    return key;
+  }
+
+  private normalizeText(
+    value: unknown,
+    maxLength: number,
+    errorMessage: string,
+  ): string {
+    if (typeof value !== "string") {
+      throw new BadRequestException(errorMessage);
+    }
+    const text = value.trim();
+    if (!text || text.length > maxLength) {
+      throw new BadRequestException(errorMessage);
+    }
+    return text;
+  }
+
+  private normalizeOptionalText(
+    value: unknown,
+    maxLength: number,
+  ): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value !== "string") {
+      throw new BadRequestException(
+        "Некорректная подсказка дополнительного поля.",
+      );
+    }
+    const text = value.trim();
+    if (!text) return undefined;
+    if (text.length > maxLength) {
+      throw new BadRequestException(
+        "Подсказка дополнительного поля слишком длинная.",
+      );
+    }
+    return text;
+  }
+
+  private normalizeOptions(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(
+        "Для поля со списком нужны варианты выбора.",
+      );
+    }
+    const options = [
+      ...new Set(
+        value.map((item) =>
+          this.normalizeText(
+            item,
+            80,
+            "Вариант выбора дополнительного поля обязателен.",
+          ),
+        ),
+      ),
+    ];
+    if (options.length === 0) {
+      throw new BadRequestException(
+        "Для поля со списком нужен хотя бы один вариант выбора.",
+      );
+    }
+    return options;
+  }
+
+  private normalizeEnumValue<T extends readonly string[]>(
+    value: unknown,
+    allowed: T,
+    errorMessage: string,
+  ): T[number] {
+    if (typeof value !== "string" || !allowed.includes(value)) {
+      throw new BadRequestException(errorMessage);
+    }
+    return value as T[number];
+  }
+}

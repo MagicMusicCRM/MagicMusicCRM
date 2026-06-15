@@ -1,10 +1,14 @@
 import requests
 import json
 import uuid
+import os
 
 # Configuration
-SUPABASE_URL = "https://xblpnywnlhfgofskbdxb.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHBueXdubGhmZ29mc2tiZHhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDA5ODcsImV4cCI6MjA4ODcxNjk4N30.qRuC_TQ8rlz68fzi0geqqdbkA7ABRBEyw3GyMkMJJxg"
+SUPABASE_URL = os.environ.get("LEGACY_SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("LEGACY_SUPABASE_ANON_KEY", "")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise RuntimeError("LEGACY_SUPABASE_URL and LEGACY_SUPABASE_ANON_KEY are required.")
 
 def upsert_data(table, data, unique_column='id'):
     """Upserts data into Supabase using REST API."""
@@ -15,7 +19,7 @@ def upsert_data(table, data, unique_column='id'):
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates"
     }
-    
+
     response = requests.post(url, headers=headers, json=data)
     if response.status_code in [200, 201]:
         print(f"Successfully upserted data into {table}")

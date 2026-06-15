@@ -9,18 +9,25 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_notifier/local_notifier.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/firebase_options.dart';
+
+void _logNotification(String message) {
+  if (kDebugMode) {
+    debugPrint(message);
+  }
+}
 
 // Background message handler — runs in a separate isolate
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  debugPrint("BG-HANDLER: messageId=${message.messageId}");
-  debugPrint("BG-HANDLER: notification=${message.notification?.title}");
-  debugPrint("BG-HANDLER: data=${message.data}");
+  _logNotification(
+    'Background notification received: hasNotification=${message.notification != null}',
+  );
 
   // If this is a data-only message (no notification field), show it manually.
   // Messages WITH notification field are shown automatically by Android.
@@ -42,8 +49,8 @@ Future<void> _showBackgroundNotification({
 }) async {
   const channel = AndroidNotificationChannel(
     'high_importance_channel',
-    'High Importance Notifications',
-    description: 'This channel is used for important notifications.',
+    'Важные уведомления',
+    description: 'Важные уведомления Magic Music CRM.',
     importance: Importance.max,
     playSound: true,
   );
@@ -107,11 +114,12 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
+  StreamSubscription<String>? _tokenRefreshSubscription;
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'high_importance_channel',
-    'High Importance Notifications',
-    description: 'This channel is used for important notifications.',
+    'Важные уведомления',
+    description: 'Важные уведомления Magic Music CRM.',
     importance: Importance.max,
     playSound: true,
   );
@@ -126,13 +134,13 @@ class NotificationService {
         );
         _listenToDesktopMessages();
       } catch (e) {
-        debugPrint('Error setting up local_notifier $e');
+        _logNotification('Error setting up local_notifier $e');
       }
       return; // Firebase messaging doesn't support Windows/Linux out of the box
     }
 
     if (Firebase.apps.isEmpty) {
-      debugPrint('Firebase is not initialized. Notifications disabled.');
+      _logNotification('Firebase is not initialized. Notifications disabled.');
       return;
     }
 
@@ -195,28 +203,27 @@ class NotificationService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      debugPrint('User granted permission');
+      _logNotification('User granted permission');
     } else if (settings.authorizationStatus ==
         AuthorizationStatus.provisional) {
-      debugPrint('User granted provisional permission');
+      _logNotification('User granted provisional permission');
     } else {
-      debugPrint('User declined or has not accepted permission');
+      _logNotification('User declined or has not accepted permission');
     }
 
     // ── ALWAYS register click handlers (even without FCM token) ──────────
 
     // Handle when app is opened from a notification (background → foreground)
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('📩 onMessageOpenedApp: ${message.data}');
+      _logNotification('Notification opened.');
       _handleNotificationClick(message.data);
     });
 
     // Handle when app is started from a notification (terminated → start)
     _firebaseMessaging.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
-        debugPrint('📩 getInitialMessage: ${message.data}');
-        // Delay slightly to ensure providers and screens are ready
-        Future.delayed(const Duration(milliseconds: 800), () {
+        _logNotification('Initial notification opened.');
+        scheduleMicrotask(() {
           _handleNotificationClick(message.data);
         });
       }
@@ -224,18 +231,13 @@ class NotificationService {
 
     // ── FCM Token management ──────────────────────────────────────────────
 
-    String? token = await _firebaseMessaging.getToken();
-    if (token != null) {
-      unawaited(_saveTokenToDatabase(token));
-      _firebaseMessaging.onTokenRefresh.listen((refreshedToken) {
-        unawaited(_saveTokenToDatabase(refreshedToken));
-      });
-    }
+    _attachTokenRefreshListener();
+    await syncCurrentDeviceToken();
 
     // ── Foreground message handling ───────────────────────────────────────
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      debugPrint('📩 Foreground message: ${message.data}');
+      _logNotification('Foreground notification received.');
 
       final notification = message.notification;
       final title =
@@ -270,23 +272,44 @@ class NotificationService {
     });
   }
 
+  Future<void> syncCurrentDeviceToken() async {
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+      return;
+    }
+    if (Firebase.apps.isEmpty) {
+      _logNotification(
+        'Firebase is not initialized. Device token sync skipped.',
+      );
+      return;
+    }
+
+    try {
+      final token = await _firebaseMessaging.getToken();
+      if (token == null || token.isEmpty) {
+        _logNotification('FCM token sync skipped: token is empty.');
+        return;
+      }
+      await _saveTokenToDatabase(token);
+    } catch (e) {
+      _logNotification('Error syncing FCM token: $e');
+    }
+  }
+
   /// Called when user clicks a local notification (foreground or background-shown)
   void _onLocalNotificationClick(NotificationResponse response) {
-    debugPrint('📩 Local notification clicked, payload: ${response.payload}');
+    _logNotification('Local notification clicked.');
     if (response.payload == null || response.payload!.isEmpty) return;
 
     try {
       final data = jsonDecode(response.payload!) as Map<String, dynamic>;
       _handleNotificationClick(data);
     } catch (e) {
-      debugPrint('Error parsing notification payload: $e');
+      _logNotification('Error parsing notification payload: $e');
     }
   }
 
   /// Core navigation handler — extracts chat metadata and triggers UI navigation
   void _handleNotificationClick(Map<String, dynamic> data) {
-    debugPrint('🎯 NOTIFICATION CLICK: $data');
-
     final senderId = data['sender_id']?.toString();
     final chatId = data['chat_id']?.toString();
     final receiverId = data['receiver_id']?.toString();
@@ -295,7 +318,9 @@ class NotificationService {
     // For group chats: navigate by chat_id
     final targetPartnerId = senderId ?? receiverId;
 
-    debugPrint('🎯 Navigating to partner=$targetPartnerId, group=$chatId');
+    _logNotification(
+      'Notification navigation: hasPartner=${targetPartnerId != null}, hasChat=${chatId != null}',
+    );
 
     ref
         .read(messengerNavigationProvider.notifier)
@@ -309,19 +334,28 @@ class NotificationService {
 
   Future<void> _saveTokenToDatabase(String? token) async {
     if (token == null) return;
-
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      try {
-        await Supabase.instance.client.rpc(
-          'upsert_fcm_token',
-          params: {'p_token': token, 'p_platform': _platformName},
-        );
-        debugPrint('FCM Token saved to database');
-      } catch (e) {
-        debugPrint('Error saving FCM token: $e');
+    try {
+      final api = ref.read(magicApiClientProvider);
+      final tokens = await api.readTokens();
+      if (tokens?.accessToken.isNotEmpty != true) {
+        _logNotification('FCM token registration skipped: no v3 session.');
+        return;
       }
+      await ref
+          .read(magicNotificationsServiceProvider)
+          .registerDevice(token: token, platform: _platformName);
+      _logNotification('FCM token registered through v3 API.');
+    } catch (e) {
+      _logNotification('Error registering FCM token: $e');
     }
+  }
+
+  void _attachTokenRefreshListener() {
+    _tokenRefreshSubscription ??= _firebaseMessaging.onTokenRefresh.listen((
+      refreshedToken,
+    ) {
+      unawaited(_saveTokenToDatabase(refreshedToken));
+    });
   }
 
   String get _platformName {

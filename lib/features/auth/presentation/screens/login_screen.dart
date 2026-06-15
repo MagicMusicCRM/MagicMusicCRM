@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/email_otp_screen.dart';
-import 'package:magic_music_crm/features/auth/providers/supa_auth_provider.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -20,6 +20,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -30,18 +31,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
+    final email = _emailController.text.trim();
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
-      final email = _emailController.text.trim();
-      final service = ref.read(supaAuthServiceProvider);
-      await service.signInWithPassword(
+      final service = ref.read(magicAuthServiceProvider);
+      final response = await service.signInWithPassword(
         email: email,
         password: _passwordController.text,
       );
-      final requiresEmailOtp = await service
-          .isEmailOtpMfaEnabledForCurrentUser();
-      if (requiresEmailOtp) {
-        await service.beginEmailOtpMfaChallenge(email: email);
+      if (response.emailOtpRequired) {
         if (mounted) {
           context.go(
             '/email-otp',
@@ -52,23 +53,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           );
         }
       }
-    } on AuthException catch (e) {
-      if (mounted) _showError(_mapAuthError(e.message));
+    } on MagicApiException catch (e) {
+      final message = _mapAuthError(e.message);
+      if (_isEmailUnverifiedError(e.message)) {
+        try {
+          await ref
+              .read(magicAuthServiceProvider)
+              .resendSignupOtp(email: email);
+          if (mounted) {
+            context.go(
+              '/email-otp',
+              extra: EmailOtpRouteData(
+                email: email,
+                purpose: EmailOtpPurpose.signup,
+              ),
+            );
+          }
+          return;
+        } catch (_) {
+          // Keep the original login error visible; resend can be retried there.
+        }
+      }
+      if (mounted) _showError(message);
     } catch (e) {
       if (mounted) _showError('Произошла ошибка. Попробуйте снова.');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-    try {
-      await ref.read(supaAuthServiceProvider).signInWithGoogle();
-    } on AuthException catch (e) {
-      if (mounted) _showError(_mapAuthError(e.message));
-    } catch (_) {
-      if (mounted) _showError('Не удалось начать вход через Google.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -78,12 +86,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
   }
 
+  bool _isEmailUnverifiedError(String message) {
+    return message.contains('Email not confirmed') ||
+        (message.contains('Подтвердите') && message.contains('перед входом'));
+  }
+
   String _mapAuthError(String message) {
-    if (message.contains('Invalid login credentials')) {
-      return 'Неверный email или пароль';
+    if (message.contains('Invalid login credentials') ||
+        message.contains('Неверная почта или пароль')) {
+      return 'Неверная почта или пароль';
     }
-    if (message.contains('Email not confirmed')) {
-      return 'Подтвердите email перед входом';
+    if (_isEmailUnverifiedError(message)) {
+      return 'Подтвердите почту перед входом';
     }
     if (message.contains('Too many requests')) {
       return 'Слишком много попыток. Подождите немного';
@@ -92,6 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _showError(String message) {
+    setState(() => _errorMessage = message);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -155,37 +170,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 48),
-                SizedBox(
-                  height: 54,
-                  child: OutlinedButton.icon(
-                    onPressed: _isLoading ? null : _signInWithGoogle,
-                    icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-                    label: const Text('Войти через Google'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.white.withAlpha(70)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: Colors.white.withAlpha(50))),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        'или',
-                        style: TextStyle(color: Colors.white.withAlpha(120)),
-                      ),
-                    ),
-                    Expanded(child: Divider(color: Colors.white.withAlpha(50))),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
                 // Email field
                 TextFormField(
                   controller: _emailController,
@@ -194,7 +178,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   autocorrect: false,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    labelText: 'Email',
+                    labelText: 'Электронная почта',
                     hintText: 'user@example.com',
                     prefixIcon: Icon(
                       Icons.email_outlined,
@@ -216,7 +200,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   validator: (value) => _isValidEmail(value?.trim() ?? '')
                       ? null
-                      : 'Введите корректный email',
+                      : 'Введите корректную почту',
                 ),
                 const SizedBox(height: 20),
 
@@ -263,6 +247,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 20),
 
                 // Sign In button (Solid Gold)
+                if (_errorMessage != null) ...[
+                  Text(
+                    _errorMessage!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppTheme.danger,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Container(
                   height: 56,
                   decoration: BoxDecoration(
@@ -297,6 +292,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                TextButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () => context.push('/password-reset'),
+                  child: const Text(
+                    'Забыли пароль?',
+                    style: TextStyle(color: Colors.white70, fontSize: 15),
+                  ),
+                ),
+                const SizedBox(height: 4),
                 TextButton(
                   onPressed: () => context.push('/register'),
                   child: const Text(

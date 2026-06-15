@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
-class LessonAttendanceDialog extends StatefulWidget {
+class LessonAttendanceDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> lesson;
 
   const LessonAttendanceDialog({super.key, required this.lesson});
@@ -15,11 +16,12 @@ class LessonAttendanceDialog extends StatefulWidget {
   }
 
   @override
-  State<LessonAttendanceDialog> createState() => _LessonAttendanceDialogState();
+  ConsumerState<LessonAttendanceDialog> createState() =>
+      _LessonAttendanceDialogState();
 }
 
-class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
-  final _supabase = Supabase.instance.client;
+class _LessonAttendanceDialogState
+    extends ConsumerState<LessonAttendanceDialog> {
   bool _loading = true;
   bool _saving = false;
   List<Map<String, dynamic>> _participations = [];
@@ -35,64 +37,13 @@ class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
     setState(() => _loading = true);
     try {
       final lessonId = widget.lesson['id'];
-      final groupId = widget.lesson['group_id'];
-      final studentId = widget.lesson['student_id'];
-
-      // 1. Get students for this lesson
-      if (groupId != null) {
-        final res = await _supabase
-            .from('group_students')
-            .select('student_id, students(id, first_name, last_name, profiles(first_name, last_name))')
-            .eq('group_id', groupId);
-        _students = List<Map<String, dynamic>>.from(res).map((item) {
-          final s = item['students'] as Map<String, dynamic>;
-          final sfName = s['first_name']?.toString() ?? '';
-          final slName = s['last_name']?.toString() ?? '';
-          final p = s['profiles'] as Map<String, dynamic>?;
-          var name = '$sfName $slName'.trim();
-          if (name.isEmpty && p != null) {
-            name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-          }
-          return {
-            'id': s['id'],
-            'name': name.isEmpty ? 'Без имени' : name,
-          };
-        }).toList();
-      } else if (studentId != null) {
-        final s = widget.lesson['students'];
-        final sfName = s?['first_name']?.toString() ?? '';
-        final slName = s?['last_name']?.toString() ?? '';
-        final p = s?['profiles'];
-        var name = '$sfName $slName'.trim();
-        if (name.isEmpty && p != null) {
-          name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-        }
-        _students = [{
-          'id': studentId,
-          'name': name.isEmpty ? 'Без имени' : name,
-        }];
-      }
-
-      // 2. Get existing participation
-      final participationRes = await _supabase
-          .from('lesson_participation')
-          .select('*')
-          .eq('lesson_id', lessonId);
-      
-      _participations = List<Map<String, dynamic>>.from(participationRes);
-
-      // Initialize missing participations in local state
-      for (final student in _students) {
-        final exists = _participations.any((p) => p['student_id'] == student['id']);
-        if (!exists) {
-          _participations.add({
-            'lesson_id': lessonId,
-            'student_id': student['id'],
-            'is_present': true,
-            'pass_reason': '',
-          });
-        }
-      }
+      final attendance = await ref
+          .read(magicCrmServiceProvider)
+          .getLessonAttendance(lessonId);
+      _students = List<Map<String, dynamic>>.from(attendance['students']);
+      _participations = List<Map<String, dynamic>>.from(
+        attendance['participations'],
+      );
 
       setState(() => _loading = false);
     } catch (e) {
@@ -108,19 +59,9 @@ class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
     setState(() => _saving = true);
     try {
       final lessonId = widget.lesson['id'];
-      
-      // Upsert participations
-      for (final p in _participations) {
-        await _supabase.from('lesson_participation').upsert({
-          'lesson_id': lessonId,
-          'student_id': p['student_id'],
-          'is_present': p['is_present'],
-          'pass_reason': p['pass_reason'],
-        }, onConflict: 'lesson_id,student_id');
-      }
-
-      // Update lesson status to completed
-      await _supabase.from('lessons').update({'status': 'completed'}).eq('id', lessonId);
+      await ref
+          .read(magicCrmServiceProvider)
+          .saveLessonAttendance(lessonId, _participations);
 
       if (mounted) {
         Navigator.pop(context);
@@ -150,7 +91,7 @@ class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
                 itemBuilder: (ctx, i) {
                   final student = _students[i];
                   final participation = _participations.firstWhere((p) => p['student_id'] == student['id']);
-                  
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Column(
@@ -164,9 +105,9 @@ class _LessonAttendanceDialogState extends State<LessonAttendanceDialog> {
                               onChanged: (val) => setState(() => participation['is_present'] = val),
                               activeThumbColor: AppTheme.success,
                             ),
-                            Text(participation['is_present'] ? 'Был' : 'Н/Б', 
+                            Text(participation['is_present'] ? 'Был' : 'Н/Б',
                                 style: TextStyle(
-                                  fontSize: 12, 
+                                  fontSize: 12,
                                   color: participation['is_present'] ? AppTheme.success : AppTheme.danger,
                                   fontWeight: FontWeight.bold
                                 )),

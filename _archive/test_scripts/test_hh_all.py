@@ -2,7 +2,7 @@ import json
 import requests
 
 API_URL = "https://sokol.t8s.ru/Api/V2/"
-AUTH_KEY = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n"
+AUTH_KEY = "REDACTED_HOLLIHOP_AUTH_KEY"
 
 def test_endpoint(endpoint):
     params = {'authkey': AUTH_KEY}

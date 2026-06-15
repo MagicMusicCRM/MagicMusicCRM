@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AccountDeletionStatusScreen extends ConsumerWidget {
   const AccountDeletionStatusScreen({super.key});
@@ -65,7 +65,7 @@ class AccountDeletionStatusScreen extends ConsumerWidget {
                     const SizedBox(height: 24),
                     FilledButton.icon(
                       onPressed: () async {
-                        await Supabase.instance.client.auth.signOut();
+                        await ref.read(magicAuthServiceProvider).signOut();
                         if (context.mounted) context.go('/login');
                       },
                       icon: const Icon(Icons.logout),

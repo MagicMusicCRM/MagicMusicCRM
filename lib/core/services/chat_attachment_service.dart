@@ -1,114 +1,89 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http_parser/http_parser.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/constants/env.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
 import 'package:mime/mime.dart';
 
-/// Service for uploading chat attachments (files, voice messages) to Supabase Storage.
+/// Service for private v3 file uploads and short-lived download URLs.
 class ChatAttachmentService {
-  static const String _bucketName = 'chat-attachments';
+  static const String _chatBucketName = 'chat-attachments';
   static const String _storageReferencePrefix = 'storage://';
-  static const String _projectSupabaseHost = 'xblpnywnlhfgofskbdxb.supabase.co';
   static const int maxFileSizeBytes = 25 * 1024 * 1024; // 25 MB
 
-  static final _supabase = Supabase.instance.client;
-  static const _uuid = Uuid();
+  static MagicApiClient? _debugApiClient;
+  static final Map<String, Future<String?>> _inFlightResolveUrls = {};
+  static final MagicApiClient _defaultApiClient = MagicApiClient(
+    baseUrl: Env.magicApiBaseUrl,
+    tokenStore: const SecureMagicTokenStore(),
+  );
 
-  /// Upload a file (bytes) to Supabase Storage.
-  /// Returns a storage reference. The UI resolves it to a short-lived signed URL.
+  @visibleForTesting
+  static void debugSetApiClient(MagicApiClient? apiClient) {
+    _debugApiClient = apiClient;
+    _inFlightResolveUrls.clear();
+  }
+
+  static MagicApiClient get _api => _debugApiClient ?? _defaultApiClient;
+
+  /// Upload a file to v3 private storage.
+  /// Returns the backend file object id.
   static Future<String> uploadFile({
     required Uint8List bytes,
     required String originalFileName,
     required String senderId,
-  }) async {
-    final extension = _getExtension(originalFileName);
-    final storagePath = '$senderId/${_uuid.v4()}$extension';
-    var mimeType = lookupMimeType(originalFileName);
-    const blockedMimes = {
-      'text/html',
-      'text/xml',
-      'application/xhtml+xml',
-      'image/svg+xml',
-      'application/javascript',
-      'text/javascript',
-    };
-
-    if (mimeType != null && blockedMimes.contains(mimeType)) {
-      mimeType = 'application/octet-stream';
-    }
-    mimeType ??= 'application/octet-stream';
-
-    await _supabase.storage
-        .from(_bucketName)
-        .uploadBinary(
-          storagePath,
-          bytes,
-          fileOptions: FileOptions(contentType: mimeType),
-        );
-
-    return _storageReference(_bucketName, storagePath);
+    String? chatId,
+  }) {
+    _assertChatId(chatId);
+    return _upload(
+      bytes: bytes,
+      fileName: originalFileName,
+      purpose: 'chat_attachment',
+      ownerType: 'chat',
+      ownerId: chatId,
+    );
   }
 
-  /// Upload a voice recording (bytes) to Supabase Storage.
-  /// Returns a storage reference. The UI resolves it to a short-lived signed URL.
+  /// Upload a voice recording to v3 private storage.
+  /// Returns the backend file object id.
   static Future<String> uploadVoice({
     required Uint8List bytes,
     required String senderId,
+    String? chatId,
     String extension = '.m4a',
-  }) async {
-    final storagePath = '$senderId/voice_${_uuid.v4()}$extension';
-    final mimeType = extension == '.webm'
-        ? 'audio/webm'
-        : extension == '.wav'
-        ? 'audio/wav'
-        : 'audio/mp4';
-
-    await _supabase.storage
-        .from(_bucketName)
-        .uploadBinary(
-          storagePath,
-          bytes,
-          fileOptions: FileOptions(contentType: mimeType),
-        );
-
-    return _storageReference(_bucketName, storagePath);
+  }) {
+    _assertChatId(chatId);
+    final normalizedExtension = extension.startsWith('.')
+        ? extension
+        : '.$extension';
+    return _upload(
+      bytes: bytes,
+      fileName:
+          'voice_${DateTime.now().millisecondsSinceEpoch}$normalizedExtension',
+      purpose: 'chat_voice',
+      ownerType: 'chat',
+      ownerId: chatId,
+      explicitMimeType: _voiceMimeType(normalizedExtension),
+    );
   }
 
-  /// Upload an avatar image (bytes) to the avatars bucket.
-  /// Returns a storage reference; the UI resolves it through the current API host.
+  /// Upload an avatar image to v3 private storage.
+  /// Returns the backend file object id.
   static Future<String> uploadAvatar({
     required Uint8List bytes,
     required String fileName,
-  }) async {
-    const avatarBucket = 'avatars';
-    final extension = _getExtension(fileName);
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) {
-      throw StateError('Avatar upload requires an authenticated user.');
-    }
-    final storagePath = '$userId/avatar_${_uuid.v4()}$extension';
-    final mimeType = lookupMimeType(fileName) ?? 'image/jpeg';
-
-    await _supabase.storage
-        .from(avatarBucket)
-        .uploadBinary(
-          storagePath,
-          bytes,
-          fileOptions: FileOptions(contentType: mimeType),
-        );
-
-    return _storageReference(avatarBucket, storagePath);
+  }) {
+    return _upload(bytes: bytes, fileName: fileName, purpose: 'profile_avatar');
   }
 
-  /// Delete an avatar from the avatars bucket.
-  static Future<void> deleteAvatar(String? url) async {
-    if (url == null || url.isEmpty) return;
-    const avatarBucket = 'avatars';
+  /// Delete an avatar file object when it is already a v3 file id.
+  /// Legacy Supabase storage references are ignored during v3 cutover.
+  static Future<void> deleteAvatar(String? value) async {
+    if (!_looksLikeBackendFileId(value)) return;
     try {
-      final path = storagePathFromUrl(url, avatarBucket);
-      if (path != null) {
-        await _supabase.storage.from(avatarBucket).remove([path]);
-      }
+      await _api.delete<Map<String, dynamic>>('/files/$value');
     } catch (e) {
       debugPrint('Avatar delete error: $e');
     }
@@ -116,36 +91,48 @@ class ChatAttachmentService {
 
   static bool isPrivateStorageReference(String? value) {
     return value != null &&
-        value.startsWith('$_storageReferencePrefix$_bucketName/');
+        value.startsWith('$_storageReferencePrefix$_chatBucketName/');
   }
 
   static Future<String?> resolveUrl(
     String? value, {
     int expiresIn = 3600,
   }) async {
-    if (value == null || value.isEmpty) return null;
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
 
-    final reference = _parseStorageReference(value);
-    if (reference == null) return normalizeSupabaseUrl(value);
+    if (_looksLikeBackendFileId(trimmed)) {
+      return _resolveBackendFileUrl(trimmed);
+    }
 
-    return _supabase.storage
-        .from(reference.bucket)
-        .createSignedUrl(reference.path, expiresIn);
+    if (_parseStorageReference(trimmed) != null) return null;
+
+    return trimmed;
   }
 
-  static String normalizeSupabaseUrl(String value) {
-    final uri = Uri.tryParse(value);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return value;
-    if (!_isKnownSupabaseHost(uri.host)) return value;
+  static Future<String?> _resolveBackendFileUrl(String fileId) {
+    final cacheKey = '${_api.rawDio.options.baseUrl}|$fileId';
+    final pending = _inFlightResolveUrls[cacheKey];
+    if (pending != null) return pending;
 
-    final current = Uri.parse(Env.supabaseUrl);
-    return uri
-        .replace(
-          scheme: current.scheme,
-          host: current.host,
-          port: current.hasPort ? current.port : null,
-        )
-        .toString();
+    final future = _requestBackendFileUrl(fileId).whenComplete(() {
+      _inFlightResolveUrls.remove(cacheKey);
+    });
+    _inFlightResolveUrls[cacheKey] = future;
+    return future;
+  }
+
+  static Future<String?> _requestBackendFileUrl(String fileId) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/files/$fileId/download-token',
+    );
+    final token = response['token']?.toString();
+    if (token == null || token.isEmpty) {
+      throw const MagicApiException(
+        message: 'Сервер не выдал ссылку на файл.',
+      );
+    }
+    return _downloadUrl(token);
   }
 
   static String? storagePathFromUrl(String value, String bucket) {
@@ -163,8 +150,38 @@ class ChatAttachmentService {
     return Uri.decodeFull(rawPath);
   }
 
-  static String _storageReference(String bucket, String path) {
-    return '$_storageReferencePrefix$bucket/$path';
+  static Future<String> _upload({
+    required Uint8List bytes,
+    required String fileName,
+    required String purpose,
+    String? ownerType,
+    String? ownerId,
+    String? explicitMimeType,
+  }) async {
+    final mimeType =
+        explicitMimeType ??
+        lookupMimeType(fileName, headerBytes: bytes) ??
+        'application/octet-stream';
+    final formData = FormData.fromMap({
+      'purpose': purpose,
+      'ownerType': ?ownerType,
+      'ownerId': ?ownerId,
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: fileName,
+        contentType: MediaType.parse(mimeType),
+      ),
+    });
+
+    final response = await _api.post<Map<String, dynamic>>(
+      '/files',
+      data: formData,
+    );
+    final id = response['id']?.toString();
+    if (id == null || id.isEmpty) {
+      throw const MagicApiException(message: 'Сервер не вернул id файла.');
+    }
+    return id;
   }
 
   static _StorageReference? _parseStorageReference(String value) {
@@ -198,15 +215,36 @@ class ChatAttachmentService {
     return null;
   }
 
-  static bool _isKnownSupabaseHost(String host) {
-    final currentHost = Uri.parse(Env.supabaseUrl).host;
-    return host == currentHost || host == _projectSupabaseHost;
+  static bool _looksLikeBackendFileId(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return false;
+    if (trimmed.startsWith(_storageReferencePrefix)) return false;
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && uri.hasScheme) return false;
+    return !trimmed.contains('/');
   }
 
-  static String _getExtension(String fileName) {
-    final dotIndex = fileName.lastIndexOf('.');
-    if (dotIndex == -1 || dotIndex == fileName.length - 1) return '';
-    return fileName.substring(dotIndex);
+  static String _downloadUrl(String token) {
+    final baseUrl = _api.rawDio.options.baseUrl;
+    final normalized = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+    return Uri.parse(normalized).resolve('files/download/$token').toString();
+  }
+
+  static String _voiceMimeType(String extension) {
+    return switch (extension.toLowerCase()) {
+      '.webm' => 'audio/webm',
+      '.wav' => 'audio/wav',
+      '.ogg' => 'audio/ogg',
+      '.mp3' => 'audio/mpeg',
+      _ => 'audio/mp4',
+    };
+  }
+
+  static void _assertChatId(String? chatId) {
+    if (chatId?.trim().isNotEmpty == true) return;
+    throw const MagicApiException(
+      message: 'Сначала откройте чат, затем добавьте вложение.',
+    );
   }
 
   /// Format file size for display.
@@ -215,6 +253,23 @@ class ChatAttachmentService {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  static String safeDownloadFileName(String? value) {
+    final fallback = 'download';
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return fallback;
+
+    final withoutPath = trimmed.split(RegExp(r'[\\/]')).last.trim();
+    final sanitized = withoutPath
+        .replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '')
+        .replaceAll(RegExp(r'[<>:"|?*]'), '_')
+        .trim();
+
+    if (sanitized.isEmpty || sanitized == '.' || sanitized == '..') {
+      return fallback;
+    }
+    return sanitized.length > 120 ? sanitized.substring(0, 120) : sanitized;
   }
 }
 

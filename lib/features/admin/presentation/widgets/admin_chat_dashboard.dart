@@ -1,59 +1,70 @@
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
-import 'package:magic_music_crm/core/widgets/voice_recorder_widget.dart';
-import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
-import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/broadcast_dialog.dart';
-import 'package:file_picker/file_picker.dart';
+import 'dart:io' show File;
 import 'dart:typed_data';
 
-class AdminChatDashboard extends StatefulWidget {
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
+import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
+import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
+import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
+import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
+import 'package:magic_music_crm/core/widgets/voice_recorder_widget.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/broadcast_dialog.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
+
+class AdminChatDashboard extends ConsumerStatefulWidget {
   const AdminChatDashboard({super.key});
 
   @override
-  State<AdminChatDashboard> createState() => _AdminChatDashboardState();
+  ConsumerState<AdminChatDashboard> createState() => _AdminChatDashboardState();
 }
 
-class _AdminChatDashboardState extends State<AdminChatDashboard> {
-  String? _selectedStudentId;
+class _AdminChatDashboardState extends ConsumerState<AdminChatDashboard> {
+  String? _selectedStudentUserId;
   String? _selectedStudentName;
   bool _showSchoolInbox = true;
 
   @override
   Widget build(BuildContext context) {
-    if (_selectedStudentId != null) {
-      return _IndividualChatView(
-        studentProfileId: _selectedStudentId!,
-        studentName: _selectedStudentName ?? 'Ученик',
-        onBack: () => setState(() => _selectedStudentId = null),
+    if (_selectedStudentUserId != null) {
+      return _ChatView(
+        title: _selectedStudentName ?? 'Ученик',
+        targetUserId: _selectedStudentUserId,
+        showHeader: true,
+        onBack: () => setState(() {
+          _selectedStudentUserId = null;
+          _selectedStudentName = null;
+        }),
       );
     }
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               Expanded(
                 child: SegmentedButton<bool>(
                   segments: const [
                     ButtonSegment(
-                      value: true, 
-                      label: Text('Общий (В школу)'), 
-                      icon: Icon(Icons.school_rounded)
+                      value: true,
+                      label: Text('В школу'),
+                      icon: Icon(Icons.school_rounded),
                     ),
                     ButtonSegment(
-                      value: false, 
-                      label: Text('Личные чаты'), 
-                      icon: Icon(Icons.person_rounded)
+                      value: false,
+                      label: Text('Личные чаты'),
+                      icon: Icon(Icons.person_rounded),
                     ),
                   ],
                   selected: {_showSchoolInbox},
-                  onSelectionChanged: (val) => setState(() => _showSchoolInbox = val.first),
+                  onSelectionChanged: (value) =>
+                      setState(() => _showSchoolInbox = value.first),
                 ),
               ),
               const SizedBox(width: 12),
@@ -70,372 +81,329 @@ class _AdminChatDashboardState extends State<AdminChatDashboard> {
           ),
         ),
         Expanded(
-          child: _showSchoolInbox ? const _SchoolInbox() : _StudentChatList(
-            onChatSelected: (id, name) => setState(() {
-              _selectedStudentId = id;
-              _selectedStudentName = name;
-            }),
-          ),
+          child: _showSchoolInbox
+              ? const _ChatView(title: 'Администрация школы')
+              : _StudentChatList(
+                  onChatSelected: (id, name) => setState(() {
+                    _selectedStudentUserId = id;
+                    _selectedStudentName = name;
+                  }),
+                ),
         ),
       ],
     );
   }
 }
 
-class _SchoolInbox extends StatefulWidget {
-  const _SchoolInbox();
+class _StudentChatList extends ConsumerStatefulWidget {
+  final void Function(String userId, String name) onChatSelected;
 
-  @override
-  State<_SchoolInbox> createState() => _SchoolInboxState();
-}
-
-class _SchoolInboxState extends State<_SchoolInbox> {
-  final _supabase = Supabase.instance.client;
-  final _scrollController = ScrollController();
-  List<Map<String, dynamic>> _messages = [];
-  bool _loading = true;
-  RealtimeChannel? _channel;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMessages();
-    _subscribe();
-  }
-
-  Future<void> _loadMessages() async {
-    try {
-      final res = await _supabase
-          .from('messages')
-          .select()
-          .filter('receiver_id', 'is', null)
-          .order('created_at', ascending: true)
-          .limit(100);
-      
-      if (mounted) {
-        setState(() {
-          _messages = List<Map<String, dynamic>>.from(res);
-          _loading = false;
-        });
-        _scrollToBottom();
-      }
-    } catch (e) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _subscribe() {
-    _channel = _supabase.channel('public:messages_school');
-    _channel!.onPostgresChanges(
-      event: PostgresChangeEvent.insert,
-      schema: 'public',
-      table: 'messages',
-      callback: (payload) {
-        final newMsg = payload.newRecord;
-        if (newMsg['receiver_id'] == null) {
-          if (mounted) {
-            setState(() => _messages.add(newMsg));
-            _scrollToBottom();
-          }
-        }
-      },
-    ).subscribe();
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _channel?.unsubscribe();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final userId = _supabase.auth.currentUser?.id;
-    if (_loading) return const Center(child: CircularProgressIndicator());
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(12),
-            itemCount: _messages.length,
-            itemBuilder: (context, i) {
-              final m = _messages[i];
-              final isMe = m['sender_id'] == userId;
-              return _MessageBubble(message: m, isMe: isMe, senderName: isMe ? 'Администрация' : 'Клиент');
-            },
-          ),
-        ),
-        _MessageInputWithAttachments(
-          onSend: (text) async {
-            await _supabase.from('messages').insert({
-              'sender_id': userId,
-              'content': text,
-              'receiver_id': null,
-              'message_type': 'text',
-            });
-          },
-          onSendVoice: (bytes, durationMs, ext) async {
-            final url = await ChatAttachmentService.uploadVoice(
-              bytes: bytes,
-              senderId: userId!,
-              extension: ext,
-            );
-            await _supabase.from('messages').insert({
-              'sender_id': userId,
-              'receiver_id': null,
-              'content': '🎤 Голосовое сообщение',
-              'message_type': 'voice',
-              'attachment_url': url,
-              'attachment_size': bytes.length,
-              'voice_duration_ms': durationMs,
-            });
-          },
-          onSendFile: (bytes, fileName, fileSize) async {
-            final url = await ChatAttachmentService.uploadFile(
-              bytes: bytes,
-              originalFileName: fileName,
-              senderId: userId!,
-            );
-            await _supabase.from('messages').insert({
-              'sender_id': userId,
-              'receiver_id': null,
-              'content': '📎 $fileName',
-              'message_type': 'file',
-              'attachment_url': url,
-              'attachment_name': fileName,
-              'attachment_size': fileSize,
-            });
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _StudentChatList extends StatefulWidget {
-  final Function(String, String) onChatSelected;
   const _StudentChatList({required this.onChatSelected});
 
   @override
-  State<_StudentChatList> createState() => _StudentChatListState();
+  ConsumerState<_StudentChatList> createState() => _StudentChatListState();
 }
 
-class _StudentChatListState extends State<_StudentChatList> {
-  final _supabase = Supabase.instance.client;
+class _StudentChatListState extends ConsumerState<_StudentChatList> {
   List<Map<String, dynamic>> _students = [];
-  Map<String, int> _unreadCounts = {};
   bool _loading = true;
-  RealtimeChannel? _channel;
 
   @override
   void initState() {
     super.initState();
     _loadData();
-    _subscribe();
   }
 
   Future<void> _loadData() async {
     try {
-      final studentsRes = await _supabase.from('profiles').select().eq('role', 'client');
-      
-      final unreadRes = await _supabase.from('messages')
-          .select('sender_id, receiver_id')
-          .eq('is_read', false);
-          
-      final userId = _supabase.auth.currentUser?.id;
-      final counts = <String, int>{};
-      
-      for (final m in unreadRes) {
-        final sender = m['sender_id']?.toString() ?? '';
-        final receiver = m['receiver_id']?.toString();
-        if (receiver == null || receiver == userId) {
-          counts[sender] = (counts[sender] ?? 0) + 1;
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _students = List<Map<String, dynamic>>.from(studentsRes);
-          _unreadCounts = counts;
-          _loading = false;
-        });
-      }
+      final profiles = await ref
+          .read(magicProfileAdminServiceProvider)
+          .listProfiles(role: 'client', limit: 100);
+      if (!mounted) return;
+      setState(() {
+        _students = profiles.where((profile) {
+          final userId = profile['user_id']?.toString();
+          return userId != null && userId.isNotEmpty;
+        }).toList()..sort((a, b) => _profileName(a).compareTo(_profileName(b)));
+        _loading = false;
+      });
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка загрузки учеников: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
     }
-  }
-
-  void _subscribe() {
-    _channel = _supabase.channel('public:messages_unread');
-    _channel!.onPostgresChanges(
-      event: PostgresChangeEvent.insert,
-      schema: 'public',
-      table: 'messages',
-      callback: (payload) {
-        final newMsg = payload.newRecord;
-        if (newMsg['is_read'] == false) {
-          final userId = _supabase.auth.currentUser?.id;
-          final receiver = newMsg['receiver_id']?.toString();
-          if (receiver == null || receiver == userId) {
-            final sender = newMsg['sender_id']?.toString() ?? '';
-            if (mounted) {
-              setState(() {
-                _unreadCounts[sender] = (_unreadCounts[sender] ?? 0) + 1;
-              });
-            }
-          }
-        }
-      },
-    ).subscribe();
-  }
-
-  @override
-  void dispose() {
-    _channel?.unsubscribe();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
+      );
+    }
+
+    if (_students.isEmpty) {
+      return Center(
+        child: Text(
+          'Ученики не найдены',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
 
     return ListView.builder(
       itemCount: _students.length,
-      itemBuilder: (context, i) {
-        final s = _students[i];
-        final id = s['id'].toString();
-        final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
-        final count = _unreadCounts[id] ?? 0;
-
+      itemBuilder: (context, index) {
+        final student = _students[index];
+        final userId = student['user_id'].toString();
+        final name = _profileName(student);
         return ListTile(
           leading: CircleAvatar(
             backgroundColor: AppTheme.primaryGold.withAlpha(40),
             child: Text(
-              name.isNotEmpty ? name[0] : '?', 
-              style: const TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.bold)
+              name.isNotEmpty ? name[0] : '?',
+              style: const TextStyle(
+                color: AppTheme.primaryGold,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-          title: Text(name.isEmpty ? 'Ученик' : name, style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Text(s['phone'] ?? '', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (count > 0) 
-                Badge(
-                  label: Text('$count'),
-                  backgroundColor: AppTheme.primaryGold,
-                ),
-              const SizedBox(width: 8),
-              Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ],
+          title: Text(
+            name.isEmpty ? 'Ученик' : name,
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          onTap: () {
-            widget.onChatSelected(id, name);
-            setState(() => _unreadCounts[id] = 0);
-          },
+          subtitle: Text(
+            student['phone']?.toString().isNotEmpty == true
+                ? student['phone'].toString()
+                : student['email']?.toString() ?? '',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          trailing: Icon(
+            Icons.chevron_right,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          onTap: () => widget.onChatSelected(userId, name),
         );
       },
     );
   }
 }
 
-class _IndividualChatView extends StatefulWidget {
-  final String studentProfileId;
-  final String studentName;
-  final VoidCallback onBack;
-  const _IndividualChatView({required this.studentProfileId, required this.studentName, required this.onBack});
+class _ChatView extends ConsumerStatefulWidget {
+  final String title;
+  final String? targetUserId;
+  final bool showHeader;
+  final VoidCallback? onBack;
+
+  const _ChatView({
+    required this.title,
+    this.targetUserId,
+    this.showHeader = false,
+    this.onBack,
+  });
 
   @override
-  State<_IndividualChatView> createState() => _IndividualChatViewState();
+  ConsumerState<_ChatView> createState() => _ChatViewState();
 }
 
-class _IndividualChatViewState extends State<_IndividualChatView> {
-  final _supabase = Supabase.instance.client;
+class _ChatViewState extends ConsumerState<_ChatView> {
   final _scrollController = ScrollController();
   List<Map<String, dynamic>> _messages = [];
-  List<String> _adminIds = [];
   bool _loading = true;
-  RealtimeChannel? _channel;
+  String? _currentUserId;
+  String? _chatId;
+  MagicRealtimeConnection? _realtime;
+  bool _realtimeConnecting = false;
+
+  MagicMessengerService get _messenger =>
+      ref.read(magicMessengerServiceProvider);
+
+  MagicRealtimeService get _realtimeService =>
+      ref.read(magicRealtimeServiceProvider);
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
-    _subscribe();
   }
 
   Future<void> _loadMessages() async {
     try {
-      final adminsRes = await _supabase.from('profiles').select('id').filter('role', 'in', ['admin', 'manager']);
-      final adminIds = (adminsRes as List).map((a) => a['id'].toString()).toList();
+      final profile = await ref.read(magicAuthServiceProvider).currentProfile();
+      final chatId = await _ensureChatId();
+      final messages = await _messenger.listMessages(chatId, limit: 100);
 
-      final res = await _supabase
-          .from('messages')
-          .select()
-          .or('sender_id.eq.${widget.studentProfileId},receiver_id.eq.${widget.studentProfileId}')
-          .order('created_at', ascending: true)
-          .limit(100);
-          
-      if (mounted) {
-        setState(() {
-          _adminIds = adminIds;
-          _messages = List<Map<String, dynamic>>.from(res);
-          _loading = false;
-        });
-        _scrollToBottom();
-        _markAsRead(_messages);
-      }
+      if (!mounted) return;
+      setState(() {
+        _currentUserId = profile.userId;
+        _messages = messages;
+        _loading = false;
+      });
+      _scrollToBottom();
+      await _markAsRead(messages);
+      await _connectRealtime(chatId);
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка загрузки чата: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
     }
   }
 
-  void _subscribe() {
-    _channel = _supabase.channel('public:messages_individual');
-    _channel!.onPostgresChanges(
-      event: PostgresChangeEvent.insert,
-      schema: 'public',
-      table: 'messages',
-      callback: (payload) {
-        final m = payload.newRecord;
-        if (m['sender_id'] == widget.studentProfileId || m['receiver_id'] == widget.studentProfileId) {
-          if (mounted) {
-            setState(() => _messages.add(m));
-            _scrollToBottom();
-            _markAsRead([m]);
-          }
-        }
-      },
-    ).subscribe();
+  Future<String> _ensureChatId() async {
+    final existing = _chatId;
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final targetUserId = widget.targetUserId;
+    final chat = targetUserId == null
+        ? await _messenger.ensureAdministrationChat()
+        : await _messenger.ensureDirectChat(targetUserId);
+    final chatId = chat['id']?.toString();
+    if (chatId == null || chatId.isEmpty) {
+      throw StateError('Сервер не вернул идентификатор чата.');
+    }
+    _chatId = chatId;
+    return chatId;
+  }
+
+  Future<void> _connectRealtime(String chatId) async {
+    if (_realtime != null || _realtimeConnecting) return;
+    _realtimeConnecting = true;
+    try {
+      final connection = await _realtimeService.connect();
+      if (!mounted) {
+        connection.dispose();
+        return;
+      }
+
+      connection.joinChat(chatId);
+      connection.onMessageCreated((payload) {
+        if (payload['chatId'] != chatId) return;
+        if (!mounted) return;
+        setState(() => _upsertMessage(_legacyRealtimeMessage(payload)));
+        _scrollToBottom();
+        _markAsRead(_messages);
+      });
+      connection.onMessageUpdated((payload) {
+        if (payload['chatId'] != chatId) return;
+        if (!mounted) return;
+        setState(() => _upsertMessage(_legacyRealtimeMessage(payload)));
+      });
+      _realtime = connection;
+    } catch (e) {
+      debugPrint('Admin chat realtime unavailable: $e');
+    } finally {
+      _realtimeConnecting = false;
+    }
   }
 
   Future<void> _markAsRead(List<Map<String, dynamic>> messages) async {
-    final userId = _supabase.auth.currentUser?.id;
-    final unreadIds = messages
-        .where((m) => (m['receiver_id'] == userId || m['receiver_id'] == null) && m['is_read'] == false)
-        .map((m) => m['id'] as String)
-        .toList();
+    final chatId = _chatId;
+    final lastMessageId = messages.isEmpty
+        ? null
+        : messages.last['id']?.toString();
+    if (chatId == null || lastMessageId == null || lastMessageId.isEmpty) {
+      return;
+    }
+    await _messenger.markRead(chatId, lastReadMessageId: lastMessageId);
+  }
 
-    if (unreadIds.isNotEmpty) {
-      await _supabase
-          .from('messages')
-          .update({'is_read': true, 'read_at': DateTime.now().toIso8601String()})
-          .filter('id', 'in', unreadIds);
+  Future<void> _sendText(String text) async {
+    try {
+      final chatId = await _ensureChatId();
+      final message = await _messenger.sendMessage(chatId, content: text);
+      if (!mounted) return;
+      setState(() => _upsertMessage(message));
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Ошибка отправки: $e');
+    }
+  }
+
+  Future<void> _sendVoice(
+    Uint8List bytes,
+    int durationMs,
+    String extension,
+  ) async {
+    try {
+      final chatId = await _ensureChatId();
+      final fileId = await ChatAttachmentService.uploadVoice(
+        bytes: bytes,
+        senderId: _currentUserId ?? '',
+        chatId: chatId,
+        extension: extension,
+      );
+      final message = await _messenger.sendMessage(
+        chatId,
+        content: 'Голосовое сообщение',
+        messageType: 'voice',
+        attachmentFileId: fileId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _upsertMessage({...message, 'voice_duration_ms': durationMs});
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Ошибка отправки голосового: $e');
+    }
+  }
+
+  Future<void> _sendFile(Uint8List bytes, String fileName, int fileSize) async {
+    try {
+      final chatId = await _ensureChatId();
+      final fileId = await ChatAttachmentService.uploadFile(
+        bytes: bytes,
+        originalFileName: fileName,
+        senderId: _currentUserId ?? '',
+        chatId: chatId,
+      );
+      final message = await _messenger.sendMessage(
+        chatId,
+        content: fileName,
+        messageType: 'file',
+        attachmentFileId: fileId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _upsertMessage({
+          ...message,
+          'attachment_file_id': fileId,
+          'attachment_name': fileName,
+          'attachment_size': fileSize,
+        });
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Ошибка отправки файла: $e');
+    }
+  }
+
+  void _upsertMessage(Map<String, dynamic> message) {
+    final id = message['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final index = _messages.indexWhere((item) => item['id'] == id);
+    if (index == -1) {
+      _messages.add(message);
+    } else {
+      _messages[index] = {..._messages[index], ...message};
     }
   }
 
@@ -451,9 +419,18 @@ class _IndividualChatViewState extends State<_IndividualChatView> {
     });
   }
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
+    );
+  }
+
   @override
   void dispose() {
-    _channel?.unsubscribe();
+    final chatId = _chatId;
+    if (chatId != null) _realtime?.leaveRoom(chatId);
+    _realtime?.disconnect();
+    _realtime?.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -463,96 +440,78 @@ class _IndividualChatViewState extends State<_IndividualChatView> {
     if (_loading) {
       return Column(
         children: [
-          AppBar(
-            title: Text(widget.studentName),
-            leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: widget.onBack),
+          if (widget.showHeader)
+            AppBar(
+              title: Text(widget.title),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: widget.onBack,
+              ),
+            ),
+          const Expanded(
+            child: Center(
+              child: CircularProgressIndicator(color: AppTheme.primaryGold),
+            ),
           ),
-          const Expanded(child: Center(child: CircularProgressIndicator())),
         ],
       );
     }
 
-    final userId = _supabase.auth.currentUser?.id;
-
-    // Filter messages to only show those between student and any admin, or to/from school (null)
-    final filteredMessages = _messages.where((m) {
-      final isFromStudent = m['sender_id'] == widget.studentProfileId;
-      final isToStudent = m['receiver_id'] == widget.studentProfileId;
-      
-      if (isFromStudent) {
-        return m['receiver_id'] == null || _adminIds.contains(m['receiver_id']);
-      } else if (isToStudent) {
-        return m['sender_id'] == null || _adminIds.contains(m['sender_id']);
-      }
-      return false;
-    }).toList();
-
     return Column(
       children: [
-        AppBar(
-          title: Text(widget.studentName),
-          leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: widget.onBack),
-        ),
-        Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(12),
-            itemCount: filteredMessages.length,
-            itemBuilder: (context, i) {
-              final m = filteredMessages[i];
-              final isMe = m['sender_id'] == userId;
-              return _MessageBubble(message: m, isMe: isMe, senderName: isMe ? 'Я (Админ)' : widget.studentName);
-            },
+        if (widget.showHeader)
+          AppBar(
+            title: Text(widget.title),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: widget.onBack,
+            ),
           ),
+        Expanded(
+          child: _messages.isEmpty
+              ? Center(
+                  child: Text(
+                    'Нет сообщений',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(12),
+                  itemCount: _messages.length,
+                  itemBuilder: (context, index) {
+                    final message = _messages[index];
+                    final isMe = message['sender_id'] == _currentUserId;
+                    return _MessageBubble(
+                      message: message,
+                      isMe: isMe,
+                      senderName: isMe ? 'Я' : _senderName(message),
+                    );
+                  },
+                ),
         ),
         _MessageInputWithAttachments(
-          onSend: (text) async {
-            await _supabase.from('messages').insert({
-              'sender_id': userId,
-              'content': text,
-              'receiver_id': widget.studentProfileId,
-              'message_type': 'text',
-            });
-          },
-          onSendVoice: (bytes, durationMs, ext) async {
-            final url = await ChatAttachmentService.uploadVoice(
-              bytes: bytes,
-              senderId: userId!,
-              extension: ext,
-            );
-            await _supabase.from('messages').insert({
-              'sender_id': userId,
-              'receiver_id': widget.studentProfileId,
-              'content': '🎤 Голосовое сообщение',
-              'message_type': 'voice',
-              'attachment_url': url,
-              'attachment_size': bytes.length,
-              'voice_duration_ms': durationMs,
-            });
-          },
-          onSendFile: (bytes, fileName, fileSize) async {
-            final url = await ChatAttachmentService.uploadFile(
-              bytes: bytes,
-              originalFileName: fileName,
-              senderId: userId!,
-            );
-            await _supabase.from('messages').insert({
-              'sender_id': userId,
-              'receiver_id': widget.studentProfileId,
-              'content': '📎 $fileName',
-              'message_type': 'file',
-              'attachment_url': url,
-              'attachment_name': fileName,
-              'attachment_size': fileSize,
-            });
-          },
+          onSend: _sendText,
+          onSendVoice: _sendVoice,
+          onSendFile: _sendFile,
         ),
       ],
     );
   }
-}
 
-// ── Shared Widgets ──────────────────────────────────────────────────────────
+  String _senderName(Map<String, dynamic> message) {
+    final profiles = message['profiles'];
+    if (profiles is Map) {
+      final firstName = profiles['first_name']?.toString() ?? '';
+      final lastName = profiles['last_name']?.toString() ?? '';
+      final name = '$firstName $lastName'.trim();
+      if (name.isNotEmpty) return name;
+    }
+    return widget.targetUserId == null ? 'Клиент' : widget.title;
+  }
+}
 
 class _MessageBubble extends StatelessWidget {
   final Map<String, dynamic> message;
@@ -567,33 +526,49 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dt = DateTime.tryParse(message['created_at'] ?? '');
-    final timeStr = dt != null ? DateFormat('HH:mm').format(dt.toLocal()) : '';
+    final dt = DateTime.tryParse(message['created_at']?.toString() ?? '');
+    final timeStr = dt != null
+        ? DateFormat('HH:mm', 'ru').format(dt.toLocal())
+        : '';
     final messageType = message['message_type']?.toString() ?? 'text';
-    final isImageFile = messageType == 'file' && 
+    final attachmentUrl =
+        message['attachment_url']?.toString() ??
+        message['attachment_file_id']?.toString();
+    final isImageFile =
+        messageType == 'file' &&
         FileAttachmentWidget.isImage(message['attachment_name']?.toString());
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
-        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isMe
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           if (!isMe)
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 2),
               child: Text(
                 senderName,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           Container(
             margin: const EdgeInsets.only(bottom: 8),
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
             padding: isImageFile
                 ? const EdgeInsets.all(4)
                 : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: isMe ? AppTheme.primaryGold : Theme.of(context).colorScheme.surface,
+              color: isMe
+                  ? AppTheme.primaryGold
+                  : Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
@@ -604,28 +579,29 @@ class _MessageBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Content based on message type
                 if (messageType == 'voice')
                   SizedBox(
                     width: 220,
                     child: VoicePlayerWidget(
-                      audioUrl: message['attachment_url'] ?? '',
-                      durationMs: message['voice_duration_ms'] as int?,
+                      audioUrl: attachmentUrl ?? '',
+                      durationMs: _asInt(message['voice_duration_ms']),
                       isMe: isMe,
                     ),
                   )
                 else if (messageType == 'file')
                   FileAttachmentWidget(
                     fileName: message['attachment_name']?.toString(),
-                    fileUrl: message['attachment_url']?.toString(),
-                    fileSize: message['attachment_size'] as int?,
+                    fileUrl: attachmentUrl,
+                    fileSize: _asInt(message['attachment_size']),
                     isMe: isMe,
                   )
                 else
                   Text(
-                    message['content'] ?? '',
+                    message['content']?.toString() ?? '',
                     style: TextStyle(
-                      color: isMe ? Colors.white : Theme.of(context).colorScheme.onSurface,
+                      color: isMe
+                          ? Colors.white
+                          : Theme.of(context).colorScheme.onSurface,
                       fontSize: 14,
                       height: 1.3,
                     ),
@@ -637,16 +613,22 @@ class _MessageBubble extends StatelessWidget {
                     Text(
                       timeStr,
                       style: TextStyle(
-                        color: isMe ? Colors.white.withAlpha(180) : Theme.of(context).colorScheme.onSurfaceVariant,
+                        color: isMe
+                            ? Colors.white.withAlpha(180)
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 9,
                       ),
                     ),
                     if (isMe) ...[
                       const SizedBox(width: 4),
                       Icon(
-                        message['is_read'] == true ? Icons.done_all : Icons.done,
+                        message['is_read'] == true
+                            ? Icons.done_all
+                            : Icons.done,
                         size: 12,
-                        color: message['is_read'] == true ? AppTheme.success : Colors.white.withAlpha(180),
+                        color: message['is_read'] == true
+                            ? AppTheme.success
+                            : Colors.white.withAlpha(180),
                       ),
                     ],
                   ],
@@ -660,12 +642,13 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-/// Unified message input widget with text, file attachment, and voice recording support.
 class _MessageInputWithAttachments extends StatefulWidget {
   final Future<void> Function(String text) onSend;
-  final Future<void> Function(Uint8List bytes, int durationMs, String extension) onSendVoice;
-  final Future<void> Function(Uint8List bytes, String fileName, int fileSize) onSendFile;
-  
+  final Future<void> Function(Uint8List bytes, int durationMs, String extension)
+  onSendVoice;
+  final Future<void> Function(Uint8List bytes, String fileName, int fileSize)
+  onSendFile;
+
   const _MessageInputWithAttachments({
     required this.onSend,
     required this.onSendVoice,
@@ -673,10 +656,12 @@ class _MessageInputWithAttachments extends StatefulWidget {
   });
 
   @override
-  State<_MessageInputWithAttachments> createState() => _MessageInputWithAttachmentsState();
+  State<_MessageInputWithAttachments> createState() =>
+      _MessageInputWithAttachmentsState();
 }
 
-class _MessageInputWithAttachmentsState extends State<_MessageInputWithAttachments> {
+class _MessageInputWithAttachmentsState
+    extends State<_MessageInputWithAttachments> {
   final _controller = TextEditingController();
   bool _isRecording = false;
   bool _isSendingFile = false;
@@ -687,48 +672,46 @@ class _MessageInputWithAttachmentsState extends State<_MessageInputWithAttachmen
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
-        withData: true,
+        withData: false,
         allowMultiple: false,
       );
-
       if (result == null || result.files.isEmpty) return;
 
       final file = result.files.first;
-      if (file.bytes == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Не удалось прочитать файл', style: TextStyle(color: Colors.white)),
-              backgroundColor: AppTheme.danger,
-            ),
-          );
-        }
-        return;
-      }
-
       if (file.size > ChatAttachmentService.maxFileSizeBytes) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Файл слишком большой (макс. 25 МБ)', style: TextStyle(color: Colors.white)),
-              backgroundColor: AppTheme.danger,
-            ),
-          );
-        }
+        _showError('Файл слишком большой (макс. 25 МБ)');
         return;
       }
 
       setState(() => _isSendingFile = true);
-      await widget.onSendFile(file.bytes!, file.name, file.size);
+      final bytes = await _readPickedFileBytes(file);
+      if (bytes == null) return;
+      await widget.onSendFile(bytes, file.name, file.size);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка: $e', style: const TextStyle(color: Colors.white)), backgroundColor: AppTheme.danger),
-        );
-      }
+      _showError('Ошибка отправки файла: $e');
     } finally {
       if (mounted) setState(() => _isSendingFile = false);
     }
+  }
+
+  Future<Uint8List?> _readPickedFileBytes(PlatformFile file) async {
+    if (file.bytes != null) return file.bytes;
+    final path = file.path;
+    if (path == null || path.isEmpty) {
+      _showError('Не удалось прочитать файл');
+      return null;
+    }
+    return File(path).readAsBytes();
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(color: Colors.white)),
+        backgroundColor: AppTheme.danger,
+      ),
+    );
   }
 
   @override
@@ -741,8 +724,9 @@ class _MessageInputWithAttachmentsState extends State<_MessageInputWithAttachmen
   Widget build(BuildContext context) {
     if (_isRecording) {
       return VoiceRecorderWidget(
-        onVoiceRecorded: (bytes, durationMs, ext) async {
-          await widget.onSendVoice(bytes, durationMs, ext);
+        onVoiceRecorded: (bytes, durationMs, extension) async {
+          await widget.onSendVoice(bytes, durationMs, extension);
+          if (mounted) setState(() => _isRecording = false);
         },
         onCancel: () {
           if (mounted) setState(() => _isRecording = false);
@@ -759,18 +743,23 @@ class _MessageInputWithAttachmentsState extends State<_MessageInputWithAttachmen
       child: SafeArea(
         child: Row(
           children: [
-            // Attach file button
             IconButton(
               icon: _isSendingFile
                   ? const SizedBox(
-                      width: 20, height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGold),
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryGold,
+                      ),
                     )
-                  : Icon(Icons.attach_file_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  : Icon(
+                      Icons.attach_file_rounded,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               tooltip: 'Прикрепить файл',
               onPressed: _isSendingFile ? null : _pickAndSendFile,
             ),
-            // Text field
             Expanded(
               child: TextField(
                 controller: _controller,
@@ -782,46 +771,98 @@ class _MessageInputWithAttachmentsState extends State<_MessageInputWithAttachmen
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
-                onSubmitted: (_) {
-                  final text = _controller.text.trim();
-                  if (text.isNotEmpty) {
-                    widget.onSend(text);
-                    _controller.clear();
-                  }
-                },
-                onChanged: (_) => setState(() {}),
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _sendText(),
               ),
             ),
             const SizedBox(width: 8),
-            // Mic or Send button
-            Container(
-              decoration: const BoxDecoration(
-                color: AppTheme.primaryGold,
-                shape: BoxShape.circle,
-              ),
-              child: _controller.text.trim().isEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.mic_rounded, color: Colors.white),
-                      tooltip: 'Голосовое сообщение',
-                      onPressed: () => setState(() => _isRecording = true),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.send_rounded, color: Colors.white),
-                      onPressed: () {
-                        final text = _controller.text.trim();
-                        if (text.isNotEmpty) {
-                          widget.onSend(text);
-                          _controller.clear();
-                          setState(() {});
-                        }
-                      },
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _controller,
+              builder: (context, value, _) {
+                final hasText = value.text.trim().isNotEmpty;
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: AppTheme.primaryGold,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      hasText ? Icons.send_rounded : Icons.mic_rounded,
+                      color: Colors.white,
                     ),
+                    tooltip: hasText ? 'Отправить' : 'Голосовое сообщение',
+                    onPressed: hasText
+                        ? _sendText
+                        : () => setState(() => _isRecording = true),
+                  ),
+                );
+              },
             ),
           ],
         ),
       ),
     );
   }
+
+  Future<void> _sendText() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    _controller.clear();
+    await widget.onSend(text);
+  }
+}
+
+Map<String, dynamic> _legacyRealtimeMessage(Map<String, dynamic> item) {
+  final sender = item['sender'];
+  final senderMap = sender is Map<String, dynamic>
+      ? sender
+      : const <String, dynamic>{};
+  return {
+    'id': item['id'],
+    'chat_id': item['chatId'],
+    'sender_id': item['senderId'],
+    'content': item['content'],
+    'message_type': item['messageType'],
+    'attachment_file_id': item['attachmentFileId'],
+    'attachment_name':
+        item['attachmentName'] ??
+        item['attachmentFileName'] ??
+        item['fileName'],
+    'attachment_size': item['attachmentSize'] ?? item['attachmentFileSize'],
+    'attachment_mime_type': item['attachmentMimeType'],
+    'voice_duration_ms': item['voiceDurationMs'],
+    'reply_to_id': item['replyToId'],
+    'forwarded_from_id': item['forwardedFromId'],
+    'pinned_by': item['pinnedBy'],
+    'pinned_at': item['pinnedAt'],
+    'created_at': item['createdAt'],
+    'updated_at': item['updatedAt'],
+    'deleted_at': item['deletedAt'],
+    'is_read': item['isRead'] == true,
+    'profiles': {
+      'id': senderMap['id'],
+      'first_name': senderMap['firstName'],
+      'last_name': senderMap['lastName'],
+    },
+  };
+}
+
+String _profileName(Map<String, dynamic> profile) {
+  final firstName = profile['first_name']?.toString() ?? '';
+  final lastName = profile['last_name']?.toString() ?? '';
+  final name = '$firstName $lastName'.trim();
+  if (name.isNotEmpty) return name;
+  return profile['email']?.toString() ?? '';
+}
+
+int? _asInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
 }

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -17,7 +18,6 @@ class StudentDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
-  final _supabase = Supabase.instance.client;
   Map<String, dynamic>? _student;
   Map<String, dynamic>? _balance;
   List<Map<String, dynamic>> _payments = [];
@@ -37,82 +37,41 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   Future<void> _loadAllData() async {
     setState(() => _loading = true);
     try {
-      // Load student with profile
-      final studentRes = await _supabase
-          .from('students')
-          .select('*, profiles(*)')
-          .eq('id', widget.studentId)
-          .single();
+      final crm = ref.read(magicCrmServiceProvider);
+      final results = await Future.wait<dynamic>([
+        crm.getStudent(widget.studentId),
+        crm.listPayments(studentId: widget.studentId, limit: 100),
+        crm.listLessons(studentId: widget.studentId, limit: 100),
+        crm.listTasks(studentId: widget.studentId, limit: 100),
+        crm.listStudentGroups(widget.studentId, limit: 100),
+        crm.listStudentBalances(studentId: widget.studentId, limit: 1),
+        crm.listComments(
+          entityType: 'student',
+          entityId: widget.studentId,
+          limit: 100,
+        ),
+        crm.listExpectedPayments(studentId: widget.studentId, limit: 100),
+      ]);
 
-      // Load payments
-      final paymentsRes = await _supabase
-          .from('payments')
-          .select('*')
-          .eq('student_id', widget.studentId)
-          .order('payment_date', ascending: false);
-
-      // Load lessons
-      final lessonsRes = await _supabase
-          .from('lessons')
-          .select(
-            '*, teachers(first_name, last_name, profiles(first_name, last_name)), groups(name), rooms(name)',
-          )
-          .eq('student_id', widget.studentId)
-          .order('scheduled_at', ascending: false);
-
-      // Load tasks (fixed to look for tasks about this student)
-      final tasksRes = await _supabase
-          .from('tasks')
-          .select('*, profiles:assigned_to(first_name, last_name)')
-          .or(
-            'student_id.eq.${widget.studentId},assigned_to.eq.${widget.studentId}',
-          )
-          .order('created_at', ascending: false);
-
-      // Load groups student belongs to
-      final groupsRes = await _supabase
-          .from('group_students')
-          .select(
-            'groups(id, name, teachers(first_name, last_name, profiles(first_name, last_name)))',
-          )
-          .eq('student_id', widget.studentId);
-
-      // Load balance from view
-      final balanceRes = await _supabase
-          .from('student_balances')
-          .select('*')
-          .eq('student_id', widget.studentId)
-          .single();
-
-      // Load comments
-      final commentsRes = await _supabase
-          .from('entity_comments')
-          .select('*')
-          .eq('entity_id', widget.studentId)
-          .eq('entity_type', 'student')
-          .order('created_at', ascending: false);
-
-      // Load expected payments
-      final expectedPaymentsRes = await _supabase
-          .from('expected_payments')
-          .select('*')
-          .eq('student_id', widget.studentId)
-          .order('due_date', ascending: false);
+      final studentRes = results[0] as Map<String, dynamic>;
+      final paymentsRes = results[1] as List<Map<String, dynamic>>;
+      final lessonsRes = results[2] as List<Map<String, dynamic>>;
+      final tasksRes = results[3] as List<Map<String, dynamic>>;
+      final groupsRes = results[4] as List<Map<String, dynamic>>;
+      final balanceRows = results[5] as List<Map<String, dynamic>>;
+      final commentsRes = results[6] as List<Map<String, dynamic>>;
+      final expectedPaymentsRes = results[7] as List<Map<String, dynamic>>;
 
       if (mounted) {
         setState(() {
           _student = studentRes;
-          _balance = balanceRes;
-          _payments = List<Map<String, dynamic>>.from(paymentsRes);
-          _lessons = List<Map<String, dynamic>>.from(lessonsRes);
-          _tasks = List<Map<String, dynamic>>.from(tasksRes);
-          _comments = List<Map<String, dynamic>>.from(commentsRes);
-          _groups = List<Map<String, dynamic>>.from(
-            groupsRes,
-          ).map((g) => g['groups'] as Map<String, dynamic>).toList();
-          _expectedPayments = List<Map<String, dynamic>>.from(
-            expectedPaymentsRes,
-          );
+          _balance = balanceRows.isEmpty ? null : balanceRows.first;
+          _payments = paymentsRes;
+          _lessons = lessonsRes;
+          _tasks = tasksRes;
+          _comments = commentsRes;
+          _groups = groupsRes;
+          _expectedPayments = expectedPaymentsRes;
           _tasks.sort(
             (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
           );
@@ -131,11 +90,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: AppTheme.primaryPurple),
-        ),
-      );
+      return const DetailPageSkeleton();
     }
 
     if (_student == null) {
@@ -177,7 +132,12 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             ],
           ),
           actions: [
-            if (_student != null && _student!['profiles'] != null)
+            if (_student != null &&
+                (_student!['profile_user_id']?.toString().isNotEmpty == true ||
+                    (_student!['profiles'] as Map<String, dynamic>?)?['user_id']
+                            ?.toString()
+                            .isNotEmpty ==
+                        true))
               IconButton(
                 icon: const Icon(
                   Icons.chat_bubble_outline_rounded,
@@ -185,14 +145,16 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                 ),
                 tooltip: 'Перейти в чат',
                 onPressed: () {
+                  final profileMap =
+                      _student!['profiles'] as Map<String, dynamic>?;
+                  final userId =
+                      _student!['profile_user_id']?.toString() ??
+                      profileMap?['user_id']?.toString();
+                  if (userId == null || userId.isEmpty) return;
                   // Set the navigation target
                   ref
                       .read(messengerNavigationProvider.notifier)
-                      .navigateTo(
-                        MessengerNavigationState(
-                          partnerId: _student!['profiles']['id'],
-                        ),
-                      );
+                      .navigateTo(MessengerNavigationState(partnerId: userId));
 
                   // Navigate back to the dashboard where MessengerScreen is hosted
                   if (context.canPop()) {
@@ -248,7 +210,11 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
       children: [
         _buildInfoCard('Контактные данные', [
           _InfoRow(icon: Icons.phone_rounded, label: 'Телефон', value: phone),
-          _InfoRow(icon: Icons.email_rounded, label: 'Email', value: email),
+          _InfoRow(
+            icon: Icons.email_rounded,
+            label: 'Электронная почта',
+            value: email,
+          ),
         ]),
         SizedBox(height: 16),
         _buildInfoCard('Дополнительная информация', [
@@ -266,16 +232,18 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           ),
           _InfoRow(
             icon: Icons.fingerprint_rounded,
-            label: 'Holli Hop ID',
+            label: 'Идентификатор HolliHop',
             value: _student!['hollihop_id']?.toString() ?? '—',
           ),
-          ...customData.entries.map(
-            (e) => _InfoRow(
-              icon: Icons.info_outline_rounded,
-              label: e.key,
-              value: e.value?.toString() ?? '—',
-            ),
-          ),
+          ...customData.entries
+              .map(
+                (e) => _InfoRow(
+                  icon: Icons.info_outline_rounded,
+                  label: e.key,
+                  value: e.value?.toString() ?? '—',
+                ),
+              )
+              .where((row) => !_isHiddenCustomDataRow(row.label)),
         ]),
         SizedBox(height: 16),
         _buildInfoCard('Финансовые настройки', [
@@ -329,6 +297,16 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
         ]),
       ],
     );
+  }
+
+  bool _isHiddenCustomDataRow(String key) {
+    return {
+      'hollihopId',
+      'hollihop_id',
+      'sourceLeadId',
+      'branchId',
+      'branch_id',
+    }.contains(key);
   }
 
   Widget? _buildFAB() {
@@ -407,16 +385,50 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
     );
 
     if (content != null && content.trim().isNotEmpty) {
-      final finalContent = isProgress
-          ? '[PROGRESS] ${content.trim()}'
-          : content.trim();
-      await _supabase.from('entity_comments').insert({
-        'entity_id': widget.studentId,
+      final body = isProgress ? '[PROGRESS] ${content.trim()}' : content.trim();
+      final tempId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+      final optimistic = {
+        'id': tempId,
         'entity_type': 'student',
-        'content': finalContent,
-        'author_id': _supabase.auth.currentUser?.id,
+        'entity_id': widget.studentId,
+        'content': body,
+        'body': body,
+        'created_at': DateTime.now().toIso8601String(),
+        'profiles': {'first_name': 'Вы', 'last_name': ''},
+        '_pending': true,
+      };
+      setState(() {
+        _comments.insert(0, optimistic);
       });
-      _loadAllData();
+      try {
+        final saved = await ref
+            .read(magicCrmServiceProvider)
+            .createComment(
+              entityType: 'student',
+              entityId: widget.studentId,
+              body: content.trim(),
+              progress: isProgress,
+            );
+        if (!mounted) return;
+        setState(() {
+          final index = _comments.indexWhere((item) => item['id'] == tempId);
+          if (index >= 0) _comments[index] = saved;
+          _comments.sort(
+            (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+          );
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _comments.removeWhere((item) => item['id'] == tempId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Не удалось добавить комментарий: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
     }
   }
 
@@ -458,13 +470,15 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
     );
 
     if (result == true && titleCtrl.text.isNotEmpty) {
-      await _supabase.from('tasks').insert({
-        'title': titleCtrl.text.trim(),
-        'description': descCtrl.text.trim(),
-        'student_id': widget.studentId,
-        'status': 'todo',
-        'created_by': _supabase.auth.currentUser?.id,
-      });
+      await ref
+          .read(magicCrmServiceProvider)
+          .createTask(
+            entityType: 'student',
+            entityId: widget.studentId,
+            title: titleCtrl.text.trim(),
+            description: descCtrl.text.trim(),
+            status: 'open',
+          );
       _loadAllData();
     }
   }
@@ -497,16 +511,23 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
 
     if (newPrice != null && double.tryParse(newPrice) != null) {
       try {
-        await _supabase
-            .from('students')
-            .update({'individual_price': double.parse(newPrice)})
-            .eq('id', widget.studentId);
+        final price = double.parse(newPrice);
+        await ref
+            .read(magicCrmServiceProvider)
+            .updateStudent(
+              widget.studentId,
+              customDataPatch: {
+                'individualPrice': price,
+                'individual_price': price,
+              },
+            );
         _loadAllData();
       } catch (e) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        }
       }
     }
   }
@@ -554,6 +575,14 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
         final dateStr = dt != null
             ? DateFormat('d MMM yyyy', 'ru').format(dt)
             : '—';
+        final paymentNote = (p['notes'] ?? p['description'] ?? '')
+            .toString()
+            .trim();
+        final method = (p['method'] ?? p['type'] ?? '').toString().trim();
+        final subtitle = [
+          dateStr,
+          if (paymentNote.isNotEmpty) paymentNote,
+        ].join(' • ');
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
@@ -565,14 +594,16 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               '${p['amount']} ₽',
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-            subtitle: Text(dateStr),
-            trailing: Text(
-              p['description'] ?? '',
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
+            subtitle: Text(subtitle),
+            trailing: method.isEmpty
+                ? null
+                : Text(
+                    method,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
           ),
         );
       },
@@ -669,6 +700,11 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             ? DateFormat('d MMM yyyy', 'ru').format(dt)
             : '—';
         final status = p['status'] ?? 'pending';
+        final description = (p['description'] ?? '').toString().trim();
+        final subtitle = [
+          'Срок: $dateStr',
+          if (description.isNotEmpty) description,
+        ].join(' • ');
 
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
@@ -683,7 +719,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               '${p['amount']} ₽',
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-            subtitle: Text('Срок: $dateStr • ${p['description'] ?? "Счёт"}'),
+            subtitle: Text(subtitle),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -764,7 +800,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           controller: controller,
           decoration: const InputDecoration(
             hintText: 'https://...',
-            labelText: 'URL документа',
+            labelText: 'Ссылка на документ',
           ),
         ),
         actions: [
@@ -781,10 +817,15 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
     );
 
     if (newUrl != null) {
-      await _supabase
-          .from('students')
-          .update({'contract_url': newUrl.trim()})
-          .eq('id', widget.studentId);
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateStudent(
+            widget.studentId,
+            customDataPatch: {
+              'legacyContractUrl': newUrl.trim(),
+              'contract_url': newUrl.trim(),
+            },
+          );
       _loadAllData();
     }
   }

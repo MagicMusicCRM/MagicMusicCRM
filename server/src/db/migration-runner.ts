@@ -1,0 +1,103 @@
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
+import { Pool } from 'pg';
+
+const migrationTable = 'app_schema_migrations';
+
+interface MigrationFile {
+  id: string;
+  upPath: string;
+  downPath: string;
+}
+
+export class MigrationRunner {
+  constructor(
+    private readonly pool: Pool,
+    private readonly migrationsDir = path.resolve(process.cwd(), 'db/migrations')
+  ) {}
+
+  async up(): Promise<string[]> {
+    await this.ensureMigrationTable();
+    const migrations = await this.readMigrationFiles();
+    const applied = await this.appliedIds();
+    const pending = migrations.filter((migration) => !applied.has(migration.id));
+    const completed: string[] = [];
+
+    for (const migration of pending) {
+      const sql = await fs.readFile(migration.upPath, 'utf8');
+      await this.pool.query('begin');
+      try {
+        await this.pool.query(sql);
+        await this.pool.query(
+          `insert into ${migrationTable} (id, applied_at) values ($1, now())`,
+          [migration.id]
+        );
+        await this.pool.query('commit');
+        completed.push(migration.id);
+      } catch (error) {
+        await this.pool.query('rollback');
+        throw error;
+      }
+    }
+
+    return completed;
+  }
+
+  async down(): Promise<string | null> {
+    await this.ensureMigrationTable();
+    const latest = await this.pool.query<{ id: string }>(
+      `select id from ${migrationTable} order by applied_at desc limit 1`
+    );
+
+    const migrationId = latest.rows[0]?.id;
+    if (!migrationId) return null;
+
+    const migrations = await this.readMigrationFiles();
+    const migration = migrations.find((item) => item.id === migrationId);
+    if (!migration) throw new Error(`Missing down migration for ${migrationId}`);
+
+    const sql = await fs.readFile(migration.downPath, 'utf8');
+    await this.pool.query('begin');
+    try {
+      await this.pool.query(sql);
+      await this.pool.query(`delete from ${migrationTable} where id = $1`, [
+        migrationId
+      ]);
+      await this.pool.query('commit');
+      return migrationId;
+    } catch (error) {
+      await this.pool.query('rollback');
+      throw error;
+    }
+  }
+
+  private async ensureMigrationTable() {
+    await this.pool.query(`
+      create table if not exists ${migrationTable} (
+        id text primary key,
+        applied_at timestamptz not null default now()
+      )
+    `);
+  }
+
+  private async appliedIds(): Promise<Set<string>> {
+    const result = await this.pool.query<{ id: string }>(
+      `select id from ${migrationTable}`
+    );
+    return new Set(result.rows.map((row) => row.id));
+  }
+
+  private async readMigrationFiles(): Promise<MigrationFile[]> {
+    const files = await fs.readdir(this.migrationsDir);
+    const upFiles = files.filter((file) => file.endsWith('.up.sql')).sort();
+
+    return upFiles.map((file) => {
+      const id = file.replace(/\.up\.sql$/, '');
+      return {
+        id,
+        upPath: path.join(this.migrationsDir, file),
+        downPath: path.join(this.migrationsDir, `${id}.down.sql`)
+      };
+    });
+  }
+}

@@ -1,0 +1,194 @@
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { AuditService } from "../audit/audit.service";
+import { DatabaseService } from "../db/database.service";
+import { CrmCustomFieldDefinitionDto } from "./dto/update-crm-custom-fields.dto";
+import { SettingsService } from "./settings.service";
+
+describe("SettingsService", () => {
+  const admin = { userId: "admin-a", role: "admin" as const };
+
+  const createService = (rows: Record<string, unknown>[] = []) => {
+    const query = jest.fn().mockResolvedValue({ rows });
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const service = new SettingsService(
+      { query } as unknown as DatabaseService,
+      audit as unknown as AuditService,
+    );
+    return { service, query, audit };
+  };
+
+  it("returns admin chat avatar setting for authenticated users", async () => {
+    const { service, query } = createService([
+      {
+        key: "admin_chat_avatar_url",
+        value_text: "storage://avatars/admin/avatar.png",
+        updated_at: "2026-06-12T00:00:00.000Z",
+      },
+    ]);
+
+    await expect(
+      service.getAdminChatAvatar({ userId: "client-a", role: "client" }),
+    ).resolves.toEqual({
+      key: "admin_chat_avatar_url",
+      value: "storage://avatars/admin/avatar.png",
+      updatedAt: "2026-06-12T00:00:00.000Z",
+    });
+    expect(query.mock.calls[0][1]).toEqual(["admin_chat_avatar_url"]);
+  });
+
+  it("updates admin chat avatar only for admins and records audit", async () => {
+    const { service, query, audit } = createService([
+      {
+        key: "admin_chat_avatar_url",
+        value_text: "https://cdn.example.com/avatar.png",
+        updated_at: "2026-06-12T00:00:00.000Z",
+      },
+    ]);
+
+    await expect(
+      service.updateAdminChatAvatar(
+        admin,
+        " https://cdn.example.com/avatar.png ",
+      ),
+    ).resolves.toEqual({
+      key: "admin_chat_avatar_url",
+      value: "https://cdn.example.com/avatar.png",
+      updatedAt: "2026-06-12T00:00:00.000Z",
+    });
+
+    expect(query.mock.calls[0][1]).toEqual([
+      "admin_chat_avatar_url",
+      JSON.stringify("https://cdn.example.com/avatar.png"),
+      "admin-a",
+    ]);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "settings.admin_chat_avatar_updated",
+        entityType: "setting",
+        entityId: "admin_chat_avatar_url",
+        metadata: { cleared: false },
+      }),
+    );
+  });
+
+  it("rejects manager writes and unsafe avatar schemes", async () => {
+    const { service } = createService();
+
+    await expect(
+      service.updateAdminChatAvatar(
+        { userId: "manager-a", role: "manager" },
+        "https://cdn.example.com/avatar.png",
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.updateAdminChatAvatar(admin, "javascript:alert(1)"),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("returns default CRM custom field schema when no saved setting exists", async () => {
+    const { service, query } = createService();
+
+    const result = await service.getCrmCustomFields({
+      userId: "manager-a",
+      role: "manager",
+    });
+
+    expect(query.mock.calls[0][1]).toEqual(["crm_custom_fields"]);
+    expect(result.key).toBe("crm_custom_fields");
+    expect(result.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: "students",
+          key: "hollihopId",
+          label: "ID в HolliHop",
+        }),
+        expect.objectContaining({
+          entity: "leads",
+          key: "source",
+          type: "select",
+        }),
+      ]),
+    );
+  });
+
+  it("updates CRM custom field schema only for admins and records audit", async () => {
+    const savedFields: CrmCustomFieldDefinitionDto[] = [
+      {
+        entity: "students",
+        key: "parentName",
+        label: "Имя родителя",
+        type: "text",
+        required: true,
+        hint: "Контакт для связи",
+      },
+      {
+        entity: "leads",
+        key: "preferredDiscipline",
+        label: "Интересующее направление",
+        type: "select",
+        required: false,
+        options: ["Вокал", "Гитара"],
+      },
+    ];
+    const { service, query, audit } = createService([
+      {
+        key: "crm_custom_fields",
+        value: savedFields,
+        updated_at: "2026-06-13T00:00:00.000Z",
+      },
+    ]);
+
+    await expect(
+      service.updateCrmCustomFields(admin, savedFields),
+    ).resolves.toEqual({
+      key: "crm_custom_fields",
+      fields: savedFields,
+      updatedAt: "2026-06-13T00:00:00.000Z",
+    });
+    expect(query.mock.calls[0][1]).toEqual([
+      "crm_custom_fields",
+      JSON.stringify(savedFields),
+      "admin-a",
+    ]);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "settings.crm_custom_fields_updated",
+        entityType: "setting",
+        entityId: "crm_custom_fields",
+        metadata: { fieldCount: 2 },
+      }),
+    );
+  });
+
+  it("rejects non-admin CRM schema writes and duplicate field keys", async () => {
+    const { service } = createService();
+
+    await expect(
+      service.updateCrmCustomFields({ userId: "manager-a", role: "manager" }, [
+        {
+          entity: "students",
+          key: "parentName",
+          label: "Имя родителя",
+          type: "text",
+        },
+      ]),
+    ).rejects.toThrow(ForbiddenException);
+
+    await expect(
+      service.updateCrmCustomFields(admin, [
+        {
+          entity: "students",
+          key: "parentName",
+          label: "Имя родителя",
+          type: "text",
+        },
+        {
+          entity: "students",
+          key: "parentName",
+          label: "Дублирующее поле",
+          type: "text",
+        },
+      ]),
+    ).rejects.toThrow(BadRequestException);
+  });
+});

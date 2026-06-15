@@ -1,53 +1,49 @@
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 
 final hollihopServiceProvider = Provider<HolliHopService>((ref) {
-  return HolliHopService();
+  return HolliHopService(ref.watch(magicApiClientProvider));
 });
 
 class HolliHopService {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: "https://sokol.t8s.ru/Api/V2/",
-    queryParameters: {
-      "authkey": "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n",
-    },
-  ));
+  final MagicApiClient _api;
+
+  const HolliHopService(this._api);
 
   Future<List<String>> getDisciplines() async {
-    try {
-      final response = await _dio.get("GetDisciplines");
-      if (response.statusCode == 200) {
-        return List<String>.from(response.data);
-      }
-    } catch (e) {
-      debugPrint("Error fetching disciplines: $e");
-    }
-    return [];
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/hollihop/disciplines',
+    );
+    return _stringItems(response);
   }
 
   Future<List<String>> getLevels() async {
-    try {
-      final response = await _dio.get("GetLevels");
-      if (response.statusCode == 200) {
-        return List<String>.from(response.data);
-      }
-    } catch (e) {
-      debugPrint("Error fetching levels: $e");
-    }
-    return [];
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/hollihop/levels',
+    );
+    return _stringItems(response);
+  }
+
+  Future<List<String>> getCategories() async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/hollihop/categories',
+    );
+    return _stringItems(response);
   }
 
   Future<List<Map<String, dynamic>>> getLeadStatuses() async {
-    try {
-      final response = await _dio.get("GetLeadStatuses");
-      if (response.statusCode == 200) {
-        final data = response.data as Map<String, dynamic>;
-        return List<Map<String, dynamic>>.from(data['Statuses'] ?? []);
-      }
-    } catch (e) {
-      debugPrint("Error fetching lead statuses: $e");
-    }
-    return [];
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/hollihop/lead-statuses',
+    );
+    final items = response['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map<String, dynamic>>().toList();
+  }
+
+  List<String> _stringItems(Map<String, dynamic> response) {
+    final items = response['items'];
+    if (items is! List) return const <String>[];
+    return items.whereType<String>().toList();
   }
 }

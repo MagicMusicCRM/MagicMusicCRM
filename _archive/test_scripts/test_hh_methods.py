@@ -2,7 +2,7 @@ import json
 import requests
 
 API_URL = "https://sokol.t8s.ru/Api/V2/"
-AUTH_KEY = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n"
+AUTH_KEY = "REDACTED_HOLLIHOP_AUTH_KEY"
 
 def test_endpoint(endpoint, method="GET", params=None):
     if params is None: params = {}
@@ -14,7 +14,7 @@ def test_endpoint(endpoint, method="GET", params=None):
             res = requests.get(url, params=params, timeout=10)
         else:
             res = requests.post(url, params={"authkey": AUTH_KEY}, json=params, timeout=10)
-        
+
         print(f"Status: {res.status_code}")
         if res.status_code == 200:
             data = res.json()

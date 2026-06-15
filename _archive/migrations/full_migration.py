@@ -9,9 +9,9 @@ from pathlib import Path
 
 # --- CONFIGURATION ---
 API_URL = "https://sokol.t8s.ru/Api/V2/"
-AUTH_KEY = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n"
+AUTH_KEY = "REDACTED_HOLLIHOP_AUTH_KEY"
 SUPABASE_URL = 'https://xblpnywnlhfgofskbdxb.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHBueXdubGhmZ29mc2tiZHhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDA5ODcsImV4cCI6MjA4ODcxNjk4N30.qRuC_TQ8rlz68fzi0geqqdbkA7ABRBEyw3GyMkMJJxg'
+SUPABASE_KEY = 'REDACTED_LEGACY_SUPABASE_ANON_KEY'
 
 # --- HOLLIHOP FETCHING ---
 def fetch_hh(endpoint, params=None):
@@ -74,7 +74,7 @@ def get_sb_map(table, key_col="hollihop_id", val_col="id"):
 # --- MAIN MIGRATION ---
 def main():
     print("--- Starting Full Migration ---")
-    
+
     # 1. Offices (Branches)
     offices = fetch_hh("GetOffices").get("Offices", [])
     branches_payload = [{"hollihop_id": o["Id"], "name": o["Name"], "address": o.get("Address", "")} for o in offices]
@@ -117,13 +117,13 @@ def main():
         branch_id = None
         offices_l = l.get("OfficesAndCompanies", [])
         if offices_l: branch_id = branches_map.get(offices_l[0]["Id"])
-        
+
         leads_payload.append({
-            "hollihop_id": l["Id"], 
-            "name": l.get("FirstName", ""), 
+            "hollihop_id": l["Id"],
+            "name": l.get("FirstName", ""),
             "last_name": l.get("LastName", ""),
             "middle_name": l.get("MiddleName", ""),
-            "phone": l.get("Mobile", ""), 
+            "phone": l.get("Mobile", ""),
             "email": l.get("EMail", ""),
             "status": status_map.get(l.get("StatusId"), "new"),
             "branch_id": branch_id,
@@ -145,7 +145,7 @@ def main():
         teacher_id = None
         assignee = e.get("Assignee")
         if assignee: teacher_id = teachers_map.get(assignee["Id"])
-        
+
         groups_payload.append({
             "hollihop_id": e["Id"], "name": e.get("Name", "Unnamed"),
             "branch_id": branch_id, "teacher_id": teacher_id,
@@ -170,12 +170,12 @@ def main():
     # Fetch ClientId -> StudentId map from HolliHop student list to resolve ClientId
     # Actually, GetStudents returned 'ClientId' in the inspect script.
     client_to_student_map = {s["ClientId"]: students_map.get(s["Id"]) for s in students if "ClientId" in s}
-    
+
     payments_payload = []
     for p in all_payments:
         student_uuid = client_to_student_map.get(p.get("ClientId"))
         branch_uuid = branches_map.get(p.get("OfficeOrCompanyId"))
-        
+
         payments_payload.append({
             "hollihop_id": p["Id"],
             "student_id": student_uuid, # Linked to our students table

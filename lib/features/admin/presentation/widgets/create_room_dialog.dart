@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
-class CreateRoomDialog extends StatefulWidget {
-  final Map<String, dynamic>? room; // if null, create mode; otherwise, edit mode
+class CreateRoomDialog extends ConsumerStatefulWidget {
+  final Map<String, dynamic>?
+  room; // if null, create mode; otherwise, edit mode
 
   const CreateRoomDialog({super.key, this.room});
 
   @override
-  State<CreateRoomDialog> createState() => _CreateRoomDialogState();
+  ConsumerState<CreateRoomDialog> createState() => _CreateRoomDialogState();
 }
 
-class _CreateRoomDialogState extends State<CreateRoomDialog> {
+class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   final _nameController = TextEditingController();
   final _capacityController = TextEditingController(text: '1');
   String? _selectedBranch;
@@ -30,9 +33,9 @@ class _CreateRoomDialogState extends State<CreateRoomDialog> {
   }
 
   Future<void> _fetchBranches() async {
-    final res = await Supabase.instance.client.from('branches').select('id, name');
+    final res = await ref.read(magicCrmReferenceCacheProvider).branches();
     setState(() {
-      _branches = List<Map<String, dynamic>>.from(res);
+      _branches = res;
       if (_branches.isNotEmpty && _selectedBranch == null) {
         _selectedBranch = _branches.first['id'].toString();
       }
@@ -51,17 +54,26 @@ class _CreateRoomDialogState extends State<CreateRoomDialog> {
     final name = _nameController.text.trim();
     if (name.isEmpty || _selectedBranch == null) return;
 
-    final data = {
-      'name': name,
-      'capacity': int.tryParse(_capacityController.text.trim()) ?? 1,
-      'branch_id': _selectedBranch,
-    };
+    final capacity = int.tryParse(_capacityController.text.trim()) ?? 1;
+    final crm = ref.read(magicCrmServiceProvider);
 
     if (widget.room == null) {
-      await Supabase.instance.client.from('rooms').insert(data);
+      await crm.createRoom(
+        name: name,
+        branchId: _selectedBranch,
+        capacity: capacity,
+      );
     } else {
-      await Supabase.instance.client.from('rooms').update(data).eq('id', widget.room!['id']);
+      final roomId = widget.room!['id']?.toString();
+      if (roomId == null || roomId.isEmpty) return;
+      await crm.updateRoom(
+        roomId,
+        name: name,
+        branchId: _selectedBranch,
+        capacity: capacity,
+      );
     }
+    ref.read(magicCrmReferenceCacheProvider).invalidate(rooms: true);
 
     if (mounted) Navigator.pop(context, true);
   }
@@ -75,14 +87,26 @@ class _CreateRoomDialogState extends State<CreateRoomDialog> {
         title: const Text('Удалить аудиторию?'),
         content: const Text('Это действие нельзя отменить.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Назад')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить', style: TextStyle(color: AppTheme.danger))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Назад'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Удалить',
+              style: TextStyle(color: AppTheme.danger),
+            ),
+          ),
         ],
       ),
     );
 
     if (confirm == true) {
-      await Supabase.instance.client.from('rooms').delete().eq('id', widget.room!['id']);
+      final roomId = widget.room!['id']?.toString();
+      if (roomId == null || roomId.isEmpty) return;
+      await ref.read(magicCrmServiceProvider).deleteRoom(roomId);
+      ref.read(magicCrmReferenceCacheProvider).invalidate(rooms: true);
       if (mounted) Navigator.pop(context, true);
     }
   }
@@ -90,41 +114,57 @@ class _CreateRoomDialogState extends State<CreateRoomDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.room == null ? 'Новая аудитория' : 'Редактировать аудиторию'),
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      content: _loading ? const CircularProgressIndicator(color: AppTheme.primaryPurple) : Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Название'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _capacityController,
-            decoration: const InputDecoration(labelText: 'Вместимость (чел.)'),
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedBranch,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Филиал'),
-            items: _branches.map((b) => DropdownMenuItem(
-              value: b['id'].toString(),
-              child: Text(b['name']),
-            )).toList(),
-            onChanged: (v) => setState(() => _selectedBranch = v),
-          ),
-        ],
+      title: Text(
+        widget.room == null ? 'Новая аудитория' : 'Редактировать аудиторию',
       ),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      content: _loading
+          ? const CircularProgressIndicator(color: AppTheme.primaryPurple)
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(labelText: 'Название'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _capacityController,
+                  decoration: const InputDecoration(
+                    labelText: 'Вместимость (чел.)',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedBranch,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Филиал'),
+                  items: _branches
+                      .map(
+                        (b) => DropdownMenuItem(
+                          value: b['id'].toString(),
+                          child: Text(b['name']),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => _selectedBranch = v),
+                ),
+              ],
+            ),
       actions: [
         if (widget.room != null)
           TextButton(
             onPressed: _delete,
-            child: const Text('Удалить', style: TextStyle(color: AppTheme.danger)),
+            child: const Text(
+              'Удалить',
+              style: TextStyle(color: AppTheme.danger),
+            ),
           ),
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
         FilledButton(onPressed: _save, child: const Text('Сохранить')),
       ],
     );

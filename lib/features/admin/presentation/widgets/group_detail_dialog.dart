@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 
-class GroupDetailDialog extends StatefulWidget {
+class GroupDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> group;
-  
+
   const GroupDetailDialog({super.key, required this.group});
 
   static Future<bool?> show(BuildContext context, Map<String, dynamic> group) {
@@ -16,13 +17,13 @@ class GroupDetailDialog extends StatefulWidget {
   }
 
   @override
-  State<GroupDetailDialog> createState() => _GroupDetailDialogState();
+  ConsumerState<GroupDetailDialog> createState() => _GroupDetailDialogState();
 }
 
-class _GroupDetailDialogState extends State<GroupDetailDialog> {
-  final _supabase = Supabase.instance.client;
+class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
   bool _loading = true;
   bool _saving = false;
+  bool _changed = false;
   List<Map<String, dynamic>> _groupStudents = [];
   List<Map<String, dynamic>> _allStudents = [];
 
@@ -35,23 +36,18 @@ class _GroupDetailDialogState extends State<GroupDetailDialog> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      final groupId = widget.group['id'];
-      
-      // 1. Load group students
-      final gsRes = await _supabase
-          .from('group_students')
-          .select('student_id, students(id, first_name, last_name, profiles(first_name, last_name))')
-          .eq('group_id', groupId);
-      
-      _groupStudents = List<Map<String, dynamic>>.from(gsRes);
+      final crm = ref.read(magicCrmServiceProvider);
+      final results = await Future.wait([
+        crm.listGroupStudents(widget.group['id'].toString(), limit: 100),
+        crm.listStudents(limit: 100),
+      ]);
 
-      // 2. Load all students for the picker
-      final sRes = await _supabase
-          .from('students')
-          .select('id, first_name, last_name, profiles(first_name, last_name)');
-      _allStudents = List<Map<String, dynamic>>.from(sRes);
-
-      setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() {
+        _groupStudents = results[0];
+        _allStudents = results[1];
+        _loading = false;
+      });
     } catch (e) {
       debugPrint('Error loading group data: $e');
       if (mounted) setState(() => _loading = false);
@@ -60,27 +56,36 @@ class _GroupDetailDialogState extends State<GroupDetailDialog> {
 
   Future<void> _addStudent() async {
     final selectedStudent = await _showStudentPicker();
+    if (selectedStudent == null) return;
 
-    if (selectedStudent != null) {
-      final selectedStudentId = selectedStudent.id;
-      // Check if already in group
-      if (_groupStudents.any((s) => s['student_id'] == selectedStudentId)) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ученик уже в группе')));
-        return;
+    final selectedStudentId = selectedStudent.id;
+    if (_groupStudents.any((student) => student['id'] == selectedStudentId)) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Ученик уже в группе')));
       }
+      return;
+    }
 
-      setState(() => _saving = true);
-      try {
-        await _supabase.from('group_students').insert({
-          'group_id': widget.group['id'],
-          'student_id': selectedStudentId,
-        });
-        await _loadData();
-      } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
-      } finally {
-        if (mounted) setState(() => _saving = false);
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .addGroupStudent(
+            groupId: widget.group['id'].toString(),
+            studentId: selectedStudentId,
+          );
+      _changed = true;
+      await _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
       }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -88,28 +93,46 @@ class _GroupDetailDialogState extends State<GroupDetailDialog> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Удалить из группы?'),
-        content: Text('Вы уверены, что хотите удалить ученика из этой группы?'),
+        title: const Text('Удалить из группы?'),
+        content: const Text(
+          'Вы уверены, что хотите удалить ученика из этой группы?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Отмена')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Удалить', style: TextStyle(color: AppTheme.danger))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Удалить',
+              style: TextStyle(color: AppTheme.danger),
+            ),
+          ),
         ],
       ),
     );
 
-    if (confirm == true) {
-      setState(() => _saving = true);
-      try {
-        await _supabase.from('group_students')
-            .delete()
-            .eq('group_id', widget.group['id'])
-            .eq('student_id', studentId);
-        await _loadData();
-      } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
-      } finally {
-        if (mounted) setState(() => _saving = false);
+    if (confirm != true) return;
+
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .removeGroupStudent(
+            groupId: widget.group['id'].toString(),
+            studentId: studentId,
+          );
+      _changed = true;
+      await _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
       }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -120,7 +143,12 @@ class _GroupDetailDialogState extends State<GroupDetailDialog> {
     return AlertDialog(
       title: Text('Группа: $groupName'),
       content: _loading
-          ? SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)))
+          ? SizedBox(
+              height: 200,
+              child: Center(
+                child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+              ),
+            )
           : SizedBox(
               width: double.maxFinite,
               child: Scrollbar(
@@ -129,43 +157,70 @@ class _GroupDetailDialogState extends State<GroupDetailDialog> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Состав группы:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      SizedBox(height: 8),
+                      Text(
+                        'Состав группы:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       if (_groupStudents.isEmpty)
                         Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Center(child: Text('Нет учеников', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              'Нет учеников',
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
                         )
                       else
-                        ..._groupStudents.map((item) {
-                          final s = item['students'];
-                          final sfName = s?['first_name']?.toString() ?? '';
-                          final slName = s?['last_name']?.toString() ?? '';
-                          final p = s?['profiles'] as Map<String, dynamic>?;
-                          var name = '$sfName $slName'.trim();
-                          if (name.isEmpty && p != null) {
-                            name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-                          }
-                          final displayName = name.isEmpty ? 'Без имени' : name;
+                        ..._groupStudents.map((student) {
+                          final displayName = _studentName(student);
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: CircleAvatar(
                               radius: 14,
-                              backgroundColor: AppTheme.primaryPurple.withAlpha(50),
-                              child: Text(displayName.isNotEmpty ? displayName[0] : '?', style: const TextStyle(fontSize: 10, color: AppTheme.primaryPurple)),
+                              backgroundColor: AppTheme.primaryPurple.withAlpha(
+                                50,
+                              ),
+                              child: Text(
+                                displayName.isNotEmpty ? displayName[0] : '?',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: AppTheme.primaryPurple,
+                                ),
+                              ),
                             ),
-                            title: Text(displayName, style: const TextStyle(fontSize: 13)),
+                            title: Text(
+                              displayName,
+                              style: const TextStyle(fontSize: 13),
+                            ),
                             trailing: IconButton(
-                              icon: Icon(Icons.remove_circle_outline, color: AppTheme.danger, size: 20),
-                              onPressed: () => _removeStudent(s['id']),
+                              icon: const Icon(
+                                Icons.remove_circle_outline,
+                                color: AppTheme.danger,
+                                size: 20,
+                              ),
+                              onPressed: _saving
+                                  ? null
+                                  : () => _removeStudent(
+                                      student['id'].toString(),
+                                    ),
                             ),
                           );
                         }),
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
                       OutlinedButton.icon(
                         onPressed: _saving ? null : _addStudent,
-                        icon: Icon(Icons.person_add_rounded, size: 18),
-                        label: Text('Добавить ученика'),
+                        icon: const Icon(Icons.person_add_rounded, size: 18),
+                        label: const Text('Добавить ученика'),
                       ),
                     ],
                   ),
@@ -174,24 +229,32 @@ class _GroupDetailDialogState extends State<GroupDetailDialog> {
             ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('Закрыть', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          onPressed: () => Navigator.pop(context, _changed),
+          child: Text(
+            'Закрыть',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         ),
       ],
     );
   }
 
   Future<SearchableSelectItem?> _showStudentPicker() async {
-    final items = _allStudents.map((s) {
-      final sfName = s['first_name']?.toString() ?? '';
-      final slName = s['last_name']?.toString() ?? '';
-      final p = s['profiles'] as Map<String, dynamic>?;
-      var name = '$sfName $slName'.trim();
-      if (name.isEmpty && p != null) {
-        name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-      }
-      return SearchableSelectItem(id: s['id'].toString(), label: name.isEmpty ? 'Без имени' : name);
-    }).toList();
+    final existingIds = _groupStudents
+        .map((student) => student['id']?.toString())
+        .whereType<String>()
+        .toSet();
+    final items = _allStudents
+        .where((student) => !existingIds.contains(student['id']?.toString()))
+        .map(
+          (student) => SearchableSelectItem(
+            id: student['id'].toString(),
+            label: _studentName(student),
+          ),
+        )
+        .toList();
 
     SearchableSelectItem? selected;
     await showModalBottomSheet(
@@ -206,5 +269,13 @@ class _GroupDetailDialogState extends State<GroupDetailDialog> {
       ),
     );
     return selected;
+  }
+
+  String _studentName(Map<String, dynamic> student) {
+    final first = student['first_name']?.toString() ?? '';
+    final last = student['last_name']?.toString() ?? '';
+    final email = student['email']?.toString() ?? '';
+    final name = '$first $last'.trim();
+    return name.isEmpty ? (email.isEmpty ? 'Без имени' : email) : name;
   }
 }

@@ -8,9 +8,9 @@ import socket
 
 # --- CONFIGURATION ---
 API_URL = "https://sokol.t8s.ru/Api/V2/"
-AUTH_KEY = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n"
+AUTH_KEY = "REDACTED_HOLLIHOP_AUTH_KEY"
 SUPABASE_URL = 'https://xblpnywnlhfgofskbdxb.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHBueXdubGhmZ29mc2tiZHhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDA5ODcsImV4cCI6MjA4ODcxNjk4N30.qRuC_TQ8rlz68fzi0geqqdbkA7ABRBEyw3GyMkMJJxg'
+SUPABASE_KEY = 'REDACTED_LEGACY_SUPABASE_ANON_KEY'
 
 # Set global timeout for urllib
 socket.setdefaulttimeout(30)
@@ -58,7 +58,7 @@ def get_sb_map(table, key_col="hollihop_id", val_col="id"):
     limit = 1000
     offset = 0
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
-    
+
     while True:
         url = f"{SUPABASE_URL}/rest/v1/{table}?select={key_col},{val_col}&limit={limit}&offset={offset}"
         try:
@@ -78,19 +78,19 @@ def get_sb_map(table, key_col="hollihop_id", val_col="id"):
         except Exception as e:
             print(f"    Exception: {e}", flush=True)
             break
-            
+
     print(f"  [SB] Total {len(all_data)} items for {table}", flush=True)
     return all_data
 
 def main():
     print("--- Starting Migration V2 (Lessons & Memberships) ---", flush=True)
-    
+
     # 1. Maps for resolution
     students_map = get_sb_map("students")
     teachers_map = get_sb_map("teachers")
     branches_map = get_sb_map("branches")
     groups_map = get_sb_map("groups")
-    
+
     # We also need ClientId to UUID map for students because memberships use ClientId
     print("Fetching ClientIds from HH...", flush=True)
     all_students = []
@@ -117,7 +117,7 @@ def main():
         sid = client_id_to_uuid.get(m.get("ClientId"))
         if gid and sid:
             memberships_payload.append({"group_id": gid, "student_id": sid})
-    
+
     if memberships_payload:
         print(f"Upserting {len(memberships_payload)} memberships...", flush=True)
         url = f"{SUPABASE_URL}/rest/v1/group_students"
@@ -137,34 +137,34 @@ def main():
     print("Fetching Lessons (Schedule) in chunks...", flush=True)
     start_date = datetime(2023, 1, 1)
     end_date = datetime(2025, 12, 31)
-    
+
     current_start = start_date
     total_lessons = 0
-    
+
     while current_start < end_date:
         next_month = (current_start.replace(day=28) + timedelta(days=4)).replace(day=1)
         chunk_end = next_month - timedelta(days=1)
         if chunk_end > end_date: chunk_end = end_date
-        
+
         ds = current_start.strftime("%Y-%m-%d")
         de = chunk_end.strftime("%Y-%m-%d")
-        
+
         print(f"  Processing chunk {ds} to {de}...", flush=True)
         schedule_res = fetch_hh("GetSchedule", {"dateFrom": ds, "dateTo": de, "take": 5000})
         schedule = (schedule_res or {}).get("Schedule", [])
         print(f"    Found {len(schedule)} items", flush=True)
-        
+
         lessons_payload = []
         for s in schedule:
             group_uuid = groups_map.get(s.get("EdUnitId"))
             teacher_uuid = teachers_map.get(s.get("TeacherId"))
             branch_uuid = branches_map.get(s.get("OfficeOrCompanyId"))
-            
+
             hh_status = s.get("Status")
             status = "planned"
             if hh_status == "Пройдено": status = "completed"
             elif hh_status == "Отменено": status = "cancelled"
-            
+
             lessons_payload.append({
                 "hollihop_id": s["Id"],
                 "group_id": group_uuid,
@@ -172,13 +172,13 @@ def main():
                 "branch_id": branch_uuid,
                 "scheduled_at": s.get("ScheduledAt"),
                 "status": status,
-                "duration_minutes": 60 
+                "duration_minutes": 60
             })
-        
+
         if lessons_payload:
             upsert_sb("lessons", lessons_payload)
             total_lessons += len(lessons_payload)
-            
+
         current_start = next_month
         time.sleep(0.1)
 

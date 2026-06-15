@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 
 class ManageStatusesDialog extends ConsumerStatefulWidget {
@@ -54,20 +57,22 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
     );
     if (result != null) {
       await ref
-          .read(supaLeadServiceProvider)
-          .addStatus(
+          .read(magicCrmServiceProvider)
+          .createLeadStatus(
             key: result['key']!,
             label: result['label']!,
             color: result['color']!,
             sortOrder: _statuses.length,
           );
+      ref.read(magicCrmReferenceCacheProvider).invalidate(leadStatuses: true);
       ref.invalidate(leadStatusesProvider);
       _loadStatuses();
     }
   }
 
   Future<void> _deleteStatus(String id) async {
-    await ref.read(supaLeadServiceProvider).deleteStatus(id);
+    await ref.read(magicCrmServiceProvider).deleteLeadStatus(id);
+    ref.read(magicCrmReferenceCacheProvider).invalidate(leadStatuses: true);
     ref.invalidate(leadStatusesProvider);
     _loadStatuses();
   }
@@ -90,8 +95,9 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
         width: 400,
         height: 400,
         child: _loading
-            ? const Center(
-                child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+            ? const Padding(
+                padding: EdgeInsets.all(4),
+                child: ListSkeleton(count: 5),
               )
             : ListView.builder(
                 itemCount: _statuses.length,
@@ -184,7 +190,7 @@ class _StatusEditDialogState extends State<_StatusEditDialog> {
           TextField(
             controller: _keyCtrl,
             decoration: const InputDecoration(
-              labelText: 'Ключ (напр. negotiation, на англ., без пробелов)',
+              labelText: 'Ключ (латиницей, без пробелов)',
             ),
           ),
           const SizedBox(height: 16),

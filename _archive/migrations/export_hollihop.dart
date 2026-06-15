@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const String apiUrl = "https://sokol.t8s.ru/Api/V2/";
-const String authKey = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n";
+const String authKey = "REDACTED_HOLLIHOP_AUTH_KEY";
 
 final String backupDir = "hollihop_backup_${DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first}";
 
@@ -11,11 +11,11 @@ Future<dynamic> _fetch(String endpoint, bool useV1, [Map<String, String>? params
     'authkey': authKey,
     ...?params,
   };
-  
+
   final base = useV1 ? apiUrl.replaceAll('/V2/', '/V1/') : apiUrl;
   final uri = Uri.parse("$base$endpoint").replace(queryParameters: queryParams);
   print("Fetching from $endpoint ${useV1 ? '(V1)' : '(V2)'}...");
-  
+
   final client = HttpClient();
   try {
     final request = await client.getUrl(uri);
@@ -49,7 +49,7 @@ Future<void> saveJson(String filename, dynamic data) async {
 
 void main() async {
   print("Starting HolliHop CRM Export to $backupDir...");
-  
+
   final take = "200";
 
   // Core (V2)

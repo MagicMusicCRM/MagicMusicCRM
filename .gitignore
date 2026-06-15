@@ -32,6 +32,18 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/server/node_modules/
+/server/dist/
+/server/coverage/
+/server/.env
+/server/exports/
+/server/storage/
+/infra/staging/.env
+/infra/staging/.backup.env
+/infra/staging/.monitor.env
+/exports/
+/security-scans/
+/.supergoal/
 
 # Symbolication related
 app.*.symbols

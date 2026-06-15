@@ -3,13 +3,46 @@ import 'package:flutter/material.dart';
 import 'package:crop_image/crop_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:ui' as ui;
+import 'package:image/image.dart' as img;
 
 class AvatarCropperDialog extends StatefulWidget {
   final Uint8List imageBytes;
 
   const AvatarCropperDialog({super.key, required this.imageBytes});
 
-  /// Opens file picker, checks size (1MB max), crops and returns cropped bytes.
+  static const int maxInputBytes = 25 * 1024 * 1024;
+  static const int maxAvatarEdge = 512;
+  static const int targetOutputBytes = 900 * 1024;
+
+  static Uint8List compressAvatarBytes(Uint8List bytes) {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return bytes;
+
+    final largestEdge = decoded.width > decoded.height
+        ? decoded.width
+        : decoded.height;
+    final normalized = largestEdge > maxAvatarEdge
+        ? img.copyResize(
+            decoded,
+            width: decoded.width >= decoded.height ? maxAvatarEdge : null,
+            height: decoded.height > decoded.width ? maxAvatarEdge : null,
+            interpolation: img.Interpolation.average,
+          )
+        : decoded;
+
+    for (final quality in const [88, 82, 76, 70]) {
+      final encoded = Uint8List.fromList(
+        img.encodeJpg(normalized, quality: quality),
+      );
+      if (encoded.length <= targetOutputBytes || quality == 70) {
+        return encoded;
+      }
+    }
+
+    return Uint8List.fromList(img.encodeJpg(normalized, quality: 70));
+  }
+
+  /// Opens file picker, crops and returns compressed avatar bytes.
   static Future<Uint8List?> pickAndCropAvatar(BuildContext context) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -21,11 +54,11 @@ class AvatarCropperDialog extends StatefulWidget {
     final file = result.files.first;
     if (file.bytes == null) return null;
 
-    if (file.size > 1024 * 1024) {
+    if (file.size > maxInputBytes) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Файл слишком большой. Максимальный размер - 1 МБ.'),
+            content: Text('Файл слишком большой. Максимальный размер - 25 МБ.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -34,7 +67,7 @@ class AvatarCropperDialog extends StatefulWidget {
     }
 
     final imageBytes = file.bytes!;
-    
+
     if (!context.mounted) return null;
 
     return showDialog<Uint8List>(
@@ -71,9 +104,14 @@ class _AvatarCropperDialogState extends State<AvatarCropperDialog> {
     setState(() => _isProcessing = true);
     try {
       final ui.Image bitmap = await _controller.croppedBitmap();
-      final ByteData? data = await bitmap.toByteData(format: ui.ImageByteFormat.png);
+      final ByteData? data = await bitmap.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       if (data != null) {
-        if (mounted) Navigator.pop(context, data.buffer.asUint8List());
+        final compressed = AvatarCropperDialog.compressAvatarBytes(
+          data.buffer.asUint8List(),
+        );
+        if (mounted) Navigator.pop(context, compressed);
       } else {
         if (mounted) Navigator.pop(context, null);
       }
@@ -105,9 +143,13 @@ class _AvatarCropperDialogState extends State<AvatarCropperDialog> {
         ),
         ElevatedButton(
           onPressed: _isProcessing ? null : _crop,
-          child: _isProcessing 
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Text('Сохранить'),
+          child: _isProcessing
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Сохранить'),
         ),
       ],
     );

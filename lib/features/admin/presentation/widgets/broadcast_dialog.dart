@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 
-class BroadcastDialog extends StatefulWidget {
+class BroadcastDialog extends ConsumerStatefulWidget {
   const BroadcastDialog({super.key});
 
   static Future<void> show(BuildContext context) {
@@ -12,69 +13,54 @@ class BroadcastDialog extends StatefulWidget {
   }
 
   @override
-  State<BroadcastDialog> createState() => _BroadcastDialogState();
+  ConsumerState<BroadcastDialog> createState() => _BroadcastDialogState();
 }
 
-class _BroadcastDialogState extends State<BroadcastDialog> {
+class _BroadcastDialogState extends ConsumerState<BroadcastDialog> {
   final _messageController = TextEditingController();
   bool _sending = false;
-  String _target = 'all'; // 'all', 'students', 'teachers'
+  String _target = 'all';
 
   Future<void> _send() async {
-    if (_messageController.text.trim().isEmpty) return;
+    final body = _messageController.text.trim();
+    if (body.isEmpty) return;
 
     setState(() => _sending = true);
     try {
-      final supabase = Supabase.instance.client;
-      final currentUser = supabase.auth.currentUser;
-      if (currentUser == null) return;
+      final result = await ref
+          .read(magicNotificationsServiceProvider)
+          .adminSend(
+            target: _target == 'all' ? 'all' : 'role',
+            role: switch (_target) {
+              'students' => 'client',
+              'teachers' => 'teacher',
+              _ => null,
+            },
+            title: 'Сообщение от школы',
+            body: body,
+            data: const {'route': 'notifications'},
+          );
 
-      // In a real app, this might call an Edge Function for efficiency.
-      // Here we'll do it by inserting messages.
-      
-      List<String> receiverIds = [];
-      
-      if (_target == 'all' || _target == 'students') {
-        final students = await supabase.from('students').select('profile_id');
-        receiverIds.addAll(students.map((s) => s['profile_id'] as String));
-      }
-      
-      if (_target == 'all' || _target == 'teachers') {
-        final teachers = await supabase.from('teachers').select('profile_id');
-        receiverIds.addAll(teachers.map((t) => t['profile_id'] as String));
-      }
-
-      // Remove duplicates and self
-      receiverIds = receiverIds.toSet().toList();
-      receiverIds.remove(currentUser.id);
-
-      final messages = receiverIds.map((id) => {
-        'sender_id': currentUser.id,
-        'receiver_id': id,
-        'content': _messageController.text.trim(),
-        'is_read': false,
-      }).toList();
-
-      if (messages.isNotEmpty) {
-        // Supabase allows bulk insert
-        await supabase.from('messages').insert(messages);
-      }
-
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Рассылка отправлена (${messages.length} получателей)')),
-        );
-      }
+      if (!mounted) return;
+      Navigator.pop(context);
+      final count = result['recipientCount'] ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Рассылка отправлена: $count получателей')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка при рассылке: $e')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Ошибка при рассылке: $e')));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
   }
 
   @override
@@ -86,17 +72,31 @@ class _BroadcastDialogState extends State<BroadcastDialog> {
         children: [
           SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: 'all', label: Text('Всем'), icon: Icon(Icons.people_alt_rounded)),
-              ButtonSegment(value: 'students', label: Text('Ученикам'), icon: Icon(Icons.school_rounded)),
-              ButtonSegment(value: 'teachers', label: Text('Преп.'), icon: Icon(Icons.person_rounded)),
+              ButtonSegment(
+                value: 'all',
+                label: Text('Всем'),
+                icon: Icon(Icons.people_alt_rounded),
+              ),
+              ButtonSegment(
+                value: 'students',
+                label: Text('Ученикам'),
+                icon: Icon(Icons.school_rounded),
+              ),
+              ButtonSegment(
+                value: 'teachers',
+                label: Text('Преподавателям'),
+                icon: Icon(Icons.person_rounded),
+              ),
             ],
             selected: {_target},
-            onSelectionChanged: (set) => setState(() => _target = set.first),
+            onSelectionChanged: (value) =>
+                setState(() => _target = value.first),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _messageController,
             maxLines: 5,
+            maxLength: 1000,
             decoration: const InputDecoration(
               hintText: 'Введите текст сообщения...',
               border: OutlineInputBorder(),
@@ -106,14 +106,21 @@ class _BroadcastDialogState extends State<BroadcastDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _sending ? null : () => Navigator.pop(context),
           child: const Text('Отмена'),
         ),
         FilledButton.icon(
           onPressed: _sending ? null : _send,
-          icon: _sending 
-            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : const Icon(Icons.send_rounded),
+          icon: _sending
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.send_rounded),
           label: const Text('Отправить'),
         ),
       ],

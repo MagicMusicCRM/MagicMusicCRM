@@ -6,7 +6,7 @@ from datetime import datetime
 import time
 
 API_URL = "https://sokol.t8s.ru/Api/V2/"
-AUTH_KEY = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n"
+AUTH_KEY = "REDACTED_HOLLIHOP_AUTH_KEY"
 
 # Create backup directory
 backup_dir = "hollihop_backup_" + datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -16,10 +16,10 @@ def fetch_data(endpoint, params=None):
     if params is None:
         params = {}
     params['authkey'] = AUTH_KEY
-    
+
     query_string = urllib.parse.urlencode(params)
     url = f"{API_URL}{endpoint}?{query_string}"
-    
+
     print(f"Fetching from {endpoint}...")
     try:
         req = urllib.request.Request(url, method="GET")
@@ -38,59 +38,59 @@ def save_json(filename, data):
 
 def main():
     print(f"Starting HolliHop CRM Export to {backup_dir}...")
-    
+
     # 1. Export Locations
     locations = fetch_data("GetLocations")
     if locations:
         save_json("locations.json", locations)
-        
+
     # 2. Export Offices
     offices = fetch_data("GetOffices")
     if offices:
         save_json("offices.json", offices)
-        
+
     # 3. Export Lead Statuses
     statuses = fetch_data("GetLeadStatuses")
     if statuses:
         save_json("lead_statuses.json", statuses)
-        
+
     # 4. Export Teachers
     # Teachers don't seem to be paginated by default if there are few, but let's just fetch all.
     teachers = fetch_data("GetTeachers")
     if teachers:
         save_json("teachers.json", teachers)
-        
+
     # 5. Export EdUnits (Classes/Groups)
     edunits = fetch_data("GetEdUnits")
     if edunits:
         save_json("ed_units.json", edunits)
-        
+
     # 6. Export Leads (with pagination)
     all_leads = []
     skip = 0
     take = 200
-    
+
     print("Fetching leads (this might take a while)...")
     while True:
         leads_response = fetch_data("GetLeads", {"skip": skip, "take": take})
         if not leads_response or "Leads" not in leads_response:
             break
-            
+
         leads_chunk = leads_response["Leads"]
         all_leads.extend(leads_chunk)
-        
+
         print(f"  Fetched {len(leads_chunk)} leads (Total: {len(all_leads)})...")
-        
+
         if len(leads_chunk) < take:
             break
-            
+
         skip += take
         time.sleep(0.1) # Be nice to the API
-        
+
     if all_leads:
         save_json("leads.json", {"Leads": all_leads})
         print(f"Successfully exported {len(all_leads)} leads.")
-        
+
     # 7. Export Students
     all_students = []
     skip = 0
@@ -99,16 +99,16 @@ def main():
         students_response = fetch_data("GetStudents", {"skip": skip, "take": take})
         if not students_response or "Students" not in students_response:
             break
-            
+
         chunk = students_response["Students"]
         all_students.extend(chunk)
         print(f"  Fetched {len(chunk)} students (Total: {len(all_students)})...")
-        
+
         if len(chunk) < take:
             break
         skip += take
         time.sleep(0.1)
-        
+
     if all_students:
         save_json("students.json", {"Students": all_students})
         print(f"Successfully exported {len(all_students)} students.")
@@ -121,16 +121,16 @@ def main():
         eus_response = fetch_data("GetEdUnitStudents", {"skip": skip, "take": take})
         if not eus_response or "EdUnitStudents" not in eus_response:
             break
-            
+
         chunk = eus_response["EdUnitStudents"]
         all_edunit_students.extend(chunk)
         print(f"  Fetched {len(chunk)} EdUnitStudents (Total: {len(all_edunit_students)})...")
-        
+
         if len(chunk) < take:
             break
         skip += take
         time.sleep(0.1)
-        
+
     if all_edunit_students:
         save_json("ed_unit_students.json", {"EdUnitStudents": all_edunit_students})
         print(f"Successfully exported {len(all_edunit_students)} EdUnitStudents.")
@@ -155,7 +155,7 @@ def main():
 
     # 10. Export Student Logs (History/Comments)
     print("Fetching student logs...")
-    logs_response = fetch_data("GetStudentLogs", {"take": 2000}) 
+    logs_response = fetch_data("GetStudentLogs", {"take": 2000})
     if logs_response:
         save_json("student_logs.json", logs_response)
         print("Successfully exported student logs.")

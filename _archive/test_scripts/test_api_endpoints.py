@@ -3,7 +3,7 @@ import urllib.request
 import urllib.parse
 
 API_URL = "https://sokol.t8s.ru/Api/V2/"
-AUTH_KEY = "L/GNdp2hnzeCkipgzZn64mjlazEnwByibYJoUGle7oLx2oNQtq0l6DVoi39m6G2n"
+AUTH_KEY = "REDACTED_HOLLIHOP_AUTH_KEY"
 
 endpoints = [
     "GetPayments",
@@ -21,7 +21,7 @@ def test_endpoint(endpoint):
     params = {'authkey': AUTH_KEY}
     query_string = urllib.parse.urlencode(params)
     url = f"{API_URL}{endpoint}?{query_string}"
-    
+
     print(f"Testing {endpoint}...", end=" ")
     try:
         req = urllib.request.Request(url, method="GET")

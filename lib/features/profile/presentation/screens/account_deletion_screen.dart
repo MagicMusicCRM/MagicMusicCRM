@@ -29,7 +29,7 @@ class _AccountDeletionScreenState extends ConsumerState<AccountDeletionScreen> {
     setState(() => _isSubmitting = true);
     try {
       await ref
-          .read(supaReleaseGateServiceProvider)
+          .read(releaseGateServiceProvider)
           .requestAccountDeletion(reason: _reasonController.text.trim());
       ref.invalidate(releaseGateStatusProvider);
       ref.invalidate(pendingDeletionRequestProvider);

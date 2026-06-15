@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/avatar_cropper_dialog.dart';
-import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
+import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
@@ -22,8 +22,6 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  final _supabase = Supabase.instance.client;
-
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -34,6 +32,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _hasChanges = false;
 
   String? _role;
+  String _userId = '';
 
   // Initial data for change comparison
   String _ogFirstName = '';
@@ -85,21 +84,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
     try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) return;
+      final data = await ref.read(magicAuthServiceProvider).currentProfile();
 
-      final data = await _supabase
-          .from('profiles')
-          .select()
-          .eq('id', user.id)
-          .single();
-
-      _ogFirstName = data['first_name'] ?? '';
-      _ogLastName = data['last_name'] ?? '';
-      _ogPhone = data['phone'] ?? '';
-      _ogDob = data['dob'] ?? '';
-      _ogAvatarUrl = data['avatar_url']?.toString();
-      _role = data['role']?.toString();
+      _userId = data.userId;
+      _ogFirstName = data.firstName ?? '';
+      _ogLastName = data.lastName ?? '';
+      _ogPhone = data.phone ?? '';
+      _ogDob = data.dob ?? '';
+      _ogAvatarUrl = data.avatarFileId;
+      _role = data.role;
 
       _firstNameController.text = _ogFirstName;
       _lastNameController.text = _ogLastName;
@@ -126,6 +119,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  String _roleLabel(String? role) {
+    return switch (role) {
+      'system_admin' => 'Администратор системы',
+      'admin' => 'Администратор',
+      'manager' => 'Управляющий',
+      'teacher' => 'Преподаватель',
+      'client' => 'Клиент',
+      _ => 'Клиент',
+    };
+  }
+
   Future<void> _saveChanges() async {
     if (!_hasChanges) return;
 
@@ -139,9 +143,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     setState(() => _isSaving = true);
     try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) return;
-
       String? updatedAvatarUrl = _ogAvatarUrl;
 
       // 1. Upload new avatar if picked
@@ -149,7 +150,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         updatedAvatarUrl = await ChatAttachmentService.uploadAvatar(
           bytes: _newAvatarBytes!,
           fileName:
-              'profile_${user.id}_${DateTime.now().millisecondsSinceEpoch}.png',
+              'profile_${_userId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
         );
         // Clean up old avatar
         if (_ogAvatarUrl != null) {
@@ -158,18 +159,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
 
       // 2. Update DB
-      await _supabase
-          .from('profiles')
-          .update({
-            'first_name': _firstNameController.text.trim(),
-            'last_name': _lastNameController.text.trim(),
-            'phone': _phoneController.text.trim(),
-            'dob': _dobController.text.trim().isEmpty
+      await ref
+          .read(magicAuthServiceProvider)
+          .updateCurrentProfile(
+            firstName: _firstNameController.text.trim(),
+            lastName: _lastNameController.text.trim(),
+            phone: _phoneController.text.trim(),
+            dob: _dobController.text.trim().isEmpty
                 ? null
                 : _dobController.text.trim(),
-            if (_newAvatarBytes != null) 'avatar_url': updatedAvatarUrl,
-          })
-          .eq('id', user.id);
+            avatarFileId: updatedAvatarUrl,
+          );
 
       // 3. Update local OG vars
       _ogFirstName = _firstNameController.text.trim();
@@ -182,9 +182,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _checkForChanges();
 
       // 4. Invalidate global caches
-      ref.invalidate(currentProfileProvider);
-      ref.invalidate(allProfilesProvider);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -231,7 +228,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const _ProfileSkeleton();
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -311,7 +308,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ? '$_ogFirstName $_ogLastName'
                             : 'Имя',
                         avatarUrl: _ogAvatarUrl,
-                        uniqueId: _supabase.auth.currentUser?.id ?? '',
+                        uniqueId: _userId,
                         radius: 60,
                       ),
                     Container(
@@ -398,7 +395,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                   _buildTelegramTextField(
                     controller: TextEditingController(
-                      text: _role == 'client' ? 'Ученик' : _role,
+                      text: _roleLabel(_role),
                     ),
                     label: 'Роль',
                     textColor: secondaryTextColor,
@@ -451,7 +448,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ListTile(
                     leading: const Icon(Icons.login_outlined),
                     title: const Text('Способы входа'),
-                    subtitle: const Text('Пароль и привязка Google'),
+                    subtitle: const Text('Пароль и код из письма'),
                     trailing: const Icon(
                       Icons.chevron_right,
                       color: Colors.grey,
@@ -530,6 +527,95 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           disabledBorder: InputBorder.none,
           filled: false,
           contentPadding: EdgeInsets.zero,
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileSkeleton extends StatelessWidget {
+  const _ProfileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = isDark
+        ? TelegramColors.darkBg
+        : TelegramColors.lightBg;
+    final surfaceColor = isDark
+        ? TelegramColors.darkSurface
+        : TelegramColors.lightSurface;
+
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      appBar: AppBar(
+        title: const Text('Изменить профиль', style: TextStyle(fontSize: 18)),
+        backgroundColor: surfaceColor,
+        elevation: 0,
+      ),
+      body: ResponsiveConstraint(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          children: [
+            const Center(
+              child: Skeleton(width: 120, height: 120, borderRadius: 60),
+            ),
+            const SizedBox(height: 20),
+            const Center(child: Skeleton(width: 140, height: 18)),
+            const SizedBox(height: 32),
+            _SkeletonSection(surfaceColor: surfaceColor, rows: 2),
+            const SizedBox(height: 24),
+            _SkeletonSection(surfaceColor: surfaceColor, rows: 2),
+            const SizedBox(height: 24),
+            _SkeletonSection(surfaceColor: surfaceColor, rows: 1),
+            const SizedBox(height: 48),
+            _SkeletonSection(surfaceColor: surfaceColor, rows: 3),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonSection extends StatelessWidget {
+  final Color surfaceColor;
+  final int rows;
+
+  const _SkeletonSection({
+    required this.surfaceColor,
+    required this.rows,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Column(
+        children: List.generate(
+          rows,
+          (index) => Padding(
+            padding: EdgeInsets.only(bottom: index == rows - 1 ? 0 : 16),
+            child: const Row(
+              children: [
+                Skeleton(width: 28, height: 28, borderRadius: 14),
+                SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Skeleton(width: 130, height: 12),
+                      SizedBox(height: 8),
+                      Skeleton(height: 16),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

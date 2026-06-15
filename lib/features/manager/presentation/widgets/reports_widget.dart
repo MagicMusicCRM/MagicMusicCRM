@@ -1,30 +1,47 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
 
-class ReportsWidget extends StatefulWidget {
-  const ReportsWidget({super.key});
+class ReportsWidget extends ConsumerStatefulWidget {
+  final int initialTab;
+  const ReportsWidget({super.key, this.initialTab = 0});
 
   @override
-  State<ReportsWidget> createState() => _ReportsWidgetState();
+  ConsumerState<ReportsWidget> createState() => _ReportsWidgetState();
 }
 
-class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProviderStateMixin {
+class _ReportsWidgetState extends ConsumerState<ReportsWidget>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _supabase = Supabase.instance.client;
   List<_MonthData> _monthlyData = [];
-  List<Map<String, dynamic>> _lessonsRaw = [];
+  List<Map<String, dynamic>> _teacherRevenue = [];
   bool _loading = true;
   Map<String, dynamic> _summary = {};
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 2),
+    );
     _loadReports();
+  }
+
+  @override
+  void didUpdateWidget(covariant ReportsWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextTab = widget.initialTab.clamp(0, 2);
+    if (nextTab != _tabController.index) {
+      _tabController.index = nextTab;
+    }
   }
 
   @override
@@ -38,69 +55,29 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
     try {
       final now = DateTime.now();
       final sixMonthsAgo = DateTime(now.year, now.month - 5, 1);
-
-      final [lessons, payments, students] = await Future.wait([
-        _supabase
-            .from('lessons')
-            .select('scheduled_at, status, teacher_id, teachers(first_name, last_name, profiles(first_name, last_name)), groups(name, price_per_lesson)')
-            .gte('scheduled_at', sixMonthsAgo.toIso8601String()),
-        _supabase
-            .from('payments')
-            .select('created_at, amount')
-            .gte('created_at', sixMonthsAgo.toIso8601String()),
-        _supabase
-            .from('students')
-            .select('created_at')
-            .gte('created_at', sixMonthsAgo.toIso8601String()),
-      ]);
-
-      // Group by month
-      final Map<String, _MonthData> byMonth = {};
-      for (int i = 5; i >= 0; i--) {
-        final m = DateTime(now.year, now.month - i, 1);
-        final key = DateFormat('MMM', 'ru').format(m);
-        byMonth[key] = _MonthData(month: key);
-      }
-
-      for (final l in lessons) {
-        final dt = DateTime.tryParse(l['scheduled_at'] ?? '');
-        if (dt == null) continue;
-        final key = DateFormat('MMM', 'ru').format(dt);
-        if (byMonth.containsKey(key)) {
-          byMonth[key]!.lessons++;
-          if (l['status'] == 'completed') byMonth[key]!.completed++;
-        }
-      }
-
-      for (final p in payments) {
-        final dt = DateTime.tryParse(p['created_at'] ?? '');
-        if (dt == null) continue;
-        final key = DateFormat('MMM', 'ru').format(dt);
-        if (byMonth.containsKey(key)) {
-          byMonth[key]!.revenue += double.tryParse(p['amount'].toString()) ?? 0;
-        }
-      }
-
-      for (final s in students) {
-        final dt = DateTime.tryParse(s['created_at'] ?? '');
-        if (dt == null) continue;
-        final key = DateFormat('MMM', 'ru').format(dt);
-        if (byMonth.containsKey(key)) byMonth[key]!.newStudents++;
-      }
-
-      final monthList = byMonth.values.toList();
-      final totalLessons = monthList.fold<int>(0, (s, m) => s + m.lessons);
-      final totalCompleted = monthList.fold<int>(0, (s, m) => s + m.completed);
-      final totalRevenue = monthList.fold<double>(0, (s, m) => s + m.revenue);
-      final attendanceRate = totalLessons > 0 ? (totalCompleted / totalLessons * 100) : 0.0;
+      final report = await ref
+          .read(magicCrmServiceProvider)
+          .getFinanceReport(
+            from: sixMonthsAgo.toUtc().toIso8601String(),
+            to: now.add(const Duration(days: 1)).toUtc().toIso8601String(),
+          );
+      final monthList = (report['monthly'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(_MonthData.fromReport)
+          .toList();
+      final summary = report['summary'] is Map<String, dynamic>
+          ? report['summary'] as Map<String, dynamic>
+          : const <String, dynamic>{};
 
       setState(() {
         _monthlyData = monthList;
-        _lessonsRaw = List<Map<String, dynamic>>.from(lessons);
+        _teacherRevenue = (report['teachers'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
         _summary = {
-          'attendance': attendanceRate,
-          'revenue': totalRevenue,
-          'total_lessons': totalLessons,
+          'attendance': summary['attendance'] ?? 0.0,
+          'revenue': summary['revenue'] ?? 0,
+          'total_lessons': summary['total_lessons'] ?? 0,
         };
         _loading = false;
       });
@@ -112,7 +89,9 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple));
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+      );
     }
 
     return Column(
@@ -125,6 +104,7 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
           tabs: const [
             Tab(text: 'Аналитика'),
             Tab(text: 'Финансы'),
+            Tab(text: 'Активность'),
           ],
         ),
         Expanded(
@@ -133,6 +113,7 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
             children: [
               _buildOverviewTab(),
               const FinancialDashboardWidget(),
+              const _ActivityLogTab(),
             ],
           ),
         ),
@@ -142,8 +123,12 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
 
   Widget _buildOverviewTab() {
     final fmt = NumberFormat('#,##0', 'ru');
-    final maxRevenue = _monthlyData.isEmpty ? 1.0 : _monthlyData.map((m) => m.revenue).reduce((a, b) => a > b ? a : b);
-    final maxLessons = _monthlyData.isEmpty ? 1 : _monthlyData.map((m) => m.lessons).reduce((a, b) => a > b ? a : b);
+    final maxRevenue = _monthlyData.isEmpty
+        ? 1.0
+        : _monthlyData.map((m) => m.revenue).reduce((a, b) => a > b ? a : b);
+    final maxLessons = _monthlyData.isEmpty
+        ? 1
+        : _monthlyData.map((m) => m.lessons).reduce((a, b) => a > b ? a : b);
 
     return RefreshIndicator(
       color: AppTheme.primaryPurple,
@@ -154,40 +139,58 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Отчёты', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            const Text(
+              'Отчёты',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 4),
-            Text('За последние 6 месяцев', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Text(
+              'За последние 6 месяцев',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 20),
 
             // KPI Row
             Row(
               children: [
-                Expanded(child: _KpiCard(
-                  label: 'Посещаемость',
-                  value: '${(_summary['attendance'] as double? ?? 0).toStringAsFixed(1)}%',
-                  icon: Icons.trending_up_rounded,
-                  color: AppTheme.success,
-                )),
+                Expanded(
+                  child: _KpiCard(
+                    label: 'Посещаемость',
+                    value:
+                        '${_asDouble(_summary['attendance']).toStringAsFixed(1)}%',
+                    icon: Icons.trending_up_rounded,
+                    color: AppTheme.success,
+                  ),
+                ),
                 const SizedBox(width: 10),
-                Expanded(child: _KpiCard(
-                  label: 'Выручка',
-                  value: '${fmt.format(_summary['revenue'] ?? 0)} ₽',
-                  icon: Icons.payments_rounded,
-                  color: AppTheme.secondaryGold,
-                )),
+                Expanded(
+                  child: _KpiCard(
+                    label: 'Выручка',
+                    value: '${fmt.format(_summary['revenue'] ?? 0)} ₽',
+                    icon: Icons.payments_rounded,
+                    color: AppTheme.secondaryGold,
+                  ),
+                ),
                 const SizedBox(width: 10),
-                Expanded(child: _KpiCard(
-                  label: 'Занятий',
-                  value: '${_summary['total_lessons'] ?? 0}',
-                  icon: Icons.calendar_month_rounded,
-                  color: AppTheme.primaryPurple,
-                )),
+                Expanded(
+                  child: _KpiCard(
+                    label: 'Занятий',
+                    value: '${_summary['total_lessons'] ?? 0}',
+                    icon: Icons.calendar_month_rounded,
+                    color: AppTheme.primaryPurple,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
 
             // Lessons Chart
-            const Text('Занятия по месяцам', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const Text(
+              'Занятия по месяцам',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 12),
             SizedBox(
               height: 160,
@@ -195,14 +198,24 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: _monthlyData.map((m) {
                   final ratio = maxLessons > 0 ? m.lessons / maxLessons : 0.0;
-                  final completedRatio = m.lessons > 0 ? m.completed / m.lessons : 0.0;
+                  final completedRatio = m.lessons > 0
+                      ? m.completed / m.lessons
+                      : 0.0;
                   return Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text('${m.lessons}', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          Text(
+                            '${m.lessons}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                           const SizedBox(height: 4),
                           Stack(
                             alignment: Alignment.bottomCenter,
@@ -226,7 +239,15 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
                             ],
                           ),
                           const SizedBox(height: 6),
-                          Text(m.month, style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          Text(
+                            m.month,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -239,17 +260,36 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
               children: [
                 Container(width: 10, height: 10, color: AppTheme.primaryPurple),
                 const SizedBox(width: 6),
-                Text('Завершено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                Text(
+                  'Завершено',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Container(width: 10, height: 10, color: AppTheme.primaryPurple.withAlpha(40)),
+                Container(
+                  width: 10,
+                  height: 10,
+                  color: AppTheme.primaryPurple.withAlpha(40),
+                ),
                 const SizedBox(width: 6),
-                Text('Всего запланировано', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                Text(
+                  'Всего запланировано',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
 
             // Revenue Chart
-            const Text('Выручка по месяцам', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const Text(
+              'Выручка по месяцам',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 12),
             SizedBox(
               height: 140,
@@ -265,8 +305,15 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
                         children: [
                           if (m.revenue > 0)
                             Text(
-                              m.revenue >= 1000 ? '${(m.revenue / 1000).toStringAsFixed(0)}к' : m.revenue.toStringAsFixed(0),
-                              style: TextStyle(fontSize: 9, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                              m.revenue >= 1000
+                                  ? '${(m.revenue / 1000).toStringAsFixed(0)}к'
+                                  : m.revenue.toStringAsFixed(0),
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           const SizedBox(height: 4),
                           Container(
@@ -282,7 +329,15 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Text(m.month, style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          Text(
+                            m.month,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -297,25 +352,48 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
             const SizedBox(height: 24),
 
             // Monthly table
-            const Text('Детализация', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const Text(
+              'Детализация',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
-            ..._monthlyData.reversed.map((m) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    Text(m.month, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    _SmallStat(label: 'занятий', value: '${m.lessons}', color: AppTheme.primaryPurple),
-                    const SizedBox(width: 16),
-                    _SmallStat(label: 'новых', value: '${m.newStudents}', color: AppTheme.success),
-                    const SizedBox(width: 16),
-                    _SmallStat(label: 'выручка', value: '${fmt.format(m.revenue)} ₽', color: AppTheme.secondaryGold),
-                  ],
+            ..._monthlyData.reversed.map(
+              (m) => Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        m.month,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+                      _SmallStat(
+                        label: 'занятий',
+                        value: '${m.lessons}',
+                        color: AppTheme.primaryPurple,
+                      ),
+                      const SizedBox(width: 16),
+                      _SmallStat(
+                        label: 'новых',
+                        value: '${m.newStudents}',
+                        color: AppTheme.success,
+                      ),
+                      const SizedBox(width: 16),
+                      _SmallStat(
+                        label: 'выручка',
+                        value: '${fmt.format(m.revenue)} ₽',
+                        color: AppTheme.secondaryGold,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            )),
+            ),
           ],
         ),
       ),
@@ -323,34 +401,12 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
   }
 
   Widget _buildTeacherRevenueBreakdown() {
-    final Map<String, double> teacherRevenue = {};
-    final Map<String, String> teacherNames = {};
-
-    for (var l in _lessonsRaw) {
-      if (l['status'] == 'completed') {
-        final teacherId = l['teacher_id']?.toString() ?? 'unknown';
-        final teacherData = l['teachers'] as Map<String, dynamic>?;
-        String tName = 'Неизвестный учитель';
-        if (teacherData != null) {
-          final tfName = teacherData['first_name']?.toString() ?? '';
-          final tlName = teacherData['last_name']?.toString() ?? '';
-          final p = teacherData['profiles'] as Map<String, dynamic>?;
-          var name = '$tfName $tlName'.trim();
-          if (name.isEmpty && p != null) {
-            name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-          }
-          if (name.isNotEmpty) tName = name;
-        }
-        
-        final cost = (l['groups']?['price_per_lesson'] as num?)?.toDouble() ?? 1500;
-        
-        teacherRevenue[teacherId] = (teacherRevenue[teacherId] ?? 0) + cost;
-        teacherNames[teacherId] = tName;
-      }
-    }
-
-    final sortedTeachers = teacherRevenue.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final sortedTeachers = List<Map<String, dynamic>>.from(_teacherRevenue)
+      ..sort((a, b) {
+        final ar = double.tryParse('${a['revenue']}') ?? 0;
+        final br = double.tryParse('${b['revenue']}') ?? 0;
+        return br.compareTo(ar);
+      });
 
     final fmt = NumberFormat('#,##0', 'ru');
 
@@ -359,7 +415,10 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Выручка по учителям', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        const Text(
+          'Выручка по учителям',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 12),
         Card(
           child: ListView.separated(
@@ -369,15 +428,32 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
             separatorBuilder: (context, index) => const Divider(height: 1),
             itemBuilder: (ctx, i) {
               final e = sortedTeachers[i];
-              final name = teacherNames[e.key] ?? '—';
+              final name = e['name']?.toString() ?? '—';
+              final revenue = double.tryParse('${e['revenue']}') ?? 0;
               return ListTile(
                 leading: CircleAvatar(
                   backgroundColor: AppTheme.primaryPurple.withAlpha(30),
                   radius: 16,
-                  child: const Icon(Icons.person_outline_rounded, size: 16, color: AppTheme.primaryPurple),
+                  child: const Icon(
+                    Icons.person_outline_rounded,
+                    size: 16,
+                    color: AppTheme.primaryPurple,
+                  ),
                 ),
-                title: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                trailing: Text('${fmt.format(e.value)} ₽', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.success)),
+                title: Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                trailing: Text(
+                  '${fmt.format(revenue)} ₽',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.success,
+                  ),
+                ),
               );
             },
           ),
@@ -387,6 +463,11 @@ class _ReportsWidgetState extends State<ReportsWidget> with SingleTickerProvider
   }
 }
 
+double _asDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
 class _MonthData {
   final String month;
   int lessons = 0;
@@ -394,13 +475,29 @@ class _MonthData {
   int newStudents = 0;
   double revenue = 0;
   _MonthData({required this.month});
+
+  factory _MonthData.fromReport(Map<String, dynamic> row) {
+    final parsed = DateTime.tryParse(row['month_start']?.toString() ?? '');
+    return _MonthData(
+        month: parsed == null ? '—' : DateFormat('MMM', 'ru').format(parsed),
+      )
+      ..lessons = int.tryParse('${row['lessons'] ?? 0}') ?? 0
+      ..completed = int.tryParse('${row['completed'] ?? 0}') ?? 0
+      ..newStudents = int.tryParse('${row['new_students'] ?? 0}') ?? 0
+      ..revenue = double.tryParse('${row['revenue'] ?? 0}') ?? 0;
+  }
 }
 
 class _KpiCard extends StatelessWidget {
   final String label, value;
   final IconData icon;
   final Color color;
-  const _KpiCard({required this.label, required this.value, required this.icon, required this.color});
+  const _KpiCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -411,9 +508,24 @@ class _KpiCard extends StatelessWidget {
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(height: 6),
-            Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 13), textAlign: TextAlign.center),
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 2),
-            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10), textAlign: TextAlign.center),
+            Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 10,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
@@ -424,15 +536,458 @@ class _KpiCard extends StatelessWidget {
 class _SmallStat extends StatelessWidget {
   final String label, value;
   final Color color;
-  const _SmallStat({required this.label, required this.value, required this.color});
+  const _SmallStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
-        Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 10,
+          ),
+        ),
       ],
     );
   }
+}
+
+class _ActivityLogTab extends ConsumerStatefulWidget {
+  const _ActivityLogTab();
+
+  @override
+  ConsumerState<_ActivityLogTab> createState() => _ActivityLogTabState();
+}
+
+class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
+  final _searchCtrl = TextEditingController();
+  Timer? _searchDebounce;
+  bool _loading = true;
+  String _period = 'week';
+  String _entityType = 'all';
+  List<Map<String, dynamic>> _items = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.addListener(_onSearchChanged);
+    _loadActivity();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchCtrl.removeListener(_onSearchChanged);
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) _loadActivity();
+    });
+  }
+
+  Future<void> _loadActivity() async {
+    setState(() => _loading = true);
+    try {
+      final bounds = _activityBounds(_period);
+      final items = await ref
+          .read(magicCrmServiceProvider)
+          .listActivityLog(
+            q: _searchCtrl.text,
+            entityType: _entityType == 'all' ? null : _entityType,
+            from: bounds.$1,
+            to: bounds.$2,
+            limit: 100,
+          );
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _setFilter(void Function() update) {
+    setState(update);
+    _loadActivity();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 340, minWidth: 240),
+                child: TextField(
+                  controller: _searchCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Поиск действий',
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
+                ),
+              ),
+              _ReportFilterDropdown(
+                label: 'Период',
+                value: _period,
+                icon: Icons.event_rounded,
+                options: const [
+                  ('week', '7 дней'),
+                  ('month', 'Месяц'),
+                  ('quarter', 'Квартал'),
+                ],
+                onChanged: (value) => _setFilter(() => _period = value),
+              ),
+              _ReportFilterDropdown(
+                label: 'Объект',
+                value: _entityType,
+                icon: Icons.link_rounded,
+                options: const [
+                  ('all', 'Все объекты'),
+                  ('student', 'Ученики'),
+                  ('lead', 'Лиды'),
+                  ('teacher', 'Учителя'),
+                  ('staff', 'Сотрудники'),
+                  ('lesson', 'Занятия'),
+                  ('task', 'Задачи'),
+                ],
+                onChanged: (value) => _setFilter(() => _entityType = value),
+              ),
+              if (_searchCtrl.text.isNotEmpty || _entityType != 'all')
+                TextButton.icon(
+                  onPressed: () {
+                    _searchDebounce?.cancel();
+                    setState(() {
+                      _searchCtrl.clear();
+                      _searchDebounce?.cancel();
+                      _entityType = 'all';
+                    });
+                    _loadActivity();
+                  },
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: const Text('Сбросить'),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: AppTheme.primaryPurple,
+                  ),
+                )
+              : _items.isEmpty
+              ? Center(
+                  child: Text(
+                    'Нет действий за период',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              : RefreshIndicator(
+                  color: AppTheme.primaryPurple,
+                  onRefresh: _loadActivity,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: _items.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) =>
+                        _ActivityLogTile(item: _items[index]),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActivityLogTile extends StatelessWidget {
+  final Map<String, dynamic> item;
+
+  const _ActivityLogTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final createdAt = DateTime.tryParse(item['created_at']?.toString() ?? '');
+    final dateText = createdAt == null
+        ? ''
+        : DateFormat('d MMM, HH:mm', 'ru').format(createdAt.toLocal());
+    final actor = item['actor_name']?.toString().trim();
+    final description = item['description']?.toString().trim();
+    final action = item['action']?.toString() ?? '';
+    final entityType = item['entity_type']?.toString();
+    final historyType = item['history_type']?.toString();
+    final role = item['actor_role']?.toString();
+
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withAlpha(10)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _activityColor(action).withAlpha(28),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                _activityIcon(action),
+                color: _activityColor(action),
+                size: 19,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          description == null || description.isEmpty
+                              ? _activityLabel(action)
+                              : description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      if (dateText.isNotEmpty) ...[
+                        const SizedBox(width: 10),
+                        Text(
+                          dateText,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (actor != null && actor.isNotEmpty)
+                        _ReportTag(label: actor, color: AppTheme.secondaryGold),
+                      if (role != null && role.isNotEmpty)
+                        _ReportTag(
+                          label: _activityRoleLabel(role),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      if (entityType != null && entityType.isNotEmpty)
+                        _ReportTag(
+                          label: _activityEntityLabel(entityType),
+                          color: AppTheme.primaryPurple,
+                        ),
+                      if (historyType != null && historyType.isNotEmpty)
+                        _ReportTag(
+                          label: _activityHistoryLabel(historyType),
+                          color: AppTheme.success,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportFilterDropdown extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final List<(String, String)> options;
+  final ValueChanged<String> onChanged;
+
+  const _ReportFilterDropdown({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.options,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = options.any((option) => option.$1 == value)
+        ? value
+        : options.first.$1;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220, minWidth: 170),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('$label-$normalized'),
+        initialValue: normalized,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+        items: options
+            .map(
+              (option) => DropdownMenuItem<String>(
+                value: option.$1,
+                child: Text(option.$2, overflow: TextOverflow.ellipsis),
+              ),
+            )
+            .toList(),
+        onChanged: (value) {
+          if (value != null) onChanged(value);
+        },
+      ),
+    );
+  }
+}
+
+class _ReportTag extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _ReportTag({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withAlpha(25),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+(String?, String?) _activityBounds(String period) {
+  final now = DateTime.now();
+  final todayEnd = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).add(const Duration(days: 1));
+  final from = switch (period) {
+    'month' => DateTime(now.year, now.month),
+    'quarter' => DateTime(now.year, now.month - 2),
+    _ => DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 6)),
+  };
+  return (from.toUtc().toIso8601String(), todayEnd.toUtc().toIso8601String());
+}
+
+IconData _activityIcon(String action) {
+  if (action.contains('delete')) return Icons.delete_outline_rounded;
+  if (action.contains('update') || action.contains('updated')) {
+    return Icons.edit_note_rounded;
+  }
+  if (action.contains('created') || action.contains('create')) {
+    return Icons.add_circle_outline_rounded;
+  }
+  return Icons.history_rounded;
+}
+
+Color _activityColor(String action) {
+  if (action.contains('delete')) return AppTheme.danger;
+  if (action.contains('update') || action.contains('updated')) {
+    return AppTheme.secondaryGold;
+  }
+  if (action.contains('created') || action.contains('create')) {
+    return AppTheme.success;
+  }
+  return AppTheme.primaryPurple;
+}
+
+String _activityLabel(String action) {
+  if (action.contains('student')) return 'Изменение ученика';
+  if (action.contains('lead')) return 'Изменение лида';
+  if (action.contains('lesson')) return 'Изменение занятия';
+  if (action.contains('task')) return 'Изменение задачи';
+  if (action.contains('comment')) return 'Комментарий';
+  return 'Действие';
+}
+
+String _activityEntityLabel(String entityType) {
+  return switch (entityType) {
+    'student' => 'Ученик',
+    'lead' => 'Лид',
+    'teacher' => 'Учитель',
+    'staff' => 'Сотрудник',
+    'lesson' => 'Занятие',
+    'task' => 'Задача',
+    'comment' => 'Комментарий',
+    _ => entityType,
+  };
+}
+
+String _activityHistoryLabel(String historyType) {
+  return switch (historyType) {
+    'comment' => 'Комментарий',
+    'task' => 'Задача',
+    'status' => 'Статус',
+    'payment' => 'Платёж',
+    'lesson' => 'Занятие',
+    _ => historyType,
+  };
+}
+
+String _activityRoleLabel(String role) {
+  return switch (role) {
+    'admin' => 'Администратор',
+    'system_admin' => 'Администратор системы',
+    'manager' => 'Управляющий',
+    'teacher' => 'Учитель',
+    'client' => 'Клиент',
+    _ => role,
+  };
 }

@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 SUPABASE_URL = 'https://xblpnywnlhfgofskbdxb.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHBueXdubGhmZ29mc2tiZHhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDA5ODcsImV4cCI6MjA4ODcxNjk4N30.qRuC_TQ8rlz68fzi0geqqdbkA7ABRBEyw3GyMkMJJxg'
+SUPABASE_KEY = 'REDACTED_LEGACY_SUPABASE_ANON_KEY'
 HEADERS = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
 
 project_dir = Path("c:/Users/User/Kvazar Projects/MagicMusicCRM")
@@ -76,7 +76,7 @@ for s in students_data:
         prof_id = str(uuid.uuid4())
         stud_id = str(uuid.uuid4())
         existing_students[hh_id] = {"id": stud_id, "profile_id": prof_id}
-        
+
     profiles_payload.append({
         "id": prof_id,
         "role": "client",
@@ -84,7 +84,7 @@ for s in students_data:
         "last_name": s.get("LastName", ""),
         "phone": s.get("Mobile", s.get("Phone", ""))
     })
-    
+
     students_payload.append({
         "id": stud_id,
         "profile_id": prof_id,
@@ -115,7 +115,7 @@ for e in edunits_data:
     assignee = e.get("Assignee")
     if assignee:
         teacher_id = teachers_map.get(assignee["Id"])
-        
+
     schedule_items = e.get("ScheduleItems", [])
     for item in schedule_items:
         classroom_name = item.get("ClassroomName")
@@ -139,13 +139,13 @@ for e in edunits_data:
             b_time = item.get("BeginTime")
             e_time = item.get("EndTime")
             weekdays_mask = item.get("Weekdays", 0)
-            
+
             if not b_date_str or not e_date_str or not b_time or not e_time:
                 continue
-                
+
             b_date = datetime.strptime(b_date_str, "%Y-%m-%d").date()
             e_date = datetime.strptime(e_date_str, "%Y-%m-%d").date()
-            
+
             # Helper to check if a python weekday (0=Mon, 6=Sun) matches HolliHop bitmask
             def matches_weekday(dt_date, mask):
                 if mask == 0: return True # If no mask, assume it occurs on the dates given or maybe just once?
@@ -158,10 +158,10 @@ for e in edunits_data:
                     b_dt = datetime.strptime(f"{current_date} {b_time}", "%Y-%m-%d %H:%M")
                     e_dt_full = datetime.strptime(f"{current_date} {e_time}", "%Y-%m-%d %H:%M")
                     duration = int((e_dt_full - b_dt).total_seconds() / 60)
-                    
+
                     scheduled_at = b_dt.isoformat() + "Z"
                     lesson_id = str(uuid.uuid5(uuid.NAMESPACE_OID, f"lesson_{item['Id']}_{current_date}"))
-                    
+
                     lessons_payload.append({
                         "id": lesson_id,
                         "group_id": group_id,
@@ -174,7 +174,7 @@ for e in edunits_data:
                         "custom_data": {"schedule_item_id": item["Id"], "weekdays": weekdays_mask}
                     })
                 current_date += timedelta(days=1)
-                
+
         except Exception as ex:
             print("Skipped schedule item error:", ex)
 
