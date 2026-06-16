@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -117,10 +116,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         _displayedMonth.month + 1,
         1,
       ).add(const Duration(days: 7));
-      final referenceCache = ref.read(magicCrmReferenceCacheProvider);
       final results = await Future.wait([
-        referenceCache.branches(),
-        referenceCache.rooms(),
+        crm.listBranches(limit: 100),
+        crm.listRooms(limit: 100),
         crm.listLessons(
           from: from.toUtc().toIso8601String(),
           to: to.toUtc().toIso8601String(),

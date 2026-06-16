@@ -1,7 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
-import 'package:magic_music_crm/core/api/magic_token_store.dart';
-import 'package:magic_music_crm/core/constants/env.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+
+final magicSettingsServiceProvider = Provider<MagicSettingsService>((ref) {
+  return MagicSettingsService(ref.watch(magicApiClientProvider));
+});
 
 const crmCustomFieldEntities = <String, String>{
   'students': 'Ученики',
@@ -69,18 +73,12 @@ class CrmCustomFieldDefinition {
 
 /// Service for managing global system settings.
 class MagicSettingsService {
-  @visibleForTesting
-  static MagicApiClient? debugApiClientOverride;
+  final MagicApiClient _api;
 
-  static final MagicApiClient _defaultApiClient = MagicApiClient(
-    baseUrl: Env.magicApiBaseUrl,
-    tokenStore: const SecureMagicTokenStore(),
-  );
-
-  static MagicApiClient get _api => debugApiClientOverride ?? _defaultApiClient;
+  const MagicSettingsService(this._api);
 
   /// Retrieves the administration chat avatar URL.
-  static Future<String?> getAdminChatAvatar() async {
+  Future<String?> getAdminChatAvatar() async {
     try {
       final res = await _api.get<Map<String, dynamic>>(
         '/settings/admin-chat-avatar',
@@ -95,7 +93,7 @@ class MagicSettingsService {
   }
 
   /// Updates the administration chat avatar URL.
-  static Future<void> updateAdminChatAvatar(String? url) async {
+  Future<void> updateAdminChatAvatar(String? url) async {
     try {
       await _api.patch<Map<String, dynamic>>(
         '/admin/settings/admin-chat-avatar',
@@ -108,7 +106,7 @@ class MagicSettingsService {
   }
 
   /// Retrieves CRM custom field templates.
-  static Future<List<CrmCustomFieldDefinition>> getCrmCustomFields() async {
+  Future<List<CrmCustomFieldDefinition>> getCrmCustomFields() async {
     final res = await _api.get<Map<String, dynamic>>(
       '/settings/crm-custom-fields',
     );
@@ -122,7 +120,7 @@ class MagicSettingsService {
   }
 
   /// Updates CRM custom field templates.
-  static Future<List<CrmCustomFieldDefinition>> updateCrmCustomFields(
+  Future<List<CrmCustomFieldDefinition>> updateCrmCustomFields(
     List<CrmCustomFieldDefinition> fields,
   ) async {
     final res = await _api.patch<Map<String, dynamic>>(

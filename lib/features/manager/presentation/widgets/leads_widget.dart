@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/core/models/types.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
+import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'manage_statuses_dialog.dart';
@@ -72,23 +72,32 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
 
   Future<void> _loadFilterMetadata() async {
     try {
-      final cache = ref.read(magicCrmReferenceCacheProvider);
+      final crm = ref.read(magicCrmServiceProvider);
+      final hollihop = ref.read(hollihopServiceProvider);
       final results = await Future.wait<dynamic>([
-        cache.branches(),
-        cache.disciplines(),
-        cache.levels(),
-        cache.categories(),
+        crm.listBranches(limit: 100),
+        hollihop.getDisciplines(),
+        hollihop.getLevels(),
+        hollihop.getCategories(),
       ]);
       if (!mounted) return;
       setState(() {
         _branches = List<Map<String, dynamic>>.from(results[0] as List);
-        _disciplines = List<Map<String, dynamic>>.from(results[1] as List);
-        _levels = List<Map<String, dynamic>>.from(results[2] as List);
-        _categories = List<Map<String, dynamic>>.from(results[3] as List);
+        _disciplines = _stringOptions(results[1] as List);
+        _levels = _stringOptions(results[2] as List);
+        _categories = _stringOptions(results[3] as List);
       });
     } catch (_) {
       // Filter metadata is progressive; the board remains usable without it.
     }
+  }
+
+  List<Map<String, dynamic>> _stringOptions(List values) {
+    return values
+        .map((value) => value.toString().trim())
+        .where((value) => value.isNotEmpty)
+        .map((value) => {'id': value, 'name': value})
+        .toList();
   }
 
   Future<void> _loadPresets() async {
@@ -1213,10 +1222,9 @@ class _LeadCard extends ConsumerWidget {
 
   Future<void> _scheduleTrial(BuildContext context, WidgetRef ref) async {
     final crm = ref.read(magicCrmServiceProvider);
-    final references = ref.read(magicCrmReferenceCacheProvider);
     final [teachersRes, roomsRes] = await Future.wait([
       crm.listTeachers(limit: 100),
-      references.rooms(),
+      crm.listRooms(limit: 100),
     ]);
 
     final teachers = List<Map<String, dynamic>>.from(teachersRes);

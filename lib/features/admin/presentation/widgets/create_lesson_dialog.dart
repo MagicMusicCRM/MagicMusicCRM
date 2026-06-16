@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
@@ -82,7 +81,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _crm.listTeachers(limit: 100),
         _crm.listGroups(limit: 100),
         _crm.listStudents(limit: 100),
-        ref.read(magicCrmReferenceCacheProvider).branches(),
+        _crm.listBranches(limit: 100),
       ]);
 
       setState(() {
@@ -110,9 +109,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
   Future<void> _loadRooms(String branchId) async {
     try {
-      final rooms = await ref
-          .read(magicCrmReferenceCacheProvider)
-          .rooms(branchId: branchId);
+      final rooms = await _crm.listRooms(branchId: branchId, limit: 100);
       setState(() {
         _rooms = rooms;
         if (_selectedRoomId != null &&

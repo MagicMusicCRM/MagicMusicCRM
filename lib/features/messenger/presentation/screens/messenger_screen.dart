@@ -266,7 +266,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
     final rawItemsFuture = messenger.listChats(limit: 100);
     final channelsFuture = messenger.listChannels();
-    final adminAvatarFuture = MagicSettingsService.getAdminChatAvatar();
+    final adminAvatarFuture = ref
+        .read(magicSettingsServiceProvider)
+        .getAdminChatAvatar();
     final Future<Map<String, dynamic>?> adminChatFuture = isStaff
         ? Future<Map<String, dynamic>?>.value(null)
         : messenger.ensureAdministrationChat();
@@ -985,12 +987,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     String ext,
   ) async {
     if (_selectedChatId == null) return;
-    final fileId = await ChatAttachmentService.uploadVoice(
-      bytes: bytes,
-      senderId: _userId,
-      extension: ext,
-      chatId: _selectedChatId!,
-    );
+    final fileId = await ref
+        .read(chatAttachmentServiceProvider)
+        .uploadVoice(
+          bytes: bytes,
+          senderId: _userId,
+          extension: ext,
+          chatId: _selectedChatId!,
+        );
 
     final message = await ref
         .read(magicMessengerServiceProvider)
@@ -1014,12 +1018,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     final messageType = mimeType?.startsWith('image/') == true
         ? 'image'
         : 'file';
-    final fileId = await ChatAttachmentService.uploadFile(
-      bytes: bytes,
-      originalFileName: fileName,
-      senderId: _userId,
-      chatId: _selectedChatId!,
-    );
+    final fileId = await ref
+        .read(chatAttachmentServiceProvider)
+        .uploadFile(
+          bytes: bytes,
+          originalFileName: fileName,
+          senderId: _userId,
+          chatId: _selectedChatId!,
+        );
 
     final content = caption?.isNotEmpty == true ? caption!.trim() : fileName;
     final message = await ref

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
@@ -41,11 +40,10 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
   Future<void> _loadReferences() async {
     try {
       final crm = ref.read(magicCrmServiceProvider);
-      final references = ref.read(magicCrmReferenceCacheProvider);
       final results = await Future.wait([
         crm.listTeachers(limit: 100),
-        references.branches(),
-        references.rooms(),
+        crm.listBranches(limit: 100),
+        crm.listRooms(limit: 100),
       ]);
       if (!mounted) return;
       setState(() {

@@ -1,12 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 /// Widget for playing back voice messages inside a message bubble.
-class VoicePlayerWidget extends StatefulWidget {
+class VoicePlayerWidget extends ConsumerStatefulWidget {
   final String audioUrl;
   final int? durationMs;
   final bool isMe;
@@ -19,10 +20,10 @@ class VoicePlayerWidget extends StatefulWidget {
   });
 
   @override
-  State<VoicePlayerWidget> createState() => _VoicePlayerWidgetState();
+  ConsumerState<VoicePlayerWidget> createState() => _VoicePlayerWidgetState();
 }
 
-class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
+class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
   final _player = AudioPlayer();
   bool _isPlaying = false;
   bool _isLoading = false;
@@ -91,9 +92,9 @@ class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
         // If not loaded yet, set the URL first
         if (_player.processingState == ProcessingState.idle) {
           setState(() => _isLoading = true);
-          _resolvedAudioUrl ??= await ChatAttachmentService.resolveUrl(
-            widget.audioUrl,
-          );
+          _resolvedAudioUrl ??= await ref
+              .read(chatAttachmentServiceProvider)
+              .resolveUrl(widget.audioUrl);
           if (_resolvedAudioUrl == null) {
             throw StateError('Аудиофайл недоступен');
           }
@@ -190,9 +191,34 @@ class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
                     final normalizedProgress = progress.clamp(0.0, 1.0);
                     final isPlayed = (index / 24) <= normalizedProgress;
                     // Simple deterministic pseudo-random heights for the waveform
-                    final heights = [6, 10, 8, 14, 18, 12, 16, 20, 14, 10, 12, 18, 14, 20, 16, 12, 8, 14, 10, 6, 8, 12, 10, 4];
+                    final heights = [
+                      6,
+                      10,
+                      8,
+                      14,
+                      18,
+                      12,
+                      16,
+                      20,
+                      14,
+                      10,
+                      12,
+                      18,
+                      14,
+                      20,
+                      16,
+                      12,
+                      8,
+                      14,
+                      10,
+                      6,
+                      8,
+                      12,
+                      10,
+                      4,
+                    ];
                     final h = heights[index % heights.length].toDouble();
-                    
+
                     return Container(
                       width: 2,
                       height: h,

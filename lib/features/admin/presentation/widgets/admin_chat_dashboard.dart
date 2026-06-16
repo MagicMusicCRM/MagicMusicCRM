@@ -342,12 +342,14 @@ class _ChatViewState extends ConsumerState<_ChatView> {
   ) async {
     try {
       final chatId = await _ensureChatId();
-      final fileId = await ChatAttachmentService.uploadVoice(
-        bytes: bytes,
-        senderId: _currentUserId ?? '',
-        chatId: chatId,
-        extension: extension,
-      );
+      final fileId = await ref
+          .read(chatAttachmentServiceProvider)
+          .uploadVoice(
+            bytes: bytes,
+            senderId: _currentUserId ?? '',
+            chatId: chatId,
+            extension: extension,
+          );
       final message = await _messenger.sendMessage(
         chatId,
         content: 'Голосовое сообщение',
@@ -368,12 +370,14 @@ class _ChatViewState extends ConsumerState<_ChatView> {
   Future<void> _sendFile(Uint8List bytes, String fileName, int fileSize) async {
     try {
       final chatId = await _ensureChatId();
-      final fileId = await ChatAttachmentService.uploadFile(
-        bytes: bytes,
-        originalFileName: fileName,
-        senderId: _currentUserId ?? '',
-        chatId: chatId,
-      );
+      final fileId = await ref
+          .read(chatAttachmentServiceProvider)
+          .uploadFile(
+            bytes: bytes,
+            originalFileName: fileName,
+            senderId: _currentUserId ?? '',
+            chatId: chatId,
+          );
       final message = await _messenger.sendMessage(
         chatId,
         content: fileName,

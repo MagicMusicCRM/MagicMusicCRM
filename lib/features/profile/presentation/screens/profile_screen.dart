@@ -147,14 +147,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
       // 1. Upload new avatar if picked
       if (_newAvatarBytes != null) {
-        updatedAvatarUrl = await ChatAttachmentService.uploadAvatar(
+        final attachments = ref.read(chatAttachmentServiceProvider);
+        updatedAvatarUrl = await attachments.uploadAvatar(
           bytes: _newAvatarBytes!,
           fileName:
               'profile_${_userId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
         );
         // Clean up old avatar
         if (_ogAvatarUrl != null) {
-          await ChatAttachmentService.deleteAvatar(_ogAvatarUrl);
+          await attachments.deleteAvatar(_ogAvatarUrl);
         }
       }
 
@@ -394,9 +395,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     indent: 16,
                   ),
                   _buildTelegramTextField(
-                    controller: TextEditingController(
-                      text: _roleLabel(_role),
-                    ),
+                    controller: TextEditingController(text: _roleLabel(_role)),
                     label: 'Роль',
                     textColor: secondaryTextColor,
                     hintColor: secondaryTextColor,
@@ -581,10 +580,7 @@ class _SkeletonSection extends StatelessWidget {
   final Color surfaceColor;
   final int rows;
 
-  const _SkeletonSection({
-    required this.surfaceColor,
-    required this.rows,
-  });
+  const _SkeletonSection({required this.surfaceColor, required this.rows});
 
   @override
   Widget build(BuildContext context) {

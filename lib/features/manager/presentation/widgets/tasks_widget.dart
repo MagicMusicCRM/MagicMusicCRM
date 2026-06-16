@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -52,7 +51,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   Future<void> _loadFilterData() async {
     try {
       final results = await Future.wait([
-        ref.read(magicCrmReferenceCacheProvider).branches(),
+        ref.read(magicCrmServiceProvider).listBranches(limit: 100),
         ref.read(magicProfileAdminServiceProvider).listProfiles(limit: 100),
       ]);
       if (!mounted) return;

@@ -132,7 +132,9 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
     try {
       final messenger = ref.read(magicMessengerServiceProvider);
       if (widget.chatId == 'admin_chat') {
-        final avatarUrl = await MagicSettingsService.getAdminChatAvatar();
+        final avatarUrl = await ref
+            .read(magicSettingsServiceProvider)
+            .getAdminChatAvatar();
         _data = {
           'name': 'Администрация (Чат с клиентами)',
           'avatar_url': avatarUrl,
@@ -457,7 +459,9 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
             final url =
                 m['attachment_url']?.toString() ??
                 m['attachment_file_id']?.toString();
-            final resolved = await ChatAttachmentService.resolveUrl(url);
+            final resolved = await ref
+                .read(chatAttachmentServiceProvider)
+                .resolveUrl(url);
             if (resolved != null) launchUrl(Uri.parse(resolved));
           },
         );
@@ -1060,17 +1064,18 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
-class _ResolvedNetworkImage extends StatefulWidget {
+class _ResolvedNetworkImage extends ConsumerStatefulWidget {
   final String url;
   final BoxFit fit;
 
   const _ResolvedNetworkImage({required this.url, required this.fit});
 
   @override
-  State<_ResolvedNetworkImage> createState() => _ResolvedNetworkImageState();
+  ConsumerState<_ResolvedNetworkImage> createState() =>
+      _ResolvedNetworkImageState();
 }
 
-class _ResolvedNetworkImageState extends State<_ResolvedNetworkImage> {
+class _ResolvedNetworkImageState extends ConsumerState<_ResolvedNetworkImage> {
   String? _resolvedUrl;
   bool _isLoading = true;
 
@@ -1095,7 +1100,9 @@ class _ResolvedNetworkImageState extends State<_ResolvedNetworkImage> {
     });
 
     try {
-      final resolved = await ChatAttachmentService.resolveUrl(widget.url);
+      final resolved = await ref
+          .read(chatAttachmentServiceProvider)
+          .resolveUrl(widget.url);
       if (!mounted || widget.url.isEmpty) return;
       setState(() {
         _resolvedUrl = resolved;

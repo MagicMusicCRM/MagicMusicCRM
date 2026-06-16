@@ -234,12 +234,14 @@ class _ChatWidgetState extends ConsumerState<ChatWidget> {
   ) async {
     try {
       final chatId = await _ensureChatId(_selectedReceiverId);
-      final fileId = await ChatAttachmentService.uploadVoice(
-        bytes: bytes,
-        senderId: _currentUserId ?? widget.currentUserId,
-        chatId: chatId,
-        extension: extension,
-      );
+      final fileId = await ref
+          .read(chatAttachmentServiceProvider)
+          .uploadVoice(
+            bytes: bytes,
+            senderId: _currentUserId ?? widget.currentUserId,
+            chatId: chatId,
+            extension: extension,
+          );
 
       final message = await _messenger.sendMessage(
         chatId,
@@ -281,12 +283,14 @@ class _ChatWidgetState extends ConsumerState<ChatWidget> {
       final bytes = await _readPickedFileBytes(file);
       if (bytes == null) return;
       final chatId = await _ensureChatId(_selectedReceiverId);
-      final fileId = await ChatAttachmentService.uploadFile(
-        bytes: bytes,
-        originalFileName: file.name,
-        senderId: _currentUserId ?? widget.currentUserId,
-        chatId: chatId,
-      );
+      final fileId = await ref
+          .read(chatAttachmentServiceProvider)
+          .uploadFile(
+            bytes: bytes,
+            originalFileName: file.name,
+            senderId: _currentUserId ?? widget.currentUserId,
+            chatId: chatId,
+          );
 
       final message = await _messenger.sendMessage(
         chatId,

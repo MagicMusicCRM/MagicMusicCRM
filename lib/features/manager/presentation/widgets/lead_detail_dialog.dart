@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -93,9 +92,11 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   }
 
   Future<void> _fetchMetadata() async {
+    final crm = ref.read(magicCrmServiceProvider);
+    final settings = ref.read(magicSettingsServiceProvider);
     final results = await Future.wait<dynamic>([
-      ref.read(magicCrmReferenceCacheProvider).branches() as Future<dynamic>,
-      MagicSettingsService.getCrmCustomFields(),
+      crm.listBranches(limit: 100),
+      settings.getCrmCustomFields(),
     ]);
 
     if (mounted) {

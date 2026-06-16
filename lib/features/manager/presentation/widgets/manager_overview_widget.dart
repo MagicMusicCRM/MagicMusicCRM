@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -81,7 +80,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
   @override
   void initState() {
     super.initState();
-    _branchesFuture = ref.read(magicCrmReferenceCacheProvider).branches();
+    _branchesFuture = ref.read(magicCrmServiceProvider).listBranches();
     _dashboardFuture = _loadDashboard();
   }
 
@@ -99,9 +98,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
   void _reloadDashboard({bool refreshBranches = false}) {
     setState(() {
       if (refreshBranches) {
-        _branchesFuture = ref
-            .read(magicCrmReferenceCacheProvider)
-            .branches(forceRefresh: true);
+        _branchesFuture = ref.read(magicCrmServiceProvider).listBranches();
       }
       _dashboardFuture = _loadDashboard();
     });

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
-class CustomFieldConfigWidget extends StatefulWidget {
+class CustomFieldConfigWidget extends ConsumerStatefulWidget {
   const CustomFieldConfigWidget({super.key});
 
   @override
-  State<CustomFieldConfigWidget> createState() =>
+  ConsumerState<CustomFieldConfigWidget> createState() =>
       _CustomFieldConfigWidgetState();
 }
 
-class _CustomFieldConfigWidgetState extends State<CustomFieldConfigWidget> {
+class _CustomFieldConfigWidgetState
+    extends ConsumerState<CustomFieldConfigWidget> {
   final _formKey = GlobalKey<FormState>();
   final _keyCtrl = TextEditingController();
   final _labelCtrl = TextEditingController();
@@ -47,7 +49,9 @@ class _CustomFieldConfigWidgetState extends State<CustomFieldConfigWidget> {
       _error = null;
     });
     try {
-      final fields = await MagicSettingsService.getCrmCustomFields();
+      final fields = await ref
+          .read(magicSettingsServiceProvider)
+          .getCrmCustomFields();
       if (!mounted) return;
       setState(() {
         _fields = fields;
@@ -65,7 +69,9 @@ class _CustomFieldConfigWidgetState extends State<CustomFieldConfigWidget> {
   Future<void> _saveFields() async {
     setState(() => _saving = true);
     try {
-      final saved = await MagicSettingsService.updateCrmCustomFields(_fields);
+      final saved = await ref
+          .read(magicSettingsServiceProvider)
+          .updateCrmCustomFields(_fields);
       if (!mounted) return;
       setState(() {
         _fields = saved;

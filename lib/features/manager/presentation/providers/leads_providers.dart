@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 class LeadBoardFilters {
@@ -243,6 +242,5 @@ final leadsStreamProvider = FutureProvider<List<Map<String, dynamic>>>((
 final leadStatusesProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
-  final cache = ref.watch(magicCrmReferenceCacheProvider);
-  return cache.leadStatuses();
+  return ref.watch(magicCrmServiceProvider).listLeadStatuses(limit: 100);
 });

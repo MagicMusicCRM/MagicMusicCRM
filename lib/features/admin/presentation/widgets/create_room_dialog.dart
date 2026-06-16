@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
@@ -33,7 +32,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   }
 
   Future<void> _fetchBranches() async {
-    final res = await ref.read(magicCrmReferenceCacheProvider).branches();
+    final res = await ref.read(magicCrmServiceProvider).listBranches();
     setState(() {
       _branches = res;
       if (_branches.isNotEmpty && _selectedBranch == null) {
@@ -73,8 +72,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         capacity: capacity,
       );
     }
-    ref.read(magicCrmReferenceCacheProvider).invalidate(rooms: true);
-
     if (mounted) Navigator.pop(context, true);
   }
 
@@ -106,7 +103,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       final roomId = widget.room!['id']?.toString();
       if (roomId == null || roomId.isEmpty) return;
       await ref.read(magicCrmServiceProvider).deleteRoom(roomId);
-      ref.read(magicCrmReferenceCacheProvider).invalidate(rooms: true);
       if (mounted) Navigator.pop(context, true);
     }
   }

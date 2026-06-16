@@ -9,10 +9,6 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 
 void main() {
-  tearDown(() {
-    MagicSettingsService.debugApiClientOverride = null;
-  });
-
   test('reads and updates admin chat avatar through v3 settings API', () async {
     final adapter = _FakeAdapter([
       _FakeResponse(
@@ -34,12 +30,10 @@ void main() {
         },
       ),
     ]);
-    MagicSettingsService.debugApiClientOverride = _client(adapter);
+    final service = MagicSettingsService(_client(adapter));
 
-    final avatar = await MagicSettingsService.getAdminChatAvatar();
-    await MagicSettingsService.updateAdminChatAvatar(
-      'storage://avatars/admin/avatar-2.png',
-    );
+    final avatar = await service.getAdminChatAvatar();
+    await service.updateAdminChatAvatar('storage://avatars/admin/avatar-2.png');
 
     expect(avatar, 'storage://avatars/admin/avatar.png');
     expect(adapter.requests[0].method, 'GET');
@@ -98,10 +92,10 @@ void main() {
           },
         ),
       ]);
-      MagicSettingsService.debugApiClientOverride = _client(adapter);
+      final service = MagicSettingsService(_client(adapter));
 
-      final fields = await MagicSettingsService.getCrmCustomFields();
-      final saved = await MagicSettingsService.updateCrmCustomFields([
+      final fields = await service.getCrmCustomFields();
+      final saved = await service.updateCrmCustomFields([
         const CrmCustomFieldDefinition(
           entity: 'students',
           key: 'parentName',

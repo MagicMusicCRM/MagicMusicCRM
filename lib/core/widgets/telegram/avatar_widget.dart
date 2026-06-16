@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 
 /// Telegram-style circular avatar with gradient background and initials fallback.
-class TelegramAvatar extends StatefulWidget {
+class TelegramAvatar extends ConsumerStatefulWidget {
   final String? name;
   final String? avatarUrl;
   final String? uniqueId;
@@ -20,10 +21,10 @@ class TelegramAvatar extends StatefulWidget {
   });
 
   @override
-  State<TelegramAvatar> createState() => _TelegramAvatarState();
+  ConsumerState<TelegramAvatar> createState() => _TelegramAvatarState();
 }
 
-class _TelegramAvatarState extends State<TelegramAvatar> {
+class _TelegramAvatarState extends ConsumerState<TelegramAvatar> {
   String? _resolvedAvatarUrl;
   String? _sourceAvatarUrl;
 
@@ -50,7 +51,9 @@ class _TelegramAvatarState extends State<TelegramAvatar> {
     }
 
     try {
-      final resolved = await ChatAttachmentService.resolveUrl(sourceUrl);
+      final resolved = await ref
+          .read(chatAttachmentServiceProvider)
+          .resolveUrl(sourceUrl);
       if (!mounted || sourceUrl != _sourceAvatarUrl) return;
       setState(() => _resolvedAvatarUrl = resolved);
     } catch (error) {

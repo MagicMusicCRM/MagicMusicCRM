@@ -9,10 +9,6 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 
 void main() {
-  tearDown(() {
-    ChatAttachmentService.debugSetApiClient(null);
-  });
-
   test(
     'uploads chat attachments through v3 File API multipart contract',
     () async {
@@ -28,9 +24,9 @@ void main() {
           },
         ),
       ]);
-      ChatAttachmentService.debugSetApiClient(_client(adapter));
+      final service = ChatAttachmentService(_client(adapter));
 
-      final id = await ChatAttachmentService.uploadFile(
+      final id = await service.uploadFile(
         bytes: Uint8List.fromList(utf8.encode('hello')),
         originalFileName: 'note.txt',
         senderId: 'user-a',
@@ -53,9 +49,9 @@ void main() {
         body: {'id': 'voice-file-a'},
       ),
     ]);
-    ChatAttachmentService.debugSetApiClient(_client(adapter));
+    final service = ChatAttachmentService(_client(adapter));
 
-    final id = await ChatAttachmentService.uploadVoice(
+    final id = await service.uploadVoice(
       bytes: Uint8List.fromList([1, 2, 3]),
       senderId: 'user-a',
       chatId: 'chat-a',
@@ -77,9 +73,9 @@ void main() {
         body: {'token': 'download-token-a'},
       ),
     ]);
-    ChatAttachmentService.debugSetApiClient(_client(adapter));
+    final service = ChatAttachmentService(_client(adapter));
 
-    final url = await ChatAttachmentService.resolveUrl('file-a');
+    final url = await service.resolveUrl('file-a');
 
     expect(
       url,
@@ -95,11 +91,11 @@ void main() {
         body: {'token': 'download-token-a'},
       ),
     ]);
-    ChatAttachmentService.debugSetApiClient(_client(adapter));
+    final service = ChatAttachmentService(_client(adapter));
 
     final urls = await Future.wait([
-      ChatAttachmentService.resolveUrl('file-a'),
-      ChatAttachmentService.resolveUrl('file-a'),
+      service.resolveUrl('file-a'),
+      service.resolveUrl('file-a'),
     ]);
 
     expect(urls, [
@@ -112,7 +108,8 @@ void main() {
   test(
     'does not try to sign legacy storage references through Supabase SDK',
     () async {
-      final url = await ChatAttachmentService.resolveUrl(
+      final service = ChatAttachmentService(_client(_FakeAdapter(const [])));
+      final url = await service.resolveUrl(
         'storage://chat-attachments/user-a/file.png',
       );
 
@@ -120,13 +117,17 @@ void main() {
     },
   );
 
-  test('passes through ordinary external HTTPS URLs without Supabase rewrite', () async {
-    final url = await ChatAttachmentService.resolveUrl(
-      'https://cdn.example.com/uploads/file.png?sig=abc',
-    );
+  test(
+    'passes through ordinary external HTTPS URLs without Supabase rewrite',
+    () async {
+      final service = ChatAttachmentService(_client(_FakeAdapter(const [])));
+      final url = await service.resolveUrl(
+        'https://cdn.example.com/uploads/file.png?sig=abc',
+      );
 
-    expect(url, 'https://cdn.example.com/uploads/file.png?sig=abc');
-  });
+      expect(url, 'https://cdn.example.com/uploads/file.png?sig=abc');
+    },
+  );
 
   test('sanitizes download file names before saving locally', () {
     expect(

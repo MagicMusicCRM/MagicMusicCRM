@@ -68,4 +68,9 @@ app.*.map.json
 
 # Generated local analysis/capture artifacts
 /.nexus-map/
+/_archive/
+/installer_output/
+/ast_nodes*.json
+/bugreport-*.zip
+/docs/Supabase_Custom_Domain_Setup_Guide.docx
 /docs/release/play_console/screenshots/raw/

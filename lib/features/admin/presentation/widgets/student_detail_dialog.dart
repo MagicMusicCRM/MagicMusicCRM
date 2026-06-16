@@ -68,7 +68,7 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
           ref.read(magicCrmServiceProvider).getStudentCard(id)
         else
           Future.value(_studentData),
-        MagicSettingsService.getCrmCustomFields(),
+        ref.read(magicSettingsServiceProvider).getCrmCustomFields(),
       ]);
       if (!mounted) return;
       final payload = results[0] as Map<String, dynamic>;

@@ -3,18 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
-final statsProvider = StreamProvider<Map<String, dynamic>>((ref) {
-  final crm = ref.watch(magicCrmServiceProvider);
-
-  Stream<Map<String, dynamic>> poll() async* {
-    yield await crm.getOverviewStats();
-    yield* Stream.periodic(
-      const Duration(seconds: 10),
-      (_) => crm.getOverviewStats(),
-    ).asyncMap((value) => value);
-  }
-
-  return poll();
+final statsProvider = FutureProvider<Map<String, dynamic>>((ref) {
+  return ref.watch(magicCrmServiceProvider).getOverviewStats();
 });
 
 class AdminOverviewWidget extends ConsumerWidget {

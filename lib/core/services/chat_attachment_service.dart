@@ -1,11 +1,15 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/api/magic_token_store.dart';
-import 'package:magic_music_crm/core/constants/env.dart';
 import 'package:mime/mime.dart';
+
+final chatAttachmentServiceProvider = Provider<ChatAttachmentService>((ref) {
+  return ChatAttachmentService(ref.watch(magicApiClientProvider));
+});
 
 /// Service for private v3 file uploads and short-lived download URLs.
 class ChatAttachmentService {
@@ -13,24 +17,14 @@ class ChatAttachmentService {
   static const String _storageReferencePrefix = 'storage://';
   static const int maxFileSizeBytes = 25 * 1024 * 1024; // 25 MB
 
-  static MagicApiClient? _debugApiClient;
-  static final Map<String, Future<String?>> _inFlightResolveUrls = {};
-  static final MagicApiClient _defaultApiClient = MagicApiClient(
-    baseUrl: Env.magicApiBaseUrl,
-    tokenStore: const SecureMagicTokenStore(),
-  );
+  final MagicApiClient _api;
+  final Map<String, Future<String?>> _inFlightResolveUrls = {};
 
-  @visibleForTesting
-  static void debugSetApiClient(MagicApiClient? apiClient) {
-    _debugApiClient = apiClient;
-    _inFlightResolveUrls.clear();
-  }
-
-  static MagicApiClient get _api => _debugApiClient ?? _defaultApiClient;
+  ChatAttachmentService(this._api);
 
   /// Upload a file to v3 private storage.
   /// Returns the backend file object id.
-  static Future<String> uploadFile({
+  Future<String> uploadFile({
     required Uint8List bytes,
     required String originalFileName,
     required String senderId,
@@ -48,7 +42,7 @@ class ChatAttachmentService {
 
   /// Upload a voice recording to v3 private storage.
   /// Returns the backend file object id.
-  static Future<String> uploadVoice({
+  Future<String> uploadVoice({
     required Uint8List bytes,
     required String senderId,
     String? chatId,
@@ -71,7 +65,7 @@ class ChatAttachmentService {
 
   /// Upload an avatar image to v3 private storage.
   /// Returns the backend file object id.
-  static Future<String> uploadAvatar({
+  Future<String> uploadAvatar({
     required Uint8List bytes,
     required String fileName,
   }) {
@@ -80,7 +74,7 @@ class ChatAttachmentService {
 
   /// Delete an avatar file object when it is already a v3 file id.
   /// Legacy Supabase storage references are ignored during v3 cutover.
-  static Future<void> deleteAvatar(String? value) async {
+  Future<void> deleteAvatar(String? value) async {
     if (!_looksLikeBackendFileId(value)) return;
     try {
       await _api.delete<Map<String, dynamic>>('/files/$value');
@@ -94,10 +88,7 @@ class ChatAttachmentService {
         value.startsWith('$_storageReferencePrefix$_chatBucketName/');
   }
 
-  static Future<String?> resolveUrl(
-    String? value, {
-    int expiresIn = 3600,
-  }) async {
+  Future<String?> resolveUrl(String? value, {int expiresIn = 3600}) async {
     final trimmed = value?.trim();
     if (trimmed == null || trimmed.isEmpty) return null;
 
@@ -110,7 +101,7 @@ class ChatAttachmentService {
     return trimmed;
   }
 
-  static Future<String?> _resolveBackendFileUrl(String fileId) {
+  Future<String?> _resolveBackendFileUrl(String fileId) {
     final cacheKey = '${_api.rawDio.options.baseUrl}|$fileId';
     final pending = _inFlightResolveUrls[cacheKey];
     if (pending != null) return pending;
@@ -122,15 +113,13 @@ class ChatAttachmentService {
     return future;
   }
 
-  static Future<String?> _requestBackendFileUrl(String fileId) async {
+  Future<String?> _requestBackendFileUrl(String fileId) async {
     final response = await _api.post<Map<String, dynamic>>(
       '/files/$fileId/download-token',
     );
     final token = response['token']?.toString();
     if (token == null || token.isEmpty) {
-      throw const MagicApiException(
-        message: 'Сервер не выдал ссылку на файл.',
-      );
+      throw const MagicApiException(message: 'Сервер не выдал ссылку на файл.');
     }
     return _downloadUrl(token);
   }
@@ -150,7 +139,7 @@ class ChatAttachmentService {
     return Uri.decodeFull(rawPath);
   }
 
-  static Future<String> _upload({
+  Future<String> _upload({
     required Uint8List bytes,
     required String fileName,
     required String purpose,
@@ -224,7 +213,7 @@ class ChatAttachmentService {
     return !trimmed.contains('/');
   }
 
-  static String _downloadUrl(String token) {
+  String _downloadUrl(String token) {
     final baseUrl = _api.rawDio.options.baseUrl;
     final normalized = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
     return Uri.parse(normalized).resolve('files/download/$token').toString();

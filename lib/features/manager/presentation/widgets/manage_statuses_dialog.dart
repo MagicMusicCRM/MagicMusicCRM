@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/services/magic_crm_reference_cache.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -64,7 +63,6 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
             color: result['color']!,
             sortOrder: _statuses.length,
           );
-      ref.read(magicCrmReferenceCacheProvider).invalidate(leadStatuses: true);
       ref.invalidate(leadStatusesProvider);
       _loadStatuses();
     }
@@ -72,7 +70,6 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
 
   Future<void> _deleteStatus(String id) async {
     await ref.read(magicCrmServiceProvider).deleteLeadStatus(id);
-    ref.read(magicCrmReferenceCacheProvider).invalidate(leadStatuses: true);
     ref.invalidate(leadStatusesProvider);
     _loadStatuses();
   }

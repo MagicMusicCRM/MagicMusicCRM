@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:dio/dio.dart';
@@ -9,7 +10,7 @@ import 'dart:io';
 
 /// Widget for displaying a file attachment inside a message bubble.
 /// Images are displayed inline; other files show as downloadable cards.
-class FileAttachmentWidget extends StatefulWidget {
+class FileAttachmentWidget extends ConsumerStatefulWidget {
   final String? fileName;
   final String? fileUrl;
   final int? fileSize;
@@ -41,10 +42,11 @@ class FileAttachmentWidget extends StatefulWidget {
   }
 
   @override
-  State<FileAttachmentWidget> createState() => _FileAttachmentWidgetState();
+  ConsumerState<FileAttachmentWidget> createState() =>
+      _FileAttachmentWidgetState();
 }
 
-class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
+class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
   bool _downloading = false;
   String? _resolvedFileUrl;
   bool _resolvingUrl = false;
@@ -105,7 +107,9 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
     setState(() => _downloading = true);
 
     try {
-      final url = await ChatAttachmentService.resolveUrl(widget.fileUrl);
+      final url = await ref
+          .read(chatAttachmentServiceProvider)
+          .resolveUrl(widget.fileUrl);
       if (url == null) return;
 
       final dir = await _preferredDownloadDirectory();
@@ -179,7 +183,9 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
   }
 
   Future<void> _showFullScreenImage(BuildContext context) async {
-    final imageUrl = await ChatAttachmentService.resolveUrl(widget.fileUrl);
+    final imageUrl = await ref
+        .read(chatAttachmentServiceProvider)
+        .resolveUrl(widget.fileUrl);
     if (imageUrl == null) return;
     if (!context.mounted) return;
 
@@ -215,7 +221,9 @@ class _FileAttachmentWidgetState extends State<FileAttachmentWidget> {
 
     setState(() => _resolvingUrl = true);
     try {
-      final resolved = await ChatAttachmentService.resolveUrl(sourceUrl);
+      final resolved = await ref
+          .read(chatAttachmentServiceProvider)
+          .resolveUrl(sourceUrl);
       if (!mounted || sourceUrl != widget.fileUrl) return;
       setState(() {
         _resolvedFileUrl = resolved;
