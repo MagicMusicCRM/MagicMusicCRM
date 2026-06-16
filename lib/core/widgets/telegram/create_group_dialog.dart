@@ -42,7 +42,7 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
     try {
       final res = await ref
           .read(magicProfileAdminServiceProvider)
-          .listProfiles(limit: 200);
+          .listProfiles(limit: 100);
       if (mounted) {
         setState(() {
           _allUsers = res

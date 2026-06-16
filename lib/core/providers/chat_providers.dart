@@ -55,7 +55,7 @@ final messengerNavigationProvider =
 final adminIdsProvider = FutureProvider<List<String>>((ref) async {
   final profiles = await ref
       .watch(magicProfileAdminServiceProvider)
-      .listProfiles(limit: 200);
+      .listProfiles(limit: 100);
   return profiles
       .where((profile) {
         final role = profile['role']?.toString();
@@ -229,5 +229,5 @@ final channelAllPermissionsProvider =
     });
 
 final allProfilesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
-  return ref.watch(magicProfileAdminServiceProvider).listProfiles(limit: 200);
+  return ref.watch(magicProfileAdminServiceProvider).listProfiles(limit: 100);
 });

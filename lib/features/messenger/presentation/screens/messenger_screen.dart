@@ -273,7 +273,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     final Future<List<Map<String, dynamic>>> adminProfilesFuture = isStaff
         ? ref
               .read(magicProfileAdminServiceProvider)
-              .listProfiles(limit: 200)
+              .listProfiles(limit: 100)
               .catchError((Object e) {
                 _logMessenger(
                   'MessengerScreen: Error loading admin profiles: $e',

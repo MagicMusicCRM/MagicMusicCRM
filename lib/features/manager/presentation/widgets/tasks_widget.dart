@@ -53,7 +53,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     try {
       final results = await Future.wait([
         ref.read(magicCrmReferenceCacheProvider).branches(),
-        ref.read(magicProfileAdminServiceProvider).listProfiles(limit: 200),
+        ref.read(magicProfileAdminServiceProvider).listProfiles(limit: 100),
       ]);
       if (!mounted) return;
       setState(() {
