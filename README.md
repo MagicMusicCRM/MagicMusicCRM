@@ -186,8 +186,8 @@ flutter build windows --release
 Current verified local Windows ZIP:
 
 ```text
-build/releases/MagicMusicCRM-Windows-x64-auth-refreshfix-20260616-020617.zip
-SHA256 81416A8E37189F9BC768C6F6A44E5F41D2CFC6C86AC156037494A4B8772B4B65
+build/releases/MagicMusicCRM-Windows-x64-auth-session-racefix-20260616-032014.zip
+SHA256 4B8D2340DB67D9EC93CA394887F54450AF721B7511E58BC1848A9274F6A29E99
 ```
 
 Android debug smoke artifact:

@@ -182,4 +182,25 @@ _`S7` pre-release gate completed 2026-06-12 and evidence is in `.anws/v3/09_S7_R
 > 7. **Синтаксическая безопасность**: При редактировании глубоко вложенных деревьев виджетов (Scaffold -> Safe -> Center -> Scroll -> Constrained) ВСЕГДА проверяйте количество закрывающих скобок. Рекомендуется использовать `write_to_file` для перезаписи всего метода `build` при обнаружении коррупции.
 
 ---
+## 🔐 Env / Ops Recovery
+
+> [!IMPORTANT]
+> Реальные env-файлы ignored. Не коммитьте секреты, backup-архивы, Firebase private key, HolliHop key, Supabase service role, DB URL с паролями или Telegram token.
+
+| Файл | Назначение |
+|------|------------|
+| `server/.env` | Локальный NestJS backend, DB, email/push providers, HolliHop key, local migration DB URL. |
+| `server/.migration.env` | Безопасные дефолты импортов: dry-run, batch size, Supabase export dir, HolliHop mode. Секреты брать из `server/.env`. |
+| `infra/staging/.env` | Staging Docker Compose runtime для `api.phantom-net.ru`. |
+| `infra/staging/.backup.env` | Backup root/storage root/encryption passphrase для `backup-staging.sh` и `restore-staging.sh`. |
+| `infra/staging/.monitor.env` | Health URL, disk threshold, service list and alert sink for `monitor-staging.sh`. |
+| `infra/staging/.deploy.env` | SSH/deploy координаты: `magicdeploy@161.104.50.105`, key `C:/Users/potyl/.ssh/mmcrm_proxy_ed25519`, remote `/opt/magicmusiccrm`. |
+| `.flutter.env` | Build-time values for Flutter; Flutter still needs these passed as `--dart-define`. |
+
+Минимальные проверки после env-правок:
+- `cd infra/staging && docker compose --env-file .env config -q`
+- `cd server && npm run typecheck`
+- `flutter analyze`
+
+---
 > **Самопроверка**: Готовы? Предложите пользователю запустить `/quickstart` для новой задачи.

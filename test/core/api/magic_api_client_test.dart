@@ -148,6 +148,78 @@ void main() {
       expect((await store.read())?.refreshToken, 'next-refresh-token');
     });
 
+    test('shares one refresh across separate client instances', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/profile/me',
+          statusCode: 401,
+          body: {'message': 'Unauthorized'},
+        ),
+        _FakeResponse(
+          path: '/settings/admin-chat-avatar',
+          statusCode: 401,
+          body: {'message': 'Unauthorized'},
+        ),
+        _FakeResponse(
+          path: '/auth/refresh',
+          statusCode: 200,
+          delay: const Duration(milliseconds: 20),
+          body: {
+            'session': {
+              'accessToken': 'next-access-token',
+              'refreshToken': 'next-refresh-token',
+              'tokenType': 'Bearer',
+              'expiresIn': 900,
+            },
+          },
+        ),
+        _FakeResponse(
+          path: '/profile/me',
+          statusCode: 200,
+          body: {'id': 'user-a'},
+        ),
+        _FakeResponse(
+          path: '/settings/admin-chat-avatar',
+          statusCode: 200,
+          body: {'value': null},
+        ),
+      ]);
+      final store = MemoryMagicTokenStore(
+        const MagicApiTokens(
+          accessToken: 'expired-access-token',
+          refreshToken: 'refresh-token',
+          tokenType: 'Bearer',
+          expiresIn: 900,
+        ),
+      );
+      final primaryClient = _client(adapter, store: store);
+      final secondaryClient = _client(adapter, store: store);
+
+      final responses = await Future.wait([
+        primaryClient.get<Map<String, dynamic>>('/profile/me'),
+        secondaryClient.get<Map<String, dynamic>>(
+          '/settings/admin-chat-avatar',
+        ),
+      ]);
+
+      expect(responses.first['id'], 'user-a');
+      expect(responses.last['value'], isNull);
+      expect(
+        adapter.requests.where(
+          (request) => request.uri.path == '/auth/refresh',
+        ),
+        hasLength(1),
+      );
+      expect(
+        adapter.requests
+            .where((request) => request.uri.path != '/auth/refresh')
+            .skip(2)
+            .map((request) => request.headers['Authorization']),
+        everyElement('Bearer next-access-token'),
+      );
+      expect((await store.read())?.refreshToken, 'next-refresh-token');
+    });
+
     test('clears tokens when refresh fails', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

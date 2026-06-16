@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:magic_music_crm/core/api/magic_api_tokens.dart';
 
@@ -12,6 +14,7 @@ class SecureMagicTokenStore implements MagicTokenStore {
   static const _refreshTokenKey = 'mmcrm.v3.refresh_token';
   static const _tokenTypeKey = 'mmcrm.v3.token_type';
   static const _expiresInKey = 'mmcrm.v3.expires_in';
+  static const _tokenBundleKey = 'mmcrm.v3.tokens';
 
   final FlutterSecureStorage _storage;
 
@@ -23,6 +26,18 @@ class SecureMagicTokenStore implements MagicTokenStore {
 
   @override
   Future<MagicApiTokens?> read() async {
+    final bundle = await _storage.read(key: _tokenBundleKey);
+    if (bundle != null && bundle.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(bundle);
+        if (decoded is Map<String, dynamic>) {
+          return MagicApiTokens.fromJson(decoded);
+        }
+      } catch (_) {
+        // Fall back to legacy split keys below.
+      }
+    }
+
     final coreTokens = await Future.wait([
       _storage.read(key: _accessTokenKey),
       _storage.read(key: _refreshTokenKey),
@@ -46,6 +61,10 @@ class SecureMagicTokenStore implements MagicTokenStore {
 
   @override
   Future<void> write(MagicApiTokens tokens) async {
+    await _storage.write(
+      key: _tokenBundleKey,
+      value: jsonEncode(tokens.toJson()),
+    );
     await Future.wait([
       _storage.write(key: _accessTokenKey, value: tokens.accessToken),
       _storage.write(key: _refreshTokenKey, value: tokens.refreshToken),
@@ -57,6 +76,7 @@ class SecureMagicTokenStore implements MagicTokenStore {
   @override
   Future<void> clear() async {
     await Future.wait([
+      _storage.delete(key: _tokenBundleKey),
       _storage.delete(key: _accessTokenKey),
       _storage.delete(key: _refreshTokenKey),
       _storage.delete(key: _tokenTypeKey),

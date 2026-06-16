@@ -7,7 +7,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 class MagicApiClient {
   final Dio _dio;
   final MagicTokenStore _tokenStore;
-  Future<bool>? _refreshInFlight;
+  static Future<bool>? _sharedRefreshInFlight;
 
   MagicApiClient({
     required String baseUrl,
@@ -186,16 +186,16 @@ class MagicApiClient {
   }
 
   Future<bool> _tryRefresh() async {
-    final inFlight = _refreshInFlight;
+    final inFlight = _sharedRefreshInFlight;
     if (inFlight != null) return inFlight;
 
     final refresh = _refreshTokens();
-    _refreshInFlight = refresh;
+    _sharedRefreshInFlight = refresh;
     try {
       return await refresh;
     } finally {
-      if (identical(_refreshInFlight, refresh)) {
-        _refreshInFlight = null;
+      if (identical(_sharedRefreshInFlight, refresh)) {
+        _sharedRefreshInFlight = null;
       }
     }
   }
@@ -218,6 +218,11 @@ class MagicApiClient {
       await _tokenStore.write(MagicApiTokens.fromJson(session));
       return true;
     } on DioException {
+      final latest = await _tokenStore.read();
+      if (latest?.refreshToken != null &&
+          latest!.refreshToken != refreshToken) {
+        return true;
+      }
       await _tokenStore.clear();
       return false;
     }

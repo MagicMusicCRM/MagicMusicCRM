@@ -36,11 +36,14 @@ migrate_working_dir/
 /server/dist/
 /server/coverage/
 /server/.env
+/server/.migration.env
 /server/exports/
 /server/storage/
 /infra/staging/.env
 /infra/staging/.backup.env
 /infra/staging/.monitor.env
+/infra/staging/.deploy.env
+/.flutter.env
 /exports/
 /security-scans/
 /.supergoal/
