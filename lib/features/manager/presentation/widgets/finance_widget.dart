@@ -406,6 +406,28 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
             ],
             onChanged: (v) => setState(() => _type = v ?? 'subscription'),
           ),
+          if (!canSubmit) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Выберите ученика и укажите сумму больше нуля',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
       actions: [

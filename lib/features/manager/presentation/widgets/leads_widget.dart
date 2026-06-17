@@ -21,6 +21,7 @@ class LeadsWidget extends ConsumerStatefulWidget {
 
 class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   final _searchCtrl = TextEditingController();
+  final _boardScrollController = ScrollController();
   List<StatusRecord> _activeStatuses = [];
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _disciplines = [];
@@ -51,6 +52,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   void dispose() {
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
+    _boardScrollController.dispose();
     super.dispose();
   }
 
@@ -672,59 +674,64 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
             children: [
               _buildToolbar(board),
               Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: columns.map((column) {
-                      final status = _statusFromColumn(column);
-                      final rawLeads = column['items'] is List
-                          ? (column['items'] as List)
-                                .whereType<Map<String, dynamic>>()
-                                .toList()
-                          : <Map<String, dynamic>>[];
-                      final extraLeads =
-                          _extraLeadsByStatus[status.$1] ??
-                          const <Map<String, dynamic>>[];
-                      final leads = rawLeads
-                          .followedBy(extraLeads)
-                          .where(
-                            (lead) => !_hiddenLeadIds.contains(
-                              lead['id']?.toString(),
-                            ),
-                          )
-                          .map((lead) {
-                            final id = lead['id']?.toString() ?? '';
-                            final status = _optimisticLeadStatuses[id];
-                            return status == null
-                                ? lead
-                                : {...lead, 'status': status};
-                          })
-                          .toList();
-                      final totalCountRaw = column['total_count'];
-                      final totalCount = totalCountRaw is num
-                          ? totalCountRaw.toInt()
-                          : int.tryParse(totalCountRaw?.toString() ?? '') ??
-                                leads.length;
-                      return _KanbanColumn(
-                        status: status,
-                        leads: leads,
-                        totalCount: totalCount,
-                        onMove: _moveStatus,
-                        onDelete: _deleteLead,
-                        onTap: _openDetail,
-                        allStatuses: active,
-                        onRefresh: _refreshBoard,
-                        pendingLeadIds: _pendingLeadIds,
-                        nextCursor: pageCursor,
-                        loadingMore: _loadingMore,
-                        onLoadMore: _loadMoreLeads,
-                      );
-                    }).toList(),
+                child: Scrollbar(
+                  controller: _boardScrollController,
+                  thumbVisibility: true,
+                  child: SingleChildScrollView(
+                    controller: _boardScrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: columns.map((column) {
+                        final status = _statusFromColumn(column);
+                        final rawLeads = column['items'] is List
+                            ? (column['items'] as List)
+                                  .whereType<Map<String, dynamic>>()
+                                  .toList()
+                            : <Map<String, dynamic>>[];
+                        final extraLeads =
+                            _extraLeadsByStatus[status.$1] ??
+                            const <Map<String, dynamic>>[];
+                        final leads = rawLeads
+                            .followedBy(extraLeads)
+                            .where(
+                              (lead) => !_hiddenLeadIds.contains(
+                                lead['id']?.toString(),
+                              ),
+                            )
+                            .map((lead) {
+                              final id = lead['id']?.toString() ?? '';
+                              final status = _optimisticLeadStatuses[id];
+                              return status == null
+                                  ? lead
+                                  : {...lead, 'status': status};
+                            })
+                            .toList();
+                        final totalCountRaw = column['total_count'];
+                        final totalCount = totalCountRaw is num
+                            ? totalCountRaw.toInt()
+                            : int.tryParse(totalCountRaw?.toString() ?? '') ??
+                                  leads.length;
+                        return _KanbanColumn(
+                          status: status,
+                          leads: leads,
+                          totalCount: totalCount,
+                          onMove: _moveStatus,
+                          onDelete: _deleteLead,
+                          onTap: _openDetail,
+                          allStatuses: active,
+                          onRefresh: _refreshBoard,
+                          pendingLeadIds: _pendingLeadIds,
+                          nextCursor: pageCursor,
+                          loadingMore: _loadingMore,
+                          onLoadMore: _loadMoreLeads,
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
               ),
@@ -1025,37 +1032,64 @@ class _LeadCard extends ConsumerWidget {
                               onMove(id, v);
                             }
                           },
-                          itemBuilder: (_) => [
-                            ...allStatuses
-                                .where((s) => s.$1 != currentStatus)
-                                .map(
-                                  (s) => PopupMenuItem(
-                                    value: s.$1,
-                                    child: Text('→ ${s.$2}'),
-                                  ),
+                          itemBuilder: (_) {
+                            final currentMatch = allStatuses.where(
+                              (s) => s.$1 == currentStatus,
+                            );
+                            final currentLabel = currentMatch.isEmpty
+                                ? currentStatus
+                                : currentMatch.first.$2;
+                            return [
+                              // Show the current status (disabled, checked) so a
+                              // status move makes the present state explicit.
+                              PopupMenuItem<String>(
+                                enabled: false,
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.check_rounded,
+                                      size: 16,
+                                      color: AppTheme.success,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text('Сейчас: $currentLabel'),
+                                    ),
+                                  ],
                                 ),
-                            const PopupMenuDivider(),
-                            const PopupMenuItem(
-                              value: 'comment',
-                              child: Text('Добавить комментарий'),
-                            ),
-                            const PopupMenuItem(
-                              value: 'task',
-                              child: Text('Создать задачу'),
-                            ),
-                            const PopupMenuItem(
-                              value: 'trial',
-                              child: Text('Назначить пробный'),
-                            ),
-                            const PopupMenuDivider(),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Text(
-                                'Удалить',
-                                style: TextStyle(color: AppTheme.danger),
                               ),
-                            ),
-                          ],
+                              const PopupMenuDivider(),
+                              ...allStatuses
+                                  .where((s) => s.$1 != currentStatus)
+                                  .map(
+                                    (s) => PopupMenuItem(
+                                      value: s.$1,
+                                      child: Text('Перевести в: ${s.$2}'),
+                                    ),
+                                  ),
+                              const PopupMenuDivider(),
+                              const PopupMenuItem(
+                                value: 'comment',
+                                child: Text('Добавить комментарий'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'task',
+                                child: Text('Создать задачу'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'trial',
+                                child: Text('Назначить пробный'),
+                              ),
+                              const PopupMenuDivider(),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text(
+                                  'Удалить',
+                                  style: TextStyle(color: AppTheme.danger),
+                                ),
+                              ),
+                            ];
+                          },
                         ),
                       ],
                     ),

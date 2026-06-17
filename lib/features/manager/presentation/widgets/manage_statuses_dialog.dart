@@ -23,6 +23,7 @@ class ManageStatusesDialog extends ConsumerStatefulWidget {
 class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
   List<Map<String, dynamic>> _statuses = [];
   bool _loading = true;
+  Object? _error;
 
   @override
   void initState() {
@@ -31,7 +32,10 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
   }
 
   Future<void> _loadStatuses() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final res = await ref.read(leadStatusesProvider.future);
       if (!mounted) return;
@@ -41,10 +45,10 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка загрузки: $e')));
-        setState(() => _loading = false);
+        setState(() {
+          _error = e;
+          _loading = false;
+        });
       }
     }
   }
@@ -93,6 +97,107 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
     _loadStatuses();
   }
 
+  // Explicit loading / error / empty / list states so the modal body is never
+  // an unexplained blank panel (Windows audit P1).
+  Widget _buildContent() {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(4),
+        child: ListSkeleton(count: 5),
+      );
+    }
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppTheme.danger,
+                size: 40,
+              ),
+              const SizedBox(height: 10),
+              const Text('Не удалось загрузить колонки'),
+              const SizedBox(height: 6),
+              Text(
+                '$_error',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _loadStatuses,
+                child: const Text('Повторить'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_statuses.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.view_column_outlined,
+                size: 40,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 10),
+              const Text('Колонок воронки пока нет'),
+              const SizedBox(height: 6),
+              Text(
+                'Добавьте первую колонку, чтобы выстроить воронку лидов.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _addStatus,
+                icon: const Icon(Icons.add),
+                label: const Text('Добавить колонку'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      itemCount: _statuses.length,
+      itemBuilder: (context, index) {
+        final s = _statuses[index];
+        final hexColor = s['color']?.toString().replaceAll('#', '') ?? '8B5CF6';
+        final c = Color(int.parse('FF$hexColor', radix: 16));
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+            ),
+            title: Text(s['label']),
+            subtitle: Text('Ключ: ${s['key']}'),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline, color: AppTheme.danger),
+              onPressed: () => _deleteStatus(s['id'].toString()),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -107,47 +212,7 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
           ),
         ],
       ),
-      content: SizedBox(
-        width: 400,
-        height: 400,
-        child: _loading
-            ? const Padding(
-                padding: EdgeInsets.all(4),
-                child: ListSkeleton(count: 5),
-              )
-            : ListView.builder(
-                itemCount: _statuses.length,
-                itemBuilder: (context, index) {
-                  final s = _statuses[index];
-                  final hexColor =
-                      s['color']?.toString().replaceAll('#', '') ?? '8B5CF6';
-                  final c = Color(int.parse('FF$hexColor', radix: 16));
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: c,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      title: Text(s['label']),
-                      subtitle: Text('Ключ: ${s['key']}'),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: AppTheme.danger,
-                        ),
-                        onPressed: () => _deleteStatus(s['id'].toString()),
-                      ),
-                    ),
-                  );
-                },
-              ),
-      ),
+      content: SizedBox(width: 400, height: 400, child: _buildContent()),
       actions: [
         FilledButton.icon(
           onPressed: _addStatus,

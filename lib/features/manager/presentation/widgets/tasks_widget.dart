@@ -25,6 +25,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   Timer? _searchDebounce;
   bool _loading = true;
   bool _filtersLoading = true;
+  bool _creatingTask = false;
   Object? _loadError;
   String _statusFilter = 'all';
   String _entityTypeFilter = 'all';
@@ -133,15 +134,41 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   }
 
   Future<void> _createTask() async {
+    if (_creatingTask) return;
+    final messenger = ScaffoldMessenger.of(context);
     final crm = ref.read(magicCrmServiceProvider);
     final profiles = ref.read(magicProfileAdminServiceProvider);
-    final results = await Future.wait([
-      profiles.listProfiles(limit: 100),
-      crm.listStudents(limit: 100),
-      crm.listLeads(limit: 100),
-      crm.listGroups(limit: 100),
-      crm.listTeachers(limit: 100),
-    ]);
+
+    // Prefetch select options with a visible pending state so the FAB never
+    // looks dead while the requests are in flight, and surface failures.
+    setState(() => _creatingTask = true);
+    List<List<Map<String, dynamic>>> results;
+    try {
+      results = await Future.wait([
+        profiles.listProfiles(limit: 100),
+        crm.listStudents(limit: 100),
+        crm.listLeads(limit: 100),
+        crm.listGroups(limit: 100),
+        crm.listTeachers(limit: 100),
+      ]);
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось подготовить форму задачи: $e'),
+            backgroundColor: AppTheme.danger,
+            action: SnackBarAction(
+              label: 'Повторить',
+              textColor: Colors.white,
+              onPressed: _createTask,
+            ),
+          ),
+        );
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _creatingTask = false);
+    }
 
     if (!mounted) return;
 
@@ -158,16 +185,30 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
 
     if (result == null) return;
 
-    await crm.createTask(
-      entityType: result['entity_type'].toString(),
-      entityId: result['entity_id'].toString(),
-      title: result['title'].toString(),
-      description: result['description']?.toString(),
-      assignedTo: result['assigned_to']?.toString(),
-      dueAt: result['due_at']?.toString(),
-      status: 'open',
-    );
-    await _loadTasks();
+    try {
+      await crm.createTask(
+        entityType: result['entity_type'].toString(),
+        entityId: result['entity_id'].toString(),
+        title: result['title'].toString(),
+        description: result['description']?.toString(),
+        assignedTo: result['assigned_to']?.toString(),
+        dueAt: result['due_at']?.toString(),
+        status: 'open',
+      );
+      await _loadTasks();
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text('Задача создана')));
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось создать задачу: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _updateStatus(String id, String status) async {
@@ -306,9 +347,19 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton(
-        onPressed: _createTask,
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _creatingTask ? null : _createTask,
+        icon: _creatingTask
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.add),
+        label: Text(_creatingTask ? 'Подготовка…' : 'Новая задача'),
       ),
       body: Column(
         children: [

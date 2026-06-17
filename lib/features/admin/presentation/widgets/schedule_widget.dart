@@ -70,6 +70,7 @@ class ScheduleWidget extends ConsumerStatefulWidget {
 
 class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   bool _isLoading = true;
+  Object? _loadError;
 
   // Data
   List<Map<String, dynamic>> _branches = [];
@@ -103,7 +104,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   Future<void> _fetchAll() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final from = DateTime(
@@ -224,7 +228,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       });
     } catch (e) {
       debugPrint('Error fetching schedule: $e');
-      setState(() => _isLoading = false);
+      setState(() {
+        _loadError = e;
+        _isLoading = false;
+      });
     }
   }
 
@@ -568,38 +575,54 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // ═══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: ScheduleSkeleton(rows: 7, columns: 6),
-      );
-    }
+    // Keep the header and date controls visible during loading/error so the
+    // manager can always tell where they are and retry, instead of staring at
+    // an anonymous skeleton grid.
+    final isBusy = _isLoading || _loadError != null;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
           _buildHeader(),
-          _buildBranchSelector(),
-          if (_currentView == _ScheduleView.day) _buildDayViewModeToggle(),
+          if (!isBusy) ...[
+            _buildBranchSelector(),
+            if (_currentView == _ScheduleView.day) _buildDayViewModeToggle(),
+          ],
           _buildDateNavigation(),
-          if (_currentView == _ScheduleView.day) _buildAvailabilitySummary(),
-          Expanded(
-            child: _currentView == _ScheduleView.month
-                ? _buildMonthView()
-                : _buildDayView(),
-          ),
+          if (!isBusy && _currentView == _ScheduleView.day)
+            _buildAvailabilitySummary(),
+          Expanded(child: _buildScheduleContent()),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddLessonDialog(
-          _currentView == _ScheduleView.day ? _selectedDate : DateTime.now(),
-          null,
-        ),
-        backgroundColor: AppTheme.primaryPurple,
-        child: Icon(Icons.add_rounded, color: Colors.white),
-      ),
+      floatingActionButton: isBusy
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _showAddLessonDialog(
+                _currentView == _ScheduleView.day
+                    ? _selectedDate
+                    : DateTime.now(),
+                null,
+              ),
+              backgroundColor: AppTheme.primaryPurple,
+              child: Icon(Icons.add_rounded, color: Colors.white),
+            ),
     );
+  }
+
+  Widget _buildScheduleContent() {
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: ScheduleSkeleton(rows: 7, columns: 6),
+      );
+    }
+    if (_loadError != null) {
+      return _ScheduleError(error: _loadError, onRetry: _fetchAll);
+    }
+    return _currentView == _ScheduleView.month
+        ? _buildMonthView()
+        : _buildDayView();
   }
 
   // ── Header ────────────────────────────────────────────────────────────────
@@ -922,6 +945,53 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     );
   }
 
+  // Empty-state hint shown when the loaded period has no lessons, so an empty
+  // calendar does not read as a broken/loading screen.
+  Widget _buildEmptyScheduleHint() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withAlpha(150),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(24),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.event_busy_rounded,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'На выбранный период занятий нет',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => _showAddLessonDialog(
+                _currentView == _ScheduleView.day
+                    ? _selectedDate
+                    : DateTime.now(),
+                null,
+              ),
+              child: const Text('Создать занятие'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> _conflictsForSelectedDay() {
     return _scheduleConflicts.where((conflict) {
       final dt = _parseServerTime(conflict['scheduled_at']);
@@ -965,6 +1035,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
     return Column(
       children: [
+        if (_filteredLessons.isEmpty) _buildEmptyScheduleHint(),
         // Weekday headers
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1885,6 +1956,49 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       'branch_mismatch' => 'филиал не совпадает',
       _ => type,
     };
+  }
+}
+
+// Error state with retry, mirroring the per-feature `_TasksError`/`_FinanceError`
+// pattern so the schedule never fails silently into an anonymous skeleton.
+class _ScheduleError extends StatelessWidget {
+  final Object? error;
+  final VoidCallback onRetry;
+
+  const _ScheduleError({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppTheme.danger,
+              size: 42,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Не удалось загрузить расписание',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton(onPressed: onRetry, child: const Text('Повторить')),
+          ],
+        ),
+      ),
+    );
   }
 }
 
