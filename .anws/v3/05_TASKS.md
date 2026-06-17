@@ -312,11 +312,11 @@ graph TD
   - **Estimate**: 12 h.
   - **Status**: Completed on 2026-06-18. Confirmed existing role-change confirmation (`user_roles_widget.dart`) and humanized activity labels (`reports_widget.dart`); added the lead status-menu current-state marker (`leads_widget.dart`) and a finance blocked-submit hint "Выберите ученика и укажите сумму больше нуля" (`finance_widget.dart`). Remaining P2 token/theme cleanup stays in backlog. Added on 2026-06-16 from `docs/audits/windows-ux-ui-2026-06-16/report.md` after `P1/P2` findings in role editing, reporting language, finance guidance and token/theme consistency.
 
-- [x] **INT-S8** [MILESTONE]: Windows manager UX acceptance
+- [ ] **INT-S8** [MILESTONE]: Windows manager UX acceptance
   - **Description**: Re-run the manager Windows desktop audit after S8 fixes and confirm no `P0` or `P1` trust failures remain in overview, schedule, leads, users, finance, tasks and reports.
   - **Verification**: Audit evidence is refreshed under `docs/audits/` and the Windows manager shell has no silent failures, blank modals or ambiguous mutation controls.
   - **Estimate**: 4 h.
-  - **Status**: Completed on 2026-06-18. Refreshed acceptance recorded in `docs/audits/windows-ux-ui-2026-06-18/report.md` mapping every `P0`/`P1` finding to its fix; verified by `flutter analyze` (clean), `flutter test` (94/94, incl. new `test/features/s8_desktop_ux_states_test.dart`). A live Computer-Use desktop re-audit with the production backend is deferred (no manager session in this environment) and recommended before public release. Added on 2026-06-16 as the acceptance gate for the desktop UX/UI remediation backlog derived from the latest local audit.
+  - **Status**: Code-ready 2026-06-18, acceptance pending (Linear `KVA-123` = In Review). Remediation mapping recorded in `docs/audits/windows-ux-ui-2026-06-18/report.md`; verified by `flutter analyze` (clean), `flutter test` (94/94, incl. new `test/features/s8_desktop_ux_states_test.dart`). The live Windows desktop re-audit + native build still need a networked environment (blocked here: `firebase_core` CMake SDK download has no outbound network, no manager session) before this gate can be marked done. Added on 2026-06-16 as the acceptance gate for the desktop UX/UI remediation backlog derived from the latest local audit.
 
 ## User Story Overlay
 
