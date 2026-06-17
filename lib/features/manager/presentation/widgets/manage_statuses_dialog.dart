@@ -69,6 +69,25 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
   }
 
   Future<void> _deleteStatus(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить колонку?'),
+        content: const Text('Колонка воронки будет удалена.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     await ref.read(magicCrmServiceProvider).deleteLeadStatus(id);
     ref.invalidate(leadStatusesProvider);
     _loadStatuses();

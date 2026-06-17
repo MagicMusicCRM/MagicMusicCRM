@@ -110,12 +110,17 @@ function checkPublicEnvFiles() {
     if (name === ".env.example") return false;
     return name === ".env" || name.startsWith(".env.");
   });
+  const unsafeEnvFiles = envFiles.filter(
+    (path) => isGitTracked(path) || !isGitIgnored(path),
+  );
   add(
     "public-env-files",
-    envFiles.length === 0 ? "pass" : "fail",
-    envFiles.length === 0
-      ? "No committed runtime .env files found in scanned paths."
-      : `Runtime env files present: ${envFiles.map(toRepoPath).join(", ")}`,
+    unsafeEnvFiles.length === 0 ? "pass" : "fail",
+    unsafeEnvFiles.length === 0
+      ? "No tracked or unignored runtime .env files found in scanned paths."
+      : `Tracked or unignored runtime env files present: ${unsafeEnvFiles
+          .map(toRepoPath)
+          .join(", ")}`,
   );
 }
 
@@ -235,6 +240,14 @@ function walk(root: string): string[] {
 
 function toRepoPath(path: string): string {
   return relative(repoRoot, path).replace(/\\/g, "/");
+}
+
+function isGitIgnored(path: string): boolean {
+  return run("git", ["check-ignore", toRepoPath(path)]).status === 0;
+}
+
+function isGitTracked(path: string): boolean {
+  return run("git", ["ls-files", "--error-unmatch", toRepoPath(path)]).status === 0;
 }
 
 function resolveCommand(command: string): string {

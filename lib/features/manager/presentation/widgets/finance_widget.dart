@@ -15,6 +15,7 @@ class FinanceWidget extends ConsumerStatefulWidget {
 class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   List<Map<String, dynamic>> _payments = [];
   bool _loading = true;
+  Object? _loadError;
   double _total = 0;
   String _period = 'month';
 
@@ -25,7 +26,10 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   }
 
   Future<void> _loadPayments() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final now = DateTime.now();
       late DateTime from;
@@ -55,8 +59,11 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
         _total = total;
         _loading = false;
       });
-    } catch (_) {
-      setState(() => _loading = false);
+    } catch (e) {
+      setState(() {
+        _loadError = e;
+        _loading = false;
+      });
     }
   }
 
@@ -168,6 +175,8 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                 ? Center(
                     child: CircularProgressIndicator(color: AppTheme.success),
                   )
+                : _loadError != null
+                ? _FinanceError(error: _loadError, onRetry: _loadPayments)
                 : _payments.isEmpty
                 ? Center(
                     child: Text(
@@ -266,6 +275,47 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FinanceError extends StatelessWidget {
+  final Object? error;
+  final VoidCallback onRetry;
+
+  const _FinanceError({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppTheme.danger,
+              size: 42,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Не удалось загрузить платежи',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton(onPressed: onRetry, child: const Text('Повторить')),
+          ],
+        ),
       ),
     );
   }

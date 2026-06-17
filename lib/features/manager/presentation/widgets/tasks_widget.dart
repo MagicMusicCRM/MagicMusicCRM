@@ -25,6 +25,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   Timer? _searchDebounce;
   bool _loading = true;
   bool _filtersLoading = true;
+  Object? _loadError;
   String _statusFilter = 'all';
   String _entityTypeFilter = 'all';
   String _priorityFilter = 'all';
@@ -75,7 +76,12 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   }
 
   Future<void> _loadTasks({bool showLoading = true}) async {
-    if (showLoading) setState(() => _loading = true);
+    if (showLoading) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
     try {
       final dueBounds = _dueBounds();
       final data = await ref
@@ -96,8 +102,13 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
         _tasks = data;
         _loading = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadError = e;
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -334,6 +345,8 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                     padding: EdgeInsets.symmetric(horizontal: 12),
                     child: ListSkeleton(count: 6),
                   )
+                : _loadError != null
+                ? _TasksError(error: _loadError, onRetry: _loadTasks)
                 : _tasks.isEmpty
                 ? Center(
                     child: Text(
@@ -390,6 +403,47 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
       _dueFilter = 'all';
     });
     _loadTasks();
+  }
+}
+
+class _TasksError extends StatelessWidget {
+  final Object? error;
+  final VoidCallback onRetry;
+
+  const _TasksError({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppTheme.danger,
+              size: 42,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Не удалось загрузить задачи',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton(onPressed: onRetry, child: const Text('Повторить')),
+          ],
+        ),
+      ),
+    );
   }
 }
 

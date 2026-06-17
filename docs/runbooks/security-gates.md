@@ -16,7 +16,7 @@ The default mode fails on repository errors that can be checked locally:
 - `git diff --check`
 - `server/exports` and `server/storage` Git ignore coverage
 - Docker build-context exclusion for `exports/`, `storage/` and `security-scans/`
-- public `.env` files
+- tracked or unignored runtime `.env` files
 - generated source maps
 - frontend runtime secret defaults
 - `npm audit --audit-level=moderate`

@@ -234,6 +234,11 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
 
   Future<void> _deleteLead(String id) async {
     if (id.isEmpty || _pendingLeadIds.contains(id)) return;
+    final confirmed = await _confirmDelete(
+      title: 'Удалить лид?',
+      body: 'Лид будет скрыт из воронки.',
+    );
+    if (!confirmed) return;
     setState(() {
       _hiddenLeadIds.add(id);
       _pendingLeadIds.add(id);
@@ -324,6 +329,11 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
 
   Future<void> _deletePreset(int index) async {
     if (index < 0 || index >= _presets.length) return;
+    final confirmed = await _confirmDelete(
+      title: 'Удалить пресет?',
+      body: 'Сохраненный набор фильтров будет удален.',
+    );
+    if (!confirmed) return;
     final next = List<LeadFilterPreset>.from(_presets)..removeAt(index);
     await ref.read(leadFilterPresetStoreProvider).save(next);
     if (!mounted) return;
@@ -351,6 +361,31 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
     } else if (parts[0] == 'delete') {
       _deletePreset(index);
     }
+  }
+
+  Future<bool> _confirmDelete({
+    required String title,
+    required String body,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
   }
 
   StatusRecord _statusFromColumn(Map<String, dynamic> column) {

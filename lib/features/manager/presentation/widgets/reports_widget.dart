@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +23,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   List<_MonthData> _monthlyData = [];
   List<Map<String, dynamic>> _teacherRevenue = [];
   bool _loading = true;
+  Object? _loadError;
   Map<String, dynamic> _summary = {};
 
   @override
@@ -51,7 +53,10 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   }
 
   Future<void> _loadReports() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final now = DateTime.now();
       final sixMonthsAgo = DateTime(now.year, now.month - 5, 1);
@@ -81,8 +86,11 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
         };
         _loading = false;
       });
-    } catch (_) {
-      setState(() => _loading = false);
+    } catch (e) {
+      setState(() {
+        _loadError = e;
+        _loading = false;
+      });
     }
   }
 
@@ -92,6 +100,9 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       return const Center(
         child: CircularProgressIndicator(color: AppTheme.primaryPurple),
       );
+    }
+    if (_loadError != null) {
+      return _ReportsError(error: _loadError, onRetry: _loadReports);
     }
 
     return Column(
@@ -193,7 +204,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 160,
+              height: 176,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: _monthlyData.map((m) {
@@ -201,19 +212,24 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                   final completedRatio = m.lessons > 0
                       ? m.completed / m.lessons
                       : 0.0;
+                  final plannedHeight = m.lessons > 0
+                      ? math.max(8.0, 116 * ratio)
+                      : 2.0;
                   return Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 5),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text(
-                            '${m.lessons}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
+                          SizedBox(
+                            height: 18,
+                            child: Text(
+                              '${m.lessons}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -222,18 +238,18 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                             children: [
                               Container(
                                 width: double.infinity,
-                                height: 120 * ratio,
+                                height: plannedHeight,
                                 decoration: BoxDecoration(
-                                  color: AppTheme.primaryPurple.withAlpha(40),
-                                  borderRadius: BorderRadius.circular(6),
+                                  color: AppTheme.secondaryGold.withAlpha(34),
+                                  borderRadius: BorderRadius.circular(5),
                                 ),
                               ),
                               Container(
                                 width: double.infinity,
-                                height: 120 * ratio * completedRatio,
+                                height: plannedHeight * completedRatio,
                                 decoration: BoxDecoration(
-                                  color: AppTheme.primaryPurple,
-                                  borderRadius: BorderRadius.circular(6),
+                                  color: AppTheme.secondaryGold,
+                                  borderRadius: BorderRadius.circular(5),
                                 ),
                               ),
                             ],
@@ -243,6 +259,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                             m.month,
                             style: TextStyle(
                               fontSize: 10,
+                              fontWeight: FontWeight.w600,
                               color: Theme.of(
                                 context,
                               ).colorScheme.onSurfaceVariant,
@@ -258,7 +275,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             const SizedBox(height: 8),
             Row(
               children: [
-                Container(width: 10, height: 10, color: AppTheme.primaryPurple),
+                Container(width: 10, height: 10, color: AppTheme.secondaryGold),
                 const SizedBox(width: 6),
                 Text(
                   'Завершено',
@@ -271,7 +288,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                 Container(
                   width: 10,
                   height: 10,
-                  color: AppTheme.primaryPurple.withAlpha(40),
+                  color: AppTheme.secondaryGold.withAlpha(34),
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -292,40 +309,42 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 140,
+              height: 158,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: _monthlyData.map((m) {
                   final ratio = maxRevenue > 0 ? m.revenue / maxRevenue : 0.0;
+                  final barHeight = m.revenue > 0
+                      ? math.max(8.0, 96 * ratio)
+                      : 2.0;
                   return Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 5),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          if (m.revenue > 0)
-                            Text(
+                          SizedBox(
+                            height: 18,
+                            child: Text(
                               m.revenue >= 1000
                                   ? '${(m.revenue / 1000).toStringAsFixed(0)}к'
                                   : m.revenue.toStringAsFixed(0),
                               style: TextStyle(
                                 fontSize: 9,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w700,
+                                color: m.revenue > 0
+                                    ? Theme.of(context).colorScheme.onSurface
+                                    : Colors.transparent,
                               ),
                             ),
+                          ),
                           const SizedBox(height: 4),
                           Container(
                             width: double.infinity,
-                            height: 100 * ratio,
+                            height: barHeight,
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFD97706), Color(0xFFF59E0B)],
-                                begin: Alignment.bottomCenter,
-                                end: Alignment.topCenter,
-                              ),
-                              borderRadius: BorderRadius.circular(6),
+                              color: AppTheme.secondaryGold,
+                              borderRadius: BorderRadius.circular(5),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -333,6 +352,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                             m.month,
                             style: TextStyle(
                               fontSize: 10,
+                              fontWeight: FontWeight.w600,
                               color: Theme.of(
                                 context,
                               ).colorScheme.onSurfaceVariant,
@@ -463,6 +483,47 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   }
 }
 
+class _ReportsError extends StatelessWidget {
+  final Object? error;
+  final VoidCallback onRetry;
+
+  const _ReportsError({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppTheme.danger,
+              size: 42,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Не удалось загрузить отчеты',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton(onPressed: onRetry, child: const Text('Повторить')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 double _asDouble(Object? value) {
   if (value is num) return value.toDouble();
   return double.tryParse(value?.toString() ?? '') ?? 0;
@@ -479,12 +540,30 @@ class _MonthData {
   factory _MonthData.fromReport(Map<String, dynamic> row) {
     final parsed = DateTime.tryParse(row['month_start']?.toString() ?? '');
     return _MonthData(
-        month: parsed == null ? '—' : DateFormat('MMM', 'ru').format(parsed),
+        month: parsed == null ? '—' : _shortMonthName(parsed.month),
       )
       ..lessons = int.tryParse('${row['lessons'] ?? 0}') ?? 0
       ..completed = int.tryParse('${row['completed'] ?? 0}') ?? 0
       ..newStudents = int.tryParse('${row['new_students'] ?? 0}') ?? 0
       ..revenue = double.tryParse('${row['revenue'] ?? 0}') ?? 0;
+  }
+
+  static String _shortMonthName(int month) {
+    const names = [
+      'янв',
+      'фев',
+      'мар',
+      'апр',
+      'май',
+      'июн',
+      'июл',
+      'авг',
+      'сен',
+      'окт',
+      'ноя',
+      'дек',
+    ];
+    return names[(month - 1).clamp(0, names.length - 1)];
   }
 }
 
@@ -577,6 +656,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
   final _searchCtrl = TextEditingController();
   Timer? _searchDebounce;
   bool _loading = true;
+  Object? _loadError;
   String _period = 'week';
   String _entityType = 'all';
   List<Map<String, dynamic>> _items = [];
@@ -604,7 +684,10 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
   }
 
   Future<void> _loadActivity() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final bounds = _activityBounds(_period);
       final items = await ref
@@ -621,8 +704,13 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
         _items = items;
         _loading = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadError = e;
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -702,6 +790,8 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
                     color: AppTheme.primaryPurple,
                   ),
                 )
+              : _loadError != null
+              ? _ReportsError(error: _loadError, onRetry: _loadActivity)
               : _items.isEmpty
               ? Center(
                   child: Text(

@@ -1488,7 +1488,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     }
 
     // Staff view with CRM navigation
-    final isDesktop = MediaQuery.of(context).size.width >= 768;
+    final isDesktopPlatform =
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
+    final isDesktop =
+        isDesktopPlatform || MediaQuery.of(context).size.width >= 768;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     ref.listen<CrmNavigationRequest?>(crmNavigationRequestProvider, (
@@ -1524,6 +1529,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                   : TelegramColors.lightSidebar,
               selectedIndex: selectedCrmTab,
               useIndicator: true,
+              labelType: NavigationRailLabelType.all,
               indicatorColor: TelegramColors.brandPurple.withAlpha(51),
               onDestinationSelected: (idx) {
                 setState(() {

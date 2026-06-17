@@ -68,6 +68,7 @@ app.*.map.json
 
 # Generated local analysis/capture artifacts
 /.nexus-map/
+/.understand-anything/
 /_archive/
 /installer_output/
 /ast_nodes*.json
