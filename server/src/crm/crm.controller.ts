@@ -516,6 +516,22 @@ export class CrmController {
     return this.crm.getLeadCard(actor, id);
   }
 
+  @Get("leads/:id/chat-user")
+  resolveLeadChatUser(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.resolveLeadChatUser(actor, id);
+  }
+
+  @Get("contacts/by-user/:userId")
+  resolveContactForUser(
+    @CurrentActor() actor: ActorContext,
+    @Param("userId", ParseUUIDPipe) userId: string,
+  ) {
+    return this.crm.resolveContactForUser(actor, userId);
+  }
+
   @Post("leads")
   createLead(@CurrentActor() actor: ActorContext, @Body() dto: UpsertLeadDto) {
     return this.crm.createLead(actor, dto);

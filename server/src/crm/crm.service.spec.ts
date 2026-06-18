@@ -3071,4 +3071,50 @@ describe("CrmService", () => {
       }),
     );
   });
+
+  it("resolves a lead chat user via an explicit crm link", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [{ id: "lead-a", name: "Иван", phone: "+7 999 000-00-00" }] },
+      { rows: [{ user_id: "user-x" }] },
+    ]);
+    const result = await service.resolveLeadChatUser(actor, "lead-a");
+    expect(result).toEqual({ userId: "user-x", name: "Иван" });
+  });
+
+  it("resolves a lead chat user by matching phone when no link exists", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [{ id: "lead-a", name: "Иван", phone: "+7 (999) 000-00-00" }] },
+      { rows: [] },
+      { rows: [{ user_id: "user-phone" }] },
+    ]);
+    const result = await service.resolveLeadChatUser(actor, "lead-a");
+    expect(result.userId).toBe("user-phone");
+  });
+
+  it("returns null lead chat user when nothing matches", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [{ id: "lead-a", name: "Иван", phone: null }] },
+      { rows: [] },
+    ]);
+    const result = await service.resolveLeadChatUser(actor, "lead-a");
+    expect(result.userId).toBeNull();
+  });
+
+  it("resolves a contact for a chat user, preferring crm links", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [{ entity_type: "lead", entity_id: "lead-1" }] },
+      { rows: [] }, // no owned student
+    ]);
+    const result = await service.resolveContactForUser(actor, "user-x");
+    expect(result).toEqual({ studentId: null, leadId: "lead-1" });
+  });
+
+  it("falls back to an owned student when a chat user has no crm links", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [] }, // no links
+      { rows: [{ id: "student-9" }] }, // owned student via profile.user_id
+    ]);
+    const result = await service.resolveContactForUser(actor, "user-x");
+    expect(result).toEqual({ studentId: "student-9", leadId: null });
+  });
 });

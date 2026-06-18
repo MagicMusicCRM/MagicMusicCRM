@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -1145,6 +1146,21 @@ class _LeadCard extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        IconButton(
+                          tooltip: 'Написать в чат',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          icon: const Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 18,
+                            color: AppTheme.primaryPurple,
+                          ),
+                          onPressed: () => _openChat(context, ref),
+                        ),
                         PopupMenuButton<String>(
                           icon: isPending
                               ? const SizedBox(
@@ -1455,6 +1471,42 @@ class _LeadCard extends ConsumerWidget {
             title: title.trim(),
           );
       onRefresh();
+    }
+  }
+
+  Future<void> _openChat(BuildContext context, WidgetRef ref) async {
+    final leadId = lead['id']?.toString();
+    if (leadId == null || leadId.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .resolveLeadChatUser(leadId);
+      final userId = result['userId']?.toString();
+      if (userId == null || userId.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'У этого лида пока нет связанного пользователя для чата. '
+              'Свяжите его по телефону в разделе «Пользователи».',
+            ),
+          ),
+        );
+        return;
+      }
+      // The leads board lives inside the messenger shell — setting the
+      // navigation target makes the shell open/create the direct chat and
+      // switch to the chat tab.
+      ref
+          .read(messengerNavigationProvider.notifier)
+          .navigateTo(MessengerNavigationState(partnerId: userId));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось открыть чат: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
     }
   }
 

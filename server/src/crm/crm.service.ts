@@ -3845,6 +3845,113 @@ export class CrmService {
     return { items: result.rows.map((row) => this.toLeadDto(row)) };
   }
 
+  // Resolve the messenger user behind a lead so staff can jump straight into a
+  // chat with them. Prefers an explicit user_crm_link, then falls back to a
+  // client user whose profile phone matches the lead's phone.
+  async resolveLeadChatUser(actor: ActorContext, leadId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const lead = await this.database.query<{
+      id: string;
+      name: string;
+      phone: string | null;
+    }>(
+      `
+        select id,
+          coalesce(
+            nullif(btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')), ''),
+            'Лид'
+          ) as name,
+          phone
+        from app.leads
+        where id = $1 and deleted_at is null
+        limit 1
+      `,
+      [leadId],
+    );
+    if (!lead.rows[0]) throw new NotFoundException("Лид не найден.");
+
+    const link = await this.database.query<{ user_id: string }>(
+      `
+        select user_id
+        from app.user_crm_links
+        where entity_type = 'lead' and entity_id = $1 and deleted_at is null
+        order by confirmed_at desc nulls last, created_at desc
+        limit 1
+      `,
+      [leadId],
+    );
+    if (link.rows[0]) {
+      return { userId: link.rows[0].user_id, name: lead.rows[0].name };
+    }
+
+    const phone = this.normalizeContactPhone(lead.rows[0].phone);
+    if (phone) {
+      const byPhone = await this.database.query<{ user_id: string }>(
+        `
+          select p.user_id
+          from app.profiles p
+          join app.users u on u.id = p.user_id and u.deleted_at is null
+          where p.deleted_at is null
+            and regexp_replace(coalesce(p.phone, ''), '[^0-9]', '', 'g') = $1
+            and u.role = 'client'
+          order by u.created_at desc
+          limit 1
+        `,
+        [phone],
+      );
+      if (byPhone.rows[0]) {
+        return { userId: byPhone.rows[0].user_id, name: lead.rows[0].name };
+      }
+    }
+    return { userId: null, name: lead.rows[0].name };
+  }
+
+  // Reverse lookup: given a messenger user (a chat partner), find the CRM
+  // lead/student they map to so staff can open the right card from a chat.
+  async resolveContactForUser(actor: ActorContext, userId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const links = await this.database.query<{
+      entity_type: string;
+      entity_id: string;
+    }>(
+      `
+        select entity_type, entity_id
+        from app.user_crm_links
+        where user_id = $1 and deleted_at is null
+      `,
+      [userId],
+    );
+    let studentId: string | null = null;
+    let leadId: string | null = null;
+    for (const row of links.rows) {
+      if (row.entity_type === "student") studentId ??= row.entity_id;
+      if (row.entity_type === "lead") leadId ??= row.entity_id;
+    }
+    // Students created in-app own their user directly (their profile.user_id),
+    // which may not have an explicit crm-link row.
+    if (!studentId) {
+      const owned = await this.database.query<{ id: string }>(
+        `
+          select s.id
+          from app.students s
+          join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+          where p.user_id = $1 and s.deleted_at is null
+          order by s.created_at desc
+          limit 1
+        `,
+        [userId],
+      );
+      studentId = owned.rows[0]?.id ?? null;
+    }
+    return { studentId, leadId };
+  }
+
+  private normalizeContactPhone(phone: string | null | undefined): string | null {
+    if (!phone) return null;
+    const digits = phone.replace(/[^0-9]/g, "");
+    return digits.length >= 10 ? digits : null;
+  }
+
   async createLead(actor: ActorContext, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
     const result = await this.database.query<LeadRow>(

@@ -780,6 +780,18 @@ class MagicCrmService {
     await _api.delete<Map<String, dynamic>>('/crm/leads/$id');
   }
 
+  /// Resolve the messenger user behind a lead (via crm-link or phone match)
+  /// so staff can jump into a chat. Returns `{userId, name}` (userId may be null).
+  Future<Map<String, dynamic>> resolveLeadChatUser(String leadId) async {
+    return _api.get<Map<String, dynamic>>('/crm/leads/$leadId/chat-user');
+  }
+
+  /// Reverse lookup: given a chat partner user, find their CRM lead/student.
+  /// Returns `{studentId, leadId}` (either may be null).
+  Future<Map<String, dynamic>> resolveContactForUser(String userId) async {
+    return _api.get<Map<String, dynamic>>('/crm/contacts/by-user/$userId');
+  }
+
   Future<Map<String, dynamic>> createLeadStatus({
     required String key,
     required String label,
