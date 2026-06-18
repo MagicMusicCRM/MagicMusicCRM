@@ -1661,21 +1661,36 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       return Scaffold(
         body: Row(
           children: [
-            NavigationRail(
-              backgroundColor: isDark
-                  ? TelegramColors.darkSidebar
-                  : TelegramColors.lightSidebar,
-              selectedIndex: selectedCrmTab,
-              useIndicator: true,
-              labelType: NavigationRailLabelType.all,
-              indicatorColor: TelegramColors.brandPurple.withAlpha(51),
-              onDestinationSelected: (idx) {
-                setState(() {
-                  _selectedCrmTab = idx;
-                  if (idx == 7) _selectedReportsTab = 0;
-                });
-              },
-              destinations: _desktopCrmDestinations(),
+            // NavigationRail doesn't scroll; with 8 always-labelled
+            // destinations it clips the bottom items (Tasks/Reports) on short
+            // windows or at 125-150% display scaling. Wrap it so it fills the
+            // height when there's room and scrolls when there isn't.
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
+                  ),
+                  child: IntrinsicHeight(
+                    child: NavigationRail(
+                      backgroundColor: isDark
+                          ? TelegramColors.darkSidebar
+                          : TelegramColors.lightSidebar,
+                      selectedIndex: selectedCrmTab,
+                      useIndicator: true,
+                      labelType: NavigationRailLabelType.all,
+                      indicatorColor: TelegramColors.brandPurple.withAlpha(51),
+                      onDestinationSelected: (idx) {
+                        setState(() {
+                          _selectedCrmTab = idx;
+                          if (idx == 7) _selectedReportsTab = 0;
+                        });
+                      },
+                      destinations: _desktopCrmDestinations(),
+                    ),
+                  ),
+                ),
+              ),
             ),
             VerticalDivider(
               thickness: 1,

@@ -32,7 +32,40 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   List<Map<String, dynamic>> _duplicateCandidates = [];
   bool _loadingDuplicates = true;
   bool _dirty = false;
+  // True once the user has edited a field but not saved — used to warn before
+  // discarding unsaved changes on close.
+  bool _edited = false;
   String? _duplicateDecisionId;
+
+  Future<void> _handleClose() async {
+    if (!_edited) {
+      Navigator.pop(context, _dirty ? true : null);
+      return;
+    }
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Несохранённые изменения'),
+        content: const Text(
+          'Изменения не сохранены. Закрыть карточку без сохранения?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Остаться'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Закрыть без сохранения'),
+          ),
+        ],
+      ),
+    );
+    if (leave == true && mounted) {
+      Navigator.pop(context, _dirty ? true : null);
+    }
+  }
 
   List<Map<String, dynamic>> _branches = [];
   bool _loadingMetadata = true;
@@ -207,6 +240,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
       final cd = Map<String, dynamic>.from(_leadData['custom_data'] ?? {});
       cd[key] = value;
       _leadData['custom_data'] = cd;
+      _edited = true;
     });
   }
 
@@ -273,7 +307,13 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
       orElse: () => fallbackStatus,
     );
 
-    return Dialog(
+    return PopScope(
+      canPop: !_edited,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _handleClose();
+      },
+      child: Dialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
       child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
@@ -305,7 +345,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                   ),
                 ),
                 IconButton(
-                  onPressed: () => Navigator.pop(context, _dirty ? true : null),
+                  onPressed: _handleClose,
                   icon: const Icon(Icons.close),
                 ),
               ],
@@ -397,9 +437,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                 ),
                 const Spacer(),
                 TextButton(
-                  onPressed: _saving || _converting
-                      ? null
-                      : () => Navigator.pop(context, _dirty ? true : null),
+                  onPressed: _saving || _converting ? null : _handleClose,
                   child: const Text('Отмена'),
                 ),
                 const SizedBox(width: 8),
@@ -421,6 +459,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -464,7 +503,12 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
           );
         }).toList(),
         onChanged: (v) {
-          if (v != null) setState(() => _leadData['status'] = v);
+          if (v != null) {
+            setState(() {
+              _leadData['status'] = v;
+              _edited = true;
+            });
+          }
         },
       ),
     );
@@ -493,7 +537,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
           if (isCustom) {
             _updateCustomData(key, v);
           } else {
-            setState(() => _leadData[key] = v);
+            setState(() {
+              _leadData[key] = v;
+              _edited = true;
+            });
           }
         },
       ),
@@ -635,7 +682,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
               ),
             )
             .toList(),
-        onChanged: (v) => setState(() => _leadData['branch_id'] = v),
+        onChanged: (v) => setState(() {
+          _leadData['branch_id'] = v;
+          _edited = true;
+        }),
       ),
     );
   }
