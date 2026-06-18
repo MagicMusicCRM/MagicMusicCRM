@@ -39,6 +39,9 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   bool _hasLoadedMore = false;
   bool _loadingMore = false;
   String? _nextCursor;
+  // Horizontal board auto-scroll while dragging a card near an edge.
+  Timer? _autoScrollTimer;
+  double _autoScrollDir = 0;
 
   @override
   void initState() {
@@ -51,9 +54,45 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _autoScrollTimer?.cancel();
     _searchCtrl.dispose();
     _boardScrollController.dispose();
     super.dispose();
+  }
+
+  // While a card is dragged near the left/right edge of the board, scroll the
+  // horizontal view so columns out of sight can be reached without dropping.
+  void _handleDragUpdate(Offset globalPosition) {
+    if (!mounted) return;
+    final width = MediaQuery.of(context).size.width;
+    const edge = 110.0;
+    if (globalPosition.dx < edge) {
+      _autoScrollDir = -1;
+    } else if (globalPosition.dx > width - edge) {
+      _autoScrollDir = 1;
+    } else {
+      _autoScrollDir = 0;
+    }
+    if (_autoScrollDir == 0) {
+      _autoScrollTimer?.cancel();
+      _autoScrollTimer = null;
+      return;
+    }
+    _autoScrollTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!_boardScrollController.hasClients || _autoScrollDir == 0) return;
+      final pos = _boardScrollController.position;
+      final next = (pos.pixels + _autoScrollDir * 24).clamp(
+        0.0,
+        pos.maxScrollExtent,
+      );
+      if (next != pos.pixels) _boardScrollController.jumpTo(next);
+    });
+  }
+
+  void _stopAutoScroll() {
+    _autoScrollDir = 0;
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
   }
 
   Future<void> _loadStatuses() async {
@@ -729,6 +768,8 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
                           nextCursor: pageCursor,
                           loadingMore: _loadingMore,
                           onLoadMore: _loadMoreLeads,
+                          onDragUpdate: _handleDragUpdate,
+                          onDragEnd: _stopAutoScroll,
                         );
                       }).toList(),
                     ),
@@ -756,6 +797,8 @@ class _KanbanColumn extends StatefulWidget {
   final String? nextCursor;
   final bool loadingMore;
   final ValueChanged<String?> onLoadMore;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
 
   const _KanbanColumn({
     required this.status,
@@ -770,6 +813,8 @@ class _KanbanColumn extends StatefulWidget {
     required this.nextCursor,
     required this.loadingMore,
     required this.onLoadMore,
+    required this.onDragUpdate,
+    required this.onDragEnd,
   });
 
   @override
@@ -782,19 +827,30 @@ class _KanbanColumnState extends State<_KanbanColumn> {
     final hasMore =
         (widget.nextCursor?.trim().isNotEmpty ?? false) &&
         widget.totalCount > widget.leads.length;
-    return Container(
-      width: 300,
-      margin: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withAlpha(127),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: DragTarget<String>(
-        onWillAcceptWithDetails: (details) => true,
-        onAcceptWithDetails: (details) =>
-            widget.onMove(details.data, widget.status.$1),
-        builder: (context, candidateData, rejectedData) {
-          return Column(
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => true,
+      onAcceptWithDetails: (details) {
+        widget.onDragEnd();
+        widget.onMove(details.data, widget.status.$1);
+      },
+      builder: (context, candidateData, rejectedData) {
+        final hovering = candidateData.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          width: 300,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: hovering
+                ? widget.status.$3.withAlpha(30)
+                : Theme.of(context).colorScheme.surface.withAlpha(127),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: hovering ? widget.status.$3 : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.all(12),
@@ -838,17 +894,34 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                   ],
                 ),
               ),
-              if (candidateData.isNotEmpty)
-                Container(
-                  height: 100,
-                  margin: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: widget.status.$3),
-                    borderRadius: BorderRadius.circular(10),
-                    color: widget.status.$3.withAlpha(25),
-                  ),
-                  child: const Center(child: Icon(Icons.move_to_inbox_rounded)),
-                ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: hovering
+                    ? Container(
+                        height: 40,
+                        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: widget.status.$3,
+                            style: BorderStyle.solid,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          color: widget.status.$3.withAlpha(25),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Отпустите, чтобы перенести',
+                            style: TextStyle(
+                              color: widget.status.$3,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -889,14 +962,16 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                       onTap: () => widget.onTap(lead),
                       onRefresh: widget.onRefresh,
                       isPending: widget.pendingLeadIds.contains(leadId),
+                      onDragUpdate: widget.onDragUpdate,
+                      onDragEnd: widget.onDragEnd,
                     );
                   },
                 ),
               ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -912,6 +987,8 @@ class _LeadCard extends ConsumerWidget {
   final VoidCallback onTap;
   final VoidCallback onRefresh;
   final bool isPending;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
 
   const _LeadCard({
     required this.lead,
@@ -922,6 +999,8 @@ class _LeadCard extends ConsumerWidget {
     required this.onTap,
     required this.onRefresh,
     required this.isPending,
+    required this.onDragUpdate,
+    required this.onDragEnd,
   });
 
   @override
@@ -951,26 +1030,91 @@ class _LeadCard extends ConsumerWidget {
     return LongPressDraggable<String>(
       data: id,
       maxSimultaneousDrags: isPending ? 0 : null,
+      // Snappier than the default ~500ms long-press so dragging feels
+      // responsive with a mouse on desktop, while still not stealing the
+      // vertical scroll gesture inside the column list.
+      delay: const Duration(milliseconds: 180),
+      hapticFeedbackOnStart: true,
+      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
+      onDragEnd: (_) => onDragEnd(),
+      onDraggableCanceled: (_, _) => onDragEnd(),
+      onDragCompleted: onDragEnd,
       feedback: Transform.rotate(
-        angle: 0.05,
+        angle: 0.03,
         child: Material(
           color: Colors.transparent,
           child: Container(
-            width: 280,
-            padding: const EdgeInsets.all(14),
+            width: 276,
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.primaryGold, width: 2),
+              border: Border.all(color: statusColor, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(80),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-            child: Text(
-              displayName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (phone.isNotEmpty)
+                        Text(
+                          phone,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.drag_indicator_rounded, size: 18),
+              ],
             ),
           ),
+        ),
+      ),
+      // Leave a faded placeholder gap in the source column while dragging.
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: statusColor.withAlpha(120),
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: const SizedBox(height: 64, width: double.infinity),
         ),
       ),
       child: Opacity(
