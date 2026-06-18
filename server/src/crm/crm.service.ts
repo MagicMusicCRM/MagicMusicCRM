@@ -2705,6 +2705,48 @@ export class CrmService {
     };
   }
 
+  // Lightweight per-day aggregate for the month calendar: returns one row per
+  // day with the lesson count and the distinct room ids (for the colored dots),
+  // instead of shipping every lesson. Keeps the month view fast even for
+  // branches with thousands of lessons per month.
+  async getScheduleMonthSummary(
+    actor: ActorContext,
+    query: ScheduleMatrixQuery,
+  ) {
+    this.policy.assertCanReadOperationalData(actor);
+    const bounds = this.scheduleMatrixBounds(query);
+    const result = await this.database.query<{
+      day: string;
+      count: string;
+      room_ids: string[] | null;
+    }>(
+      `
+        select
+          to_char((l.scheduled_at at time zone 'Europe/Moscow')::date, 'YYYY-MM-DD') as day,
+          count(*)::text as count,
+          array_remove(array_agg(distinct l.room_id), null) as room_ids
+        from app.lessons l
+        left join app.rooms r on r.id = l.room_id and r.deleted_at is null
+        where l.deleted_at is null
+          and l.scheduled_at >= $1::timestamptz
+          and l.scheduled_at <  $2::timestamptz
+          and ($3::uuid is null or l.branch_id = $3 or r.branch_id = $3)
+        group by 1
+        order by 1
+      `,
+      [bounds.from, bounds.to, query.branchId ?? null],
+    );
+    return {
+      from: bounds.from,
+      to: bounds.to,
+      items: result.rows.map((row) => ({
+        day: row.day,
+        count: Number(row.count),
+        roomIds: row.room_ids ?? [],
+      })),
+    };
+  }
+
   async listLessons(actor: ActorContext, query: LessonQuery) {
     const limit = Math.min(query.limit ?? 100, 200);
     const result = await this.database.query<LessonRow>(

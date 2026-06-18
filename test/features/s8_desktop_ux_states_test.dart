@@ -60,13 +60,17 @@ void main() {
       expect(find.text('Повторить'), findsOneWidget);
     });
 
-    testWidgets('T8.2 tasks expose an extended create FAB and empty state', (
+    testWidgets('T8.2 tasks expose a compact create FAB and empty state', (
       tester,
     ) async {
       await tester.pumpWidget(_host(const TasksWidget()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Новая задача'), findsOneWidget);
+      // Compact circular FAB ("+") with the action surfaced via tooltip, so the
+      // label never overflows the button radius.
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+      expect(find.byIcon(Icons.add), findsOneWidget);
+      expect(find.byTooltip('Новая задача'), findsOneWidget);
       expect(find.text('Нет задач'), findsOneWidget);
     });
 

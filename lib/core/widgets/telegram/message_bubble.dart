@@ -497,8 +497,14 @@ class MessageBubble extends StatelessWidget {
                 ),
               if (onPin != null)
                 ListTile(
-                  leading: const Icon(Icons.push_pin_rounded),
-                  title: const Text('Закрепить'),
+                  leading: Icon(
+                    message['pinned_at'] != null
+                        ? Icons.push_pin_outlined
+                        : Icons.push_pin_rounded,
+                  ),
+                  title: Text(
+                    message['pinned_at'] != null ? 'Открепить' : 'Закрепить',
+                  ),
                   onTap: () {
                     Navigator.pop(context);
                     onPin!();

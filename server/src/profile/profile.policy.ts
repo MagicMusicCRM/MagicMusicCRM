@@ -23,15 +23,18 @@ export class ProfilePolicy {
     currentRole?: ActorContext['role'],
     newRole?: ActorContext['role']
   ): void {
+    // Администратор / Администратор системы: полный контроль над ролями.
     if (isAdminRole(actor.role)) return;
-    if (
-      actor.role === 'manager' &&
-      currentRole !== 'admin' &&
-      currentRole !== 'manager' &&
-      currentRole !== 'system_admin' &&
-      (newRole === 'client' || newRole === 'teacher')
-    ) {
-      return;
+    // Управляющий (manager): может назначать любую операционную роль —
+    // «Клиент», «Преподаватель» и саму высшую операционную «Управляющий»,
+    // — но НЕ может выдавать admin/system_admin и НЕ может менять роль
+    // пользователям admin-уровня (нет эскалации выше собственного уровня).
+    if (actor.role === 'manager') {
+      const targetIsAdminTier =
+        currentRole === 'admin' || currentRole === 'system_admin';
+      const grantsAdminTier =
+        newRole === 'admin' || newRole === 'system_admin';
+      if (!targetIsAdminTier && !grantsAdminTier) return;
     }
     throw new ForbiddenException(
       'Недостаточно прав для изменения роли пользователя.'

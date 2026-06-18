@@ -874,6 +874,44 @@ class MagicCrmService {
     };
   }
 
+  /// Lightweight per-day lesson counts for the month calendar. Returns a list of
+  /// `{ 'day': 'YYYY-MM-DD', 'count': int, 'room_ids': List<String> }` so the
+  /// month view can render counts + room dots without fetching every lesson.
+  Future<List<Map<String, dynamic>>> getScheduleMonthSummary({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final queryParameters = <String, dynamic>{};
+    void addString(String key, String? value) {
+      final trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        queryParameters[key] = trimmed;
+      }
+    }
+
+    addString('from', from);
+    addString('to', to);
+    addString('branchId', branchId);
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/schedule/month-summary',
+      queryParameters: queryParameters,
+    );
+    return _items(response).map((item) {
+      final roomIds = item['roomIds'];
+      return {
+        'day': item['day']?.toString(),
+        'count': item['count'] is int
+            ? item['count']
+            : int.tryParse('${item['count']}') ?? 0,
+        'room_ids': roomIds is List
+            ? roomIds.map((e) => e.toString()).toList()
+            : const <String>[],
+      };
+    }).toList();
+  }
+
   Future<List<Map<String, dynamic>>> listLessons({
     String? from,
     String? to,

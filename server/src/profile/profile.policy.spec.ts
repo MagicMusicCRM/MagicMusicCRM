@@ -16,10 +16,11 @@ describe('ProfilePolicy', () => {
     ).toThrow(NotFoundException);
   });
 
-  it('allows managers to list profiles and update client or teacher roles only', () => {
+  it('allows managers to assign operational roles up to manager, but not admin tiers', () => {
     expect(() =>
       policy.assertCanListProfiles({ userId: 'manager-a', role: 'manager' })
     ).not.toThrow();
+    // May assign client / teacher / manager (the top operational role).
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
@@ -31,9 +32,17 @@ describe('ProfilePolicy', () => {
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
         'teacher',
-        'client'
+        'manager'
       )
     ).not.toThrow();
+    expect(() =>
+      policy.assertCanUpdateRole(
+        { userId: 'manager-a', role: 'manager' },
+        'manager',
+        'teacher'
+      )
+    ).not.toThrow();
+    // Must NOT grant admin-tier roles (privilege escalation above own tier).
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
@@ -44,6 +53,14 @@ describe('ProfilePolicy', () => {
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
+        'client',
+        'system_admin'
+      )
+    ).toThrow(ForbiddenException);
+    // Must NOT modify users who already hold an admin-tier role.
+    expect(() =>
+      policy.assertCanUpdateRole(
+        { userId: 'manager-a', role: 'manager' },
         'admin',
         'manager'
       )
@@ -51,8 +68,25 @@ describe('ProfilePolicy', () => {
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
+        'system_admin',
+        'teacher'
+      )
+    ).toThrow(ForbiddenException);
+  });
+
+  it('forbids clients and teachers from updating roles', () => {
+    expect(() =>
+      policy.assertCanUpdateRole(
+        { userId: 'client-a', role: 'client' },
         'client',
-        'system_admin'
+        'teacher'
+      )
+    ).toThrow(ForbiddenException);
+    expect(() =>
+      policy.assertCanUpdateRole(
+        { userId: 'teacher-a', role: 'teacher' },
+        'client',
+        'manager'
       )
     ).toThrow(ForbiddenException);
   });

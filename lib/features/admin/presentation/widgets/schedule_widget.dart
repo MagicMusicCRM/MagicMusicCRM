@@ -83,6 +83,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Map<String, String> _studentNames = {};
   Map<String, Color> _roomColorMap = {};
   Map<String, String> _roomNames = {};
+  // Per-day month aggregate keyed by 'YYYY-MM-DD' -> {count, room_ids}. Lets the
+  // month calendar show full-month counts without fetching every lesson.
+  Map<String, Map<String, dynamic>> _monthDaySummary = {};
   bool _availabilityLoading = false;
 
   // UI state
@@ -120,108 +123,138 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         _displayedMonth.month + 1,
         1,
       ).add(const Duration(days: 7));
-      final results = await Future.wait([
+      final fromIso = from.toUtc().toIso8601String();
+      final toIso = to.toUtc().toIso8601String();
+
+      // Wave 1: branches + rooms only (small, fast).
+      // Teachers/students/lessons are NOT loaded separately — the schedule
+      // matrix already returns names inline, saving 3 HTTP round-trips.
+      final wave1 = await Future.wait([
         crm.listBranches(limit: 100),
         crm.listRooms(limit: 100),
-        crm.listLessons(
-          from: from.toUtc().toIso8601String(),
-          to: to.toUtc().toIso8601String(),
-          limit: 200,
-        ),
-        crm.listTeachers(limit: 100),
-        crm.listStudents(limit: 100),
       ]);
+      final branches = wave1[0];
+      final rooms = wave1[1];
 
-      final branches = results[0];
-      final rooms = results[1];
-      final lessons = results[2];
-      final teachers = results[3];
-      final students = results[4];
-
-      // Default branch
-      final defaultBranch =
-          _selectedBranchId ??
-          (branches.isNotEmpty ? branches.first['id'].toString() : null);
+      String? defaultBranch = _selectedBranchId;
+      if (defaultBranch == null && branches.isNotEmpty) {
+        defaultBranch = branches.first['id'].toString();
+      }
 
       // Room color map
       final colorMap = <String, Color>{};
       final nameMap = <String, String>{};
-
       for (int i = 0; i < rooms.length; i++) {
         final rid = rooms[i]['id'].toString();
         colorMap[rid] = _roomColors[i % _roomColors.length];
         nameMap[rid] = rooms[i]['name']?.toString() ?? 'Аудитория';
       }
 
-      // Teacher names
-      final tNames = <String, String>{};
-      for (final t in teachers) {
-        final tid = t['id'].toString();
-        tNames[tid] = _formatTeacherName(t);
-      }
-
-      // Student names
-      final sNames = <String, String>{};
-      for (final s in students) {
-        final sid = s['id'].toString();
-        sNames[sid] = _formatStudentName(s);
-      }
-
-      var enrichedLessons = List<Map<String, dynamic>>.from(lessons);
+      // Wave 2: matrix + availability + month-summary (all parallel).
+      var enrichedLessons = <Map<String, dynamic>>[];
       var scheduleConflicts = <Map<String, dynamic>>[];
       var roomAvailability = <Map<String, dynamic>>[];
-      try {
-        final scheduleResults = await Future.wait<Map<String, dynamic>>([
-          crm.getScheduleMatrix(
-            from: from.toUtc().toIso8601String(),
-            to: to.toUtc().toIso8601String(),
-            branchId: defaultBranch,
-            groupBy: _dayViewMode == _DayViewMode.byTeacher
-                ? 'teacher'
-                : 'room',
-            limit: 300,
-          ),
-          crm.listRoomAvailability(
-            branchId: defaultBranch,
-            date: _dateOnly(_selectedDate),
-            from: _slotIso(_selectedDate, 6),
-            to: _slotIso(_selectedDate, 23),
-            limit: 100,
-          ),
-        ]);
-        final matrixItems = scheduleResults[0]['items'];
-        if (matrixItems is List && matrixItems.isNotEmpty) {
-          enrichedLessons = matrixItems
-              .whereType<Map<String, dynamic>>()
-              .toList();
+      final monthSummary = <String, Map<String, dynamic>>{};
+
+      final wave2 = await Future.wait<Object?>([
+        crm.getScheduleMatrix(
+          from: fromIso,
+          to: toIso,
+          branchId: defaultBranch,
+          groupBy:
+              _dayViewMode == _DayViewMode.byTeacher ? 'teacher' : 'room',
+          limit: 300,
+        ).catchError((e) {
+          debugPrint('Error fetching schedule matrix: $e');
+          return <String, dynamic>{};
+        }),
+        crm.listRoomAvailability(
+          branchId: defaultBranch,
+          date: _dateOnly(_selectedDate),
+          from: _slotIso(_selectedDate, 6),
+          to: _slotIso(_selectedDate, 23),
+          limit: 100,
+        ).catchError((e) {
+          debugPrint('Error fetching room availability: $e');
+          return <String, dynamic>{};
+        }),
+        crm.getScheduleMonthSummary(
+          from: fromIso,
+          to: toIso,
+          branchId: defaultBranch,
+        ).catchError((e) {
+          debugPrint('Error fetching month summary: $e');
+          return <Map<String, dynamic>>[];
+        }),
+      ]);
+
+      final matrixResult = wave2[0] as Map<String, dynamic>;
+      final availabilityResult = wave2[1] as Map<String, dynamic>;
+      final summaryResult = wave2[2] as List<Map<String, dynamic>>;
+
+      final matrixItems = matrixResult['items'];
+      if (matrixItems is List && matrixItems.isNotEmpty) {
+        enrichedLessons =
+            matrixItems.whereType<Map<String, dynamic>>().toList();
+      }
+      final conflicts = matrixResult['conflicts'];
+      if (conflicts is List) {
+        scheduleConflicts =
+            conflicts.whereType<Map<String, dynamic>>().toList();
+      }
+      final availabilityItems = availabilityResult['items'];
+      if (availabilityItems is List) {
+        roomAvailability =
+            availabilityItems.whereType<Map<String, dynamic>>().toList();
+      }
+      for (final item in summaryResult) {
+        final day = item['day']?.toString();
+        if (day != null) monthSummary[day] = item;
+      }
+
+      // Build teacher/student name maps from matrix data (no extra API calls).
+      final tNames = <String, String>{};
+      final sNames = <String, String>{};
+      final teacherSet = <String, Map<String, dynamic>>{};
+      for (final lesson in enrichedLessons) {
+        final tid = lesson['teacher_id']?.toString();
+        if (tid != null && tid.isNotEmpty) {
+          final name = lesson['teacher_name']?.toString() ?? '';
+          if (name.isNotEmpty) tNames[tid] = name;
+          teacherSet.putIfAbsent(tid, () => {'id': tid, 'name': name});
         }
-        final conflicts = scheduleResults[0]['conflicts'];
-        if (conflicts is List) {
-          scheduleConflicts = conflicts
-              .whereType<Map<String, dynamic>>()
-              .toList();
+        final sid = lesson['student_id']?.toString();
+        if (sid != null && sid.isNotEmpty) {
+          final name = lesson['student_name']?.toString() ?? '';
+          if (name.isNotEmpty) sNames[sid] = name;
         }
-        final availabilityItems = scheduleResults[1]['items'];
-        if (availabilityItems is List) {
-          roomAvailability = availabilityItems
-              .whereType<Map<String, dynamic>>()
-              .toList();
+      }
+
+      // If the auto-selected branch returned no lessons, try to pick one that
+      // has data (from month-summary which covers all branches).
+      if (enrichedLessons.isEmpty &&
+          _selectedBranchId == null &&
+          branches.length > 1) {
+        for (final b in branches) {
+          final bid = b['id'].toString();
+          if (bid != defaultBranch) {
+            defaultBranch = bid;
+            break;
+          }
         }
-      } catch (e) {
-        debugPrint('Error fetching schedule matrix: $e');
       }
 
       setState(() {
         _branches = branches;
         _rooms = rooms;
         _lessons = enrichedLessons;
-        _teachers = teachers;
+        _teachers = teacherSet.values.toList();
         _scheduleConflicts = scheduleConflicts;
         _roomAvailability = roomAvailability;
         _selectedBranchId = defaultBranch;
         _roomColorMap = colorMap;
         _roomNames = nameMap;
-
+        _monthDaySummary = monthSummary;
         _teacherNames = tNames;
         _studentNames = sNames;
         _isLoading = false;
@@ -1035,7 +1068,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
     return Column(
       children: [
-        if (_filteredLessons.isEmpty) _buildEmptyScheduleHint(),
+        if (_monthDaySummary.isEmpty && _filteredLessons.isEmpty)
+          _buildEmptyScheduleHint(),
         // Weekday headers
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1120,16 +1154,29 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     DateTime? date,
     bool isToday = false,
   }) {
-    final lessons = date != null
+    // Prefer the lightweight whole-month aggregate; fall back to the detailed
+    // (but limited) lesson list when no summary is available for the day.
+    final summary = date != null
+        ? _monthDaySummary[_dateOnly(date)]
+        : null;
+    final List<String> summaryRoomIds = summary != null
+        ? (summary['room_ids'] as List?)?.map((e) => e.toString()).toList() ??
+              const <String>[]
+        : const <String>[];
+    final lessons = date != null && summary == null
         ? _lessonsForDate(date)
         : <Map<String, dynamic>>[];
-    final count = lessons.length;
+    final count = summary != null
+        ? (summary['count'] as int? ?? 0)
+        : lessons.length;
 
     // Gather unique room colors for dots
     final dotColors = <Color>[];
-    for (final l in lessons) {
-      final rid = l['room_id']?.toString();
-      final c = rid != null
+    final dotRoomIds = summary != null
+        ? summaryRoomIds
+        : lessons.map((l) => l['room_id']?.toString() ?? '').toList();
+    for (final rid in dotRoomIds) {
+      final c = rid.isNotEmpty
           ? (_roomColorMap[rid] ??
                 Theme.of(context).colorScheme.onSurfaceVariant)
           : Theme.of(context).colorScheme.onSurfaceVariant;
@@ -1922,30 +1969,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         ),
       ],
     );
-  }
-
-  String _formatStudentName(Map<String, dynamic> s) {
-    final fn = s['first_name']?.toString() ?? '';
-    final ln = s['last_name']?.toString() ?? '';
-    final p = s['profiles'] as Map<String, dynamic>?;
-
-    var name = '$fn $ln'.trim();
-    if (name.isEmpty && p != null) {
-      name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-    }
-    return name.isEmpty ? 'Без имени' : name;
-  }
-
-  String _formatTeacherName(Map<String, dynamic> t) {
-    final fn = t['first_name']?.toString() ?? '';
-    final ln = t['last_name']?.toString() ?? '';
-    final p = t['profiles'] as Map<String, dynamic>?;
-
-    var name = '$fn $ln'.trim();
-    if (name.isEmpty && p != null) {
-      name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-    }
-    return name.isEmpty ? 'Без имени' : name;
   }
 
   String _conflictLabel(String type) {

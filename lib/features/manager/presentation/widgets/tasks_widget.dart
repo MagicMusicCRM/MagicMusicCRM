@@ -347,9 +347,10 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: _creatingTask ? null : _createTask,
-        icon: _creatingTask
+        tooltip: _creatingTask ? 'Подготовка…' : 'Новая задача',
+        child: _creatingTask
             ? const SizedBox(
                 width: 18,
                 height: 18,
@@ -359,7 +360,6 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                 ),
               )
             : const Icon(Icons.add),
-        label: Text(_creatingTask ? 'Подготовка…' : 'Новая задача'),
       ),
       body: Column(
         children: [

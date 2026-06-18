@@ -120,9 +120,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   Future<void> _bootstrapMessenger() async {
-    await _loadCurrentProfile();
-    if (!mounted) return;
-    await _loadChatList();
+    // Profile and chat list are independent — load in parallel.
+    // Realtime needs _currentUserId from profile, so it waits for both.
+    await Future.wait([_loadCurrentProfile(), _loadChatList()]);
     if (!mounted) return;
     await _connectRealtime();
   }
@@ -455,8 +455,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     final chatId = _selectedChatId!;
     final previous = _unreadCounts[chatId] ?? 0;
     setState(() => _unreadCounts[chatId] = 0);
+    // Pass the latest message ID so the server can skip the resolve query.
+    final lastMsgId = _messages.isNotEmpty
+        ? _messages.last['id']?.toString()
+        : null;
     try {
-      await ref.read(magicMessengerServiceProvider).markRead(_selectedChatId!);
+      await ref
+          .read(magicMessengerServiceProvider)
+          .markRead(chatId, lastReadMessageId: lastMsgId);
     } catch (e) {
       if (mounted) setState(() => _unreadCounts[chatId] = previous);
       _logMessenger('MessengerScreen: Error marking messages as read: $e');
@@ -975,9 +981,26 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     );
 
     if (confirm == true) {
-      await ref
-          .read(magicMessengerServiceProvider)
-          .deleteMessage(mid, mode: isMe ? 'own' : 'moderated');
+      try {
+        final updated = await ref
+            .read(magicMessengerServiceProvider)
+            .deleteMessage(mid, mode: isMe ? 'own' : 'moderated');
+        // Apply the server response locally so the message shows as deleted
+        // immediately, independent of realtime delivery.
+        if (mounted) {
+          setState(() {
+            final idx = _messages.indexWhere((m) => m['id'] == mid);
+            if (idx != -1) _messages[idx] = {..._messages[idx], ...updated};
+          });
+        }
+      } catch (e) {
+        _logMessenger('Error deleting message: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Не удалось удалить сообщение: $e')),
+          );
+        }
+      }
     }
   }
 
@@ -1249,23 +1272,56 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     if (mounted) setState(() => _reactionsMap = nextMap);
   }
 
-  Future<void> _toggleReaction(String messageId, String emoji) async {
-    try {
-      final existing = _reactionsMap[messageId]?.firstWhere(
-        (r) => r is Map && r['user_id'] == _userId && r['emoji'] == emoji,
-        orElse: () => null,
-      );
+  void _applyReactionsToMessage(String messageId, List<dynamic> reactions) {
+    final idx = _messages.indexWhere((m) => m['id'] == messageId);
+    if (idx != -1) {
+      _messages[idx] = {..._messages[idx], 'reactions': reactions};
+    }
+  }
 
-      final messenger = ref.read(magicMessengerServiceProvider);
-      if (existing != null) {
-        await messenger.removeReaction(messageId: messageId, emoji: emoji);
-      } else {
-        await messenger.setReaction(messageId: messageId, emoji: emoji);
+  Future<void> _toggleReaction(String messageId, String emoji) async {
+    final messenger = ref.read(magicMessengerServiceProvider);
+    final previous = List<dynamic>.from(_reactionsMap[messageId] ?? const []);
+    final hasMine = previous.any(
+      (r) => r is Map && r['user_id'] == _userId && r['emoji'] == emoji,
+    );
+
+    // Optimistic update so the reaction reflects instantly, independent of
+    // realtime delivery (top-tier messenger behaviour). The server response is
+    // then applied as the authoritative state below.
+    final optimistic = List<dynamic>.from(previous);
+    if (hasMine) {
+      optimistic.removeWhere(
+        (r) => r is Map && r['user_id'] == _userId && r['emoji'] == emoji,
+      );
+    } else {
+      optimistic.add({'user_id': _userId, 'emoji': emoji});
+    }
+    setState(() {
+      _reactionsMap = {..._reactionsMap, messageId: optimistic};
+      _applyReactionsToMessage(messageId, optimistic);
+    });
+
+    try {
+      final result = hasMine
+          ? await messenger.removeReaction(messageId: messageId, emoji: emoji)
+          : await messenger.setReaction(messageId: messageId, emoji: emoji);
+      final reactions = result['reactions'];
+      if (reactions is List && mounted) {
+        setState(() {
+          _reactionsMap = {..._reactionsMap, messageId: reactions};
+          _applyReactionsToMessage(messageId, reactions);
+        });
       }
-      // Realtime listener will handle the update, but we can also trigger a manual fetch
-      _fetchReactionsForCurrentMessages();
     } catch (e) {
       _logMessenger('Error toggling reaction: $e');
+      // Revert the optimistic change on failure.
+      if (mounted) {
+        setState(() {
+          _reactionsMap = {..._reactionsMap, messageId: previous};
+          _applyReactionsToMessage(messageId, previous);
+        });
+      }
     }
   }
 

@@ -1312,7 +1312,23 @@ async function upsertRoom(
   const key = externalId ?? `${branchId ?? "global"}:${name.toLowerCase()}`;
   const cached = cache.get(key);
   if (cached) return cached;
-  const id = deterministicUuid("hollihop-classroom", `${branchId ?? "global"}:${key}`);
+  // Reconcile against an existing active room by its natural (branch, name)
+  // key before minting a deterministic id. HolliHop's ClassroomId is not
+  // stable across pulls, so keying the id on it alone created duplicate rooms
+  // for the same physical room. Reusing the existing row keeps re-imports
+  // idempotent. (Same find-or-create pattern as lead statuses above.)
+  const existing = await ctx.client.query<{ id: string }>(
+    `select id from app.rooms
+     where deleted_at is null
+       and lower(name) = lower($1)
+       and branch_id is not distinct from $2::uuid
+     order by created_at asc
+     limit 1`,
+    [name, branchId ?? null],
+  );
+  const id =
+    existing.rows[0]?.id ??
+    deterministicUuid("hollihop-classroom", `${branchId ?? "global"}:${key}`);
   cache.set(key, id);
   await recordSource(ctx, {
     source: "rooms",

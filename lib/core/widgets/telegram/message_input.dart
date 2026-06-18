@@ -39,6 +39,7 @@ class _MessageInputState extends State<MessageInput> {
   bool _isRecording = false;
   bool _isSendingFile = false;
   bool _hasText = false;
+  bool _showEmojiPicker = false;
   DateTime? _lastTypingTime;
 
   bool get _isDesktop {
@@ -270,6 +271,27 @@ class _MessageInputState extends State<MessageInput> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  // Emoji button
+                  IconButton(
+                    icon: Icon(
+                      _showEmojiPicker
+                          ? Icons.keyboard_rounded
+                          : Icons.emoji_emotions_outlined,
+                      color: _showEmojiPicker
+                          ? TelegramColors.accentBlue
+                          : isDark
+                              ? TelegramColors.darkTextSecondary
+                              : TelegramColors.lightTextSecondary,
+                    ),
+                    onPressed: widget.enabled
+                        ? () {
+                            setState(() => _showEmojiPicker = !_showEmojiPicker);
+                            if (!_showEmojiPicker) _focusNode.requestFocus();
+                          }
+                        : null,
+                    splashRadius: 20,
+                    tooltip: _showEmojiPicker ? 'Клавиатура' : 'Эмодзи',
+                  ),
                   // Attach button
                   if (widget.onSendFile != null && widget.editingMessage == null)
                     IconButton(
@@ -366,9 +388,168 @@ class _MessageInputState extends State<MessageInput> {
                 ],
               ),
             ),
+            if (_showEmojiPicker) _buildEmojiPanel(isDark),
           ],
         ),
       ),
+    );
+  }
+
+  void _insertEmoji(String emoji) {
+    final text = _controller.text;
+    final selection = _controller.selection;
+    final offset = selection.isValid ? selection.baseOffset : text.length;
+    final newText = text.substring(0, offset) + emoji + text.substring(offset);
+    _controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: offset + emoji.length),
+    );
+  }
+
+  Widget _buildEmojiPanel(bool isDark) {
+    return SizedBox(
+      height: 250,
+      child: _EmojiGrid(
+        onEmojiSelected: _insertEmoji,
+        isDark: isDark,
+      ),
+    );
+  }
+}
+
+const _emojiCategories = <({String label, IconData icon, List<String> emojis})>[
+  (
+    label: 'Смайлы',
+    icon: Icons.emoji_emotions_outlined,
+    emojis: [
+      '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
+      '🙂', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗',
+      '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝',
+      '🤑', '🤗', '🤭', '🤫', '🤔', '🫡', '🤐', '🤨',
+      '😐', '😑', '😶', '🫥', '😏', '😒', '🙄', '😬',
+      '😮‍💨', '🤥', '🫠', '😌', '😔', '😪', '🤤', '😴',
+      '😷', '🤒', '🤕', '🤢', '🤮', '🥵', '🥶', '🥴',
+      '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐',
+      '😕', '🫤', '😟', '🙁', '😮', '😯', '😲', '😳',
+      '🥺', '🥹', '😦', '😧', '😨', '😰', '😥', '😢',
+      '😭', '😱', '😖', '😣', '😞', '😓', '😩', '😫',
+      '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀',
+    ],
+  ),
+  (
+    label: 'Жесты',
+    icon: Icons.waving_hand_outlined,
+    emojis: [
+      '👋', '🤚', '🖐️', '✋', '🖖', '🫱', '🫲', '🫳',
+      '🫴', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟',
+      '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️',
+      '🫵', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏',
+      '🙌', '🫶', '👐', '🤲', '🤝', '🙏', '✍️', '💅',
+      '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻',
+    ],
+  ),
+  (
+    label: 'Сердца',
+    icon: Icons.favorite_border,
+    emojis: [
+      '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍',
+      '🤎', '💔', '❤️‍🔥', '❤️‍🩹', '❣️', '💕', '💞', '💓',
+      '💗', '💖', '💘', '💝', '💟', '♥️', '🫀', '💋',
+    ],
+  ),
+  (
+    label: 'Объекты',
+    icon: Icons.lightbulb_outline,
+    emojis: [
+      '🎵', '🎶', '🎤', '🎧', '🎸', '🎹', '🎺', '🎻',
+      '🥁', '🪘', '🎼', '🎷', '🪗', '💡', '🔥', '⭐',
+      '🌟', '✨', '💫', '🎉', '🎊', '🎈', '🎁', '🏆',
+      '🥇', '🥈', '🥉', '🏅', '📚', '📖', '✏️', '📝',
+      '💰', '💵', '💳', '📱', '💻', '⏰', '📅', '📌',
+      '🔔', '✅', '❌', '❓', '❗', '💯', '🆗', '🆕',
+    ],
+  ),
+];
+
+class _EmojiGrid extends StatefulWidget {
+  final ValueChanged<String> onEmojiSelected;
+  final bool isDark;
+
+  const _EmojiGrid({required this.onEmojiSelected, required this.isDark});
+
+  @override
+  State<_EmojiGrid> createState() => _EmojiGridState();
+}
+
+class _EmojiGridState extends State<_EmojiGrid> {
+  int _categoryIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final category = _emojiCategories[_categoryIndex];
+    return Column(
+      children: [
+        SizedBox(
+          height: 40,
+          child: Row(
+            children: List.generate(_emojiCategories.length, (i) {
+              final cat = _emojiCategories[i];
+              final selected = i == _categoryIndex;
+              return Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _categoryIndex = i),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        cat.icon,
+                        size: 20,
+                        color: selected
+                            ? TelegramColors.accentBlue
+                            : widget.isDark
+                                ? TelegramColors.darkTextSecondary
+                                : TelegramColors.lightTextSecondary,
+                      ),
+                      if (selected)
+                        Container(
+                          margin: const EdgeInsets.only(top: 2),
+                          height: 2,
+                          width: 20,
+                          decoration: BoxDecoration(
+                            color: TelegramColors.accentBlue,
+                            borderRadius: BorderRadius.circular(1),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(8),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 42,
+              mainAxisSpacing: 4,
+              crossAxisSpacing: 4,
+            ),
+            itemCount: category.emojis.length,
+            itemBuilder: (context, index) {
+              final emoji = category.emojis[index];
+              return InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => widget.onEmojiSelected(emoji),
+                child: Center(
+                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

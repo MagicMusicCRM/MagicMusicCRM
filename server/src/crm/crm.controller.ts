@@ -375,6 +375,14 @@ export class CrmController {
     return this.crm.getScheduleMatrix(actor, query);
   }
 
+  @Get("schedule/month-summary")
+  getScheduleMonthSummary(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: ScheduleMatrixQuery,
+  ) {
+    return this.crm.getScheduleMonthSummary(actor, query);
+  }
+
   @Post("lessons")
   createLesson(
     @CurrentActor() actor: ActorContext,

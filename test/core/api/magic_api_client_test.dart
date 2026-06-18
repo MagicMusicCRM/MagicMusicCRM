@@ -82,6 +82,55 @@ void main() {
       },
     );
 
+    test(
+      'proactively refreshes an expired JWT before sending (no 401 needed)',
+      () async {
+        // exp far in the past -> _isAccessTokenExpired is true.
+        final expiredJwt = _jwt(expEpochSeconds: 1700000000);
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/auth/refresh',
+            statusCode: 200,
+            body: {
+              'session': {
+                'accessToken': 'next-access-token',
+                'refreshToken': 'next-refresh-token',
+                'tokenType': 'Bearer',
+                'expiresIn': 900,
+              },
+            },
+          ),
+          _FakeResponse(
+            path: '/profile/me',
+            statusCode: 200,
+            body: {'id': 'user-a'},
+          ),
+        ]);
+        final store = MemoryMagicTokenStore(
+          MagicApiTokens(
+            accessToken: expiredJwt,
+            refreshToken: 'refresh-token',
+            tokenType: 'Bearer',
+            expiresIn: 900,
+          ),
+        );
+        final client = _client(adapter, store: store);
+
+        final response = await client.get<Map<String, dynamic>>('/profile/me');
+
+        expect(response['id'], 'user-a');
+        // Refresh happened BEFORE the protected call, so no 401 round-trip.
+        expect(adapter.requests.map((request) => request.uri.path).toList(), [
+          '/auth/refresh',
+          '/profile/me',
+        ]);
+        expect(
+          adapter.requests.last.headers['Authorization'],
+          'Bearer next-access-token',
+        );
+      },
+    );
+
     test('shares one refresh across parallel unauthorized requests', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
@@ -361,6 +410,14 @@ MagicApiClient _client(
     tokenStore: store ?? MemoryMagicTokenStore(tokens),
     dio: dio,
   );
+}
+
+String _jwt({required int expEpochSeconds}) {
+  String segment(Map<String, dynamic> value) =>
+      base64Url.encode(utf8.encode(jsonEncode(value))).replaceAll('=', '');
+  final header = segment({'alg': 'HS256', 'typ': 'JWT'});
+  final payload = segment({'sub': 'user-a', 'exp': expEpochSeconds});
+  return '$header.$payload.signature';
 }
 
 class _FakeResponse {
