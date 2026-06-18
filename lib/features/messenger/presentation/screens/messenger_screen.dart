@@ -28,6 +28,7 @@ import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/features/client/presentation/screens/client_portal_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overview_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/student_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
@@ -2049,6 +2050,18 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 ),
               ),
+              if (widget.role == 'client')
+                IconButton(
+                  icon: const Icon(Icons.school_rounded),
+                  tooltip: 'Моя школа',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ClientPortalScreen(),
+                      ),
+                    );
+                  },
+                ),
               if (canCreateGroups)
                 IconButton(
                   icon: const Icon(Icons.group_add_rounded),
