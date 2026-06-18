@@ -173,6 +173,9 @@ describe('NotificationWorker', () => {
   it('sends queued push delivery to enabled devices', async () => {
     const query = jest
       .fn()
+      // candidate ids
+      .mockResolvedValueOnce({ rows: [{ id: 'delivery-a' }] })
+      // claim returns the full delivery row
       .mockResolvedValueOnce({
         rows: [
           {
@@ -228,6 +231,9 @@ describe('NotificationWorker', () => {
   it('skips queued push delivery when token cannot be decrypted', async () => {
     const query = jest
       .fn()
+      // candidate ids
+      .mockResolvedValueOnce({ rows: [{ id: 'delivery-a' }] })
+      // claim returns the full delivery row
       .mockResolvedValueOnce({
         rows: [
           {

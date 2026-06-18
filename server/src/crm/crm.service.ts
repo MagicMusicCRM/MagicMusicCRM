@@ -2913,6 +2913,15 @@ export class CrmService {
     );
     const lesson = result.rows[0];
     if (!lesson) throw new NotFoundException("Урок не найден.");
+    // If the lesson was rescheduled, clear its reminder markers so the
+    // notification scheduler re-issues -24h/-1h reminders for the NEW time
+    // instead of staying silent (markers are keyed by lesson + kind only).
+    if (dto.scheduledAt) {
+      await this.database.query(
+        "delete from app.lesson_reminders where lesson_id = $1",
+        [lesson.id],
+      );
+    }
     await this.audit.record({
       actor,
       action: "crm.lesson_updated",

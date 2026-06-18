@@ -170,4 +170,59 @@ describe('NotificationsService', () => {
     expect(worker.dispatchPendingEmails).not.toHaveBeenCalled();
     expect(worker.dispatchPendingPush).toHaveBeenCalled();
   });
+
+  describe('lesson reminders', () => {
+    it('claims the marker and notifies recipients for a due lesson', async () => {
+      const { service, database } = createService();
+      database.query
+        // due (day)
+        .mockResolvedValueOnce({
+          rows: [
+            { id: 'lesson-1', when_local: '19.06 18:00', user_ids: ['u1', 'u2'] }
+          ]
+        } as never)
+        // claim (lesson-1, day)
+        .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
+        // due (hour) -> none
+        .mockResolvedValueOnce({ rows: [] } as never);
+      (database.transaction as jest.Mock).mockResolvedValue('notif-1');
+
+      const result = await service.dispatchLessonReminders();
+
+      expect(result.sent).toBe(1);
+      // createNotification runs in a transaction exactly once (the day lesson).
+      expect(database.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not send when the marker was already claimed (race)', async () => {
+      const { service, database } = createService();
+      database.query
+        .mockResolvedValueOnce({
+          rows: [{ id: 'lesson-1', when_local: '19.06 18:00', user_ids: ['u1'] }]
+        } as never)
+        // claim returns no row -> another tick already claimed it
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 } as never)
+        .mockResolvedValueOnce({ rows: [] } as never);
+
+      const result = await service.dispatchLessonReminders();
+
+      expect(result.sent).toBe(0);
+      expect(database.transaction).not.toHaveBeenCalled();
+    });
+
+    it('claims but does not notify a lesson with no recipients', async () => {
+      const { service, database } = createService();
+      database.query
+        .mockResolvedValueOnce({
+          rows: [{ id: 'lesson-1', when_local: '19.06 18:00', user_ids: [] }]
+        } as never)
+        .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
+        .mockResolvedValueOnce({ rows: [] } as never);
+
+      const result = await service.dispatchLessonReminders();
+
+      expect(result.sent).toBe(0);
+      expect(database.transaction).not.toHaveBeenCalled();
+    });
+  });
 });

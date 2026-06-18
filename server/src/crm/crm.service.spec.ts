@@ -2995,6 +2995,49 @@ describe("CrmService", () => {
     ]);
   });
 
+  it("clears reminder markers when a lesson is rescheduled", async () => {
+    // Manager actor: assertCanUpdateLesson returns without a query, so the
+    // first DB call is the UPDATE, then the marker delete.
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            lead_id: null,
+            teacher_id: "teacher-a",
+            branch_id: null,
+            room_id: null,
+            scheduled_at: "2026-06-20T15:00:00.000Z",
+            duration_minutes: 60,
+            status: "scheduled",
+            is_trial: false,
+            notes: null,
+            student_user_id: null,
+            teacher_user_id: null,
+            student_name: null,
+            teacher_name: null,
+            branch_name: null,
+            room_name: null,
+            group_name: null,
+            group_price_per_lesson: null,
+          },
+        ],
+      },
+      { rows: [] }, // delete from app.lesson_reminders
+    ]);
+
+    await service.updateLesson(actor, "lesson-a", {
+      scheduledAt: "2026-06-20T15:00:00.000Z",
+    });
+
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("delete from app.lesson_reminders"),
+      ["lesson-a"],
+    );
+  });
+
   it("creates trial lessons linked to leads", async () => {
     const { service, query, audit, policy } = createService([
       {
