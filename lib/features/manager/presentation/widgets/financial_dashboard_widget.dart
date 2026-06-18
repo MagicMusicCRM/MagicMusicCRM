@@ -16,6 +16,7 @@ class FinancialDashboardWidget extends ConsumerStatefulWidget {
 class _FinancialDashboardWidgetState
     extends ConsumerState<FinancialDashboardWidget> {
   bool _loading = true;
+  Object? _loadError;
   List<_MonthlyFinancials> _chartData = [];
   List<Map<String, dynamic>> _teacherEfficiency = [];
   Map<String, int> _roomLoad = {};
@@ -27,7 +28,10 @@ class _FinancialDashboardWidgetState
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final now = DateTime.now();
       final sixMonthsAgo = DateTime(now.year, now.month - 5, 1);
@@ -71,7 +75,10 @@ class _FinancialDashboardWidgetState
         _loading = false;
       });
     } catch (e) {
-      setState(() => _loading = false);
+      setState(() {
+        _loadError = e;
+        _loading = false;
+      });
     }
   }
 
@@ -80,6 +87,44 @@ class _FinancialDashboardWidgetState
     if (_loading) {
       return const Center(
         child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+      );
+    }
+
+    // A failed load must not masquerade as «школа ничего не заработала» —
+    // show an explicit error with retry instead of empty charts.
+    if (_loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppTheme.danger,
+                size: 42,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Не удалось загрузить аналитику',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$_loadError',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed: _loadData,
+                child: const Text('Повторить'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
