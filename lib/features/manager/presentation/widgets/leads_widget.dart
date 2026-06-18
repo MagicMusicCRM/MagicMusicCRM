@@ -693,7 +693,40 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
 
     return boardAsync.when(
       loading: () => const KanbanSkeleton(),
-      error: (err, stack) => Center(child: Text('Ошибка: $err')),
+      error: (err, stack) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppTheme.danger,
+                size: 42,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Не удалось загрузить воронку',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Проверьте подключение и попробуйте снова.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: _refreshBoard,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Повторить'),
+              ),
+            ],
+          ),
+        ),
+      ),
       data: (board) {
         final columns = board['columns'] is List
             ? (board['columns'] as List).whereType<Map<String, dynamic>>()

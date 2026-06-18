@@ -1051,9 +1051,12 @@ class _CommentsList extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Менеджер',
-                        style: TextStyle(
+                      Text(
+                        (c['author_name']?.toString().trim().isNotEmpty ??
+                                false)
+                            ? c['author_name'].toString()
+                            : 'Сотрудник',
+                        style: const TextStyle(
                           color: AppTheme.primaryPurple,
                           fontWeight: FontWeight.bold,
                           fontSize: 11,

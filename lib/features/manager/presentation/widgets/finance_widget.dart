@@ -240,8 +240,12 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                             ? '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
                                   .trim()
                             : 'Неизвестный ученик';
-                        final dt = p['created_at'] != null
-                            ? DateTime.tryParse(p['created_at'])
+                        // Show when the payment actually happened
+                        // (payment_date), not when the row was inserted, so
+                        // late-entered payments don't appear in the wrong period.
+                        final rawDate = p['payment_date'] ?? p['created_at'];
+                        final dt = rawDate != null
+                            ? DateTime.tryParse(rawDate.toString())
                             : null;
                         final dateStr = dt != null
                             ? DateFormat(

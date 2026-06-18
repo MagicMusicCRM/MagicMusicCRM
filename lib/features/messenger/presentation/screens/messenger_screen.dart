@@ -2203,7 +2203,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                         ? 'Поддержка'
                         : 'не в сети')
                   : _selectedChatType == 'group'
-                  ? '${_onlineUsers.where((u) => u != _userId).length + 1} в сети' // Rough estimate or fetch real count
+                  // Neutral label — the previous "{tracked}+1 в сети" was a
+                  // fabricated estimate (a 30-member group could show "1 в сети").
+                  ? 'Групповой чат'
                   : isChannel
                   ? 'Канал'
                   : widget.role == 'client'
