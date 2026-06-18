@@ -16,11 +16,11 @@ describe('ProfilePolicy', () => {
     ).toThrow(NotFoundException);
   });
 
-  it('allows managers to assign operational roles up to manager, but not admin tiers', () => {
+  it('allows managers full role control: any role to any user', () => {
     expect(() =>
       policy.assertCanListProfiles({ userId: 'manager-a', role: 'manager' })
     ).not.toThrow();
-    // May assign client / teacher / manager (the top operational role).
+    // Operational roles.
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
@@ -28,50 +28,36 @@ describe('ProfilePolicy', () => {
         'teacher'
       )
     ).not.toThrow();
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'manager-a', role: 'manager' },
-        'teacher',
-        'manager'
-      )
-    ).not.toThrow();
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'manager-a', role: 'manager' },
-        'manager',
-        'teacher'
-      )
-    ).not.toThrow();
-    // Must NOT grant admin-tier roles (privilege escalation above own tier).
+    // May now grant admin-tier roles.
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
         'client',
         'admin'
       )
-    ).toThrow(ForbiddenException);
+    ).not.toThrow();
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
         'client',
         'system_admin'
       )
-    ).toThrow(ForbiddenException);
-    // Must NOT modify users who already hold an admin-tier role.
+    ).not.toThrow();
+    // May now modify users who already hold an admin-tier role.
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
         'admin',
         'manager'
       )
-    ).toThrow(ForbiddenException);
+    ).not.toThrow();
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
         'system_admin',
         'teacher'
       )
-    ).toThrow(ForbiddenException);
+    ).not.toThrow();
   });
 
   it('forbids clients and teachers from updating roles', () => {

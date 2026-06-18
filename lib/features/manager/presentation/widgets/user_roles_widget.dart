@@ -690,18 +690,12 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
   }
 
   List<String> _rolesForCurrentActor(String currentUserRole) {
-    // Администратор / Администратор системы: полный набор ролей.
-    if (widget.currentRole == 'system_admin' || widget.currentRole == 'admin') {
+    // Управляющий, Администратор и Администратор системы получают полный набор
+    // ролей: могут назначить любую роль системы и сменить её в любой момент.
+    if (widget.currentRole == 'manager' ||
+        widget.currentRole == 'admin' ||
+        widget.currentRole == 'system_admin') {
       return _availableRoles;
-    }
-    // Управляющий (manager): может назначать любую операционную роль —
-    // «Клиент», «Преподаватель» и саму высшую операционную «Управляющий», —
-    // но не admin/system_admin, и не может менять роль admin-уровня.
-    if (widget.currentRole == 'manager') {
-      if (currentUserRole == 'admin' || currentUserRole == 'system_admin') {
-        return [currentUserRole];
-      }
-      return const ['client', 'teacher', 'manager'];
     }
     return [currentUserRole];
   }
