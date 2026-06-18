@@ -31,6 +31,7 @@ import { ManagerDashboardQuery } from "./dto/manager-dashboard.query";
 import { PaymentQuery } from "./dto/payment.query";
 import { ReportQuery } from "./dto/report.query";
 import { RoomAvailabilityQuery } from "./dto/room-availability.query";
+import { SaveContactFromChatDto } from "./dto/save-contact-from-chat.dto";
 import { ScheduleMatrixQuery } from "./dto/schedule-matrix.query";
 import { StaffListQuery } from "./dto/staff-list.query";
 import { StudentBalanceQuery } from "./dto/student-balance.query";
@@ -530,6 +531,14 @@ export class CrmController {
     @Param("userId", ParseUUIDPipe) userId: string,
   ) {
     return this.crm.resolveContactForUser(actor, userId);
+  }
+
+  @Post("contacts/save-from-chat")
+  saveContactFromChat(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: SaveContactFromChatDto,
+  ) {
+    return this.crm.saveContactFromChat(actor, dto);
   }
 
   @Post("leads")

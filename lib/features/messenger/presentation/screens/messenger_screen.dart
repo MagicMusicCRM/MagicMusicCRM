@@ -27,7 +27,9 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overview_widget.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/student_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
@@ -238,6 +240,85 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     _leaveTypingChannel();
     _realtimeConnection?.dispose();
     super.dispose();
+  }
+
+  // ── CRM actions from a chat (staff only) ───────────────────────────────────
+
+  Future<void> _saveContactFromChat(String as) async {
+    final partnerId = _selectedPartnerId;
+    if (partnerId == null || partnerId.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final label = as == 'lead' ? 'лид' : 'ученик';
+    try {
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .saveContactFromChat(userId: partnerId, as: as);
+      if (!mounted) return;
+      final created = result['created'] == true;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            created
+                ? 'Контакт сохранён как $label'
+                : 'Контакт уже был сохранён как $label',
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось сохранить: $e'),
+          backgroundColor: TelegramColors.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openContactCard() async {
+    final partnerId = _selectedPartnerId;
+    if (partnerId == null || partnerId.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final crm = ref.read(magicCrmServiceProvider);
+      final contact = await crm.resolveContactForUser(partnerId);
+      final studentId = contact['studentId']?.toString();
+      final leadId = contact['leadId']?.toString();
+      if (studentId != null && studentId.isNotEmpty) {
+        final student = await crm.getStudent(studentId);
+        if (!mounted) return;
+        await StudentDetailDialog.show(context, student);
+      } else if (leadId != null && leadId.isNotEmpty) {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Контакт связан с лидом — откройте его в разделе «Лиды».',
+            ),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Этот контакт ещё не сохранён в CRM. '
+              'Сохраните его как лид или ученик.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось открыть карточку: $e'),
+          backgroundColor: TelegramColors.danger,
+        ),
+      );
+    }
   }
 
   String get _userId => _currentUserId ?? '';
@@ -2133,6 +2214,61 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                     onPressed: () => setState(
                       () => _hiddenPinnedBars.remove(_selectedChatId),
                     ),
+                  ),
+                // Staff CRM actions for a 1:1 client chat: save the contact as a
+                // lead/student or jump to their existing card.
+                if (_isManagerOrAdminRole &&
+                    _selectedChatType == 'direct' &&
+                    (_selectedPartnerId?.isNotEmpty ?? false))
+                  PopupMenuButton<String>(
+                    icon: const Icon(
+                      Icons.person_add_alt_1_rounded,
+                      size: 20,
+                      color: TelegramColors.accentBlue,
+                    ),
+                    tooltip: 'Сохранить в CRM',
+                    onSelected: (value) {
+                      if (value == 'open_card') {
+                        _openContactCard();
+                      } else if (value == 'save_lead') {
+                        _saveContactFromChat('lead');
+                      } else if (value == 'save_student') {
+                        _saveContactFromChat('student');
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'open_card',
+                        child: Row(
+                          children: [
+                            Icon(Icons.badge_outlined, size: 18),
+                            SizedBox(width: 8),
+                            Text('Открыть карточку клиента'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'save_lead',
+                        child: Row(
+                          children: [
+                            Icon(Icons.assignment_ind_outlined, size: 18),
+                            SizedBox(width: 8),
+                            Text('Сохранить как лид'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'save_student',
+                        child: Row(
+                          children: [
+                            Icon(Icons.school_outlined, size: 18),
+                            SizedBox(width: 8),
+                            Text('Сохранить как ученик'),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
               ],
               onTitleTap: () {

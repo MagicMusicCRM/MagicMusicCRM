@@ -3952,6 +3952,126 @@ export class CrmService {
     return digits.length >= 10 ? digits : null;
   }
 
+  // Save a chat partner (an existing messenger user) into the CRM as a lead or
+  // student, linking the CRM entity back to that user. Idempotent: if the user
+  // is already linked to / backed by such an entity, returns it instead of
+  // creating a duplicate.
+  async saveContactFromChat(
+    actor: ActorContext,
+    dto: { userId: string; as: "lead" | "student" },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const profileResult = await this.database.query<{
+      profile_id: string;
+      user_id: string;
+      first_name: string | null;
+      last_name: string | null;
+      phone: string | null;
+    }>(
+      `
+        select p.id as profile_id, p.user_id, p.first_name, p.last_name, p.phone
+        from app.profiles p
+        join app.users u on u.id = p.user_id and u.deleted_at is null
+        where p.user_id = $1 and p.deleted_at is null
+        limit 1
+      `,
+      [dto.userId],
+    );
+    const profile = profileResult.rows[0];
+    if (!profile) throw new NotFoundException("Пользователь чата не найден.");
+
+    const firstName = (profile.first_name ?? "").trim() || "Без имени";
+    const lastName = (profile.last_name ?? "").trim() || null;
+    const phone = (profile.phone ?? "").trim() || null;
+    const matchedPhone = this.normalizeContactPhone(phone);
+
+    if (dto.as === "lead") {
+      const existing = await this.database.query<{ entity_id: string }>(
+        `
+          select entity_id from app.user_crm_links
+          where user_id = $1 and entity_type = 'lead' and deleted_at is null
+          limit 1
+        `,
+        [profile.user_id],
+      );
+      if (existing.rows[0]) {
+        return { leadId: existing.rows[0].entity_id, created: false };
+      }
+      const leadId = await this.database.transaction(async (client) => {
+        const inserted = await client.query<{ id: string }>(
+          `
+            insert into app.leads (first_name, last_name, phone, source, created_by)
+            values ($1, $2, $3, 'Чат', $4)
+            returning id
+          `,
+          [firstName, lastName, phone, actor.userId],
+        );
+        const id = inserted.rows[0].id;
+        await client.query(
+          `
+            insert into app.user_crm_links
+              (user_id, entity_type, entity_id, matched_phone, link_source, created_by, confirmed_at)
+            values ($1, 'lead', $2, $3, 'manual_phone', $4, now())
+            on conflict do nothing
+          `,
+          [profile.user_id, id, matchedPhone, actor.userId],
+        );
+        return id;
+      });
+      await this.audit.record({
+        actor,
+        action: "crm.lead_created",
+        entityType: "lead",
+        entityId: leadId,
+        metadata: { fromChat: true, userId: profile.user_id },
+      });
+      return { leadId, created: true };
+    }
+
+    // as === "student": reuse the partner's existing profile (do not mint a new
+    // user); dedup by profile so a client isn't doubled.
+    const existingStudent = await this.database.query<{ id: string }>(
+      `
+        select id from app.students
+        where profile_id = $1 and deleted_at is null
+        limit 1
+      `,
+      [profile.profile_id],
+    );
+    if (existingStudent.rows[0]) {
+      return { studentId: existingStudent.rows[0].id, created: false };
+    }
+    const studentId = await this.database.transaction(async (client) => {
+      const inserted = await client.query<{ id: string }>(
+        `
+          insert into app.students (profile_id, status)
+          values ($1, 'active')
+          returning id
+        `,
+        [profile.profile_id],
+      );
+      const id = inserted.rows[0].id;
+      await client.query(
+        `
+          insert into app.user_crm_links
+            (user_id, entity_type, entity_id, matched_phone, link_source, created_by, confirmed_at)
+          values ($1, 'student', $2, $3, 'manual_phone', $4, now())
+          on conflict do nothing
+        `,
+        [profile.user_id, id, matchedPhone, actor.userId],
+      );
+      return id;
+    });
+    await this.audit.record({
+      actor,
+      action: "crm.student_created",
+      entityType: "student",
+      entityId: studentId,
+      metadata: { fromChat: true, userId: profile.user_id },
+    });
+    return { studentId, created: true };
+  }
+
   async createLead(actor: ActorContext, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
     const result = await this.database.query<LeadRow>(

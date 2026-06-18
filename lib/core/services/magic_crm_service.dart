@@ -792,6 +792,19 @@ class MagicCrmService {
     return _api.get<Map<String, dynamic>>('/crm/contacts/by-user/$userId');
   }
 
+  /// Save a chat partner into the CRM as a lead or student, linking the entity
+  /// to that user. Idempotent — returns the existing one if already saved.
+  /// Response: `{leadId|studentId, created}`.
+  Future<Map<String, dynamic>> saveContactFromChat({
+    required String userId,
+    required String as,
+  }) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/contacts/save-from-chat',
+      data: {'userId': userId, 'as': as},
+    );
+  }
+
   Future<Map<String, dynamic>> createLeadStatus({
     required String key,
     required String label,

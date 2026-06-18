@@ -3117,4 +3117,94 @@ describe("CrmService", () => {
     const result = await service.resolveContactForUser(actor, "user-x");
     expect(result).toEqual({ studentId: "student-9", leadId: null });
   });
+
+  it("save-from-chat returns the existing lead when already linked", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            profile_id: "p1",
+            user_id: "u1",
+            first_name: "Иван",
+            last_name: "П",
+            phone: "+7 999 111-22-33",
+          },
+        ],
+      },
+      { rows: [{ entity_id: "lead-existing" }] },
+    ]);
+    const result = await service.saveContactFromChat(actor, {
+      userId: "u1",
+      as: "lead",
+    });
+    expect(result).toEqual({ leadId: "lead-existing", created: false });
+  });
+
+  it("save-from-chat returns the existing student for a known profile", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            profile_id: "p1",
+            user_id: "u1",
+            first_name: "Иван",
+            last_name: null,
+            phone: null,
+          },
+        ],
+      },
+      { rows: [{ id: "student-existing" }] },
+    ]);
+    const result = await service.saveContactFromChat(actor, {
+      userId: "u1",
+      as: "student",
+    });
+    expect(result).toEqual({ studentId: "student-existing", created: false });
+  });
+
+  it("save-from-chat creates and links a new lead from a chat partner", async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            profile_id: "p1",
+            user_id: "u1",
+            first_name: "Иван",
+            last_name: "П",
+            phone: "+7 999 111-22-33",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] }); // no existing link
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ id: "lead-new" }] }) // insert lead
+      .mockResolvedValueOnce({ rows: [] }); // insert crm link
+    const transaction = jest.fn(
+      async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query: clientQuery }),
+    );
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const policy = { assertCanWriteCrm: jest.fn() };
+    const service = new CrmService(
+      { query, transaction } as unknown as DatabaseService,
+      audit as unknown as AuditService,
+      policy as unknown as CrmPolicy,
+      {} as unknown as HolliHopMetadataService,
+      {} as unknown as NotificationsService,
+    );
+    const result = await service.saveContactFromChat(actor, {
+      userId: "u1",
+      as: "lead",
+    });
+    expect(result).toEqual({ leadId: "lead-new", created: true });
+    expect(clientQuery).toHaveBeenCalledTimes(2);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.lead_created",
+        entityId: "lead-new",
+      }),
+    );
+  });
 });
