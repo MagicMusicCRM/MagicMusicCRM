@@ -16,6 +16,7 @@ class FinancialDashboardWidget extends ConsumerStatefulWidget {
 class _FinancialDashboardWidgetState
     extends ConsumerState<FinancialDashboardWidget> {
   bool _loading = true;
+  Object? _loadError;
   List<_MonthlyFinancials> _chartData = [];
   List<Map<String, dynamic>> _teacherEfficiency = [];
   Map<String, int> _roomLoad = {};
@@ -27,7 +28,10 @@ class _FinancialDashboardWidgetState
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final now = DateTime.now();
       final sixMonthsAgo = DateTime(now.year, now.month - 5, 1);
@@ -71,7 +75,10 @@ class _FinancialDashboardWidgetState
         _loading = false;
       });
     } catch (e) {
-      setState(() => _loading = false);
+      setState(() {
+        _loadError = e;
+        _loading = false;
+      });
     }
   }
 
@@ -83,18 +90,80 @@ class _FinancialDashboardWidgetState
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildRevenueExpensesChart(),
-          const SizedBox(height: 24),
-          _buildTeacherEfficiencyCard(),
-          const SizedBox(height: 24),
-          _buildRoomLoadCard(),
-        ],
-      ),
+    // A failed load must not masquerade as «школа ничего не заработала» —
+    // show an explicit error with retry instead of empty charts.
+    if (_loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppTheme.danger,
+                size: 42,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Не удалось загрузить аналитику',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$_loadError',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed: _loadData,
+                child: const Text('Повторить'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 900;
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            // Keep the dashboard readable and balanced instead of stretching
+            // every card across the whole desktop width.
+            constraints: const BoxConstraints(maxWidth: 1100),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildRevenueExpensesChart(),
+                  const SizedBox(height: 16),
+                  if (wide)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _buildTeacherEfficiencyCard()),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildRoomLoadCard()),
+                      ],
+                    )
+                  else ...[
+                    _buildTeacherEfficiencyCard(),
+                    const SizedBox(height: 16),
+                    _buildRoomLoadCard(),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -116,8 +185,10 @@ class _FinancialDashboardWidgetState
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
-            AspectRatio(
-              aspectRatio: 1.7,
+            SizedBox(
+              // Fixed, comfortable chart height — prevents the panel from
+              // ballooning to full-screen height on wide desktop windows.
+              height: 260,
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,

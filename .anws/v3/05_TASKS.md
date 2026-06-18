@@ -288,35 +288,35 @@ graph TD
 
 ### S8 - Desktop UX/UI Stabilization
 
-- [ ] **T8.1** [REQ-V3-UX-001]: Restore schedule state transparency
+- [x] **T8.1** [REQ-V3-UX-001]: Restore schedule state transparency
   - **Description**: Remove silent failure states from the manager schedule and render explicit loading, empty, error and retry states with visible period/header controls.
   - **Verification**: Windows desktop schedule always shows a labeled state; failed data loads surface actionable retry UI instead of anonymous blocks.
   - **Estimate**: 8 h.
-  - **Status**: Added on 2026-06-16 from `docs/audits/windows-ux-ui-2026-06-16/report.md` after a manager-role Windows desktop audit found a persistent blank/skeleton grid in Schedule (`P0`).
+  - **Status**: Completed on 2026-06-18. Added `_loadError` + `_ScheduleError` (retry), kept header/date controls visible during loading/error, and added an empty-period hint with a "Создать занятие" CTA in `schedule_widget.dart`. Added on 2026-06-16 from `docs/audits/windows-ux-ui-2026-06-16/report.md` after a manager-role Windows desktop audit found a persistent blank/skeleton grid in Schedule (`P0`).
 
-- [ ] **T8.2** [REQ-V3-UX-001]: Make task creation flow trustworthy
+- [x] **T8.2** [REQ-V3-UX-001]: Make task creation flow trustworthy
   - **Description**: Ensure the tasks FAB opens an immediate create flow or explicit pending state, surfaces async prefetch errors and gives desktop users clear CTA feedback.
   - **Verification**: Clicking the tasks FAB produces visible progress or opens the dialog within one interaction; prefetch failures show retryable feedback.
   - **Estimate**: 8 h.
-  - **Status**: Added on 2026-06-16 from `docs/audits/windows-ux-ui-2026-06-16/report.md` after the task creation CTA failed silently in repeated desktop attempts (`P0`).
+  - **Status**: Completed on 2026-06-18. Added `_creatingTask` pending state, an extended "Новая задача" FAB with spinner, and try/catch feedback for prefetch ("Не удалось подготовить форму задачи" + retry) and create in `tasks_widget.dart`. Added on 2026-06-16 from `docs/audits/windows-ux-ui-2026-06-16/report.md` after the task creation CTA failed silently in repeated desktop attempts (`P0`).
 
-- [ ] **T8.3** [REQ-V3-UX-002]: Fix lead board and pipeline configuration surfaces
+- [x] **T8.3** [REQ-V3-UX-002]: Fix lead board and pipeline configuration surfaces
   - **Description**: Replace the blank lead-columns modal with real loading/empty/list states, keep the surface aligned with Flat Magic, and improve lead board scroll affordance and action hierarchy.
   - **Verification**: The columns modal never renders as a blank body, current statuses are inspectable/editable, and the desktop lead board exposes horizontal navigation clearly.
   - **Estimate**: 12 h.
-  - **Status**: Added on 2026-06-16 from `docs/audits/windows-ux-ui-2026-06-16/report.md` after `P1` findings in the lead columns modal, clipped pipeline layout and overloaded overflow actions.
+  - **Status**: Completed on 2026-06-18. `manage_statuses_dialog.dart` now renders loading/error+retry/empty/list states on the dark surface; `leads_widget.dart` wraps the board in a visible `Scrollbar` and the status menu shows the current status (disabled, checked) with "Перевести в: …" copy. Added on 2026-06-16 from `docs/audits/windows-ux-ui-2026-06-16/report.md` after `P1` findings in the lead columns modal, clipped pipeline layout and overloaded overflow actions.
 
-- [ ] **T8.4** [REQ-V3-UX-003]: Add safeguards for high-risk manager actions and reporting clarity
+- [x] **T8.4** [REQ-V3-UX-003]: Add safeguards for high-risk manager actions and reporting clarity
   - **Description**: Make role/status mutations explicit and confirmable, humanize manager-facing activity/reporting copy, and add missing form guidance and design-token cleanup called out by the audit.
   - **Verification**: Permission/status changes require explicit intent with success/error feedback; reports default to human-readable activity labels; desktop forms explain blocked submit states.
   - **Estimate**: 12 h.
-  - **Status**: Added on 2026-06-16 from `docs/audits/windows-ux-ui-2026-06-16/report.md` after `P1/P2` findings in role editing, reporting language, finance guidance and token/theme consistency.
+  - **Status**: Completed on 2026-06-18. Confirmed existing role-change confirmation (`user_roles_widget.dart`) and humanized activity labels (`reports_widget.dart`); added the lead status-menu current-state marker (`leads_widget.dart`) and a finance blocked-submit hint "Выберите ученика и укажите сумму больше нуля" (`finance_widget.dart`). Remaining P2 token/theme cleanup stays in backlog. Added on 2026-06-16 from `docs/audits/windows-ux-ui-2026-06-16/report.md` after `P1/P2` findings in role editing, reporting language, finance guidance and token/theme consistency.
 
 - [ ] **INT-S8** [MILESTONE]: Windows manager UX acceptance
   - **Description**: Re-run the manager Windows desktop audit after S8 fixes and confirm no `P0` or `P1` trust failures remain in overview, schedule, leads, users, finance, tasks and reports.
   - **Verification**: Audit evidence is refreshed under `docs/audits/` and the Windows manager shell has no silent failures, blank modals or ambiguous mutation controls.
   - **Estimate**: 4 h.
-  - **Status**: Added on 2026-06-16 as the acceptance gate for the desktop UX/UI remediation backlog derived from the latest local audit.
+  - **Status**: Code-ready 2026-06-18, acceptance pending (Linear `KVA-123` = In Review). Remediation mapping recorded in `docs/audits/windows-ux-ui-2026-06-18/report.md`; verified by `flutter analyze` (clean), `flutter test` (94/94, incl. new `test/features/s8_desktop_ux_states_test.dart`). The live Windows desktop re-audit + native build still need a networked environment (blocked here: `firebase_core` CMake SDK download has no outbound network, no manager session) before this gate can be marked done. Added on 2026-06-16 as the acceptance gate for the desktop UX/UI remediation backlog derived from the latest local audit.
 
 ## User Story Overlay
 

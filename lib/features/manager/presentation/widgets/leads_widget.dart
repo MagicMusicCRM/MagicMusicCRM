@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -21,6 +22,7 @@ class LeadsWidget extends ConsumerStatefulWidget {
 
 class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   final _searchCtrl = TextEditingController();
+  final _boardScrollController = ScrollController();
   List<StatusRecord> _activeStatuses = [];
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _disciplines = [];
@@ -38,6 +40,9 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   bool _hasLoadedMore = false;
   bool _loadingMore = false;
   String? _nextCursor;
+  // Horizontal board auto-scroll while dragging a card near an edge.
+  Timer? _autoScrollTimer;
+  double _autoScrollDir = 0;
 
   @override
   void initState() {
@@ -50,8 +55,45 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _autoScrollTimer?.cancel();
     _searchCtrl.dispose();
+    _boardScrollController.dispose();
     super.dispose();
+  }
+
+  // While a card is dragged near the left/right edge of the board, scroll the
+  // horizontal view so columns out of sight can be reached without dropping.
+  void _handleDragUpdate(Offset globalPosition) {
+    if (!mounted) return;
+    final width = MediaQuery.of(context).size.width;
+    const edge = 110.0;
+    if (globalPosition.dx < edge) {
+      _autoScrollDir = -1;
+    } else if (globalPosition.dx > width - edge) {
+      _autoScrollDir = 1;
+    } else {
+      _autoScrollDir = 0;
+    }
+    if (_autoScrollDir == 0) {
+      _autoScrollTimer?.cancel();
+      _autoScrollTimer = null;
+      return;
+    }
+    _autoScrollTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!_boardScrollController.hasClients || _autoScrollDir == 0) return;
+      final pos = _boardScrollController.position;
+      final next = (pos.pixels + _autoScrollDir * 24).clamp(
+        0.0,
+        pos.maxScrollExtent,
+      );
+      if (next != pos.pixels) _boardScrollController.jumpTo(next);
+    });
+  }
+
+  void _stopAutoScroll() {
+    _autoScrollDir = 0;
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
   }
 
   Future<void> _loadStatuses() async {
@@ -651,7 +693,40 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
 
     return boardAsync.when(
       loading: () => const KanbanSkeleton(),
-      error: (err, stack) => Center(child: Text('Ошибка: $err')),
+      error: (err, stack) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppTheme.danger,
+                size: 42,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Не удалось загрузить воронку',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Проверьте подключение и попробуйте снова.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: _refreshBoard,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Повторить'),
+              ),
+            ],
+          ),
+        ),
+      ),
       data: (board) {
         final columns = board['columns'] is List
             ? (board['columns'] as List).whereType<Map<String, dynamic>>()
@@ -672,59 +747,66 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
             children: [
               _buildToolbar(board),
               Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: columns.map((column) {
-                      final status = _statusFromColumn(column);
-                      final rawLeads = column['items'] is List
-                          ? (column['items'] as List)
-                                .whereType<Map<String, dynamic>>()
-                                .toList()
-                          : <Map<String, dynamic>>[];
-                      final extraLeads =
-                          _extraLeadsByStatus[status.$1] ??
-                          const <Map<String, dynamic>>[];
-                      final leads = rawLeads
-                          .followedBy(extraLeads)
-                          .where(
-                            (lead) => !_hiddenLeadIds.contains(
-                              lead['id']?.toString(),
-                            ),
-                          )
-                          .map((lead) {
-                            final id = lead['id']?.toString() ?? '';
-                            final status = _optimisticLeadStatuses[id];
-                            return status == null
-                                ? lead
-                                : {...lead, 'status': status};
-                          })
-                          .toList();
-                      final totalCountRaw = column['total_count'];
-                      final totalCount = totalCountRaw is num
-                          ? totalCountRaw.toInt()
-                          : int.tryParse(totalCountRaw?.toString() ?? '') ??
-                                leads.length;
-                      return _KanbanColumn(
-                        status: status,
-                        leads: leads,
-                        totalCount: totalCount,
-                        onMove: _moveStatus,
-                        onDelete: _deleteLead,
-                        onTap: _openDetail,
-                        allStatuses: active,
-                        onRefresh: _refreshBoard,
-                        pendingLeadIds: _pendingLeadIds,
-                        nextCursor: pageCursor,
-                        loadingMore: _loadingMore,
-                        onLoadMore: _loadMoreLeads,
-                      );
-                    }).toList(),
+                child: Scrollbar(
+                  controller: _boardScrollController,
+                  thumbVisibility: true,
+                  child: SingleChildScrollView(
+                    controller: _boardScrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: columns.map((column) {
+                        final status = _statusFromColumn(column);
+                        final rawLeads = column['items'] is List
+                            ? (column['items'] as List)
+                                  .whereType<Map<String, dynamic>>()
+                                  .toList()
+                            : <Map<String, dynamic>>[];
+                        final extraLeads =
+                            _extraLeadsByStatus[status.$1] ??
+                            const <Map<String, dynamic>>[];
+                        final leads = rawLeads
+                            .followedBy(extraLeads)
+                            .where(
+                              (lead) => !_hiddenLeadIds.contains(
+                                lead['id']?.toString(),
+                              ),
+                            )
+                            .map((lead) {
+                              final id = lead['id']?.toString() ?? '';
+                              final status = _optimisticLeadStatuses[id];
+                              return status == null
+                                  ? lead
+                                  : {...lead, 'status': status};
+                            })
+                            .toList();
+                        final totalCountRaw = column['total_count'];
+                        final totalCount = totalCountRaw is num
+                            ? totalCountRaw.toInt()
+                            : int.tryParse(totalCountRaw?.toString() ?? '') ??
+                                  leads.length;
+                        return _KanbanColumn(
+                          status: status,
+                          leads: leads,
+                          totalCount: totalCount,
+                          onMove: _moveStatus,
+                          onDelete: _deleteLead,
+                          onTap: _openDetail,
+                          allStatuses: active,
+                          onRefresh: _refreshBoard,
+                          pendingLeadIds: _pendingLeadIds,
+                          nextCursor: pageCursor,
+                          loadingMore: _loadingMore,
+                          onLoadMore: _loadMoreLeads,
+                          onDragUpdate: _handleDragUpdate,
+                          onDragEnd: _stopAutoScroll,
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
               ),
@@ -749,6 +831,8 @@ class _KanbanColumn extends StatefulWidget {
   final String? nextCursor;
   final bool loadingMore;
   final ValueChanged<String?> onLoadMore;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
 
   const _KanbanColumn({
     required this.status,
@@ -763,6 +847,8 @@ class _KanbanColumn extends StatefulWidget {
     required this.nextCursor,
     required this.loadingMore,
     required this.onLoadMore,
+    required this.onDragUpdate,
+    required this.onDragEnd,
   });
 
   @override
@@ -775,19 +861,30 @@ class _KanbanColumnState extends State<_KanbanColumn> {
     final hasMore =
         (widget.nextCursor?.trim().isNotEmpty ?? false) &&
         widget.totalCount > widget.leads.length;
-    return Container(
-      width: 300,
-      margin: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withAlpha(127),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: DragTarget<String>(
-        onWillAcceptWithDetails: (details) => true,
-        onAcceptWithDetails: (details) =>
-            widget.onMove(details.data, widget.status.$1),
-        builder: (context, candidateData, rejectedData) {
-          return Column(
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => true,
+      onAcceptWithDetails: (details) {
+        widget.onDragEnd();
+        widget.onMove(details.data, widget.status.$1);
+      },
+      builder: (context, candidateData, rejectedData) {
+        final hovering = candidateData.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          width: 300,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: hovering
+                ? widget.status.$3.withAlpha(30)
+                : Theme.of(context).colorScheme.surface.withAlpha(127),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: hovering ? widget.status.$3 : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.all(12),
@@ -831,17 +928,34 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                   ],
                 ),
               ),
-              if (candidateData.isNotEmpty)
-                Container(
-                  height: 100,
-                  margin: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: widget.status.$3),
-                    borderRadius: BorderRadius.circular(10),
-                    color: widget.status.$3.withAlpha(25),
-                  ),
-                  child: const Center(child: Icon(Icons.move_to_inbox_rounded)),
-                ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: hovering
+                    ? Container(
+                        height: 40,
+                        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: widget.status.$3,
+                            style: BorderStyle.solid,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          color: widget.status.$3.withAlpha(25),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Отпустите, чтобы перенести',
+                            style: TextStyle(
+                              color: widget.status.$3,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -882,14 +996,16 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                       onTap: () => widget.onTap(lead),
                       onRefresh: widget.onRefresh,
                       isPending: widget.pendingLeadIds.contains(leadId),
+                      onDragUpdate: widget.onDragUpdate,
+                      onDragEnd: widget.onDragEnd,
                     );
                   },
                 ),
               ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -905,6 +1021,8 @@ class _LeadCard extends ConsumerWidget {
   final VoidCallback onTap;
   final VoidCallback onRefresh;
   final bool isPending;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
 
   const _LeadCard({
     required this.lead,
@@ -915,6 +1033,8 @@ class _LeadCard extends ConsumerWidget {
     required this.onTap,
     required this.onRefresh,
     required this.isPending,
+    required this.onDragUpdate,
+    required this.onDragEnd,
   });
 
   @override
@@ -944,26 +1064,91 @@ class _LeadCard extends ConsumerWidget {
     return LongPressDraggable<String>(
       data: id,
       maxSimultaneousDrags: isPending ? 0 : null,
+      // Snappier than the default ~500ms long-press so dragging feels
+      // responsive with a mouse on desktop, while still not stealing the
+      // vertical scroll gesture inside the column list.
+      delay: const Duration(milliseconds: 180),
+      hapticFeedbackOnStart: true,
+      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
+      onDragEnd: (_) => onDragEnd(),
+      onDraggableCanceled: (_, _) => onDragEnd(),
+      onDragCompleted: onDragEnd,
       feedback: Transform.rotate(
-        angle: 0.05,
+        angle: 0.03,
         child: Material(
           color: Colors.transparent,
           child: Container(
-            width: 280,
-            padding: const EdgeInsets.all(14),
+            width: 276,
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.primaryGold, width: 2),
+              border: Border.all(color: statusColor, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(80),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-            child: Text(
-              displayName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (phone.isNotEmpty)
+                        Text(
+                          phone,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.drag_indicator_rounded, size: 18),
+              ],
             ),
           ),
+        ),
+      ),
+      // Leave a faded placeholder gap in the source column while dragging.
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: statusColor.withAlpha(120),
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: const SizedBox(height: 64, width: double.infinity),
         ),
       ),
       child: Opacity(
@@ -994,6 +1179,21 @@ class _LeadCard extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        IconButton(
+                          tooltip: 'Написать в чат',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          icon: const Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 18,
+                            color: AppTheme.primaryPurple,
+                          ),
+                          onPressed: () => _openChat(context, ref),
+                        ),
                         PopupMenuButton<String>(
                           icon: isPending
                               ? const SizedBox(
@@ -1021,41 +1221,93 @@ class _LeadCard extends ConsumerWidget {
                               _addTask(context, ref);
                             } else if (v == 'trial') {
                               _scheduleTrial(context, ref);
+                            } else if (v == 'convert') {
+                              _convertToStudent(context, ref);
                             } else {
                               onMove(id, v);
                             }
                           },
-                          itemBuilder: (_) => [
-                            ...allStatuses
-                                .where((s) => s.$1 != currentStatus)
-                                .map(
-                                  (s) => PopupMenuItem(
-                                    value: s.$1,
-                                    child: Text('→ ${s.$2}'),
+                          itemBuilder: (_) {
+                            final currentMatch = allStatuses.where(
+                              (s) => s.$1 == currentStatus,
+                            );
+                            final currentLabel = currentMatch.isEmpty
+                                ? currentStatus
+                                : currentMatch.first.$2;
+                            return [
+                              // Show the current status (disabled, checked) so a
+                              // status move makes the present state explicit.
+                              PopupMenuItem<String>(
+                                enabled: false,
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.check_rounded,
+                                      size: 16,
+                                      color: AppTheme.success,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text('Сейчас: $currentLabel'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              ...allStatuses
+                                  .where((s) => s.$1 != currentStatus)
+                                  .map(
+                                    (s) => PopupMenuItem(
+                                      value: s.$1,
+                                      child: Text('Перевести в: ${s.$2}'),
+                                    ),
+                                  ),
+                              const PopupMenuDivider(),
+                              const PopupMenuItem(
+                                value: 'comment',
+                                child: Text('Добавить комментарий'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'task',
+                                child: Text('Создать задачу'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'trial',
+                                child: Text('Назначить пробный'),
+                              ),
+                              if (linkedStudentId.isEmpty) ...[
+                                const PopupMenuDivider(),
+                                const PopupMenuItem(
+                                  value: 'convert',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.school_rounded,
+                                        size: 18,
+                                        color: AppTheme.success,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Сделать учеником',
+                                        style: TextStyle(
+                                          color: AppTheme.success,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                            const PopupMenuDivider(),
-                            const PopupMenuItem(
-                              value: 'comment',
-                              child: Text('Добавить комментарий'),
-                            ),
-                            const PopupMenuItem(
-                              value: 'task',
-                              child: Text('Создать задачу'),
-                            ),
-                            const PopupMenuItem(
-                              value: 'trial',
-                              child: Text('Назначить пробный'),
-                            ),
-                            const PopupMenuDivider(),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Text(
-                                'Удалить',
-                                style: TextStyle(color: AppTheme.danger),
+                              ],
+                              const PopupMenuDivider(),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text(
+                                  'Удалить',
+                                  style: TextStyle(color: AppTheme.danger),
+                                ),
                               ),
-                            ),
-                          ],
+                            ];
+                          },
                         ),
                       ],
                     ),
@@ -1252,6 +1504,138 @@ class _LeadCard extends ConsumerWidget {
             title: title.trim(),
           );
       onRefresh();
+    }
+  }
+
+  Future<void> _openChat(BuildContext context, WidgetRef ref) async {
+    final leadId = lead['id']?.toString();
+    if (leadId == null || leadId.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .resolveLeadChatUser(leadId);
+      final userId = result['userId']?.toString();
+      if (userId == null || userId.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'У этого лида пока нет связанного пользователя для чата. '
+              'Свяжите его по телефону в разделе «Пользователи».',
+            ),
+          ),
+        );
+        return;
+      }
+      // The leads board lives inside the messenger shell — setting the
+      // navigation target makes the shell open/create the direct chat and
+      // switch to the chat tab.
+      ref
+          .read(messengerNavigationProvider.notifier)
+          .navigateTo(MessengerNavigationState(partnerId: userId));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось открыть чат: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _convertToStudent(BuildContext context, WidgetRef ref) async {
+    final firstName = lead['name']?.toString().trim() ?? '';
+    final lastName = lead['last_name']?.toString().trim() ?? '';
+    final phone = lead['phone']?.toString().trim() ?? '';
+    final displayName = [
+      firstName,
+      lastName,
+    ].where((s) => s.isNotEmpty).join(' ');
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontSize: 12,
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Сделать учеником'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Создать карточку ученика из лида'
+              '${displayName.isEmpty ? '' : ' «$displayName»'}?',
+            ),
+            if (phone.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Телефон: $phone', style: muted),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              'Данные лида перенесутся в карточку ученика, лид останется '
+              'связанным с ним.',
+              style: muted,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.success),
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.school_rounded, size: 18),
+            label: const Text('Создать ученика'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final customData = lead['custom_data'] as Map<String, dynamic>? ?? {};
+      final patch = <String, dynamic>{};
+      final discipline = customData['discipline']?.toString();
+      final level = customData['level']?.toString();
+      final branchId = lead['branch_id']?.toString();
+      if (discipline != null && discipline.isNotEmpty) {
+        patch['discipline'] = discipline;
+      }
+      if (level != null && level.isNotEmpty) patch['level'] = level;
+      if (branchId != null && branchId.isNotEmpty) patch['branchId'] = branchId;
+
+      await ref
+          .read(magicCrmServiceProvider)
+          .createStudent(
+            firstName: firstName.isEmpty ? 'Без имени' : firstName,
+            lastName: lastName.isEmpty ? null : lastName,
+            phone: phone.isEmpty ? null : phone,
+            leadId: lead['id'].toString(),
+            customDataPatch: patch.isEmpty ? null : patch,
+          );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Лид конвертирован в ученика'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      onRefresh();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Не удалось конвертировать: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
     }
   }
 

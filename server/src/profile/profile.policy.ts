@@ -1,7 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   ActorContext,
-  isAdminRole,
   isManagerOrAdminRole
 } from '../common/security/actor-context';
 
@@ -20,19 +19,15 @@ export class ProfilePolicy {
 
   assertCanUpdateRole(
     actor: ActorContext,
-    currentRole?: ActorContext['role'],
-    newRole?: ActorContext['role']
+    _currentRole?: ActorContext['role'],
+    _newRole?: ActorContext['role']
   ): void {
-    if (isAdminRole(actor.role)) return;
-    if (
-      actor.role === 'manager' &&
-      currentRole !== 'admin' &&
-      currentRole !== 'manager' &&
-      currentRole !== 'system_admin' &&
-      (newRole === 'client' || newRole === 'teacher')
-    ) {
-      return;
-    }
+    // Управляющий, Администратор и Администратор системы получают полный
+    // контроль над ролями: могут назначить ЛЮБУЮ роль системы любому
+    // пользователю и сменить роль в любой момент. Защита от потери последнего
+    // активного администратора системы реализована в сервисе (требует
+    // запроса к БД и не может быть выражена в чистой policy).
+    if (isManagerOrAdminRole(actor.role)) return;
     throw new ForbiddenException(
       'Недостаточно прав для изменения роли пользователя.'
     );

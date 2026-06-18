@@ -17,6 +17,8 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   bool _loading = true;
   Object? _loadError;
   double _total = 0;
+  int _totalCount = 0;
+  bool _addingPayment = false;
   String _period = 'month';
 
   @override
@@ -44,19 +46,17 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
           from = DateTime(now.year, now.month, 1);
       }
 
-      final data = await ref
+      // Headline total comes from the server aggregate over the FULL period,
+      // not a fold over the (capped) page — otherwise «Итого» silently
+      // understates revenue once a period exceeds the page size.
+      final result = await ref
           .read(magicCrmServiceProvider)
-          .listPayments(from: from.toIso8601String(), limit: 100);
-
-      final list = data;
-      final total = list.fold<double>(
-        0,
-        (s, p) => s + (double.tryParse(p['amount'].toString()) ?? 0),
-      );
+          .listPaymentsWithTotal(from: from.toIso8601String(), limit: 100);
 
       setState(() {
-        _payments = list;
-        _total = total;
+        _payments = result.items;
+        _total = result.totalAmount.toDouble();
+        _totalCount = result.totalCount;
         _loading = false;
       });
     } catch (e) {
@@ -68,11 +68,15 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   }
 
   Future<void> _addPayment() async {
+    if (_addingPayment) return;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => const _PaymentDialog(),
     );
-    if (result != null) {
+    if (result == null || !mounted) return;
+    setState(() => _addingPayment = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
       await ref
           .read(magicCrmServiceProvider)
           .createPayment(
@@ -81,7 +85,23 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
             paymentDate: DateTime.now().toIso8601String(),
             method: result['type']?.toString(),
           );
-      _loadPayments();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Платёж добавлен'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      await _loadPayments();
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось добавить платёж: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _addingPayment = false);
     }
   }
 
@@ -103,8 +123,17 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
-        onPressed: _addPayment,
-        child: const Icon(Icons.add),
+        onPressed: _addingPayment ? null : _addPayment,
+        child: _addingPayment
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.add),
       ),
       body: Column(
         children: [
@@ -137,6 +166,15 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
+                      if (_totalCount > _payments.length)
+                        Text(
+                          'Всего платежей: $_totalCount · '
+                          'показаны первые ${_payments.length}',
+                          style: TextStyle(
+                            color: colors.onSurfaceVariant,
+                            fontSize: 11,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -202,8 +240,12 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                             ? '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
                                   .trim()
                             : 'Неизвестный ученик';
-                        final dt = p['created_at'] != null
-                            ? DateTime.tryParse(p['created_at'])
+                        // Show when the payment actually happened
+                        // (payment_date), not when the row was inserted, so
+                        // late-entered payments don't appear in the wrong period.
+                        final rawDate = p['payment_date'] ?? p['created_at'];
+                        final dt = rawDate != null
+                            ? DateTime.tryParse(rawDate.toString())
                             : null;
                         final dateStr = dt != null
                             ? DateFormat(
@@ -406,6 +448,28 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
             ],
             onChanged: (v) => setState(() => _type = v ?? 'subscription'),
           ),
+          if (!canSubmit) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Выберите ученика и укажите сумму больше нуля',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
       actions: [

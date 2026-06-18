@@ -250,7 +250,11 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           _InfoRow(
             icon: Icons.payments_outlined,
             label: 'Цена инд. занятия',
-            value: '${_student!['individual_price'] ?? 1500} ₽',
+            // Show an explicit unset state instead of a confident default a
+            // manager might bill on.
+            value: _student!['individual_price'] != null
+                ? '${_student!['individual_price']} ₽'
+                : 'Не задана',
             onEdit: () => _editPrice(),
           ),
           if (_balance != null) ...[
@@ -853,7 +857,11 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           )
           .map((c) => {'type': 'comment', 'data': c, 'date': c['created_at']}),
     ];
-    items.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+    items.sort(
+      (a, b) => ((b['date'] as String?) ?? '').compareTo(
+        (a['date'] as String?) ?? '',
+      ),
+    );
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),

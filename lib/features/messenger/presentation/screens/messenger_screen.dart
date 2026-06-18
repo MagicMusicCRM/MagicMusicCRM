@@ -27,7 +27,10 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/features/client/presentation/screens/client_portal_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overview_widget.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/student_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
@@ -120,9 +123,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   Future<void> _bootstrapMessenger() async {
-    await _loadCurrentProfile();
-    if (!mounted) return;
-    await _loadChatList();
+    // Profile and chat list are independent — load in parallel.
+    // Realtime needs _currentUserId from profile, so it waits for both.
+    await Future.wait([_loadCurrentProfile(), _loadChatList()]);
     if (!mounted) return;
     await _connectRealtime();
   }
@@ -238,6 +241,85 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     _leaveTypingChannel();
     _realtimeConnection?.dispose();
     super.dispose();
+  }
+
+  // ── CRM actions from a chat (staff only) ───────────────────────────────────
+
+  Future<void> _saveContactFromChat(String as) async {
+    final partnerId = _selectedPartnerId;
+    if (partnerId == null || partnerId.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final label = as == 'lead' ? 'лид' : 'ученик';
+    try {
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .saveContactFromChat(userId: partnerId, as: as);
+      if (!mounted) return;
+      final created = result['created'] == true;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            created
+                ? 'Контакт сохранён как $label'
+                : 'Контакт уже был сохранён как $label',
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось сохранить: $e'),
+          backgroundColor: TelegramColors.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openContactCard() async {
+    final partnerId = _selectedPartnerId;
+    if (partnerId == null || partnerId.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final crm = ref.read(magicCrmServiceProvider);
+      final contact = await crm.resolveContactForUser(partnerId);
+      final studentId = contact['studentId']?.toString();
+      final leadId = contact['leadId']?.toString();
+      if (studentId != null && studentId.isNotEmpty) {
+        final student = await crm.getStudent(studentId);
+        if (!mounted) return;
+        await StudentDetailDialog.show(context, student);
+      } else if (leadId != null && leadId.isNotEmpty) {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Контакт связан с лидом — откройте его в разделе «Лиды».',
+            ),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Этот контакт ещё не сохранён в CRM. '
+              'Сохраните его как лид или ученик.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось открыть карточку: $e'),
+          backgroundColor: TelegramColors.danger,
+        ),
+      );
+    }
   }
 
   String get _userId => _currentUserId ?? '';
@@ -455,8 +537,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     final chatId = _selectedChatId!;
     final previous = _unreadCounts[chatId] ?? 0;
     setState(() => _unreadCounts[chatId] = 0);
+    // Pass the latest message ID so the server can skip the resolve query.
+    final lastMsgId = _messages.isNotEmpty
+        ? _messages.last['id']?.toString()
+        : null;
     try {
-      await ref.read(magicMessengerServiceProvider).markRead(_selectedChatId!);
+      await ref
+          .read(magicMessengerServiceProvider)
+          .markRead(chatId, lastReadMessageId: lastMsgId);
     } catch (e) {
       if (mounted) setState(() => _unreadCounts[chatId] = previous);
       _logMessenger('MessengerScreen: Error marking messages as read: $e');
@@ -975,9 +1063,26 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     );
 
     if (confirm == true) {
-      await ref
-          .read(magicMessengerServiceProvider)
-          .deleteMessage(mid, mode: isMe ? 'own' : 'moderated');
+      try {
+        final updated = await ref
+            .read(magicMessengerServiceProvider)
+            .deleteMessage(mid, mode: isMe ? 'own' : 'moderated');
+        // Apply the server response locally so the message shows as deleted
+        // immediately, independent of realtime delivery.
+        if (mounted) {
+          setState(() {
+            final idx = _messages.indexWhere((m) => m['id'] == mid);
+            if (idx != -1) _messages[idx] = {..._messages[idx], ...updated};
+          });
+        }
+      } catch (e) {
+        _logMessenger('Error deleting message: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Не удалось удалить сообщение: $e')),
+          );
+        }
+      }
     }
   }
 
@@ -1249,23 +1354,56 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     if (mounted) setState(() => _reactionsMap = nextMap);
   }
 
-  Future<void> _toggleReaction(String messageId, String emoji) async {
-    try {
-      final existing = _reactionsMap[messageId]?.firstWhere(
-        (r) => r is Map && r['user_id'] == _userId && r['emoji'] == emoji,
-        orElse: () => null,
-      );
+  void _applyReactionsToMessage(String messageId, List<dynamic> reactions) {
+    final idx = _messages.indexWhere((m) => m['id'] == messageId);
+    if (idx != -1) {
+      _messages[idx] = {..._messages[idx], 'reactions': reactions};
+    }
+  }
 
-      final messenger = ref.read(magicMessengerServiceProvider);
-      if (existing != null) {
-        await messenger.removeReaction(messageId: messageId, emoji: emoji);
-      } else {
-        await messenger.setReaction(messageId: messageId, emoji: emoji);
+  Future<void> _toggleReaction(String messageId, String emoji) async {
+    final messenger = ref.read(magicMessengerServiceProvider);
+    final previous = List<dynamic>.from(_reactionsMap[messageId] ?? const []);
+    final hasMine = previous.any(
+      (r) => r is Map && r['user_id'] == _userId && r['emoji'] == emoji,
+    );
+
+    // Optimistic update so the reaction reflects instantly, independent of
+    // realtime delivery (top-tier messenger behaviour). The server response is
+    // then applied as the authoritative state below.
+    final optimistic = List<dynamic>.from(previous);
+    if (hasMine) {
+      optimistic.removeWhere(
+        (r) => r is Map && r['user_id'] == _userId && r['emoji'] == emoji,
+      );
+    } else {
+      optimistic.add({'user_id': _userId, 'emoji': emoji});
+    }
+    setState(() {
+      _reactionsMap = {..._reactionsMap, messageId: optimistic};
+      _applyReactionsToMessage(messageId, optimistic);
+    });
+
+    try {
+      final result = hasMine
+          ? await messenger.removeReaction(messageId: messageId, emoji: emoji)
+          : await messenger.setReaction(messageId: messageId, emoji: emoji);
+      final reactions = result['reactions'];
+      if (reactions is List && mounted) {
+        setState(() {
+          _reactionsMap = {..._reactionsMap, messageId: reactions};
+          _applyReactionsToMessage(messageId, reactions);
+        });
       }
-      // Realtime listener will handle the update, but we can also trigger a manual fetch
-      _fetchReactionsForCurrentMessages();
     } catch (e) {
       _logMessenger('Error toggling reaction: $e');
+      // Revert the optimistic change on failure.
+      if (mounted) {
+        setState(() {
+          _reactionsMap = {..._reactionsMap, messageId: previous};
+          _applyReactionsToMessage(messageId, previous);
+        });
+      }
     }
   }
 
@@ -1523,21 +1661,36 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       return Scaffold(
         body: Row(
           children: [
-            NavigationRail(
-              backgroundColor: isDark
-                  ? TelegramColors.darkSidebar
-                  : TelegramColors.lightSidebar,
-              selectedIndex: selectedCrmTab,
-              useIndicator: true,
-              labelType: NavigationRailLabelType.all,
-              indicatorColor: TelegramColors.brandPurple.withAlpha(51),
-              onDestinationSelected: (idx) {
-                setState(() {
-                  _selectedCrmTab = idx;
-                  if (idx == 7) _selectedReportsTab = 0;
-                });
-              },
-              destinations: _desktopCrmDestinations(),
+            // NavigationRail doesn't scroll; with 8 always-labelled
+            // destinations it clips the bottom items (Tasks/Reports) on short
+            // windows or at 125-150% display scaling. Wrap it so it fills the
+            // height when there's room and scrolls when there isn't.
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
+                  ),
+                  child: IntrinsicHeight(
+                    child: NavigationRail(
+                      backgroundColor: isDark
+                          ? TelegramColors.darkSidebar
+                          : TelegramColors.lightSidebar,
+                      selectedIndex: selectedCrmTab,
+                      useIndicator: true,
+                      labelType: NavigationRailLabelType.all,
+                      indicatorColor: TelegramColors.brandPurple.withAlpha(51),
+                      onDestinationSelected: (idx) {
+                        setState(() {
+                          _selectedCrmTab = idx;
+                          if (idx == 7) _selectedReportsTab = 0;
+                        });
+                      },
+                      destinations: _desktopCrmDestinations(),
+                    ),
+                  ),
+                ),
+              ),
             ),
             VerticalDivider(
               thickness: 1,
@@ -1912,6 +2065,18 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 ),
               ),
+              if (widget.role == 'client')
+                IconButton(
+                  icon: const Icon(Icons.school_rounded),
+                  tooltip: 'Моя школа',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ClientPortalScreen(),
+                      ),
+                    );
+                  },
+                ),
               if (canCreateGroups)
                 IconButton(
                   icon: const Icon(Icons.group_add_rounded),
@@ -2053,7 +2218,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                         ? 'Поддержка'
                         : 'не в сети')
                   : _selectedChatType == 'group'
-                  ? '${_onlineUsers.where((u) => u != _userId).length + 1} в сети' // Rough estimate or fetch real count
+                  // Neutral label — the previous "{tracked}+1 в сети" was a
+                  // fabricated estimate (a 30-member group could show "1 в сети").
+                  ? 'Групповой чат'
                   : isChannel
                   ? 'Канал'
                   : widget.role == 'client'
@@ -2077,6 +2244,61 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                     onPressed: () => setState(
                       () => _hiddenPinnedBars.remove(_selectedChatId),
                     ),
+                  ),
+                // Staff CRM actions for a 1:1 client chat: save the contact as a
+                // lead/student or jump to their existing card.
+                if (_isManagerOrAdminRole &&
+                    _selectedChatType == 'direct' &&
+                    (_selectedPartnerId?.isNotEmpty ?? false))
+                  PopupMenuButton<String>(
+                    icon: const Icon(
+                      Icons.person_add_alt_1_rounded,
+                      size: 20,
+                      color: TelegramColors.accentBlue,
+                    ),
+                    tooltip: 'Сохранить в CRM',
+                    onSelected: (value) {
+                      if (value == 'open_card') {
+                        _openContactCard();
+                      } else if (value == 'save_lead') {
+                        _saveContactFromChat('lead');
+                      } else if (value == 'save_student') {
+                        _saveContactFromChat('student');
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'open_card',
+                        child: Row(
+                          children: [
+                            Icon(Icons.badge_outlined, size: 18),
+                            SizedBox(width: 8),
+                            Text('Открыть карточку клиента'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'save_lead',
+                        child: Row(
+                          children: [
+                            Icon(Icons.assignment_ind_outlined, size: 18),
+                            SizedBox(width: 8),
+                            Text('Сохранить как лид'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'save_student',
+                        child: Row(
+                          children: [
+                            Icon(Icons.school_outlined, size: 18),
+                            SizedBox(width: 8),
+                            Text('Сохранить как ученик'),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
               ],
               onTitleTap: () {

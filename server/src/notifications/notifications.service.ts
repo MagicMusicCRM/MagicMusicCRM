@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { ActorContext, UserRole } from '../common/security/actor-context';
@@ -46,7 +52,10 @@ interface DeviceRow {
 }
 
 @Injectable()
-export class NotificationsService {
+export class NotificationsService implements OnModuleInit, OnModuleDestroy {
+  private reminderTimer?: NodeJS.Timeout;
+  private readonly logger = new Logger('LessonReminders');
+
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
@@ -54,6 +63,150 @@ export class NotificationsService {
     private readonly worker: NotificationWorker,
     private readonly tokenCrypto: NotificationTokenCrypto
   ) {}
+
+  onModuleInit(): void {
+    // Kill-switch: the scheduler is OFF unless explicitly enabled, so deploying
+    // the code never starts pushing to real students by surprise. Enable with
+    // LESSON_REMINDERS_ENABLED=true once the deployment is verified.
+    if (process.env.LESSON_REMINDERS_ENABLED !== 'true') {
+      this.logger.log(
+        'Lesson reminders disabled (set LESSON_REMINDERS_ENABLED=true to enable)'
+      );
+      return;
+    }
+    // Scan for upcoming lessons and enqueue -24h / -1h reminders every 5 min.
+    this.reminderTimer = setInterval(() => {
+      void this.dispatchLessonReminders()
+        .then(({ sent }) => {
+          if (sent > 0) this.logger.log(`Lesson reminders enqueued: ${sent}`);
+        })
+        .catch((error: unknown) => {
+          this.logger.error(
+            `Lesson reminder tick failed: ${this.errorName(error)}`
+          );
+        });
+    }, 5 * 60_000);
+    this.reminderTimer.unref?.();
+    this.logger.log('Lesson reminder scheduler started (every 5m)');
+  }
+
+  onModuleDestroy(): void {
+    if (this.reminderTimer) clearInterval(this.reminderTimer);
+  }
+
+  // Enqueue lesson reminders. Idempotent via app.lesson_reminders: each
+  // (lesson, kind) is claimed before sending, so a reminder is never sent
+  // twice even if two ticks overlap. Cancelled/rescheduled lessons fall out of
+  // the window automatically (status <> 'scheduled').
+  async dispatchLessonReminders(): Promise<{ sent: number }> {
+    let sent = 0;
+    // "За день": fire once the lesson is within 24h but still more than 12h
+    // away. The 12h floor (a) avoids a misleading "tomorrow" reminder for a
+    // lesson only a few hours out and (b) prevents a first-enable blast of
+    // "day" reminders for already-imminent lessons — those get only the -1h
+    // reminder when they reach the hour window.
+    sent += await this.processReminderKind(
+      'day',
+      "l.scheduled_at > now() + interval '12 hours' and l.scheduled_at <= now() + interval '24 hours'",
+      'Напоминание о занятии',
+      (when) => `Напоминаем о занятии ${when} (по Москве).`
+    );
+    // "За час": fire within the last hour before the lesson.
+    sent += await this.processReminderKind(
+      'hour',
+      "l.scheduled_at > now() and l.scheduled_at <= now() + interval '1 hour'",
+      'Скоро занятие',
+      (when) => `Ваше занятие начнётся примерно через час — ${when} (по Москве).`
+    );
+    // Flush the push queue promptly instead of waiting for the worker's timer.
+    if (sent > 0) this.schedulePushDispatch();
+    return { sent };
+  }
+
+  private async processReminderKind(
+    kind: 'day' | 'hour',
+    windowSql: string,
+    title: string,
+    bodyFor: (when: string) => string
+  ): Promise<number> {
+    const due = await this.database.query<{
+      id: string;
+      when_local: string;
+      user_ids: string[];
+    }>(
+      `
+        with due as (
+          select l.id, l.student_id, l.group_id,
+            to_char(l.scheduled_at at time zone 'Europe/Moscow', 'DD.MM HH24:MI') as when_local
+          from app.lessons l
+          where l.deleted_at is null
+            and l.status = 'scheduled'
+            and ${windowSql}
+            and not exists (
+              select 1 from app.lesson_reminders lr
+              where lr.lesson_id = l.id and lr.kind = $1
+            )
+          order by l.scheduled_at asc
+          limit 200
+        )
+        select d.id, d.when_local,
+          (
+            select coalesce(array_agg(distinct uid), '{}')
+            from (
+              select sp.user_id as uid
+              from app.students s
+              join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+              where s.id = d.student_id and s.deleted_at is null
+                and s.status = 'active' and sp.user_id is not null
+              union
+              select gsp.user_id as uid
+              from app.group_students gs
+              join app.students gss on gss.id = gs.student_id and gss.deleted_at is null
+              join app.profiles gsp on gsp.id = gss.profile_id and gsp.deleted_at is null
+              where gs.group_id = d.group_id and gs.left_at is null
+                and gss.status = 'active' and gsp.user_id is not null
+            ) recips
+          ) as user_ids
+        from due d
+      `,
+      [kind]
+    );
+
+    let sent = 0;
+    for (const row of due.rows) {
+      // Claim the marker first; only the call that inserts the row sends.
+      const claim = await this.database.query<{ id: string }>(
+        `
+          insert into app.lesson_reminders (lesson_id, kind)
+          values ($1, $2)
+          on conflict (lesson_id, kind) do nothing
+          returning id
+        `,
+        [row.id, kind]
+      );
+      if (claim.rowCount === 0) continue;
+      const userIds = (row.user_ids ?? []).filter(Boolean);
+      if (userIds.length === 0) continue; // nobody to notify; marker stays
+      try {
+        await this.createNotification({
+          type: 'lesson_reminder',
+          title,
+          body: bodyFor(row.when_local),
+          data: { lessonId: row.id, kind },
+          userIds,
+          channels: ['push']
+        });
+        sent += 1;
+      } catch (error: unknown) {
+        // Marker already set — do not retry, to avoid spamming on transient
+        // delivery errors. Surface it so a misfire is observable.
+        this.logger.error(
+          `Failed to enqueue ${kind} reminder for lesson ${row.id}: ${this.errorName(error)}`
+        );
+      }
+    }
+    return sent;
+  }
 
   async list(actor: ActorContext, query: ListNotificationsQuery) {
     const limit = Math.min(query.limit ?? 50, 100);

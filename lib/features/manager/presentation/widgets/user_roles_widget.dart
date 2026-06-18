@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
@@ -26,6 +28,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
   String? _linkingProfileId;
   final Set<String> _pendingRoleProfileIds = {};
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   static const _availableRoles = [
     'client',
@@ -77,6 +80,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -96,6 +100,9 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
           .listProfiles(
             limit: 100,
             role: _selectedRole == 'all' ? null : _selectedRole,
+            // Filter on the server so search reaches the whole dataset, not
+            // just the first 100 loaded rows.
+            q: _searchQuery.trim().isEmpty ? null : _searchQuery.trim(),
           );
       if (mounted) {
         setState(() {
@@ -410,7 +417,14 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) => setState(() => _searchQuery = v),
+                    onChanged: (v) {
+                      setState(() => _searchQuery = v);
+                      _searchDebounce?.cancel();
+                      _searchDebounce = Timer(
+                        const Duration(milliseconds: 350),
+                        _loadProfiles,
+                      );
+                    },
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Поиск по имени, почте, телефону...',
@@ -472,6 +486,30 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
               itemCount: _roleFilterValues.length,
             ),
           ),
+          if (_profiles.length >= 100)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Показаны первые 100 — уточните поиск, чтобы найти '
+                      'остальных',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: _isLoading
                 ? const Padding(
@@ -690,13 +728,12 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
   }
 
   List<String> _rolesForCurrentActor(String currentUserRole) {
-    if (widget.currentRole == 'system_admin') return _availableRoles;
-    if (widget.currentRole == 'admin') return _availableRoles;
-    if (widget.currentRole == 'manager') {
-      if (currentUserRole == 'client' || currentUserRole == 'teacher') {
-        return const ['client', 'teacher'];
-      }
-      return [currentUserRole];
+    // Управляющий, Администратор и Администратор системы получают полный набор
+    // ролей: могут назначить любую роль системы и сменить её в любой момент.
+    if (widget.currentRole == 'manager' ||
+        widget.currentRole == 'admin' ||
+        widget.currentRole == 'system_admin') {
+      return _availableRoles;
     }
     return [currentUserRole];
   }

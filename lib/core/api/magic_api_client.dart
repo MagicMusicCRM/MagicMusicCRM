@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_tokens.dart';
@@ -162,7 +164,15 @@ class MagicApiClient {
   }) async {
     final headers = <String, dynamic>{};
     if (authenticated) {
-      final tokens = await _tokenStore.read();
+      var tokens = await _tokenStore.read();
+      // Proactively refresh an already-expired (or near-expiry) access token
+      // BEFORE sending, so a burst of parallel requests does not each hit a 401
+      // and pile up concurrent refreshes (the session-refresh race). The
+      // refresh itself is single-flighted via [_tryRefresh].
+      if (tokens != null && _isAccessTokenExpired(tokens.accessToken)) {
+        await _tryRefresh();
+        tokens = await _tokenStore.read();
+      }
       if (tokens?.accessToken.isNotEmpty == true) {
         headers['Authorization'] = '${tokens!.tokenType} ${tokens.accessToken}';
       }
@@ -183,6 +193,37 @@ class MagicApiClient {
       durationMs: stopwatch.elapsedMilliseconds,
     );
     return response.data as T;
+  }
+
+  /// Returns true when the JWT access token is expired or within
+  /// [leewaySeconds] of expiry. On any parse failure returns false, so the
+  /// normal 401-driven refresh path stays as a fallback.
+  bool _isAccessTokenExpired(String token, {int leewaySeconds = 30}) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return false;
+      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      switch (payload.length % 4) {
+        case 2:
+          payload += '==';
+          break;
+        case 3:
+          payload += '=';
+          break;
+      }
+      final claims = jsonDecode(utf8.decode(base64.decode(payload)));
+      final exp = claims is Map ? claims['exp'] : null;
+      if (exp is! int) return false;
+      final expiry = DateTime.fromMillisecondsSinceEpoch(
+        exp * 1000,
+        isUtc: true,
+      );
+      return DateTime.now().toUtc().isAfter(
+        expiry.subtract(Duration(seconds: leewaySeconds)),
+      );
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> _tryRefresh() async {

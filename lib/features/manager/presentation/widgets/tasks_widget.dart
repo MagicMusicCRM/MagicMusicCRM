@@ -25,6 +25,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   Timer? _searchDebounce;
   bool _loading = true;
   bool _filtersLoading = true;
+  bool _creatingTask = false;
   Object? _loadError;
   String _statusFilter = 'all';
   String _entityTypeFilter = 'all';
@@ -133,15 +134,41 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   }
 
   Future<void> _createTask() async {
+    if (_creatingTask) return;
+    final messenger = ScaffoldMessenger.of(context);
     final crm = ref.read(magicCrmServiceProvider);
     final profiles = ref.read(magicProfileAdminServiceProvider);
-    final results = await Future.wait([
-      profiles.listProfiles(limit: 100),
-      crm.listStudents(limit: 100),
-      crm.listLeads(limit: 100),
-      crm.listGroups(limit: 100),
-      crm.listTeachers(limit: 100),
-    ]);
+
+    // Prefetch select options with a visible pending state so the FAB never
+    // looks dead while the requests are in flight, and surface failures.
+    setState(() => _creatingTask = true);
+    List<List<Map<String, dynamic>>> results;
+    try {
+      results = await Future.wait([
+        profiles.listProfiles(limit: 100),
+        crm.listStudents(limit: 100),
+        crm.listLeads(limit: 100),
+        crm.listGroups(limit: 100),
+        crm.listTeachers(limit: 100),
+      ]);
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось подготовить форму задачи: $e'),
+            backgroundColor: AppTheme.danger,
+            action: SnackBarAction(
+              label: 'Повторить',
+              textColor: Colors.white,
+              onPressed: _createTask,
+            ),
+          ),
+        );
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _creatingTask = false);
+    }
 
     if (!mounted) return;
 
@@ -158,16 +185,30 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
 
     if (result == null) return;
 
-    await crm.createTask(
-      entityType: result['entity_type'].toString(),
-      entityId: result['entity_id'].toString(),
-      title: result['title'].toString(),
-      description: result['description']?.toString(),
-      assignedTo: result['assigned_to']?.toString(),
-      dueAt: result['due_at']?.toString(),
-      status: 'open',
-    );
-    await _loadTasks();
+    try {
+      await crm.createTask(
+        entityType: result['entity_type'].toString(),
+        entityId: result['entity_id'].toString(),
+        title: result['title'].toString(),
+        description: result['description']?.toString(),
+        assignedTo: result['assigned_to']?.toString(),
+        dueAt: result['due_at']?.toString(),
+        status: 'open',
+      );
+      await _loadTasks();
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text('Задача создана')));
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось создать задачу: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _updateStatus(String id, String status) async {
@@ -307,8 +348,18 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
-        onPressed: _createTask,
-        child: const Icon(Icons.add),
+        onPressed: _creatingTask ? null : _createTask,
+        tooltip: _creatingTask ? 'Подготовка…' : 'Новая задача',
+        child: _creatingTask
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.add),
       ),
       body: Column(
         children: [
@@ -760,8 +811,10 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final id = task['id'] as String;
-    final status = task['status'] as String?;
+    // Read defensively — a numeric/null id from the API would otherwise throw
+    // a TypeError during build and render the card as a red error box.
+    final id = task['id']?.toString() ?? '';
+    final status = task['status']?.toString();
     final dueDate = task['due_date'] != null
         ? DateFormat(
             'd MMM yyyy',
@@ -827,10 +880,38 @@ class _TaskCard extends StatelessWidget {
                             ).colorScheme.onSurfaceVariant,
                           ),
                     color: Theme.of(context).colorScheme.surface,
-                    onSelected: (value) {
+                    onSelected: (value) async {
                       if (value == 'reassign') {
                         onReassignTap(task);
                         return;
+                      }
+                      // Cancelling drops the task out of the active workflow —
+                      // confirm to avoid an accidental mis-click in the menu.
+                      if (value == 'cancelled') {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Отменить задачу?'),
+                            content: const Text(
+                              'Задача будет отменена и скрыта из активного '
+                              'списка.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Нет'),
+                              ),
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppTheme.danger,
+                                ),
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Отменить задачу'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
                       }
                       onStatusChange(id, value);
                     },

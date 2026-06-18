@@ -16,10 +16,11 @@ describe('ProfilePolicy', () => {
     ).toThrow(NotFoundException);
   });
 
-  it('allows managers to list profiles and update client or teacher roles only', () => {
+  it('allows managers full role control: any role to any user', () => {
     expect(() =>
       policy.assertCanListProfiles({ userId: 'manager-a', role: 'manager' })
     ).not.toThrow();
+    // Operational roles.
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
@@ -27,32 +28,51 @@ describe('ProfilePolicy', () => {
         'teacher'
       )
     ).not.toThrow();
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'manager-a', role: 'manager' },
-        'teacher',
-        'client'
-      )
-    ).not.toThrow();
+    // May now grant admin-tier roles.
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
         'client',
         'admin'
       )
-    ).toThrow(ForbiddenException);
+    ).not.toThrow();
+    expect(() =>
+      policy.assertCanUpdateRole(
+        { userId: 'manager-a', role: 'manager' },
+        'client',
+        'system_admin'
+      )
+    ).not.toThrow();
+    // May now modify users who already hold an admin-tier role.
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
         'admin',
         'manager'
       )
-    ).toThrow(ForbiddenException);
+    ).not.toThrow();
     expect(() =>
       policy.assertCanUpdateRole(
         { userId: 'manager-a', role: 'manager' },
+        'system_admin',
+        'teacher'
+      )
+    ).not.toThrow();
+  });
+
+  it('forbids clients and teachers from updating roles', () => {
+    expect(() =>
+      policy.assertCanUpdateRole(
+        { userId: 'client-a', role: 'client' },
         'client',
-        'system_admin'
+        'teacher'
+      )
+    ).toThrow(ForbiddenException);
+    expect(() =>
+      policy.assertCanUpdateRole(
+        { userId: 'teacher-a', role: 'teacher' },
+        'client',
+        'manager'
       )
     ).toThrow(ForbiddenException);
   });

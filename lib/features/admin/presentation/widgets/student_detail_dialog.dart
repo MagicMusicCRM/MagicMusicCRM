@@ -219,7 +219,11 @@ class _StudentDetailDialogState extends ConsumerState<StudentDetailDialog> {
     return Dialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
+        // Cap the width so the form doesn't stretch edge-to-edge on wide
+        // desktop monitors (1500px+ line lengths).
+        width: (MediaQuery.of(context).size.width * 0.9)
+            .clamp(0.0, 900.0)
+            .toDouble(),
         height: MediaQuery.of(context).size.height * 0.85,
         padding: const EdgeInsets.all(20),
         child: Column(

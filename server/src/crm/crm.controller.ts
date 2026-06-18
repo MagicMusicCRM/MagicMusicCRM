@@ -31,6 +31,7 @@ import { ManagerDashboardQuery } from "./dto/manager-dashboard.query";
 import { PaymentQuery } from "./dto/payment.query";
 import { ReportQuery } from "./dto/report.query";
 import { RoomAvailabilityQuery } from "./dto/room-availability.query";
+import { SaveContactFromChatDto } from "./dto/save-contact-from-chat.dto";
 import { ScheduleMatrixQuery } from "./dto/schedule-matrix.query";
 import { StaffListQuery } from "./dto/staff-list.query";
 import { StudentBalanceQuery } from "./dto/student-balance.query";
@@ -375,6 +376,14 @@ export class CrmController {
     return this.crm.getScheduleMatrix(actor, query);
   }
 
+  @Get("schedule/month-summary")
+  getScheduleMonthSummary(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: ScheduleMatrixQuery,
+  ) {
+    return this.crm.getScheduleMonthSummary(actor, query);
+  }
+
   @Post("lessons")
   createLesson(
     @CurrentActor() actor: ActorContext,
@@ -506,6 +515,30 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
   ) {
     return this.crm.getLeadCard(actor, id);
+  }
+
+  @Get("leads/:id/chat-user")
+  resolveLeadChatUser(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.resolveLeadChatUser(actor, id);
+  }
+
+  @Get("contacts/by-user/:userId")
+  resolveContactForUser(
+    @CurrentActor() actor: ActorContext,
+    @Param("userId", ParseUUIDPipe) userId: string,
+  ) {
+    return this.crm.resolveContactForUser(actor, userId);
+  }
+
+  @Post("contacts/save-from-chat")
+  saveContactFromChat(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: SaveContactFromChatDto,
+  ) {
+    return this.crm.saveContactFromChat(actor, dto);
   }
 
   @Post("leads")

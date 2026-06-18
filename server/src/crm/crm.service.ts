@@ -2705,6 +2705,48 @@ export class CrmService {
     };
   }
 
+  // Lightweight per-day aggregate for the month calendar: returns one row per
+  // day with the lesson count and the distinct room ids (for the colored dots),
+  // instead of shipping every lesson. Keeps the month view fast even for
+  // branches with thousands of lessons per month.
+  async getScheduleMonthSummary(
+    actor: ActorContext,
+    query: ScheduleMatrixQuery,
+  ) {
+    this.policy.assertCanReadOperationalData(actor);
+    const bounds = this.scheduleMatrixBounds(query);
+    const result = await this.database.query<{
+      day: string;
+      count: string;
+      room_ids: string[] | null;
+    }>(
+      `
+        select
+          to_char((l.scheduled_at at time zone 'Europe/Moscow')::date, 'YYYY-MM-DD') as day,
+          count(*)::text as count,
+          array_remove(array_agg(distinct l.room_id), null) as room_ids
+        from app.lessons l
+        left join app.rooms r on r.id = l.room_id and r.deleted_at is null
+        where l.deleted_at is null
+          and l.scheduled_at >= $1::timestamptz
+          and l.scheduled_at <  $2::timestamptz
+          and ($3::uuid is null or l.branch_id = $3 or r.branch_id = $3)
+        group by 1
+        order by 1
+      `,
+      [bounds.from, bounds.to, query.branchId ?? null],
+    );
+    return {
+      from: bounds.from,
+      to: bounds.to,
+      items: result.rows.map((row) => ({
+        day: row.day,
+        count: Number(row.count),
+        roomIds: row.room_ids ?? [],
+      })),
+    };
+  }
+
   async listLessons(actor: ActorContext, query: LessonQuery) {
     const limit = Math.min(query.limit ?? 100, 200);
     const result = await this.database.query<LessonRow>(
@@ -2871,6 +2913,15 @@ export class CrmService {
     );
     const lesson = result.rows[0];
     if (!lesson) throw new NotFoundException("Урок не найден.");
+    // If the lesson was rescheduled, clear its reminder markers so the
+    // notification scheduler re-issues -24h/-1h reminders for the NEW time
+    // instead of staying silent (markers are keyed by lesson + kind only).
+    if (dto.scheduledAt) {
+      await this.database.query(
+        "delete from app.lesson_reminders where lesson_id = $1",
+        [lesson.id],
+      );
+    }
     await this.audit.record({
       actor,
       action: "crm.lesson_updated",
@@ -3379,7 +3430,40 @@ export class CrmService {
         limit,
       ],
     );
-    return { items: result.rows.map((row) => this.toPaymentDto(row)) };
+    // Period totals over the FULL filtered set (not just the page), so the UI
+    // can show a correct "Итого" instead of summing a truncated page.
+    const totals = await this.database.query<{
+      total_amount: string;
+      total_count: string;
+    }>(
+      `
+        select coalesce(sum(pay.amount), 0)::text as total_amount,
+          count(*)::text as total_count
+        from app.payments pay
+        join app.students s on s.id = pay.student_id and s.deleted_at is null
+        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+        where pay.deleted_at is null
+          and ($3::uuid is null or pay.student_id = $3)
+          and ($4::timestamptz is null or pay.payment_date >= $4)
+          and ($5::timestamptz is null or pay.payment_date < $5)
+          and (
+            $1::text in ('manager', 'admin', 'system_admin')
+            or ($1::text = 'client' and p.user_id = $2)
+          )
+      `,
+      [
+        actor.role,
+        actor.userId,
+        query.studentId ?? null,
+        query.from ?? null,
+        query.to ?? null,
+      ],
+    );
+    return {
+      items: result.rows.map((row) => this.toPaymentDto(row)),
+      totalAmount: Number(totals.rows[0]?.total_amount ?? "0"),
+      totalCount: Number(totals.rows[0]?.total_count ?? "0"),
+    };
   }
 
   async listExpectedPayments(actor: ActorContext, query: CrmListQuery) {
@@ -3801,6 +3885,233 @@ export class CrmService {
       [q || null, limit],
     );
     return { items: result.rows.map((row) => this.toLeadDto(row)) };
+  }
+
+  // Resolve the messenger user behind a lead so staff can jump straight into a
+  // chat with them. Prefers an explicit user_crm_link, then falls back to a
+  // client user whose profile phone matches the lead's phone.
+  async resolveLeadChatUser(actor: ActorContext, leadId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const lead = await this.database.query<{
+      id: string;
+      name: string;
+      phone: string | null;
+    }>(
+      `
+        select id,
+          coalesce(
+            nullif(btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')), ''),
+            'Лид'
+          ) as name,
+          phone
+        from app.leads
+        where id = $1 and deleted_at is null
+        limit 1
+      `,
+      [leadId],
+    );
+    if (!lead.rows[0]) throw new NotFoundException("Лид не найден.");
+
+    const link = await this.database.query<{ user_id: string }>(
+      `
+        select user_id
+        from app.user_crm_links
+        where entity_type = 'lead' and entity_id = $1 and deleted_at is null
+        order by confirmed_at desc nulls last, created_at desc
+        limit 1
+      `,
+      [leadId],
+    );
+    if (link.rows[0]) {
+      return { userId: link.rows[0].user_id, name: lead.rows[0].name };
+    }
+
+    const phone = this.normalizeContactPhone(lead.rows[0].phone);
+    if (phone) {
+      const byPhone = await this.database.query<{ user_id: string }>(
+        `
+          select p.user_id
+          from app.profiles p
+          join app.users u on u.id = p.user_id and u.deleted_at is null
+          where p.deleted_at is null
+            and regexp_replace(coalesce(p.phone, ''), '[^0-9]', '', 'g') = $1
+            and u.role = 'client'
+          order by u.created_at desc
+          limit 1
+        `,
+        [phone],
+      );
+      if (byPhone.rows[0]) {
+        return { userId: byPhone.rows[0].user_id, name: lead.rows[0].name };
+      }
+    }
+    return { userId: null, name: lead.rows[0].name };
+  }
+
+  // Reverse lookup: given a messenger user (a chat partner), find the CRM
+  // lead/student they map to so staff can open the right card from a chat.
+  async resolveContactForUser(actor: ActorContext, userId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const links = await this.database.query<{
+      entity_type: string;
+      entity_id: string;
+    }>(
+      `
+        select entity_type, entity_id
+        from app.user_crm_links
+        where user_id = $1 and deleted_at is null
+      `,
+      [userId],
+    );
+    let studentId: string | null = null;
+    let leadId: string | null = null;
+    for (const row of links.rows) {
+      if (row.entity_type === "student") studentId ??= row.entity_id;
+      if (row.entity_type === "lead") leadId ??= row.entity_id;
+    }
+    // Students created in-app own their user directly (their profile.user_id),
+    // which may not have an explicit crm-link row.
+    if (!studentId) {
+      const owned = await this.database.query<{ id: string }>(
+        `
+          select s.id
+          from app.students s
+          join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+          where p.user_id = $1 and s.deleted_at is null
+          order by s.created_at desc
+          limit 1
+        `,
+        [userId],
+      );
+      studentId = owned.rows[0]?.id ?? null;
+    }
+    return { studentId, leadId };
+  }
+
+  private normalizeContactPhone(phone: string | null | undefined): string | null {
+    if (!phone) return null;
+    const digits = phone.replace(/[^0-9]/g, "");
+    return digits.length >= 10 ? digits : null;
+  }
+
+  // Save a chat partner (an existing messenger user) into the CRM as a lead or
+  // student, linking the CRM entity back to that user. Idempotent: if the user
+  // is already linked to / backed by such an entity, returns it instead of
+  // creating a duplicate.
+  async saveContactFromChat(
+    actor: ActorContext,
+    dto: { userId: string; as: "lead" | "student" },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const profileResult = await this.database.query<{
+      profile_id: string;
+      user_id: string;
+      first_name: string | null;
+      last_name: string | null;
+      phone: string | null;
+    }>(
+      `
+        select p.id as profile_id, p.user_id, p.first_name, p.last_name, p.phone
+        from app.profiles p
+        join app.users u on u.id = p.user_id and u.deleted_at is null
+        where p.user_id = $1 and p.deleted_at is null
+        limit 1
+      `,
+      [dto.userId],
+    );
+    const profile = profileResult.rows[0];
+    if (!profile) throw new NotFoundException("Пользователь чата не найден.");
+
+    const firstName = (profile.first_name ?? "").trim() || "Без имени";
+    const lastName = (profile.last_name ?? "").trim() || null;
+    const phone = (profile.phone ?? "").trim() || null;
+    const matchedPhone = this.normalizeContactPhone(phone);
+
+    if (dto.as === "lead") {
+      const existing = await this.database.query<{ entity_id: string }>(
+        `
+          select entity_id from app.user_crm_links
+          where user_id = $1 and entity_type = 'lead' and deleted_at is null
+          limit 1
+        `,
+        [profile.user_id],
+      );
+      if (existing.rows[0]) {
+        return { leadId: existing.rows[0].entity_id, created: false };
+      }
+      const leadId = await this.database.transaction(async (client) => {
+        const inserted = await client.query<{ id: string }>(
+          `
+            insert into app.leads (first_name, last_name, phone, source, created_by)
+            values ($1, $2, $3, 'Чат', $4)
+            returning id
+          `,
+          [firstName, lastName, phone, actor.userId],
+        );
+        const id = inserted.rows[0].id;
+        await client.query(
+          `
+            insert into app.user_crm_links
+              (user_id, entity_type, entity_id, matched_phone, link_source, created_by, confirmed_at)
+            values ($1, 'lead', $2, $3, 'manual_phone', $4, now())
+            on conflict do nothing
+          `,
+          [profile.user_id, id, matchedPhone, actor.userId],
+        );
+        return id;
+      });
+      await this.audit.record({
+        actor,
+        action: "crm.lead_created",
+        entityType: "lead",
+        entityId: leadId,
+        metadata: { fromChat: true, userId: profile.user_id },
+      });
+      return { leadId, created: true };
+    }
+
+    // as === "student": reuse the partner's existing profile (do not mint a new
+    // user); dedup by profile so a client isn't doubled.
+    const existingStudent = await this.database.query<{ id: string }>(
+      `
+        select id from app.students
+        where profile_id = $1 and deleted_at is null
+        limit 1
+      `,
+      [profile.profile_id],
+    );
+    if (existingStudent.rows[0]) {
+      return { studentId: existingStudent.rows[0].id, created: false };
+    }
+    const studentId = await this.database.transaction(async (client) => {
+      const inserted = await client.query<{ id: string }>(
+        `
+          insert into app.students (profile_id, status)
+          values ($1, 'active')
+          returning id
+        `,
+        [profile.profile_id],
+      );
+      const id = inserted.rows[0].id;
+      await client.query(
+        `
+          insert into app.user_crm_links
+            (user_id, entity_type, entity_id, matched_phone, link_source, created_by, confirmed_at)
+          values ($1, 'student', $2, $3, 'manual_phone', $4, now())
+          on conflict do nothing
+        `,
+        [profile.user_id, id, matchedPhone, actor.userId],
+      );
+      return id;
+    });
+    await this.audit.record({
+      actor,
+      action: "crm.student_created",
+      entityType: "student",
+      entityId: studentId,
+      metadata: { fromChat: true, userId: profile.user_id },
+    });
+    return { studentId, created: true };
   }
 
   async createLead(actor: ActorContext, dto: UpsertLeadDto) {

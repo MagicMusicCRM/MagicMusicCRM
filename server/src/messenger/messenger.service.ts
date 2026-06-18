@@ -515,7 +515,7 @@ export class MessengerService {
       chatId,
       dto.lastReadMessageId,
     );
-    await this.database.query(
+    const updated = await this.database.query(
       `
         update app.chat_members
         set last_read_message_id = $3
@@ -523,6 +523,18 @@ export class MessengerService {
       `,
       [chatId, actor.userId, lastReadMessageId],
     );
+    if (updated.rowCount === 0 && chat.type === "administration") {
+      await this.database.query(
+        `
+          insert into app.chat_members (chat_id, user_id, last_read_message_id)
+          values ($1, $2, $3)
+          on conflict (chat_id, user_id)
+          do update set last_read_message_id = excluded.last_read_message_id
+          where app.chat_members.left_at is null
+        `,
+        [chatId, actor.userId, lastReadMessageId],
+      );
+    }
     this.realtime.publishChatEvent(chatId, "chat.updated", {
       id: chatId,
       readerId: actor.userId,

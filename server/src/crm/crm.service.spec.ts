@@ -2080,6 +2080,10 @@ describe("CrmService", () => {
           method: "subscription",
         }),
       ],
+      // Totals come from a separate aggregate query (mocked with the same row,
+      // which has no total_* fields, so they resolve to 0 here).
+      totalAmount: 0,
+      totalCount: 0,
     });
 
     expect(query.mock.calls[0][1]).toEqual([
@@ -2991,6 +2995,49 @@ describe("CrmService", () => {
     ]);
   });
 
+  it("clears reminder markers when a lesson is rescheduled", async () => {
+    // Manager actor: assertCanUpdateLesson returns without a query, so the
+    // first DB call is the UPDATE, then the marker delete.
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            lead_id: null,
+            teacher_id: "teacher-a",
+            branch_id: null,
+            room_id: null,
+            scheduled_at: "2026-06-20T15:00:00.000Z",
+            duration_minutes: 60,
+            status: "scheduled",
+            is_trial: false,
+            notes: null,
+            student_user_id: null,
+            teacher_user_id: null,
+            student_name: null,
+            teacher_name: null,
+            branch_name: null,
+            room_name: null,
+            group_name: null,
+            group_price_per_lesson: null,
+          },
+        ],
+      },
+      { rows: [] }, // delete from app.lesson_reminders
+    ]);
+
+    await service.updateLesson(actor, "lesson-a", {
+      scheduledAt: "2026-06-20T15:00:00.000Z",
+    });
+
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("delete from app.lesson_reminders"),
+      ["lesson-a"],
+    );
+  });
+
   it("creates trial lessons linked to leads", async () => {
     const { service, query, audit, policy } = createService([
       {
@@ -3068,6 +3115,160 @@ describe("CrmService", () => {
         action: "crm.lead_deleted",
         entityType: "lead",
         entityId: "lead-a",
+      }),
+    );
+  });
+
+  it("resolves a lead chat user via an explicit crm link", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [{ id: "lead-a", name: "Иван", phone: "+7 999 000-00-00" }] },
+      { rows: [{ user_id: "user-x" }] },
+    ]);
+    const result = await service.resolveLeadChatUser(actor, "lead-a");
+    expect(result).toEqual({ userId: "user-x", name: "Иван" });
+  });
+
+  it("resolves a lead chat user by matching phone when no link exists", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [{ id: "lead-a", name: "Иван", phone: "+7 (999) 000-00-00" }] },
+      { rows: [] },
+      { rows: [{ user_id: "user-phone" }] },
+    ]);
+    const result = await service.resolveLeadChatUser(actor, "lead-a");
+    expect(result.userId).toBe("user-phone");
+  });
+
+  it("returns null lead chat user when nothing matches", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [{ id: "lead-a", name: "Иван", phone: null }] },
+      { rows: [] },
+    ]);
+    const result = await service.resolveLeadChatUser(actor, "lead-a");
+    expect(result.userId).toBeNull();
+  });
+
+  it("resolves a contact for a chat user, preferring crm links", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [{ entity_type: "lead", entity_id: "lead-1" }] },
+      { rows: [] }, // no owned student
+    ]);
+    const result = await service.resolveContactForUser(actor, "user-x");
+    expect(result).toEqual({ studentId: null, leadId: "lead-1" });
+  });
+
+  it("falls back to an owned student when a chat user has no crm links", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [] }, // no links
+      { rows: [{ id: "student-9" }] }, // owned student via profile.user_id
+    ]);
+    const result = await service.resolveContactForUser(actor, "user-x");
+    expect(result).toEqual({ studentId: "student-9", leadId: null });
+  });
+
+  it("returns payments with a correct server-side period total (not the page fold)", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          { id: "pay-1", student_id: "s1", amount: "500", currency: "RUB" },
+          { id: "pay-2", student_id: "s1", amount: "700", currency: "RUB" },
+        ],
+      },
+      { rows: [{ total_amount: "12345", total_count: "37" }] },
+    ]);
+    const result = await service.listPayments(actor, {});
+    expect(result.items).toHaveLength(2);
+    // The total reflects the full filtered set (37 payments / 12345), not the
+    // sum of the returned page (1200).
+    expect(result.totalAmount).toBe(12345);
+    expect(result.totalCount).toBe(37);
+  });
+
+  it("save-from-chat returns the existing lead when already linked", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            profile_id: "p1",
+            user_id: "u1",
+            first_name: "Иван",
+            last_name: "П",
+            phone: "+7 999 111-22-33",
+          },
+        ],
+      },
+      { rows: [{ entity_id: "lead-existing" }] },
+    ]);
+    const result = await service.saveContactFromChat(actor, {
+      userId: "u1",
+      as: "lead",
+    });
+    expect(result).toEqual({ leadId: "lead-existing", created: false });
+  });
+
+  it("save-from-chat returns the existing student for a known profile", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            profile_id: "p1",
+            user_id: "u1",
+            first_name: "Иван",
+            last_name: null,
+            phone: null,
+          },
+        ],
+      },
+      { rows: [{ id: "student-existing" }] },
+    ]);
+    const result = await service.saveContactFromChat(actor, {
+      userId: "u1",
+      as: "student",
+    });
+    expect(result).toEqual({ studentId: "student-existing", created: false });
+  });
+
+  it("save-from-chat creates and links a new lead from a chat partner", async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            profile_id: "p1",
+            user_id: "u1",
+            first_name: "Иван",
+            last_name: "П",
+            phone: "+7 999 111-22-33",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] }); // no existing link
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ id: "lead-new" }] }) // insert lead
+      .mockResolvedValueOnce({ rows: [] }); // insert crm link
+    const transaction = jest.fn(
+      async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query: clientQuery }),
+    );
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const policy = { assertCanWriteCrm: jest.fn() };
+    const service = new CrmService(
+      { query, transaction } as unknown as DatabaseService,
+      audit as unknown as AuditService,
+      policy as unknown as CrmPolicy,
+      {} as unknown as HolliHopMetadataService,
+      {} as unknown as NotificationsService,
+    );
+    const result = await service.saveContactFromChat(actor, {
+      userId: "u1",
+      as: "lead",
+    });
+    expect(result).toEqual({ leadId: "lead-new", created: true });
+    expect(clientQuery).toHaveBeenCalledTimes(2);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.lead_created",
+        entityId: "lead-new",
       }),
     );
   });

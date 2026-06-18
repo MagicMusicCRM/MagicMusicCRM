@@ -37,6 +37,7 @@ interface DeviceTokenRow {
 export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
   private static readonly emailRetryLimit = 5;
   private emailTimer?: NodeJS.Timeout;
+  private pushTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly database: DatabaseService,
@@ -52,10 +53,18 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
       void this.dispatchPendingEmails().catch(() => undefined);
     }, 30_000);
     this.emailTimer.unref?.();
+    // Push deliveries also need a periodic drain — otherwise anything enqueued
+    // (e.g. lesson reminders) sits in 'queued' forever until an unrelated send
+    // happens to flush the queue.
+    this.pushTimer = setInterval(() => {
+      void this.dispatchPendingPush().catch(() => undefined);
+    }, 30_000);
+    this.pushTimer.unref?.();
   }
 
   onModuleDestroy(): void {
     if (this.emailTimer) clearInterval(this.emailTimer);
+    if (this.pushTimer) clearInterval(this.pushTimer);
   }
 
   async dispatchPendingEmails(limit = 20): Promise<{ processed: number; failed: number }> {
@@ -88,21 +97,48 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   async dispatchPendingPush(limit = 50): Promise<{ processed: number; failed: number }> {
-    const deliveries = await this.database.query<PushDeliveryRow>(
+    const candidates = await this.database.query<{ id: string }>(
       `
-        select nd.id, nd.notification_id, nd.user_id, n.title, n.body, n.data
+        select nd.id
         from app.notification_deliveries nd
-        join app.notifications n on n.id = nd.notification_id
         where nd.channel = 'push'
           and nd.status = 'queued'
+          and (
+            nd.dispatch_claimed_at is null
+            or nd.dispatch_claimed_at < now() - interval '5 minutes'
+          )
         order by nd.created_at asc
         limit $1
       `,
       [limit]
     );
 
+    let processed = 0;
     let failed = 0;
-    for (const delivery of deliveries.rows) {
+    for (const candidate of candidates.rows) {
+      // Atomically claim the row; if another drain already took it, skip. This
+      // makes overlapping push drains (periodic loop + on-enqueue trigger)
+      // mutually exclusive so the same push is never sent twice.
+      const claimed = await this.database.query<PushDeliveryRow>(
+        `
+          update app.notification_deliveries nd
+          set dispatch_claimed_at = now()
+          from app.notifications n
+          where nd.id = $1
+            and n.id = nd.notification_id
+            and nd.channel = 'push'
+            and nd.status = 'queued'
+            and (
+              nd.dispatch_claimed_at is null
+              or nd.dispatch_claimed_at < now() - interval '5 minutes'
+            )
+          returning nd.id, nd.notification_id, nd.user_id, n.title, n.body, n.data
+        `,
+        [candidate.id]
+      );
+      const delivery = claimed.rows[0];
+      if (!delivery) continue;
+      processed += 1;
       try {
         const delivered = await this.dispatchPush(delivery);
         if (!delivered) failed += 1;
@@ -111,7 +147,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
         await this.recordPushFailure(delivery, error);
       }
     }
-    return { processed: deliveries.rows.length, failed };
+    return { processed, failed };
   }
 
   private async dispatchEmail(item: OutboxRow): Promise<boolean> {

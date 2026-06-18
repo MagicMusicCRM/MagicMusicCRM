@@ -780,6 +780,31 @@ class MagicCrmService {
     await _api.delete<Map<String, dynamic>>('/crm/leads/$id');
   }
 
+  /// Resolve the messenger user behind a lead (via crm-link or phone match)
+  /// so staff can jump into a chat. Returns `{userId, name}` (userId may be null).
+  Future<Map<String, dynamic>> resolveLeadChatUser(String leadId) async {
+    return _api.get<Map<String, dynamic>>('/crm/leads/$leadId/chat-user');
+  }
+
+  /// Reverse lookup: given a chat partner user, find their CRM lead/student.
+  /// Returns `{studentId, leadId}` (either may be null).
+  Future<Map<String, dynamic>> resolveContactForUser(String userId) async {
+    return _api.get<Map<String, dynamic>>('/crm/contacts/by-user/$userId');
+  }
+
+  /// Save a chat partner into the CRM as a lead or student, linking the entity
+  /// to that user. Idempotent — returns the existing one if already saved.
+  /// Response: `{leadId|studentId, created}`.
+  Future<Map<String, dynamic>> saveContactFromChat({
+    required String userId,
+    required String as,
+  }) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/contacts/save-from-chat',
+      data: {'userId': userId, 'as': as},
+    );
+  }
+
   Future<Map<String, dynamic>> createLeadStatus({
     required String key,
     required String label,
@@ -872,6 +897,44 @@ class MagicCrmService {
       'groups': _mapList(response['groups'], _legacyScheduleGroup),
       'conflicts': _mapList(response['conflicts'], _legacyScheduleConflict),
     };
+  }
+
+  /// Lightweight per-day lesson counts for the month calendar. Returns a list of
+  /// `{ 'day': 'YYYY-MM-DD', 'count': int, 'room_ids': List<String> }` so the
+  /// month view can render counts + room dots without fetching every lesson.
+  Future<List<Map<String, dynamic>>> getScheduleMonthSummary({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final queryParameters = <String, dynamic>{};
+    void addString(String key, String? value) {
+      final trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        queryParameters[key] = trimmed;
+      }
+    }
+
+    addString('from', from);
+    addString('to', to);
+    addString('branchId', branchId);
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/schedule/month-summary',
+      queryParameters: queryParameters,
+    );
+    return _items(response).map((item) {
+      final roomIds = item['roomIds'];
+      return {
+        'day': item['day']?.toString(),
+        'count': item['count'] is int
+            ? item['count']
+            : int.tryParse('${item['count']}') ?? 0,
+        'room_ids': roomIds is List
+            ? roomIds.map((e) => e.toString()).toList()
+            : const <String>[],
+      };
+    }).toList();
   }
 
   Future<List<Map<String, dynamic>>> listLessons({
@@ -1203,6 +1266,34 @@ class MagicCrmService {
       queryParameters: queryParameters,
     );
     return _items(response).map(_legacyPayment).toList();
+  }
+
+  /// Like [listPayments] but also returns the server-side period totals
+  /// (`totalAmount`, `totalCount`) over the full filtered set, so the UI can
+  /// show a correct «Итого» rather than summing a truncated page.
+  Future<({List<Map<String, dynamic>> items, num totalAmount, int totalCount})>
+  listPaymentsWithTotal({String? from, String? to, String? studentId, int limit = 100}) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    if (studentId != null) queryParameters['studentId'] = studentId;
+    if (from != null) queryParameters['from'] = from;
+    if (to != null) queryParameters['to'] = to;
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/payments',
+      queryParameters: queryParameters,
+    );
+    final items = _items(response).map(_legacyPayment).toList();
+    final totalAmount = response['totalAmount'];
+    final totalCount = response['totalCount'];
+    return (
+      items: items,
+      totalAmount: totalAmount is num
+          ? totalAmount
+          : num.tryParse(totalAmount?.toString() ?? '') ?? 0,
+      totalCount: totalCount is int
+          ? totalCount
+          : int.tryParse(totalCount?.toString() ?? '') ?? items.length,
+    );
   }
 
   Future<List<Map<String, dynamic>>> listExpectedPayments({

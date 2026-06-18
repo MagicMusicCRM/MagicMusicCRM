@@ -25,6 +25,8 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   bool _loading = true;
   Object? _loadError;
   Map<String, dynamic> _summary = {};
+  // How many months back the analytics cover (inclusive of the current month).
+  int _monthsBack = 6;
 
   @override
   void initState() {
@@ -59,11 +61,11 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     });
     try {
       final now = DateTime.now();
-      final sixMonthsAgo = DateTime(now.year, now.month - 5, 1);
+      final periodStart = DateTime(now.year, now.month - (_monthsBack - 1), 1);
       final report = await ref
           .read(magicCrmServiceProvider)
           .getFinanceReport(
-            from: sixMonthsAgo.toUtc().toIso8601String(),
+            from: periodStart.toUtc().toIso8601String(),
             to: now.add(const Duration(days: 1)).toUtc().toIso8601String(),
           );
       final monthList = (report['monthly'] as List? ?? const [])
@@ -147,21 +149,66 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Отчёты',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'За последние 6 месяцев',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 20),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1100),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Отчёты',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'За последние $_monthsBack мес.',
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SegmentedButton<int>(
+                      segments: const [
+                        ButtonSegment(value: 3, label: Text('3 мес')),
+                        ButtonSegment(value: 6, label: Text('6 мес')),
+                        ButtonSegment(value: 12, label: Text('12 мес')),
+                      ],
+                      selected: {_monthsBack},
+                      onSelectionChanged: (s) {
+                        setState(() => _monthsBack = s.first);
+                        _loadReports();
+                      },
+                      style: ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? AppTheme.primaryPurple.withAlpha(30)
+                              : Colors.transparent,
+                        ),
+                        foregroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? AppTheme.primaryPurple
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
 
             // KPI Row
             Row(
@@ -414,7 +461,9 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                 ),
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );
