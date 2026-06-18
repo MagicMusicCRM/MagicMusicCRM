@@ -1172,6 +1172,8 @@ class _LeadCard extends ConsumerWidget {
                               _addTask(context, ref);
                             } else if (v == 'trial') {
                               _scheduleTrial(context, ref);
+                            } else if (v == 'convert') {
+                              _convertToStudent(context, ref);
                             } else {
                               onMove(id, v);
                             }
@@ -1224,6 +1226,29 @@ class _LeadCard extends ConsumerWidget {
                                 value: 'trial',
                                 child: Text('Назначить пробный'),
                               ),
+                              if (linkedStudentId.isEmpty) ...[
+                                const PopupMenuDivider(),
+                                const PopupMenuItem(
+                                  value: 'convert',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.school_rounded,
+                                        size: 18,
+                                        color: AppTheme.success,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Сделать учеником',
+                                        style: TextStyle(
+                                          color: AppTheme.success,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               const PopupMenuDivider(),
                               const PopupMenuItem(
                                 value: 'delete',
@@ -1430,6 +1455,102 @@ class _LeadCard extends ConsumerWidget {
             title: title.trim(),
           );
       onRefresh();
+    }
+  }
+
+  Future<void> _convertToStudent(BuildContext context, WidgetRef ref) async {
+    final firstName = lead['name']?.toString().trim() ?? '';
+    final lastName = lead['last_name']?.toString().trim() ?? '';
+    final phone = lead['phone']?.toString().trim() ?? '';
+    final displayName = [
+      firstName,
+      lastName,
+    ].where((s) => s.isNotEmpty).join(' ');
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontSize: 12,
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Сделать учеником'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Создать карточку ученика из лида'
+              '${displayName.isEmpty ? '' : ' «$displayName»'}?',
+            ),
+            if (phone.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Телефон: $phone', style: muted),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              'Данные лида перенесутся в карточку ученика, лид останется '
+              'связанным с ним.',
+              style: muted,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.success),
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.school_rounded, size: 18),
+            label: const Text('Создать ученика'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final customData = lead['custom_data'] as Map<String, dynamic>? ?? {};
+      final patch = <String, dynamic>{};
+      final discipline = customData['discipline']?.toString();
+      final level = customData['level']?.toString();
+      final branchId = lead['branch_id']?.toString();
+      if (discipline != null && discipline.isNotEmpty) {
+        patch['discipline'] = discipline;
+      }
+      if (level != null && level.isNotEmpty) patch['level'] = level;
+      if (branchId != null && branchId.isNotEmpty) patch['branchId'] = branchId;
+
+      await ref
+          .read(magicCrmServiceProvider)
+          .createStudent(
+            firstName: firstName.isEmpty ? 'Без имени' : firstName,
+            lastName: lastName.isEmpty ? null : lastName,
+            phone: phone.isEmpty ? null : phone,
+            leadId: lead['id'].toString(),
+            customDataPatch: patch.isEmpty ? null : patch,
+          );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Лид конвертирован в ученика'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      onRefresh();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Не удалось конвертировать: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
     }
   }
 
