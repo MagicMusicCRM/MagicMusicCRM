@@ -853,7 +853,11 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           )
           .map((c) => {'type': 'comment', 'data': c, 'date': c['created_at']}),
     ];
-    items.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+    items.sort(
+      (a, b) => ((b['date'] as String?) ?? '').compareTo(
+        (a['date'] as String?) ?? '',
+      ),
+    );
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),

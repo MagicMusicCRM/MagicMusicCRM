@@ -779,7 +779,11 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             'По аудиториям',
             _dayViewMode == _DayViewMode.byRoom,
             () {
+              if (_dayViewMode == _DayViewMode.byRoom) return;
               setState(() => _dayViewMode = _DayViewMode.byRoom);
+              // The matrix is grouped server-side by mode, so re-fetch to avoid
+              // showing the previous grouping's (stale) payload.
+              _fetchAll();
             },
           ),
           SizedBox(width: 8),
@@ -787,7 +791,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             'По педагогу',
             _dayViewMode == _DayViewMode.byTeacher,
             () {
+              if (_dayViewMode == _DayViewMode.byTeacher) return;
               setState(() => _dayViewMode = _DayViewMode.byTeacher);
+              _fetchAll();
             },
           ),
         ],

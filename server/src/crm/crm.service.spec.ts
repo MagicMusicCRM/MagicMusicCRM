@@ -2080,6 +2080,10 @@ describe("CrmService", () => {
           method: "subscription",
         }),
       ],
+      // Totals come from a separate aggregate query (mocked with the same row,
+      // which has no total_* fields, so they resolve to 0 here).
+      totalAmount: 0,
+      totalCount: 0,
     });
 
     expect(query.mock.calls[0][1]).toEqual([
@@ -3116,6 +3120,24 @@ describe("CrmService", () => {
     ]);
     const result = await service.resolveContactForUser(actor, "user-x");
     expect(result).toEqual({ studentId: "student-9", leadId: null });
+  });
+
+  it("returns payments with a correct server-side period total (not the page fold)", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          { id: "pay-1", student_id: "s1", amount: "500", currency: "RUB" },
+          { id: "pay-2", student_id: "s1", amount: "700", currency: "RUB" },
+        ],
+      },
+      { rows: [{ total_amount: "12345", total_count: "37" }] },
+    ]);
+    const result = await service.listPayments(actor, {});
+    expect(result.items).toHaveLength(2);
+    // The total reflects the full filtered set (37 payments / 12345), not the
+    // sum of the returned page (1200).
+    expect(result.totalAmount).toBe(12345);
+    expect(result.totalCount).toBe(37);
   });
 
   it("save-from-chat returns the existing lead when already linked", async () => {

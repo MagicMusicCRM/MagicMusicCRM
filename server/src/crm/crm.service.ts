@@ -3421,7 +3421,40 @@ export class CrmService {
         limit,
       ],
     );
-    return { items: result.rows.map((row) => this.toPaymentDto(row)) };
+    // Period totals over the FULL filtered set (not just the page), so the UI
+    // can show a correct "Итого" instead of summing a truncated page.
+    const totals = await this.database.query<{
+      total_amount: string;
+      total_count: string;
+    }>(
+      `
+        select coalesce(sum(pay.amount), 0)::text as total_amount,
+          count(*)::text as total_count
+        from app.payments pay
+        join app.students s on s.id = pay.student_id and s.deleted_at is null
+        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+        where pay.deleted_at is null
+          and ($3::uuid is null or pay.student_id = $3)
+          and ($4::timestamptz is null or pay.payment_date >= $4)
+          and ($5::timestamptz is null or pay.payment_date < $5)
+          and (
+            $1::text in ('manager', 'admin', 'system_admin')
+            or ($1::text = 'client' and p.user_id = $2)
+          )
+      `,
+      [
+        actor.role,
+        actor.userId,
+        query.studentId ?? null,
+        query.from ?? null,
+        query.to ?? null,
+      ],
+    );
+    return {
+      items: result.rows.map((row) => this.toPaymentDto(row)),
+      totalAmount: Number(totals.rows[0]?.total_amount ?? "0"),
+      totalCount: Number(totals.rows[0]?.total_count ?? "0"),
+    };
   }
 
   async listExpectedPayments(actor: ActorContext, query: CrmListQuery) {

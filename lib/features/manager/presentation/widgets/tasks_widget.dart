@@ -811,8 +811,10 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final id = task['id'] as String;
-    final status = task['status'] as String?;
+    // Read defensively — a numeric/null id from the API would otherwise throw
+    // a TypeError during build and render the card as a red error box.
+    final id = task['id']?.toString() ?? '';
+    final status = task['status']?.toString();
     final dueDate = task['due_date'] != null
         ? DateFormat(
             'd MMM yyyy',
@@ -878,10 +880,38 @@ class _TaskCard extends StatelessWidget {
                             ).colorScheme.onSurfaceVariant,
                           ),
                     color: Theme.of(context).colorScheme.surface,
-                    onSelected: (value) {
+                    onSelected: (value) async {
                       if (value == 'reassign') {
                         onReassignTap(task);
                         return;
+                      }
+                      // Cancelling drops the task out of the active workflow —
+                      // confirm to avoid an accidental mis-click in the menu.
+                      if (value == 'cancelled') {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Отменить задачу?'),
+                            content: const Text(
+                              'Задача будет отменена и скрыта из активного '
+                              'списка.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Нет'),
+                              ),
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppTheme.danger,
+                                ),
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Отменить задачу'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
                       }
                       onStatusChange(id, value);
                     },

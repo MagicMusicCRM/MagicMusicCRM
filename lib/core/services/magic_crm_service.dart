@@ -1268,6 +1268,34 @@ class MagicCrmService {
     return _items(response).map(_legacyPayment).toList();
   }
 
+  /// Like [listPayments] but also returns the server-side period totals
+  /// (`totalAmount`, `totalCount`) over the full filtered set, so the UI can
+  /// show a correct «Итого» rather than summing a truncated page.
+  Future<({List<Map<String, dynamic>> items, num totalAmount, int totalCount})>
+  listPaymentsWithTotal({String? from, String? to, String? studentId, int limit = 100}) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    if (studentId != null) queryParameters['studentId'] = studentId;
+    if (from != null) queryParameters['from'] = from;
+    if (to != null) queryParameters['to'] = to;
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/payments',
+      queryParameters: queryParameters,
+    );
+    final items = _items(response).map(_legacyPayment).toList();
+    final totalAmount = response['totalAmount'];
+    final totalCount = response['totalCount'];
+    return (
+      items: items,
+      totalAmount: totalAmount is num
+          ? totalAmount
+          : num.tryParse(totalAmount?.toString() ?? '') ?? 0,
+      totalCount: totalCount is int
+          ? totalCount
+          : int.tryParse(totalCount?.toString() ?? '') ?? items.length,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> listExpectedPayments({
     required String studentId,
     int limit = 50,
