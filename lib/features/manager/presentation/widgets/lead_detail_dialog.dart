@@ -316,7 +316,11 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
       child: Dialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
+        // Cap the width on wide desktop monitors instead of stretching the
+        // form edge-to-edge.
+        width: (MediaQuery.of(context).size.width * 0.9)
+            .clamp(0.0, 900.0)
+            .toDouble(),
         height: MediaQuery.of(context).size.height * 0.85,
         padding: const EdgeInsets.all(20),
         child: Column(
