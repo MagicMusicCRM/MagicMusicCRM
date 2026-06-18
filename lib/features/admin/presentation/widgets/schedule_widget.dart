@@ -1902,6 +1902,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         ? (_roomNames[roomId] ?? 'Аудитория')
         : 'Без аудитории';
     final conflicts = _conflictTypes(lesson['conflict_types']);
+    final lessonId = lesson['id']?.toString();
+    final currentStatus = lesson['status']?.toString() ?? 'scheduled';
 
     showDialog(
       context: context,
@@ -1929,7 +1931,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             _detailRow(
               Icons.info_outline_rounded,
               'Статус',
-              lesson['status']?.toString() ?? 'planned',
+              _lessonStatusLabel(currentStatus),
             ),
             if (conflicts.isNotEmpty) ...[
               SizedBox(height: 8),
@@ -1942,6 +1944,59 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           ],
         ),
         actions: [
+          if (lessonId != null && currentStatus != 'cancelled')
+            TextButton(
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const Text('Отменить занятие?'),
+                    content: const Text(
+                      'Занятие будет помечено как отменённое.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c, false),
+                        child: const Text('Нет'),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.danger,
+                        ),
+                        onPressed: () => Navigator.pop(c, true),
+                        child: const Text('Отменить занятие'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  await _updateLessonStatus(
+                    lessonId,
+                    'cancelled',
+                    'Занятие отменено',
+                  );
+                }
+              },
+              child: const Text(
+                'Отменить',
+                style: TextStyle(color: AppTheme.danger),
+              ),
+            ),
+          if (lessonId != null &&
+              currentStatus != 'completed' &&
+              currentStatus != 'done')
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _updateLessonStatus(
+                  lessonId,
+                  'completed',
+                  'Занятие отмечено проведённым',
+                );
+              },
+              child: const Text('Завершить'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text('Закрыть'),
@@ -1949,6 +2004,51 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         ],
       ),
     );
+  }
+
+  String _lessonStatusLabel(String? status) {
+    switch (status) {
+      case 'completed':
+      case 'done':
+        return 'Проведено';
+      case 'cancelled':
+        return 'Отменено';
+      case 'scheduled':
+      case 'planned':
+        return 'Запланировано';
+      default:
+        return status ?? 'Запланировано';
+    }
+  }
+
+  Future<void> _updateLessonStatus(
+    String lessonId,
+    String status,
+    String successMsg,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateLesson(lessonId, status: status);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(successMsg),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _fetchAll();
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось обновить занятие: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
   }
 
   Widget _detailRow(IconData icon, String label, String value) {
