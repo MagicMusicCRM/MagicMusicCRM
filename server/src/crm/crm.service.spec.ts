@@ -3609,7 +3609,8 @@ describe("CrmService", () => {
       reasonId: null,
       comment: null,
     });
-    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(result.items).toHaveLength(1);
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.lead_status_history");
     expect(query.mock.calls[0][1]).toEqual(["lead-1"]);
   });

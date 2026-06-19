@@ -4132,7 +4132,7 @@ export class CrmService {
   }
 
   async listLeadStatusHistory(actor: ActorContext, leadId: string) {
-    this.policy.assertCanReadOperationalData(actor);
+    this.policy.assertCanWriteCrm(actor);
     const result = await this.database.query<{
       id: string;
       old_status: string | null;
