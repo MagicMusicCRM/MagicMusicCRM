@@ -47,6 +47,10 @@ import { UpsertAttendanceDto } from "./dto/upsert-attendance.dto";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { UpsertLeadStatusDto } from "./dto/upsert-lead-status.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
+import { CreateDisciplineDto } from "./dto/create-discipline.dto";
+import { CreateLossReasonDto } from "./dto/create-loss-reason.dto";
+import { UpsertBranchDisciplineDto } from "./dto/upsert-branch-discipline.dto";
+import { ReorderBranchDisciplinesDto } from "./dto/reorder-branch-disciplines.dto";
 import { UpsertGroupDto } from "./dto/upsert-group.dto";
 import { UpsertRoomDto } from "./dto/upsert-room.dto";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
@@ -355,6 +359,40 @@ export class CrmController {
     @Param("branchId") branchId: string,
   ) {
     return this.crm.listBranchDisciplines(actor, branchId);
+  }
+
+  @Post("disciplines")
+  createDiscipline(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: CreateDisciplineDto,
+  ) {
+    return this.crm.createDiscipline(actor, dto);
+  }
+
+  @Post("loss-reasons")
+  createLossReason(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: CreateLossReasonDto,
+  ) {
+    return this.crm.createLossReason(actor, dto);
+  }
+
+  @Post("branches/:branchId/disciplines")
+  assignBranchDiscipline(
+    @CurrentActor() actor: ActorContext,
+    @Param("branchId") branchId: string,
+    @Body() dto: UpsertBranchDisciplineDto,
+  ) {
+    return this.crm.assignBranchDiscipline(actor, branchId, dto);
+  }
+
+  @Patch("branches/:branchId/disciplines/order")
+  reorderBranchDisciplines(
+    @CurrentActor() actor: ActorContext,
+    @Param("branchId") branchId: string,
+    @Body() dto: ReorderBranchDisciplinesDto,
+  ) {
+    return this.crm.reorderBranchDisciplines(actor, branchId, dto);
   }
 
   @Get("hollihop/disciplines")

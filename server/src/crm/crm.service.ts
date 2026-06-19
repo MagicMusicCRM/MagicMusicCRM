@@ -2733,6 +2733,80 @@ export class CrmService {
     return { success: true };
   }
 
+  async createDiscipline(actor: ActorContext, dto: { name: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{ id: string; name: string }>(
+      `insert into app.disciplines (name) values ($1) returning id, name`,
+      [dto.name],
+    );
+    return { id: result.rows[0].id, name: result.rows[0].name };
+  }
+
+  async createLossReason(
+    actor: ActorContext,
+    dto: { name: string; kind?: "lost" | "paused"; sortOrder?: number },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{
+      id: string;
+      name: string;
+      kind: string;
+      sort_order: number;
+    }>(
+      `insert into app.lead_loss_reasons (name, kind, sort_order)
+       values ($1, $2, $3)
+       returning id, name, kind, sort_order`,
+      [dto.name, dto.kind ?? "lost", dto.sortOrder ?? 0],
+    );
+    const row = result.rows[0];
+    return { id: row.id, name: row.name, kind: row.kind, sortOrder: row.sort_order };
+  }
+
+  async assignBranchDiscipline(
+    actor: ActorContext,
+    branchId: string,
+    dto: { disciplineId: string; sortOrder?: number },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{
+      id: string;
+      discipline_id: string;
+      sort_order: number;
+    }>(
+      `insert into app.branch_disciplines (branch_id, discipline_id, sort_order)
+       values (
+         $1, $2,
+         coalesce($3, (select coalesce(max(sort_order) + 1, 0)
+                         from app.branch_disciplines
+                        where branch_id = $1 and deleted_at is null))
+       )
+       on conflict (branch_id, discipline_id)
+       do update set sort_order = excluded.sort_order, deleted_at = null
+       returning id, discipline_id, sort_order`,
+      [branchId, dto.disciplineId, dto.sortOrder ?? null],
+    );
+    const row = result.rows[0];
+    return { id: row.id, disciplineId: row.discipline_id, sortOrder: row.sort_order };
+  }
+
+  async reorderBranchDisciplines(
+    actor: ActorContext,
+    branchId: string,
+    dto: { disciplineIds: string[] },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query(
+      `update app.branch_disciplines bd
+          set sort_order = t.ord - 1
+         from unnest($2::uuid[]) with ordinality as t(discipline_id, ord)
+        where bd.branch_id = $1
+          and bd.discipline_id = t.discipline_id
+          and bd.deleted_at is null`,
+      [branchId, dto.disciplineIds],
+    );
+    return { updated: result.rowCount ?? result.rows.length };
+  }
+
   async getScheduleMatrix(actor: ActorContext, query: ScheduleMatrixQuery) {
     this.policy.assertCanReadOperationalData(actor);
     const limit = Math.min(query.limit ?? 300, 500);

@@ -3403,6 +3403,30 @@ describe("CrmService", () => {
     expect(query.mock.calls[0][0]).toContain("resolved_at is null");
   });
 
+  it("creates a discipline", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ id: "d9", name: "Скрипка" }] },
+    ]);
+    const result = await service.createDiscipline(actor, { name: "Скрипка" });
+    expect(result).toEqual({ id: "d9", name: "Скрипка" });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("insert into app.disciplines");
+    expect(query.mock.calls[0][1]).toEqual(["Скрипка"]);
+  });
+
+  it("reorders branch disciplines by array position", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ id: "bd1" }, { id: "bd2" }] },
+    ]);
+    const result = await service.reorderBranchDisciplines(actor, "branch-1", {
+      disciplineIds: ["d2", "d1"],
+    });
+    expect(result).toEqual({ updated: 2 });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("with ordinality");
+    expect(query.mock.calls[0][1]).toEqual(["branch-1", ["d2", "d1"]]);
+  });
+
   it("resolveLeadChatUser phone-lookup SQL uses +7 canonical expression (regression KVA-184)", async () => {
     // Query sequence for resolveLeadChatUser when there is no explicit link
     // and we fall through to the phone-based profile lookup:
