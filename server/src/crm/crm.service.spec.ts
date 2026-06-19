@@ -3483,4 +3483,22 @@ describe("CrmService", () => {
     // The expression must appear inside a CASE block (not as a bare equality).
     expect(phoneMatchSql).toContain("case");
   });
+
+  it("lead board branch filter prefers the branch_id column", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // statuses
+      { rows: [] }, // count rows
+      { rows: [] }, // board rows
+    ]);
+    await service.listLeadBoard(actor, { branchId: "b-1" } as never);
+    const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(sql).toContain("l.branch_id::text");
+  });
+
+  it("student search branch filter prefers the branch_id column", async () => {
+    const { service, query } = createServiceWithQueryResults([{ rows: [] }]);
+    await service.searchStudents(actor, { branchId: "b-1" } as never);
+    const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(sql).toContain("s.branch_id::text");
+  });
 });

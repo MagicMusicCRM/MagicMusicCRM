@@ -538,7 +538,7 @@ export class CrmService {
             where p.deleted_at is null
               and p.payment_date >= $1::timestamptz
               and p.payment_date < $2::timestamptz
-              and ($3::uuid is null or coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('s')} = $3::text)
           ) as revenue,
           (
             select coalesce(sum(ep.amount), 0)
@@ -546,21 +546,21 @@ export class CrmService {
             join app.students s on s.id = ep.student_id and s.deleted_at is null
             where ep.status in ('pending', 'open')
               and (ep.due_date is null or ep.due_date < $2::date)
-              and ($3::uuid is null or coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('s')} = $3::text)
           ) as expected_payments,
           (
             select count(*)
             from app.student_balances sb
             join app.students s on s.id = sb.student_id and s.deleted_at is null
             where sb.balance < 0
-              and ($3::uuid is null or coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('s')} = $3::text)
           ) as debt_students,
           (
             select count(*)
             from app.students s
             where s.deleted_at is null
               and s.status = 'active'
-              and ($3::uuid is null or coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('s')} = $3::text)
           ) as active_students,
           (
             select count(*)
@@ -568,7 +568,7 @@ export class CrmService {
             where l.deleted_at is null
               and l.created_at >= $1::timestamptz
               and l.created_at < $2::timestamptz
-              and ($3::uuid is null or coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('l')} = $3::text)
           ) as new_leads,
           (
             select count(*)
@@ -880,7 +880,7 @@ export class CrmService {
           s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone,
           s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids,
-          coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') as branch_id,
+          ${this.branchIdExpr('s')} as branch_id,
           b.name as branch_name,
           (
             select count(*)
@@ -918,7 +918,7 @@ export class CrmService {
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         left join app.branches b
-          on b.id::text = coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id')
+          on b.id::text = ${this.branchIdExpr('s')}
          and b.deleted_at is null
         left join app.user_crm_links link
           on link.entity_type = 'student'
@@ -3281,8 +3281,8 @@ export class CrmService {
             grp.name
           ) as entity_name,
           coalesce(
-            nullif(coalesce(student.custom_data->>'branchId', student.custom_data->>'branch_id'), ''),
-            nullif(coalesce(lead.custom_data->>'branchId', lead.custom_data->>'branch_id'), ''),
+            nullif(${this.branchIdExpr('student')}, ''),
+            nullif(${this.branchIdExpr('lead')}, ''),
             grp.branch_id::text,
             lesson.branch_id::text
           ) as branch_id,
@@ -3302,8 +3302,8 @@ export class CrmService {
         left join app.groups grp on task.entity_type = 'group' and grp.id = task.entity_id and grp.deleted_at is null
         left join app.lessons lesson on task.entity_type = 'lesson' and lesson.id = task.entity_id and lesson.deleted_at is null
         left join app.branches branch on branch.id::text = coalesce(
-          nullif(coalesce(student.custom_data->>'branchId', student.custom_data->>'branch_id'), ''),
-          nullif(coalesce(lead.custom_data->>'branchId', lead.custom_data->>'branch_id'), ''),
+          nullif(${this.branchIdExpr('student')}, ''),
+          nullif(${this.branchIdExpr('lead')}, ''),
           grp.branch_id::text,
           lesson.branch_id::text
         ) and branch.deleted_at is null
@@ -3344,8 +3344,8 @@ export class CrmService {
           and (
             $11::uuid is null
             or coalesce(
-              nullif(coalesce(student.custom_data->>'branchId', student.custom_data->>'branch_id'), ''),
-              nullif(coalesce(lead.custom_data->>'branchId', lead.custom_data->>'branch_id'), ''),
+              nullif(${this.branchIdExpr('student')}, ''),
+              nullif(${this.branchIdExpr('lead')}, ''),
               grp.branch_id::text,
               lesson.branch_id::text
             ) = $11::text
@@ -3911,7 +3911,7 @@ export class CrmService {
             l.email, l.source, l.notes, l.assigned_to, l.custom_data,
             assigned_profile.first_name as assigned_first_name,
             assigned_profile.last_name as assigned_last_name,
-            coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id') as branch_id,
+            ${this.branchIdExpr('l')} as branch_id,
             b.name as branch_name,
             linked_student.id as linked_student_id,
             (
@@ -3946,7 +3946,7 @@ export class CrmService {
           left join app.users assigned_user on assigned_user.id = l.assigned_to and assigned_user.deleted_at is null
           left join app.profiles assigned_profile on assigned_profile.user_id = assigned_user.id and assigned_profile.deleted_at is null
           left join app.branches b
-            on b.id::text = coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id')
+            on b.id::text = ${this.branchIdExpr('l')}
            and b.deleted_at is null
           left join app.students linked_student
             on linked_student.lead_id = l.id
@@ -4019,7 +4019,7 @@ export class CrmService {
           l.email, l.source, l.notes, l.assigned_to, l.custom_data,
           assigned_profile.first_name as assigned_first_name,
           assigned_profile.last_name as assigned_last_name,
-          coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id') as branch_id,
+          ${this.branchIdExpr('l')} as branch_id,
           b.name as branch_name,
           linked_student.id as linked_student_id,
           (
@@ -4050,7 +4050,7 @@ export class CrmService {
         left join app.users assigned_user on assigned_user.id = l.assigned_to and assigned_user.deleted_at is null
         left join app.profiles assigned_profile on assigned_profile.user_id = assigned_user.id and assigned_profile.deleted_at is null
         left join app.branches b
-          on b.id::text = coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id')
+          on b.id::text = ${this.branchIdExpr('l')}
          and b.deleted_at is null
         left join app.students linked_student
           on linked_student.lead_id = l.id
@@ -4466,6 +4466,13 @@ export class CrmService {
     return { success: true };
   }
 
+  // Transition-safe branch read: prefer the real branch_id column, fall back to
+  // the legacy custom_data keys. Returns text to preserve the existing
+  // text-based comparison semantics (no jsonb::uuid casts).
+  private branchIdExpr(alias: string): string {
+    return `coalesce(${alias}.branch_id::text, ${alias}.custom_data->>'branchId', ${alias}.custom_data->>'branch_id')`;
+  }
+
   private buildStudentSearchFilter(
     actor: ActorContext,
     query: StudentSearchQuery,
@@ -4498,7 +4505,7 @@ export class CrmService {
     if (query.branchId) {
       const p = add(query.branchId);
       filters.push(
-        `coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = ${p}::text`,
+        `${this.branchIdExpr('s')} = ${p}::text`,
       );
     }
     if (query.groupId) {
@@ -4647,7 +4654,7 @@ export class CrmService {
     if (query.branchId) {
       const p = add(query.branchId);
       filters.push(
-        `coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id') = ${p}::text`,
+        `${this.branchIdExpr('l')} = ${p}::text`,
       );
     }
     this.addLeadTextFilter(filters, add, "l.source", query.source);
