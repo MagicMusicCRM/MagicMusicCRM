@@ -705,4 +705,57 @@ describe("MessengerService", () => {
 
     expect(crm.autoCreateLeadFromChat).not.toHaveBeenCalled();
   });
+
+  it("does NOT auto-create a lead for a non-administration chat (even from a client)", async () => {
+    const clientActor = { userId: "client-user-b", role: "client" as const };
+    const directChatId = "chat-direct-b";
+    type MockClient = { query: jest.Mock };
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "msg-3",
+              chat_id: directChatId,
+              sender_id: clientActor.userId,
+              content: "hi",
+              message_type: "text",
+              attachment_file_id: null,
+              reply_to_id: null,
+              forwarded_from_id: null,
+              pinned_by: null,
+              pinned_at: null,
+              created_at: new Date("2026-06-20T10:00:00Z"),
+              updated_at: new Date("2026-06-20T10:00:00Z"),
+              deleted_at: null,
+              sender_email: null,
+              sender_first_name: null,
+              sender_last_name: null,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    const { service, crm } = createService({
+      database: {
+        transaction: jest.fn(
+          async (work: (client: MockClient) => Promise<unknown>) => work(client),
+        ) as never,
+      },
+      policy: {
+        getChatAccess: jest.fn().mockResolvedValue({
+          id: directChatId,
+          type: "direct",
+          memberUserId: clientActor.userId,
+          memberRole: "member",
+        }),
+        assertCanWriteChat: jest.fn(),
+      },
+    });
+
+    await service.sendMessage(clientActor, directChatId, { content: "hi" } as never);
+
+    expect(crm.autoCreateLeadFromChat).not.toHaveBeenCalled();
+  });
 });
