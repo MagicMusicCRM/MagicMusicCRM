@@ -610,6 +610,11 @@ export class CrmService {
                     and other_room.status <> 'cancelled'
                     and other_room.id <> l.id
                     and other_room.room_id = l.room_id
+                    -- Lessons of the SAME group share a room legitimately (one
+                    -- group class = many participant rows). Only a different
+                    -- group (or an individual lesson) is a real double-booking.
+                    and (l.group_id is null or other_room.group_id is null
+                         or other_room.group_id <> l.group_id)
                     and other_room.scheduled_at < l.scheduled_at + l.duration_minutes * interval '1 minute'
                     and other_room.scheduled_at + other_room.duration_minutes * interval '1 minute' > l.scheduled_at
                 ))
@@ -2206,14 +2211,26 @@ export class CrmService {
               and overlap_lesson.scheduled_at + overlap_lesson.duration_minutes * interval '1 minute' > $5::timestamptz
           ) as is_available,
           array_remove(array[
+            -- room_overlap = TWO lessons actually overlapping each other in the
+            -- room (different groups), not merely the room being occupied during
+            -- the queried window (which a whole-day window would always be).
             case when exists (
               select 1
-              from app.lessons overlap_lesson
-              where overlap_lesson.deleted_at is null
-                and overlap_lesson.status <> 'cancelled'
-                and overlap_lesson.room_id = rr.room_id
-                and overlap_lesson.scheduled_at < $6::timestamptz
-                and overlap_lesson.scheduled_at + overlap_lesson.duration_minutes * interval '1 minute' > $5::timestamptz
+              from app.lessons a
+              join app.lessons b
+                on b.room_id = a.room_id
+                and b.id <> a.id
+                and b.deleted_at is null
+                and b.status <> 'cancelled'
+                and (a.group_id is null or b.group_id is null
+                     or a.group_id <> b.group_id)
+                and b.scheduled_at < a.scheduled_at + a.duration_minutes * interval '1 minute'
+                and b.scheduled_at + b.duration_minutes * interval '1 minute' > a.scheduled_at
+              where a.room_id = rr.room_id
+                and a.deleted_at is null
+                and a.status <> 'cancelled'
+                and a.scheduled_at < $6::timestamptz
+                and a.scheduled_at + a.duration_minutes * interval '1 minute' > $5::timestamptz
             ) then 'room_overlap' end,
             case when $7::uuid is not null and exists (
               select 1
@@ -2652,6 +2669,9 @@ export class CrmService {
                 and other_room.status <> 'cancelled'
                 and other_room.id <> scoped.id
                 and other_room.room_id = scoped.room_id
+                -- Same group sharing a room is not a conflict (see schedule_issues).
+                and (scoped.group_id is null or other_room.group_id is null
+                     or other_room.group_id <> scoped.group_id)
                 and other_room.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
                 and other_room.scheduled_at + other_room.duration_minutes * interval '1 minute' > scoped.scheduled_at
             ) then 'room_overlap' end,
@@ -2662,6 +2682,10 @@ export class CrmService {
                 and other_teacher.status <> 'cancelled'
                 and other_teacher.id <> scoped.id
                 and other_teacher.teacher_id = scoped.teacher_id
+                -- One teacher running one group class spans many participant
+                -- rows at the same time — not a teacher double-booking.
+                and (scoped.group_id is null or other_teacher.group_id is null
+                     or other_teacher.group_id <> scoped.group_id)
                 and other_teacher.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
                 and other_teacher.scheduled_at + other_teacher.duration_minutes * interval '1 minute' > scoped.scheduled_at
             ) then 'teacher_overlap' end

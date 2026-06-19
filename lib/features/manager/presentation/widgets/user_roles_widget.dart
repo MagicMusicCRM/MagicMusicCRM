@@ -553,6 +553,166 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                       final roleColor =
                           _roleColors[role] ??
                           Theme.of(context).colorScheme.onSurfaceVariant;
+                      final avatar = CircleAvatar(
+                        radius: 24,
+                        backgroundColor: roleColor.withAlpha(40),
+                        child: Text(
+                          _fullName(p).isNotEmpty
+                              ? _fullName(p)[0].toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            color: roleColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                      );
+                      final identity = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _fullName(p),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                          if ((p['email'] ?? '').isNotEmpty)
+                            Text(
+                              p['email'],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontSize: 13,
+                              ),
+                            ),
+                          if ((p['phone'] ?? '').isNotEmpty)
+                            Text(
+                              p['phone'],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontSize: 13,
+                              ),
+                            ),
+                        ],
+                      );
+                      final badges = Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          _MiniBadge(
+                            icon: Icons.school_outlined,
+                            text: '${_intValue(p['linked_students'])} учен.',
+                          ),
+                          _MiniBadge(
+                            icon: Icons.assignment_ind_outlined,
+                            text: '${_intValue(p['linked_leads'])} лид.',
+                          ),
+                          _MiniBadge(
+                            icon: Icons.person_pin_outlined,
+                            text: '${_intValue(p['linked_teachers'])} преп.',
+                          ),
+                          _MiniBadge(
+                            icon: Icons.badge_outlined,
+                            text: '${_intValue(p['linked_staff'])} сотр.',
+                          ),
+                          if (_intValue(p['candidate_students']) +
+                                  _intValue(p['candidate_leads']) +
+                                  _intValue(p['candidate_teachers']) +
+                                  _intValue(p['candidate_staff']) >
+                              0)
+                            _MiniBadge(
+                              icon: Icons.link_outlined,
+                              text:
+                                  '${_intValue(p['candidate_students']) + _intValue(p['candidate_leads']) + _intValue(p['candidate_teachers']) + _intValue(p['candidate_staff'])} канд.',
+                              accent: AppTheme.primaryGold,
+                            ),
+                        ],
+                      );
+                      final linkButton = IconButton(
+                        tooltip: 'Связать по телефону',
+                        onPressed:
+                            (p['phone'] ?? '').toString().trim().isEmpty
+                            ? null
+                            : () => _openLinkDialog(p),
+                        icon: _linkingProfileId == p['id']
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.link),
+                        color: AppTheme.primaryGold,
+                      );
+                      final roleDropdown = Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: roleColor.withAlpha(30),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: roleColor.withAlpha(80)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: role,
+                            onChanged: canUpdateRoles && !isRolePending
+                                ? (newRole) {
+                                    if (newRole != null && newRole != role) {
+                                      _confirmRoleChange(
+                                        p['id'],
+                                        _fullName(p),
+                                        role,
+                                        newRole,
+                                      );
+                                    }
+                                  }
+                                : null,
+                            dropdownColor: Theme.of(
+                              context,
+                            ).colorScheme.surface,
+                            icon: Icon(
+                              isRolePending
+                                  ? Icons.sync_rounded
+                                  : Icons.arrow_drop_down,
+                              color: roleColor,
+                              size: 18,
+                            ),
+                            isDense: true,
+                            items: _rolesForCurrentActor(role).map((r) {
+                              return DropdownMenuItem<String>(
+                                value: r,
+                                child: Text(
+                                  _roleLabels[r] ?? r,
+                                  style: TextStyle(
+                                    color:
+                                        _roleColors[r] ??
+                                        Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      );
+
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(14),
@@ -563,181 +723,55 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                             color: Theme.of(context).colorScheme.outlineVariant,
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            // Avatar
-                            CircleAvatar(
-                              radius: 24,
-                              backgroundColor: roleColor.withAlpha(40),
-                              child: Text(
-                                _fullName(p).isNotEmpty
-                                    ? _fullName(p)[0].toUpperCase()
-                                    : '?',
-                                style: TextStyle(
-                                  color: roleColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 14),
-                            // Info
-                            Expanded(
-                              child: Column(
+                        // Narrow (phone) screens stack the role dropdown below
+                        // the identity so a wide role label can't squeeze the
+                        // name to a single vertical character per line.
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            if (constraints.maxWidth < 480) {
+                              return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    _fullName(p),
-                                    style: TextStyle(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurface,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  if ((p['email'] ?? '').isNotEmpty)
-                                    Text(
-                                      p['email'],
-                                      style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  if ((p['phone'] ?? '').isNotEmpty)
-                                    Text(
-                                      p['phone'],
-                                      style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  const SizedBox(height: 4),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
+                                  Row(
                                     children: [
-                                      _MiniBadge(
-                                        icon: Icons.school_outlined,
-                                        text:
-                                            '${_intValue(p['linked_students'])} учен.',
-                                      ),
-                                      _MiniBadge(
-                                        icon: Icons.assignment_ind_outlined,
-                                        text:
-                                            '${_intValue(p['linked_leads'])} лид.',
-                                      ),
-                                      _MiniBadge(
-                                        icon: Icons.person_pin_outlined,
-                                        text:
-                                            '${_intValue(p['linked_teachers'])} преп.',
-                                      ),
-                                      _MiniBadge(
-                                        icon: Icons.badge_outlined,
-                                        text:
-                                            '${_intValue(p['linked_staff'])} сотр.',
-                                      ),
-                                      if (_intValue(p['candidate_students']) +
-                                              _intValue(p['candidate_leads']) +
-                                              _intValue(
-                                                p['candidate_teachers'],
-                                              ) +
-                                              _intValue(p['candidate_staff']) >
-                                          0)
-                                        _MiniBadge(
-                                          icon: Icons.link_outlined,
-                                          text:
-                                              '${_intValue(p['candidate_students']) + _intValue(p['candidate_leads']) + _intValue(p['candidate_teachers']) + _intValue(p['candidate_staff'])} канд.',
-                                          accent: AppTheme.primaryGold,
-                                        ),
+                                      avatar,
+                                      const SizedBox(width: 12),
+                                      Expanded(child: identity),
+                                      linkButton,
                                     ],
                                   ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            IconButton(
-                              tooltip: 'Связать по телефону',
-                              onPressed:
-                                  (p['phone'] ?? '').toString().trim().isEmpty
-                                  ? null
-                                  : () => _openLinkDialog(p),
-                              icon: _linkingProfileId == p['id']
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.link),
-                              color: AppTheme.primaryGold,
-                            ),
-                            SizedBox(width: 8),
-                            // Role Dropdown
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: roleColor.withAlpha(30),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: roleColor.withAlpha(80),
-                                ),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: role,
-                                  onChanged: canUpdateRoles && !isRolePending
-                                      ? (newRole) {
-                                          if (newRole != null &&
-                                              newRole != role) {
-                                            _confirmRoleChange(
-                                              p['id'],
-                                              _fullName(p),
-                                              role,
-                                              newRole,
-                                            );
-                                          }
-                                        }
-                                      : null,
-                                  dropdownColor: Theme.of(
-                                    context,
-                                  ).colorScheme.surface,
-                                  icon: Icon(
-                                    isRolePending
-                                        ? Icons.sync_rounded
-                                        : Icons.arrow_drop_down,
-                                    color: roleColor,
-                                    size: 18,
+                                  const SizedBox(height: 10),
+                                  badges,
+                                  const SizedBox(height: 10),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: roleDropdown,
                                   ),
-                                  isDense: true,
-                                  items: _rolesForCurrentActor(role).map((r) {
-                                    return DropdownMenuItem<String>(
-                                      value: r,
-                                      child: Text(
-                                        _roleLabels[r] ?? r,
-                                        style: TextStyle(
-                                          color: _roleColors[r] ??
-                                              Theme.of(
-                                                context,
-                                              ).colorScheme.onSurface,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
+                                ],
+                              );
+                            }
+                            return Row(
+                              children: [
+                                avatar,
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      identity,
+                                      const SizedBox(height: 4),
+                                      badges,
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ],
+                                const SizedBox(width: 8),
+                                linkButton,
+                                const SizedBox(width: 8),
+                                roleDropdown,
+                              ],
+                            );
+                          },
                         ),
                       );
                     },

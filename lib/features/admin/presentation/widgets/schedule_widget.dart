@@ -103,10 +103,21 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   );
   String? _selectedTeacherId;
 
+  // Day (by-room) grid scroll: auto-scrolls to the earliest lesson once per
+  // selected day so evening lessons aren't hidden below the 06:00 fold.
+  final ScrollController _dayGridController = ScrollController();
+  DateTime? _dayGridScrolledFor;
+
   @override
   void initState() {
     super.initState();
     _fetchAll();
+  }
+
+  @override
+  void dispose() {
+    _dayGridController.dispose();
+    super.dispose();
   }
 
   // ── Data fetching ─────────────────────────────────────────────────────────
@@ -1475,6 +1486,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     const hourHeight = 60.0;
     const headerHeight = 50.0;
 
+    _scheduleDayGridAutoScroll(dayLessons, startHour, hourHeight);
+
     return Column(
       children: [
         // Room headers
@@ -1489,12 +1502,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     _roomColorMap[rid] ??
                     Theme.of(context).colorScheme.onSurfaceVariant;
                 final availability = _availabilityForRoom(rid);
+                // Only a real scheduling conflict (overlap / branch mismatch)
+                // should red-flag a room. A room that is merely occupied by a
+                // lesson (is_available == false) is normal — flagging that as
+                // danger painted every working room red.
                 final roomConflicts = _conflictTypes(
                   availability?['conflict_types'],
                 );
-                final isAvailable = availability == null
-                    ? true
-                    : availability['is_available'] == true;
                 return Expanded(
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 2),
@@ -1506,7 +1520,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                       color: color.withAlpha(30),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: isAvailable && roomConflicts.isEmpty
+                        color: roomConflicts.isEmpty
                             ? color.withAlpha(50)
                             : AppTheme.danger,
                       ),
@@ -1517,7 +1531,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            if (!isAvailable || roomConflicts.isNotEmpty)
+                            if (roomConflicts.isNotEmpty)
                               const Padding(
                                 padding: EdgeInsets.only(right: 4),
                                 child: Icon(
@@ -1553,6 +1567,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         // Time grid + lesson cards
         Expanded(
           child: SingleChildScrollView(
+            controller: _dayGridController,
             child: SizedBox(
               height: (endHour - startHour) * hourHeight,
               child: Row(
@@ -1641,6 +1656,37 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         ),
       ],
     );
+  }
+
+  // Auto-scrolls the day grid to the earliest lesson once per selected day, so
+  // afternoon/evening lessons aren't hidden below the 06:00 fold (the grid
+  // starts at 06:00 but most lessons are later — the visible top looked empty).
+  void _scheduleDayGridAutoScroll(
+    List<Map<String, dynamic>> dayLessons,
+    int startHour,
+    double hourHeight,
+  ) {
+    if (dayLessons.isEmpty) return;
+    if (_dayGridScrolledFor == _selectedDate) return;
+
+    double? earliestTop;
+    for (final l in dayLessons) {
+      final s = _parseLessonTime(l);
+      if (s == null) continue;
+      final top = ((s.hour - startHour) + s.minute / 60.0) * hourHeight;
+      earliestTop = earliestTop == null
+          ? top
+          : (top < earliestTop ? top : earliestTop);
+    }
+    if (earliestTop == null) return;
+    final target = earliestTop - 16; // keep a little context above the lesson
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_dayGridController.hasClients) return;
+      _dayGridScrolledFor = _selectedDate;
+      final max = _dayGridController.position.maxScrollExtent;
+      _dayGridController.jumpTo(target.clamp(0.0, max));
+    });
   }
 
   Widget _buildDayLessonCard(
