@@ -580,4 +580,17 @@ export class CrmController {
   ) {
     return this.crm.deleteLead(actor, id);
   }
+
+  @Get("phone-review-queue/count")
+  countPhoneReviewQueue(@CurrentActor() actor: ActorContext) {
+    return this.crm.countPhoneReviewQueue(actor);
+  }
+
+  @Get("phone-review-queue")
+  listPhoneReviewQueue(
+    @CurrentActor() actor: ActorContext,
+    @Query("limit") limit?: string,
+  ) {
+    return this.crm.listPhoneReviewQueue(actor, limit ? Number(limit) : undefined);
+  }
 }
