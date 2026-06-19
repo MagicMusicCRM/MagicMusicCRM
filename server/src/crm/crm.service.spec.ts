@@ -3776,23 +3776,58 @@ describe("CrmService", () => {
   });
 
   it("autoCreateLeadFromChat is idempotent when the user is already linked", async () => {
-    const { service, query } = createServiceWithQueryResults([
-      { rows: [{ entity_type: "lead", entity_id: "lead-existing" }] }, // user_crm_links lookup → already linked
-    ]);
+    // All queries now happen inside database.transaction via a client mock.
+    // Sequence inside the transaction:
+    //   [0] pg_advisory_xact_lock  → void
+    //   [1] user_crm_links lookup  → already-linked row
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // advisory lock
+      .mockResolvedValueOnce({ rows: [{ entity_type: "lead", entity_id: "lead-existing" }] }); // crm links
+    const transaction = jest.fn(
+      async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query: clientQuery }),
+    );
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const policy = {
+      assertCanReadOperationalData: jest.fn(),
+      assertCanWriteCrm: jest.fn(),
+      assertCanListStudents: jest.fn(),
+      assertCanReadStudent: jest.fn(),
+    };
+    const service = new CrmService(
+      { transaction } as unknown as DatabaseService,
+      audit as unknown as AuditService,
+      policy as unknown as CrmPolicy,
+      {} as unknown as HolliHopMetadataService,
+      {} as unknown as NotificationsService,
+    );
     const result = await service.autoCreateLeadFromChat(actor, "user-1");
     expect(result).toEqual({ leadId: "lead-existing", created: false });
-    const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(sql).not.toContain("insert into app.leads");
+    // The advisory lock MUST be the first in-transaction statement.
+    const lockSql = String(clientQuery.mock.calls[0][0]);
+    expect(lockSql).toContain("pg_advisory_xact_lock");
+    // No lead insert should have happened.
+    const allSql = clientQuery.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
+    expect(allSql).not.toContain("insert into app.leads");
+    expect(audit.record).not.toHaveBeenCalled();
   });
 
   it("autoCreateLeadFromChat creates a lead and link when user is not yet linked", async () => {
-    const query = jest
-      .fn()
-      .mockResolvedValueOnce({ rows: [] }) // user_crm_links lookup → not linked
-      .mockResolvedValueOnce({ rows: [{ first_name: "Иван", last_name: "Петров", phone: "+79991234567" }] }) // profile
-      .mockResolvedValueOnce({ rows: [{ id: "status-new" }] }); // lead_statuses
+    // All queries now happen inside database.transaction via a client mock.
+    // Sequence inside the transaction:
+    //   [0] pg_advisory_xact_lock  → void
+    //   [1] user_crm_links lookup  → empty (not linked)
+    //   [2] profile lookup         → profile row
+    //   [3] lead_statuses lookup   → status row
+    //   [4] insert into app.leads  → new lead id
+    //   [5] insert into user_crm_links → void
     const clientQuery = jest
       .fn()
+      .mockResolvedValueOnce({ rows: [] }) // advisory lock
+      .mockResolvedValueOnce({ rows: [] }) // user_crm_links → not linked
+      .mockResolvedValueOnce({ rows: [{ first_name: "Иван", last_name: "Петров", phone: "+79991234567" }] }) // profile
+      .mockResolvedValueOnce({ rows: [{ id: "status-new" }] }) // lead_statuses
       .mockResolvedValueOnce({ rows: [{ id: "lead-new" }] }) // insert lead
       .mockResolvedValueOnce({ rows: [] }); // insert crm link
     const transaction = jest.fn(
@@ -3807,7 +3842,7 @@ describe("CrmService", () => {
       assertCanReadStudent: jest.fn(),
     };
     const service = new CrmService(
-      { query, transaction } as unknown as DatabaseService,
+      { transaction } as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       {} as unknown as HolliHopMetadataService,
@@ -3815,13 +3850,28 @@ describe("CrmService", () => {
     );
     const result = await service.autoCreateLeadFromChat(actor, "user-1");
     expect(result).toEqual({ leadId: "lead-new", created: true });
-    expect(clientQuery).toHaveBeenCalledTimes(2);
-    const insertSql = String(clientQuery.mock.calls[0][0]);
-    expect(insertSql).toContain("'Через приложение'");
-    const statusSql = String(query.mock.calls[2][0]);
-    expect(statusSql).toContain("'новый'");
-    const linkSql = String(clientQuery.mock.calls[1][0]);
-    expect(linkSql).toContain("'auto_phone'");
+    expect(clientQuery).toHaveBeenCalledTimes(6);
+    // Advisory lock is the first in-transaction statement.
+    const lockSql = String(clientQuery.mock.calls[0][0]);
+    expect(lockSql).toContain("pg_advisory_xact_lock");
+    // Status lookup contains 'новый' — assert by content, not by position index.
+    const statusCall = clientQuery.mock.calls.find((c: unknown[]) =>
+      String(c[0]).includes("новый"),
+    );
+    expect(statusCall).toBeDefined();
+    expect(String(statusCall![0])).toContain("'новый'");
+    // Lead insert contains the source string.
+    const insertCall = clientQuery.mock.calls.find((c: unknown[]) =>
+      String(c[0]).includes("insert into app.leads"),
+    );
+    expect(insertCall).toBeDefined();
+    expect(String(insertCall![0])).toContain("'Через приложение'");
+    // Link insert contains link_source.
+    const linkCall = clientQuery.mock.calls.find((c: unknown[]) =>
+      String(c[0]).includes("insert into app.user_crm_links"),
+    );
+    expect(linkCall).toBeDefined();
+    expect(String(linkCall![0])).toContain("'auto_phone'");
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.lead_created",
@@ -3830,6 +3880,42 @@ describe("CrmService", () => {
         metadata: expect.objectContaining({ fromApp: true, userId: "user-1" }),
       }),
     );
+  });
+
+  it("autoCreateLeadFromChat returns {leadId:null, created:false} when user has no profile", async () => {
+    // Sequence inside the transaction:
+    //   [0] pg_advisory_xact_lock  → void
+    //   [1] user_crm_links lookup  → empty (not linked)
+    //   [2] profile lookup         → empty (no profile)
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // advisory lock
+      .mockResolvedValueOnce({ rows: [] }) // user_crm_links → not linked
+      .mockResolvedValueOnce({ rows: [] }); // profile → missing
+    const transaction = jest.fn(
+      async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query: clientQuery }),
+    );
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const policy = {
+      assertCanReadOperationalData: jest.fn(),
+      assertCanWriteCrm: jest.fn(),
+      assertCanListStudents: jest.fn(),
+      assertCanReadStudent: jest.fn(),
+    };
+    const service = new CrmService(
+      { transaction } as unknown as DatabaseService,
+      audit as unknown as AuditService,
+      policy as unknown as CrmPolicy,
+      {} as unknown as HolliHopMetadataService,
+      {} as unknown as NotificationsService,
+    );
+    const result = await service.autoCreateLeadFromChat(actor, "user-no-profile");
+    expect(result).toEqual({ leadId: null, created: false });
+    // No lead should have been inserted.
+    const allSql = clientQuery.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
+    expect(allSql).not.toContain("insert into app.leads");
+    expect(audit.record).not.toHaveBeenCalled();
   });
 
   it("counts app-sourced leads", async () => {

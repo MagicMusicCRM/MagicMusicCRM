@@ -6095,68 +6095,97 @@ export class CrmService {
 
   // Auto-create a lead when a non-staff user first writes to the admin chat.
   // Idempotent: skips if the user is already linked to a lead or student.
+  // Uses a pg advisory lock (per-user) to serialize concurrent first messages
+  // so that both the check and the create happen inside a single transaction,
+  // preventing duplicate leads from a race between two rapid chat messages.
   async autoCreateLeadFromChat(
     actor: ActorContext,
     senderUserId: string,
   ): Promise<{ leadId: string | null; created: boolean }> {
-    const linked = await this.database.query<{ entity_type: string; entity_id: string }>(
-      `select entity_type, entity_id from app.user_crm_links
-        where user_id = $1 and entity_type in ('lead', 'student') and deleted_at is null
-        limit 1`,
-      [senderUserId],
-    );
-    if (linked.rows[0]) {
-      const existing = linked.rows[0];
-      return { leadId: existing.entity_type !== "student" ? existing.entity_id : null, created: false };
-    }
+    type Sentinel =
+      | { linkedLeadId: string | null }
+      | { noProfile: true }
+      | { createdLeadId: string };
 
-    const profileRes = await this.database.query<{
-      first_name: string | null;
-      last_name: string | null;
-      phone: string | null;
-    }>(
-      `select p.first_name, p.last_name, p.phone
-         from app.profiles p
-         join app.users u on u.id = p.user_id and u.deleted_at is null
-        where p.user_id = $1 and p.deleted_at is null
-        limit 1`,
-      [senderUserId],
-    );
-    const profile = profileRes.rows[0];
-    if (!profile) return { leadId: null, created: false };
+    const sentinel = await this.database.transaction<Sentinel>(async (client) => {
+      // 1. Acquire an advisory lock scoped to this transaction — serializes
+      //    concurrent autoCreateLeadFromChat calls for the same senderUserId.
+      await client.query(
+        `select pg_advisory_xact_lock(hashtext($1))`,
+        [`autolead:${senderUserId}`],
+      );
 
-    const statusRes = await this.database.query<{ id: string }>(
-      `select id from app.lead_statuses where lower(btrim(name)) = 'новый' limit 1`,
-    );
-    const newStatusId = statusRes.rows[0]?.id ?? null;
-    const matchedPhone = this.normalizeContactPhone(profile.phone);
+      // 2. Re-check the link inside the transaction (after the lock is held).
+      const linkedRes = await client.query<{ entity_type: string; entity_id: string }>(
+        `select entity_type, entity_id from app.user_crm_links
+          where user_id = $1 and entity_type in ('lead', 'student') and deleted_at is null
+          limit 1`,
+        [senderUserId],
+      );
+      if (linkedRes.rows[0]) {
+        const existing = linkedRes.rows[0];
+        return {
+          linkedLeadId: existing.entity_type !== "student" ? existing.entity_id : null,
+        };
+      }
 
-    const leadId = await this.database.transaction(async (client) => {
-      const inserted = await client.query<{ id: string }>(
+      // 3. Fetch the user profile.
+      const profileRes = await client.query<{
+        first_name: string | null;
+        last_name: string | null;
+        phone: string | null;
+      }>(
+        `select p.first_name, p.last_name, p.phone
+           from app.profiles p
+           join app.users u on u.id = p.user_id and u.deleted_at is null
+          where p.user_id = $1 and p.deleted_at is null
+          limit 1`,
+        [senderUserId],
+      );
+      const profile = profileRes.rows[0];
+      if (!profile) return { noProfile: true };
+
+      // 4. Look up the «Новый» status (null fallback is fine).
+      const statusRes = await client.query<{ id: string }>(
+        `select id from app.lead_statuses where lower(btrim(name)) = 'новый' limit 1`,
+      );
+      const newStatusId = statusRes.rows[0]?.id ?? null;
+      const matchedPhone = this.normalizeContactPhone(profile.phone);
+
+      // 5. Insert the lead and the link row in the same transaction.
+      const insertedLead = await client.query<{ id: string }>(
         `insert into app.leads (first_name, last_name, phone, source, status_id, created_by)
          values ($1, $2, $3, 'Через приложение', $4, $5)
          returning id`,
         [profile.first_name, profile.last_name, profile.phone, newStatusId, actor.userId],
       );
-      const id = inserted.rows[0].id;
+      const createdLeadId = insertedLead.rows[0].id;
       await client.query(
         `insert into app.user_crm_links
            (user_id, entity_type, entity_id, matched_phone, link_source, created_by, confirmed_at)
          values ($1, 'lead', $2, $3, 'auto_phone', $4, now())
          on conflict do nothing`,
-        [senderUserId, id, matchedPhone, actor.userId],
+        [senderUserId, createdLeadId, matchedPhone, actor.userId],
       );
-      return id;
+      return { createdLeadId };
     });
 
+    if ("linkedLeadId" in sentinel) {
+      return { leadId: sentinel.linkedLeadId, created: false };
+    }
+    if ("noProfile" in sentinel) {
+      return { leadId: null, created: false };
+    }
+
+    // 6. Audit only on actual creation, outside the transaction.
     await this.audit.record({
       actor,
       action: "crm.lead_created",
       entityType: "lead",
-      entityId: leadId,
+      entityId: sentinel.createdLeadId,
       metadata: { fromApp: true, userId: senderUserId },
     });
-    return { leadId, created: true };
+    return { leadId: sentinel.createdLeadId, created: true };
   }
 
   async countAppLeads(actor: ActorContext): Promise<{ count: number }> {
