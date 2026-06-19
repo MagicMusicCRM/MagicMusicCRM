@@ -106,9 +106,29 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           .trim();
     }
     final displayName = name.isEmpty ? 'Без имени' : name;
-    final phone = profile?['phone'] ?? '—';
-    final email = _student!['email'] ?? '—';
+    // Contact fallback across both sources (student record + profile), matching
+    // StudentDetailDialog so the same student shows the same contacts both ways.
+    final phone =
+        (_student!['phone']?.toString().trim().isNotEmpty == true
+            ? _student!['phone']
+            : profile?['phone']) ??
+        '—';
+    final email =
+        (_student!['email']?.toString().trim().isNotEmpty == true
+            ? _student!['email']
+            : profile?['email']) ??
+        '—';
     final customData = _student!['custom_data'] as Map<String, dynamic>? ?? {};
+    // Parse balance defensively (it can arrive as a string) and color it
+    // consistently: red < 0, green > 0, neutral at exactly 0.
+    final balanceNum = _balance == null
+        ? null
+        : (_balance!['balance'] is num
+              ? _balance!['balance'] as num
+              : num.tryParse(_balance!['balance']?.toString() ?? ''));
+    final balanceColor = balanceNum == null || balanceNum == 0
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : (balanceNum < 0 ? AppTheme.danger : AppTheme.success);
 
     return DefaultTabController(
       length: 7,
@@ -123,9 +143,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                   'Баланс: ${_balance!['balance']} ₽',
                   style: TextStyle(
                     fontSize: 12,
-                    color: (_balance!['balance'] as num) < 0
-                        ? AppTheme.danger
-                        : AppTheme.success,
+                    color: balanceColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
