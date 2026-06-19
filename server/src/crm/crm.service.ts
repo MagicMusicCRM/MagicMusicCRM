@@ -5903,10 +5903,10 @@ export class CrmService {
                 nullif(btrim(concat_ws(' ', pr.first_name, pr.last_name)), '')
               ) as member_name
          from app.family_members m
-         left join app.leads l    on m.entity_type = 'lead'    and l.id = m.entity_id
-         left join app.students st on m.entity_type = 'student' and st.id = m.entity_id
-         left join app.profiles sp on sp.id = st.profile_id
-         left join app.profiles pr on m.entity_type = 'profile' and pr.id = m.entity_id
+         left join app.leads l    on m.entity_type = 'lead'    and l.id = m.entity_id and l.deleted_at is null
+         left join app.students st on m.entity_type = 'student' and st.id = m.entity_id and st.deleted_at is null
+         left join app.profiles sp on sp.id = st.profile_id and sp.deleted_at is null
+         left join app.profiles pr on m.entity_type = 'profile' and pr.id = m.entity_id and pr.deleted_at is null
         where m.family_id = $1 and m.deleted_at is null
         order by m.role, member_name`,
       [fam.family_id],

@@ -3644,5 +3644,6 @@ describe("CrmService", () => {
     ]);
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual(["student", "s1"]);
+    expect(query.mock.calls[1][1]).toEqual(["fam-1"]);
   });
 });
