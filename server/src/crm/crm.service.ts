@@ -50,6 +50,7 @@ import { UpsertRoomDto } from "./dto/upsert-room.dto";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
 import { CrmPolicy } from "./crm.policy";
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
+import { normalizePhoneRu, normalizedPhoneExpr } from "./phone.util";
 
 interface StudentRow {
   id: string;
@@ -4044,9 +4045,7 @@ export class CrmService {
   }
 
   private normalizeContactPhone(phone: string | null | undefined): string | null {
-    if (!phone) return null;
-    const digits = phone.replace(/[^0-9]/g, "");
-    return digits.length >= 10 ? digits : null;
+    return normalizePhoneRu(phone).canonical;
   }
 
   // Save a chat partner (an existing messenger user) into the CRM as a lead or

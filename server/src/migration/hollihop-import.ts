@@ -6,6 +6,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
+import { normalizePhoneRu } from "../crm/phone.util";
 import { deterministicUuid, sha256Hex } from "./v3-import-utils";
 
 type JsonRow = Record<string, unknown>;
@@ -2477,13 +2478,7 @@ function orderDuplicateSeeds(
 }
 
 function normalizePhone(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const digits = value.replace(/\D/g, "");
-  if (digits.length < 7) return undefined;
-  if (digits.length === 11 && digits.startsWith("8")) {
-    return `7${digits.slice(1)}`;
-  }
-  return digits;
+  return normalizePhoneRu(value).canonical ?? undefined;
 }
 
 function normalizeEmail(value: string | undefined): string | undefined {
