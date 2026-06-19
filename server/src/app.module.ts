@@ -5,6 +5,7 @@ import { AuthModule } from "./auth/auth.module";
 import { RequestIdMiddleware } from "./common/middleware/request-id.middleware";
 import { SafeLogger } from "./common/logging/safe-logger.service";
 import { envValidationSchema } from "./config/env.validation";
+import { AnalyticsModule } from "./analytics/analytics.module";
 import { CrmModule } from "./crm/crm.module";
 import { DatabaseModule } from "./db/database.module";
 import { FilesModule } from "./files/files.module";
@@ -26,6 +27,7 @@ import { SettingsModule } from "./settings/settings.module";
     AuthModule,
     ProfileModule,
     CrmModule,
+    AnalyticsModule,
     MessengerModule,
     FilesModule,
     LegalModule,

@@ -13,6 +13,6 @@ import { CrmService } from './crm.service';
   imports: [AuditModule, DatabaseModule, JwtModule.register({}), NotificationsModule],
   controllers: [CrmController],
   providers: [CrmService, CrmPolicy, HolliHopMetadataService, JwtAuthGuard],
-  exports: [CrmService]
+  exports: [CrmService, CrmPolicy]
 })
 export class CrmModule {}
