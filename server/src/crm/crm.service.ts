@@ -953,6 +953,7 @@ export class CrmService {
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
     const leadId = dto.leadId ?? null;
     const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
+    const branchId = this.extractBranchId(dto.customDataPatch);
 
     if (leadId) {
       const lead = await this.database.query<{ id: string }>(
@@ -989,8 +990,8 @@ export class CrmService {
             returning id, user_id, first_name, last_name, phone
           ),
           inserted_student as (
-            insert into app.students (profile_id, status, lead_id, custom_data)
-            select id, $6, $7, $8::jsonb
+            insert into app.students (profile_id, status, lead_id, custom_data, branch_id)
+            select id, $6, $7, $8::jsonb, $9::uuid
             from inserted_profile
             returning id, status, profile_id, lead_id, custom_data, created_at
           )
@@ -1011,6 +1012,7 @@ export class CrmService {
           status,
           leadId,
           JSON.stringify(customDataPatch),
+          branchId,
         ],
       );
       const student = result.rows[0];
@@ -1276,6 +1278,7 @@ export class CrmService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
+    const branchId = this.extractBranchId(dto.customDataPatch);
     const result = await this.database.query<StudentRow>(
       `
         with target as (
@@ -1307,6 +1310,7 @@ export class CrmService {
           update app.students s
           set status = coalesce($6, s.status),
             custom_data = coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb,
+            branch_id = coalesce($8::uuid, s.branch_id),
             updated_at = now()
           from target
           where s.id = target.id
@@ -1346,6 +1350,7 @@ export class CrmService {
         this.trimOptional(dto.email)?.toLowerCase() ?? null,
         this.trimOptional(dto.status),
         JSON.stringify(customDataPatch),
+        branchId,
       ],
     );
     const student = result.rows[0];
@@ -4364,13 +4369,14 @@ export class CrmService {
 
   async createLead(actor: ActorContext, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
+    const branchId = this.extractBranchId(dto.customDataPatch);
     const result = await this.database.query<LeadRow>(
       `
         insert into app.leads (
           status_id, first_name, last_name, phone, email,
-          source, notes, assigned_to, custom_data, created_by
+          source, notes, assigned_to, custom_data, created_by, branch_id
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         returning id, status_id, null::text as status_name, first_name,
           last_name, phone, email, source, notes, assigned_to,
           custom_data, created_by, created_at, updated_at
@@ -4386,6 +4392,7 @@ export class CrmService {
         dto.assignedTo ?? null,
         this.sanitizeJsonObject(dto.customDataPatch),
         actor.userId,
+        branchId,
       ],
     );
     const lead = result.rows[0];
@@ -4400,6 +4407,7 @@ export class CrmService {
 
   async updateLead(actor: ActorContext, leadId: string, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
+    const branchId = this.extractBranchId(dto.customDataPatch);
     const result = await this.database.query<LeadRow>(
       `
         update app.leads
@@ -4413,6 +4421,7 @@ export class CrmService {
           notes = coalesce($8, notes),
           assigned_to = coalesce($9, assigned_to),
           custom_data = custom_data || $10::jsonb,
+          branch_id = coalesce($12::uuid, branch_id),
           updated_at = now()
         where id = $1 and deleted_at is null
         returning id, status_id, null::text as status_name, first_name,
@@ -4431,6 +4440,7 @@ export class CrmService {
         dto.assignedTo ?? null,
         this.sanitizeJsonObject(dto.customDataPatch),
         dto.clearStatus ?? false,
+        branchId,
       ],
     );
     const lead = result.rows[0];
@@ -4471,6 +4481,18 @@ export class CrmService {
   // text-based comparison semantics (no jsonb::uuid casts).
   private branchIdExpr(alias: string): string {
     return `coalesce(${alias}.branch_id::text, ${alias}.custom_data->>'branchId', ${alias}.custom_data->>'branch_id')`;
+  }
+
+  private static readonly UUID_RE =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+  // Pull a valid branch UUID out of a customDataPatch (branchId or branch_id),
+  // for dual-writing the real column alongside the legacy json.
+  private extractBranchId(
+    patch: Record<string, unknown> | undefined | null,
+  ): string | null {
+    const raw = patch?.["branchId"] ?? patch?.["branch_id"];
+    return typeof raw === "string" && CrmService.UUID_RE.test(raw) ? raw : null;
   }
 
   private buildStudentSearchFilter(

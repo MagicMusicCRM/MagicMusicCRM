@@ -471,6 +471,7 @@ describe("CrmService", () => {
       "active",
       null,
       JSON.stringify({}),
+      null, // branch_id: no branchId in customDataPatch
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -599,6 +600,7 @@ describe("CrmService", () => {
       "active",
       "lead-a",
       JSON.stringify({ discipline: "Вокал", sourceLeadId: "lead-a" }),
+      null, // branch_id: no branchId UUID in customDataPatch
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2579,6 +2581,7 @@ describe("CrmService", () => {
       "anna@example.com",
       null,
       JSON.stringify({ middleName: "Сергеевна", notes: "Важно" }),
+      null, // branch_id: no branchId UUID in customDataPatch
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -3500,5 +3503,19 @@ describe("CrmService", () => {
     await service.searchStudents(actor, { branchId: "b-1" } as never);
     const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
     expect(sql).toContain("s.branch_id::text");
+  });
+
+  it("dual-writes branch_id column when customDataPatch carries a branchId", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [{ id: "lead-1" }] },
+    ]);
+    await service.createLead(actor, {
+      firstName: "A",
+      customDataPatch: { branchId: "44444444-4444-4444-4444-444444444444" },
+    } as never);
+    const insert = query.mock.calls.map((c) => String(c[0])).find((s) => s.includes("insert into app.leads"));
+    expect(insert).toContain("branch_id");
+    const params = query.mock.calls.find((c) => String(c[0]).includes("insert into app.leads"))?.[1] as unknown[];
+    expect(params).toContain("44444444-4444-4444-4444-444444444444");
   });
 });
