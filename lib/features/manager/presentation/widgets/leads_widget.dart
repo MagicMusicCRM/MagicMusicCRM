@@ -1621,7 +1621,7 @@ class _LeadCard extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Лид конвертирован в ученика'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
         );
