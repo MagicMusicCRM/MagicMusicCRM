@@ -49,6 +49,45 @@ export class AnalyticsService {
     };
   }
 
+  private rangeBounds(query: { from?: string; to?: string }): { from: string; to: string } {
+    const to = query.to ?? new Date().toISOString();
+    const from =
+      query.from ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    return { from, to };
+  }
+
+  async funnel(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const { from, to } = this.rangeBounds(query);
+    const result = await this.database.query<{
+      status_id: string;
+      name: string;
+      sort_order: number;
+      leads_entered: string;
+    }>(
+      `select ls.id as status_id, ls.name, ls.sort_order,
+              count(distinct lsh.lead_id) as leads_entered
+         from app.lead_status_history lsh
+         join app.lead_statuses ls on ls.id = lsh.new_status_id
+        where lsh.new_status_id is not null
+          and lsh.changed_at >= $1::timestamptz
+          and lsh.changed_at < $2::timestamptz
+          and ($3::uuid is null or lsh.branch_id = $3::uuid)
+        group by ls.id, ls.name, ls.sort_order
+        order by ls.sort_order`,
+      [from, to, query.branchId ?? null],
+    );
+    let prev: number | null = null;
+    const stages = result.rows.map((r) => {
+      const leadsEntered = Number(r.leads_entered);
+      const conversionFromPrev =
+        prev === null || prev === 0 ? (prev === null ? null : 0) : Math.round((leadsEntered / prev) * 100);
+      prev = leadsEntered;
+      return { statusId: r.status_id, name: r.name, sortOrder: r.sort_order, leadsEntered, conversionFromPrev };
+    });
+    return { from, to, stages };
+  }
+
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const { items } = await this.financeMonthly(actor, query);
     const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";

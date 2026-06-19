@@ -38,4 +38,18 @@ describe("AnalyticsService", () => {
     expect(lines[0]).toBe("month_start,lessons,completed_lessons,revenue,expenses,new_students");
     expect(lines[1]).toBe("2026-06-01,10,8,5000,1200,3");
   });
+
+  it("funnel returns stage counts ordered by sort_order, gated to manager/admin", async () => {
+    const { service, query, policy } = build([
+      { status_id: "s1", name: "Новый", sort_order: 0, leads_entered: "100" },
+      { status_id: "s2", name: "Пробный", sort_order: 1, leads_entered: "40" },
+    ]);
+    const result = await service.funnel(actor, { from: "2026-01-01", to: "2026-04-01" });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.lead_status_history");
+    expect(result.stages).toEqual([
+      { statusId: "s1", name: "Новый", sortOrder: 0, leadsEntered: 100, conversionFromPrev: null },
+      { statusId: "s2", name: "Пробный", sortOrder: 1, leadsEntered: 40, conversionFromPrev: 40 },
+    ]);
+  });
 });
