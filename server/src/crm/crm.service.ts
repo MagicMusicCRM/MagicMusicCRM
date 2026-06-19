@@ -4131,6 +4131,46 @@ export class CrmService {
     };
   }
 
+  async listLeadStatusHistory(actor: ActorContext, leadId: string) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{
+      id: string;
+      old_status: string | null;
+      new_status: string | null;
+      old_owner_id: string | null;
+      new_owner_id: string | null;
+      changed_by: string | null;
+      changed_at: string;
+      reason_id: string | null;
+      comment: string | null;
+    }>(
+      `select h.id,
+              os.name as old_status,
+              ns.name as new_status,
+              h.old_owner_id, h.new_owner_id, h.changed_by, h.changed_at,
+              h.reason_id, h.comment
+         from app.lead_status_history h
+         left join app.lead_statuses os on os.id = h.old_status_id
+         left join app.lead_statuses ns on ns.id = h.new_status_id
+        where h.lead_id = $1
+        order by h.changed_at desc`,
+      [leadId],
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        oldStatus: row.old_status,
+        newStatus: row.new_status,
+        oldOwnerId: row.old_owner_id,
+        newOwnerId: row.new_owner_id,
+        changedBy: row.changed_by,
+        changedAt: row.changed_at,
+        reasonId: row.reason_id,
+        comment: row.comment,
+      })),
+    };
+  }
+
   async listLeads(actor: ActorContext, query: CrmListQuery) {
     this.policy.assertCanWriteCrm(actor);
     const limit = Math.min(query.limit ?? 50, 100);

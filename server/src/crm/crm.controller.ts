@@ -596,6 +596,14 @@ export class CrmController {
     return this.crm.getLeadCard(actor, id);
   }
 
+  @Get("leads/:leadId/status-history")
+  listLeadStatusHistory(
+    @CurrentActor() actor: ActorContext,
+    @Param("leadId", ParseUUIDPipe) leadId: string,
+  ) {
+    return this.crm.listLeadStatusHistory(actor, leadId);
+  }
+
   @Get("leads/:id/chat-user")
   resolveLeadChatUser(
     @CurrentActor() actor: ActorContext,

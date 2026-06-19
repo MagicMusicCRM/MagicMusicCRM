@@ -3578,4 +3578,39 @@ describe("CrmService", () => {
     const params = query.mock.calls.find((c) => String(c[0]).includes("insert into app.leads"))?.[1] as unknown[];
     expect(params).toContain("44444444-4444-4444-4444-444444444444");
   });
+
+  it("lists a lead's status history newest-first", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "h1",
+            old_status: "Новый",
+            new_status: "Пробный Урок",
+            old_owner_id: null,
+            new_owner_id: "u1",
+            changed_by: "u1",
+            changed_at: "2026-06-19T00:00:00.000Z",
+            reason_id: null,
+            comment: null,
+          },
+        ],
+      },
+    ]);
+    const result = await service.listLeadStatusHistory(actor, "lead-1");
+    expect(result.items[0]).toEqual({
+      id: "h1",
+      oldStatus: "Новый",
+      newStatus: "Пробный Урок",
+      oldOwnerId: null,
+      newOwnerId: "u1",
+      changedBy: "u1",
+      changedAt: "2026-06-19T00:00:00.000Z",
+      reasonId: null,
+      comment: null,
+    });
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.lead_status_history");
+    expect(query.mock.calls[0][1]).toEqual(["lead-1"]);
+  });
 });
