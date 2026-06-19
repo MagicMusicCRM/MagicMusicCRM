@@ -2781,7 +2781,7 @@ export class CrmService {
                         where branch_id = $1 and deleted_at is null))
        )
        on conflict (branch_id, discipline_id)
-       do update set sort_order = excluded.sort_order, deleted_at = null
+       do update set sort_order = coalesce($3, app.branch_disciplines.sort_order), deleted_at = null
        returning id, discipline_id, sort_order`,
       [branchId, dto.disciplineId, dto.sortOrder ?? null],
     );

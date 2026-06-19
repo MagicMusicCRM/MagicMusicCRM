@@ -3427,6 +3427,31 @@ describe("CrmService", () => {
     expect(query.mock.calls[0][1]).toEqual(["branch-1", ["d2", "d1"]]);
   });
 
+  it("assignBranchDiscipline upserts with conflict preservation and returns DTO", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ id: "bd1", discipline_id: "d1", sort_order: 3 }] },
+    ]);
+    const result = await service.assignBranchDiscipline(actor, "branch-1", {
+      disciplineId: "d1",
+    });
+    expect(result).toEqual({ id: "bd1", disciplineId: "d1", sortOrder: 3 });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("on conflict (branch_id, discipline_id)");
+    expect(query.mock.calls[0][0]).toContain("deleted_at = null");
+    expect(query.mock.calls[0][1]).toEqual(["branch-1", "d1", null]);
+  });
+
+  it("createLossReason inserts with default kind and sortOrder", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ id: "lr1", name: "Тест", kind: "lost", sort_order: 0 }] },
+    ]);
+    const result = await service.createLossReason(actor, { name: "Тест" });
+    expect(result).toEqual({ id: "lr1", name: "Тест", kind: "lost", sortOrder: 0 });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("insert into app.lead_loss_reasons");
+    expect(query.mock.calls[0][1]).toEqual(["Тест", "lost", 0]);
+  });
+
   it("resolveLeadChatUser phone-lookup SQL uses +7 canonical expression (regression KVA-184)", async () => {
     // Query sequence for resolveLeadChatUser when there is no explicit link
     // and we fall through to the phone-based profile lookup:

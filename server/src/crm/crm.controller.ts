@@ -356,7 +356,7 @@ export class CrmController {
   @Get("branches/:branchId/disciplines")
   listBranchDisciplines(
     @CurrentActor() actor: ActorContext,
-    @Param("branchId") branchId: string,
+    @Param("branchId", ParseUUIDPipe) branchId: string,
   ) {
     return this.crm.listBranchDisciplines(actor, branchId);
   }
@@ -380,7 +380,7 @@ export class CrmController {
   @Post("branches/:branchId/disciplines")
   assignBranchDiscipline(
     @CurrentActor() actor: ActorContext,
-    @Param("branchId") branchId: string,
+    @Param("branchId", ParseUUIDPipe) branchId: string,
     @Body() dto: UpsertBranchDisciplineDto,
   ) {
     return this.crm.assignBranchDiscipline(actor, branchId, dto);
@@ -389,7 +389,7 @@ export class CrmController {
   @Patch("branches/:branchId/disciplines/order")
   reorderBranchDisciplines(
     @CurrentActor() actor: ActorContext,
-    @Param("branchId") branchId: string,
+    @Param("branchId", ParseUUIDPipe) branchId: string,
     @Body() dto: ReorderBranchDisciplinesDto,
   ) {
     return this.crm.reorderBranchDisciplines(actor, branchId, dto);
