@@ -80,10 +80,12 @@ export class AnalyticsService {
     let prev: number | null = null;
     const stages = result.rows.map((r) => {
       const leadsEntered = Number(r.leads_entered);
-      const conversionFromPrev =
+      // Volume ratio of distinct leads that ENTERED this status vs the previous status in the window —
+      // NOT a per-lead cohort conversion; can exceed 100%.
+      const ratioToPrevStage =
         prev === null || prev === 0 ? (prev === null ? null : 0) : Math.round((leadsEntered / prev) * 100);
       prev = leadsEntered;
-      return { statusId: r.status_id, name: r.name, sortOrder: r.sort_order, leadsEntered, conversionFromPrev };
+      return { statusId: r.status_id, name: r.name, sortOrder: r.sort_order, leadsEntered, ratioToPrevStage };
     });
     return { from, to, stages };
   }
@@ -142,19 +144,30 @@ export class AnalyticsService {
       reason_id: string;
       name: string;
       kind: string;
-      leads_lost: string;
+      leads: string;
     }>(
       `select lr.id as reason_id, lr.name, lr.kind,
-              count(distinct lsh.lead_id) as leads_lost
+              count(distinct lsh.lead_id) as leads
          from app.lead_status_history lsh
          join app.lead_statuses ls on ls.id = lsh.new_status_id and ls.is_terminal = true
+         -- Intentionally NO deleted_at/is_active filter on lead_loss_reasons: historical fidelity —
+         -- count the reason as it was recorded at the time of the transition.
          join app.lead_loss_reasons lr on lr.id = lsh.reason_id
         where lsh.reason_id is not null
           and lsh.changed_at >= $1::timestamptz
           and lsh.changed_at < $2::timestamptz
           and ($3::uuid is null or lsh.branch_id = $3::uuid)
         group by lr.id, lr.name, lr.kind
-        order by leads_lost desc`,
+        order by leads desc`,
+      [from, to, query.branchId ?? null],
+    );
+    const unspecifiedResult = await this.database.query<{ unspecified: string }>(
+      `select count(distinct lsh.lead_id) as unspecified
+         from app.lead_status_history lsh
+         join app.lead_statuses ls on ls.id = lsh.new_status_id and ls.is_terminal = true
+        where lsh.reason_id is null
+          and lsh.changed_at >= $1::timestamptz and lsh.changed_at < $2::timestamptz
+          and ($3::uuid is null or lsh.branch_id = $3::uuid)`,
       [from, to, query.branchId ?? null],
     );
     return {
@@ -164,8 +177,9 @@ export class AnalyticsService {
         reasonId: r.reason_id,
         name: r.name,
         kind: r.kind,
-        leadsLost: Number(r.leads_lost),
+        leads: Number(r.leads),
       })),
+      unspecifiedCount: Number(unspecifiedResult.rows[0]?.unspecified ?? 0),
     };
   }
 

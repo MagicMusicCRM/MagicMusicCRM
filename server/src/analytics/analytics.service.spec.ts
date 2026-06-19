@@ -47,9 +47,11 @@ describe("AnalyticsService", () => {
     const result = await service.funnel(actor, { from: "2026-01-01", to: "2026-04-01" });
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.lead_status_history");
+    expect(result.from).toBe("2026-01-01");
+    expect(result.to).toBe("2026-04-01");
     expect(result.stages).toEqual([
-      { statusId: "s1", name: "Новый", sortOrder: 0, leadsEntered: 100, conversionFromPrev: null },
-      { statusId: "s2", name: "Пробный", sortOrder: 1, leadsEntered: 40, conversionFromPrev: 40 },
+      { statusId: "s1", name: "Новый", sortOrder: 0, leadsEntered: 100, ratioToPrevStage: null },
+      { statusId: "s2", name: "Пробный", sortOrder: 1, leadsEntered: 40, ratioToPrevStage: 40 },
     ]);
   });
 
@@ -60,24 +62,38 @@ describe("AnalyticsService", () => {
     const result = await service.branchComparison(actor, { from: "2026-01-01", to: "2026-04-01" });
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.branches");
+    expect(result.from).toBe("2026-01-01");
+    expect(result.to).toBe("2026-04-01");
     expect(result.branches).toEqual([
       { branchId: "b1", name: "Сокол", revenue: 500000, activeStudents: 120, newLeads: 30, completedLessons: 800 },
     ]);
   });
 
   it("lossReasons groups terminal-transition reasons, gated to manager/admin", async () => {
-    const { service, query, policy } = build([
-      { reason_id: "r1", name: "Дорого", kind: "lost", leads_lost: "25" },
-      { reason_id: "r2", name: "Переезд", kind: "lost", leads_lost: "10" },
-    ]);
+    const query = jest.fn()
+      .mockResolvedValueOnce({ rows: [
+        { reason_id: "r1", name: "Дорого", kind: "lost", leads: "25" },
+        { reason_id: "r2", name: "Переезд", kind: "lost", leads: "10" },
+      ] })
+      .mockResolvedValueOnce({ rows: [{ unspecified: "5" }] });
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
+    const crm = {} as unknown as CrmService;
+    const service = new AnalyticsService(
+      { query } as unknown as DatabaseService,
+      crm,
+      policy as unknown as CrmPolicy,
+    );
     const result = await service.lossReasons(actor, { from: "2026-01-01", to: "2026-04-01" });
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("app.lead_status_history");
     expect(sql).toContain("is_terminal");
+    expect(result.from).toBe("2026-01-01");
+    expect(result.to).toBe("2026-04-01");
     expect(result.reasons).toEqual([
-      { reasonId: "r1", name: "Дорого", kind: "lost", leadsLost: 25 },
-      { reasonId: "r2", name: "Переезд", kind: "lost", leadsLost: 10 },
+      { reasonId: "r1", name: "Дорого", kind: "lost", leads: 25 },
+      { reasonId: "r2", name: "Переезд", kind: "lost", leads: 10 },
     ]);
+    expect(result.unspecifiedCount).toBe(5);
   });
 });
