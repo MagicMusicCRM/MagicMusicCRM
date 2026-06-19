@@ -5961,7 +5961,8 @@ export class CrmService {
 
   async listMergeCandidates(actor: ActorContext, limit = 50) {
     this.policy.assertCanReadOperationalData(actor);
-    const capped = Math.min(Math.max(limit, 1), 200);
+    const safeLimit = Number.isFinite(limit) ? limit : 50;
+    const capped = Math.min(Math.max(safeLimit, 1), 200);
     const result = await this.database.query<{
       loser_id: string;
       winner_id: string;

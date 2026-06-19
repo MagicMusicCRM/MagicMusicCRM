@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -3742,5 +3742,33 @@ describe("CrmService", () => {
   it("mergeLeads rejects merging a lead into itself", async () => {
     const { service } = createMergeService([]);
     await expect(service.mergeLeads(actor, "same", "same")).rejects.toThrow(BadRequestException);
+  });
+
+  it("undoMerge reverses captured rows, restores the loser, and stamps undone", async () => {
+    const repointed = { "students.lead_id": ["s1"], "duplicate_candidates.status": ["dc1"] };
+    const { service, query, policy } = createMergeService([
+      { rows: [{ loser_id: "l-lo", repointed }] }, // select merge_log
+      { rows: [] }, // reverse students.lead_id
+      { rows: [] }, // reverse duplicate_candidates.status
+      { rows: [] }, // restore loser deleted_at = null
+      { rows: [] }, // update merge_log undone_at/undone_by
+    ]);
+    const result = await service.undoMerge(actor, "ml1");
+    expect(result).toEqual({ success: true });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(sql).toContain("update app.students set lead_id = $1");
+    expect(sql).toContain("set deleted_at = null");
+    expect(sql).toContain("update app.merge_log set undone_at = now()");
+    // duplicate_candidates reverse binds [null, ids]; students reverse binds [loser_id, ids]
+    const dupCall = query.mock.calls.find((c) => String(c[0]).includes("app.duplicate_candidates"));
+    expect((dupCall?.[1] as unknown[])[0]).toBeNull();
+    const studCall = query.mock.calls.find((c) => String(c[0]).includes("update app.students set lead_id"));
+    expect((studCall?.[1] as unknown[])[0]).toBe("l-lo");
+  });
+
+  it("undoMerge 404s when the merge is missing or already undone", async () => {
+    const { service } = createMergeService([{ rows: [] }]); // select merge_log → none
+    await expect(service.undoMerge(actor, "missing")).rejects.toThrow(NotFoundException);
   });
 });
