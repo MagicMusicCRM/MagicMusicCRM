@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
@@ -21,6 +22,9 @@ class LeadsWidget extends ConsumerStatefulWidget {
 }
 
 class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
+  static final _uuidRegExp = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
   final _searchCtrl = TextEditingController();
   final _boardScrollController = ScrollController();
   List<StatusRecord> _activeStatuses = [];
@@ -102,9 +106,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
     for (final r in res) {
       final key = r['key'].toString();
       final label = r['label'].toString();
-      final rawColor = r['color']?.toString() ?? '8B5CF6';
-      final hexColor = rawColor.replaceAll('#', '');
-      final color = Color(int.parse('FF$hexColor', radix: 16));
+      final color = statusColorFromValue(r['color']);
       statuses.add((key, label, color));
     }
 
@@ -250,9 +252,18 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
       _pendingLeadIds.add(id);
     });
     try {
+      // The board's "Без статуса" column has id == "unassigned" (not a UUID);
+      // every real status column carries the lead_status UUID. Send statusId
+      // only for a real UUID, otherwise ask the server to clear the status —
+      // sending the raw column id was the cause of "statusId must be a UUID".
+      final isUuid = _uuidRegExp.hasMatch(newStatus);
       await ref
           .read(magicCrmServiceProvider)
-          .updateLead(id, statusId: newStatus);
+          .updateLead(
+            id,
+            statusId: isUuid ? newStatus : null,
+            clearStatus: !isUuid,
+          );
       _refreshBoard();
       await ref.read(leadBoardProvider(_filters).future);
       if (!mounted) return;
@@ -431,9 +442,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   }
 
   StatusRecord _statusFromColumn(Map<String, dynamic> column) {
-    final rawColor = (column['color'] ?? '8B5CF6').toString();
-    final hexColor = rawColor.replaceAll('#', '');
-    final color = Color(int.tryParse('FF$hexColor', radix: 16) ?? 0xFF8B5CF6);
+    final color = statusColorFromValue(column['color']);
     return (
       column['key']?.toString() ?? column['id']?.toString() ?? 'new',
       column['label']?.toString() ??

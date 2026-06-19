@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 
@@ -175,8 +176,7 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
       itemCount: _statuses.length,
       itemBuilder: (context, index) {
         final s = _statuses[index];
-        final hexColor = s['color']?.toString().replaceAll('#', '') ?? '8B5CF6';
-        final c = Color(int.parse('FF$hexColor', radix: 16));
+        final c = statusColorFromValue(s['color']);
 
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
@@ -286,7 +286,7 @@ class _StatusEditDialogState extends State<_StatusEditDialog> {
           Wrap(
             spacing: 8,
             children: _colors.map((c) {
-              final color = Color(int.parse('FF$c', radix: 16));
+              final color = statusColorFromValue(c);
               final isSelected = _selectedHex == c;
               return GestureDetector(
                 onTap: () => setState(() => _selectedHex = c),

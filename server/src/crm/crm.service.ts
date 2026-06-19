@@ -4186,7 +4186,8 @@ export class CrmService {
     const result = await this.database.query<LeadRow>(
       `
         update app.leads
-        set status_id = coalesce($2, status_id),
+        set status_id = case when $11::boolean then null
+                             else coalesce($2, status_id) end,
           first_name = coalesce($3, first_name),
           last_name = coalesce($4, last_name),
           phone = coalesce($5, phone),
@@ -4212,6 +4213,7 @@ export class CrmService {
         dto.notes?.trim() || null,
         dto.assignedTo ?? null,
         this.sanitizeJsonObject(dto.customDataPatch),
+        dto.clearStatus ?? false,
       ],
     );
     const lead = result.rows[0];

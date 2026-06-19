@@ -3017,6 +3017,27 @@ describe("CrmService", () => {
     );
   });
 
+  it("clears a lead's status when clearStatus is set (move to Без статуса)", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [{ id: "lead-1", status_id: null }] }, // update ... returning
+    ]);
+    await service.updateLead(actor, "lead-1", { clearStatus: true } as never);
+    const sql = query.mock.calls[0][0] as string;
+    expect(sql).toContain("when $11::boolean then null");
+    // 11th positional param ($11) carries the clearStatus flag.
+    expect((query.mock.calls[0][1] as unknown[])[10]).toBe(true);
+  });
+
+  it("preserves a lead's status when clearStatus is not set", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [{ id: "lead-1", status_id: "status-a" }] },
+    ]);
+    await service.updateLead(actor, "lead-1", {
+      statusId: "11111111-1111-1111-1111-111111111111",
+    } as never);
+    expect((query.mock.calls[0][1] as unknown[])[10]).toBe(false);
+  });
+
   it("clears reminder markers when a lesson is rescheduled", async () => {
     // Manager actor: assertCanUpdateLesson returns without a query, so the
     // first DB call is the UPDATE, then the marker delete.

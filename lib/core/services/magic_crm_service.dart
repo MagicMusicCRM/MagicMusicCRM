@@ -773,6 +773,7 @@ class MagicCrmService {
     String? email,
     String? source,
     String? statusId,
+    bool clearStatus = false,
     String? notes,
     Map<String, dynamic>? customDataPatch,
   }) async {
@@ -783,6 +784,9 @@ class MagicCrmService {
     if (email != null) data['email'] = email.trim();
     if (source != null) data['source'] = source.trim();
     if (statusId != null) data['statusId'] = statusId.trim();
+    // Explicit request to un-assign the lead's status ("Без статуса" column);
+    // the backend treats this as set-to-null rather than coalesce-preserve.
+    if (clearStatus) data['clearStatus'] = true;
     if (notes != null) data['notes'] = notes.trim();
     if (customDataPatch != null) data['customDataPatch'] = customDataPatch;
 

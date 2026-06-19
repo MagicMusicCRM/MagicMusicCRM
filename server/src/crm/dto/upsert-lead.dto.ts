@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsObject,
   IsOptional,
@@ -11,6 +12,12 @@ export class UpsertLeadDto {
   @IsOptional()
   @IsUUID()
   statusId?: string;
+
+  // Explicitly un-assign the lead's status (move to "Без статуса"). Distinct
+  // from omitting statusId, which preserves the current value.
+  @IsOptional()
+  @IsBoolean()
+  clearStatus?: boolean;
 
   @IsOptional()
   @IsString()
