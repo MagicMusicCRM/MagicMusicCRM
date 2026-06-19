@@ -3079,7 +3079,10 @@ describe("CrmService", () => {
     const insert = query.mock.calls.map((c) => String(c[0])).find((s) => s.includes("insert into app.lead_status_history"));
     expect(insert).toBeDefined();
     const params = query.mock.calls.find((c) => String(c[0]).includes("insert into app.lead_status_history"))?.[1] as unknown[];
-    expect(params).toEqual(expect.arrayContaining(["lead-1", "old-status", "new-status"]));
+    expect(params).toEqual([
+      "lead-1", "old-status", "new-status", "owner-1", "owner-1",
+      actor.userId, null, null, "branch-1", "site",
+    ]);
   });
 
   it("does NOT record lead_status_history when neither status nor owner changed", async () => {
@@ -3090,6 +3093,35 @@ describe("CrmService", () => {
     await service.updateLead(actor, "lead-1", { firstName: "X" } as never);
     const insert = query.mock.calls.map((c) => String(c[0])).find((s) => s.includes("insert into app.lead_status_history"));
     expect(insert).toBeUndefined();
+  });
+
+  it("records a student_status_history row when status changes", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [{ status: "active", branch_id: "b1" }] }, // pre-select
+      {
+        rows: [
+          {
+            id: "student-1",
+            status: "paused",
+            custom_data: { middleName: "Сергеевна", notes: "Важно" },
+            profile_id: "profile-a",
+            profile_user_id: "client-a",
+            first_name: "Анна",
+            last_name: "Иванова",
+            email: "anna@example.com",
+            phone: "+79990000000",
+            created_at: "2026-06-01T00:00:00.000Z",
+            teacher_user_ids: [],
+          },
+        ],
+      }, // updateStudent CTE
+      { rows: [] }, // history insert
+    ]);
+    await service.updateStudent(actor, "student-1", { status: "paused" } as never);
+    const insert = query.mock.calls.map((c) => String(c[0])).find((s) => s.includes("insert into app.student_status_history"));
+    expect(insert).toBeDefined();
+    const params = query.mock.calls.find((c) => String(c[0]).includes("insert into app.student_status_history"))?.[1] as unknown[];
+    expect(params).toEqual(["student-1", "paused", "b1"]);
   });
 
   it("clears reminder markers when a lesson is rescheduled", async () => {
