@@ -2654,7 +2654,7 @@ export class CrmService {
     }>(
       `select bd.id, bd.discipline_id, d.name, bd.sort_order
          from app.branch_disciplines bd
-         join app.disciplines d on d.id = bd.discipline_id and d.deleted_at is null
+         join app.disciplines d on d.id = bd.discipline_id and d.deleted_at is null and d.is_active
         where bd.branch_id = $1 and bd.deleted_at is null
         order by bd.sort_order asc, d.name asc`,
       [branchId],

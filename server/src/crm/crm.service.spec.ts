@@ -1758,6 +1758,7 @@ describe("CrmService", () => {
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.branch_disciplines");
     expect(query.mock.calls[0][1]).toEqual(["branch-1"]);
+    expect(query.mock.calls[0][0]).toContain("d.is_active");
   });
 
   it("returns lead board columns with counts and aggregate lead fields", async () => {
