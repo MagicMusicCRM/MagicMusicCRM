@@ -40,6 +40,18 @@ describe("contactEntries", () => {
   it("returns [] for null/garbage", () => {
     expect(contactEntries(null, norm)).toEqual([]);
   });
+  it("uses Phone/Name/Role fallback keys and skips agents with neither phone nor name", () => {
+    expect(
+      contactEntries(
+        [
+          { Phone: "+7 916 000 11 22", Name: "Анна Петрова", Role: "guardian" },
+          { Phone: "junk" }, // no phone, no name -> skipped
+          {}, // empty -> skipped
+        ],
+        norm,
+      ),
+    ).toEqual([{ phoneNormalized: "+79160001122", name: "Анна Петрова", role: "guardian" }]);
+  });
 });
 
 describe("primaryBranchId", () => {
@@ -47,5 +59,8 @@ describe("primaryBranchId", () => {
     expect(primaryBranchId(["b1", "b2"])).toBe("b1");
     expect(primaryBranchId([])).toBeNull();
     expect(primaryBranchId(null)).toBeNull();
+  });
+  it("returns null for undefined", () => {
+    expect(primaryBranchId(undefined)).toBeNull();
   });
 });
