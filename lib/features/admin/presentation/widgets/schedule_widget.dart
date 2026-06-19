@@ -83,6 +83,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Map<String, String> _studentNames = {};
   Map<String, Color> _roomColorMap = {};
   Map<String, String> _roomNames = {};
+  // Per-branch UTC offset (minutes) so lesson times render in the branch's
+  // local zone. Defaults to 180 (Moscow / UTC+3). Russia has no DST, so a fixed
+  // offset is correct.
+  Map<String, int> _branchOffsets = {};
   // Per-day month aggregate keyed by 'YYYY-MM-DD' -> {count, room_ids}. Lets the
   // month calendar show full-month counts without fetching every lesson.
   Map<String, Map<String, dynamic>> _monthDaySummary = {};
@@ -139,6 +143,18 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       String? defaultBranch = _selectedBranchId;
       if (defaultBranch == null && branches.isNotEmpty) {
         defaultBranch = branches.first['id'].toString();
+      }
+
+      // Per-branch UTC offset map (minutes), for rendering lesson times in the
+      // branch's local zone.
+      final offsets = <String, int>{};
+      for (final b in branches) {
+        final bid = b['id']?.toString();
+        if (bid == null) continue;
+        final raw = b['utc_offset_minutes'];
+        offsets[bid] = raw is int
+            ? raw
+            : int.tryParse(raw?.toString() ?? '') ?? 180;
       }
 
       // Room color map
@@ -246,6 +262,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
       setState(() {
         _branches = branches;
+        _branchOffsets = offsets;
         _rooms = rooms;
         _lessons = enrichedLessons;
         _teachers = teacherSet.values.toList();
@@ -326,10 +343,21 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     }).toList();
   }
 
+  // UTC offset (minutes) for the selected branch, falling back to Moscow.
+  int get _selectedBranchOffset =>
+      _branchOffsets[_selectedBranchId] ?? 180;
+
+  // Offset for a specific lesson based on its branch, falling back to the
+  // selected branch / Moscow.
+  int _offsetForLesson(Map<String, dynamic> lesson) {
+    final bid = lesson['branch_id']?.toString();
+    return _branchOffsets[bid] ?? _selectedBranchOffset;
+  }
+
   DateTime? _parseLessonTime(Map<String, dynamic> lesson) {
     if (lesson['scheduled_at'] == null) return null;
     final dbTime = DateTime.parse(lesson['scheduled_at']).toUtc();
-    return dbTime.add(const Duration(hours: 3));
+    return dbTime.add(Duration(minutes: _offsetForLesson(lesson)));
   }
 
   DateTime? _parseServerTime(dynamic value) {
@@ -337,7 +365,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     if (raw == null || raw.isEmpty) return null;
     final parsed = DateTime.tryParse(raw);
     if (parsed == null) return null;
-    return parsed.toUtc().add(const Duration(hours: 3));
+    return parsed.toUtc().add(Duration(minutes: _selectedBranchOffset));
   }
 
   String _dateOnly(DateTime date) {
@@ -726,47 +754,155 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       child: Row(
-        children: _branches.map((b) {
-          final id = b['id'].toString();
-          final isSelected = id == _selectedBranchId;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(
-                b['name'].toString(),
-                style: TextStyle(
-                  color: isSelected
-                      ? AppTheme.primaryPurple
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                  fontSize: 14,
+        children: [
+          ..._branches.map((b) {
+            final id = b['id'].toString();
+            final isSelected = id == _selectedBranchId;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(
+                  b['name'].toString(),
+                  style: TextStyle(
+                    color: isSelected
+                        ? AppTheme.primaryPurple
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    fontSize: 14,
+                  ),
+                ),
+                selected: isSelected,
+                onSelected: (_) {
+                  setState(() => _selectedBranchId = id);
+                  _fetchAll();
+                },
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                selectedColor: AppTheme.primaryPurple.withAlpha(25),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: isSelected
+                        ? AppTheme.primaryPurple
+                        : Theme.of(
+                            context,
+                          ).colorScheme.onSurfaceVariant.withAlpha(60),
+                    width: 1,
+                  ),
+                ),
+                showCheckmark: false,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
                 ),
               ),
-              selected: isSelected,
-              onSelected: (_) {
-                setState(() => _selectedBranchId = id);
-                _fetchAll();
-              },
-              backgroundColor: Theme.of(context).colorScheme.surface,
-              selectedColor: AppTheme.primaryPurple.withAlpha(25),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
-                  color: isSelected
-                      ? AppTheme.primaryPurple
-                      : Theme.of(
-                          context,
-                        ).colorScheme.onSurfaceVariant.withAlpha(60),
-                  width: 1,
-                ),
+            );
+          }),
+          if (_selectedBranchId != null)
+            TextButton.icon(
+              onPressed: _editBranchTimezone,
+              icon: const Icon(Icons.schedule_rounded, size: 16),
+              label: Text(_offsetLabel(_selectedBranchOffset)),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                visualDensity: VisualDensity.compact,
               ),
-              showCheckmark: false,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             ),
-          );
-        }).toList(),
+        ],
       ),
     );
+  }
+
+  String _offsetLabel(int minutes) {
+    final sign = minutes >= 0 ? '+' : '−';
+    final h = (minutes.abs() ~/ 60).toString();
+    final m = minutes.abs() % 60;
+    return m == 0 ? 'UTC$sign$h' : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _editBranchTimezone() async {
+    final branchId = _selectedBranchId;
+    if (branchId == null) return;
+    final branch = _branches.firstWhere(
+      (b) => b['id'].toString() == branchId,
+      orElse: () => <String, dynamic>{},
+    );
+    final branchName = branch['name']?.toString() ?? 'Филиал';
+    // Russia spans UTC+2..UTC+12; offer those (minutes).
+    const options = <int>[120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720];
+    var selected = _selectedBranchOffset;
+    if (!options.contains(selected)) selected = 180;
+
+    final saved = await showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('Часовой пояс — $branchName'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Время занятий отображается в этом поясе.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: selected,
+                decoration: const InputDecoration(labelText: 'Смещение'),
+                items: options
+                    .map(
+                      (m) => DropdownMenuItem(
+                        value: m,
+                        child: Text(_offsetLabel(m)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setLocal(() => selected = v);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, selected),
+              child: const Text('Сохранить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == null || saved == _selectedBranchOffset || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateBranch(branchId, utcOffsetMinutes: saved);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Часовой пояс обновлён: ${_offsetLabel(saved)}'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _fetchAll();
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось обновить пояс: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
   }
 
   // ── Day-view mode toggle (По аудиториям / По педагогу) ────────────────────

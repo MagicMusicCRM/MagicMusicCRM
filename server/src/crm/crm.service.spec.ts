@@ -103,6 +103,8 @@ describe("CrmService", () => {
           id: "branch-a",
           name: "Центр",
           address: "Москва",
+          // No utc_offset_minutes in the mock row → defaults to Moscow (180).
+          utcOffsetMinutes: 180,
           createdAt: "2026-06-12T00:00:00.000Z",
         },
       ],
@@ -3163,6 +3165,29 @@ describe("CrmService", () => {
     ]);
     const result = await service.resolveContactForUser(actor, "user-x");
     expect(result).toEqual({ studentId: "student-9", leadId: null });
+  });
+
+  it("updates a branch's utc offset and returns the dto", async () => {
+    const { service, query, policy } = createService([
+      {
+        id: "branch-a",
+        name: "Сокол",
+        address: "Москва",
+        utc_offset_minutes: 240,
+        created_at: "2026-06-12T00:00:00.000Z",
+      },
+    ]);
+    const result = await service.updateBranch(actor, "branch-a", {
+      utcOffsetMinutes: 240,
+    });
+    expect(result).toMatchObject({
+      id: "branch-a",
+      name: "Сокол",
+      utcOffsetMinutes: 240,
+    });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalled();
+    expect(query.mock.calls[0][0]).toContain("update app.branches");
+    expect(query.mock.calls[0][1]).toEqual(["branch-a", null, null, 240]);
   });
 
   it("returns payments with a correct server-side period total (not the page fold)", async () => {

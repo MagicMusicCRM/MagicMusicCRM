@@ -16,6 +16,7 @@ import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
+import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { CreateCommentDto } from "./dto/create-comment.dto";
 import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
 import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
@@ -341,6 +342,7 @@ interface BranchRow {
   id: string;
   name: string;
   address: string | null;
+  utc_offset_minutes: number | string;
   created_at: Date | string;
 }
 
@@ -2098,7 +2100,7 @@ export class CrmService {
     const q = query.q?.trim();
     const result = await this.database.query<BranchRow>(
       `
-        select id, name, address, created_at
+        select id, name, address, utc_offset_minutes, created_at
         from app.branches
         where deleted_at is null
           and (
@@ -5371,8 +5373,44 @@ export class CrmService {
       id: row.id,
       name: row.name,
       address: row.address,
+      utcOffsetMinutes: Number(row.utc_offset_minutes ?? 180),
       createdAt: row.created_at,
     };
+  }
+
+  async updateBranch(
+    actor: ActorContext,
+    branchId: string,
+    dto: UpdateBranchDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<BranchRow>(
+      `
+        update app.branches
+        set name = coalesce($2, name),
+          address = coalesce($3, address),
+          utc_offset_minutes = coalesce($4, utc_offset_minutes),
+          updated_at = now()
+        where id = $1 and deleted_at is null
+        returning id, name, address, utc_offset_minutes, created_at
+      `,
+      [
+        branchId,
+        dto.name?.trim() || null,
+        dto.address?.trim() ?? null,
+        dto.utcOffsetMinutes ?? null,
+      ],
+    );
+    const branch = result.rows[0];
+    if (!branch) throw new NotFoundException("Филиал не найден.");
+    await this.audit.record({
+      actor,
+      action: "crm.branch_updated",
+      entityType: "branch",
+      entityId: branch.id,
+      metadata: { utcOffsetMinutes: dto.utcOffsetMinutes },
+    });
+    return this.toBranchDto(branch);
   }
 
   private toRoomDto(row: RoomRow) {

@@ -32,6 +32,7 @@ import { PaymentQuery } from "./dto/payment.query";
 import { ReportQuery } from "./dto/report.query";
 import { RoomAvailabilityQuery } from "./dto/room-availability.query";
 import { SaveContactFromChatDto } from "./dto/save-contact-from-chat.dto";
+import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { ScheduleMatrixQuery } from "./dto/schedule-matrix.query";
 import { StaffListQuery } from "./dto/staff-list.query";
 import { StudentBalanceQuery } from "./dto/student-balance.query";
@@ -236,6 +237,15 @@ export class CrmController {
     @Query() query: CrmListQuery,
   ) {
     return this.crm.listBranches(actor, query);
+  }
+
+  @Patch("branches/:id")
+  updateBranch(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateBranchDto,
+  ) {
+    return this.crm.updateBranch(actor, id, dto);
   }
 
   @Get("rooms")

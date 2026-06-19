@@ -466,6 +466,23 @@ class MagicCrmService {
     return _items(response).map(_legacyBranch).toList();
   }
 
+  Future<Map<String, dynamic>> updateBranch(
+    String id, {
+    String? name,
+    String? address,
+    int? utcOffsetMinutes,
+  }) async {
+    final data = <String, dynamic>{};
+    if (name != null) data['name'] = name.trim();
+    if (address != null) data['address'] = address.trim();
+    if (utcOffsetMinutes != null) data['utcOffsetMinutes'] = utcOffsetMinutes;
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/branches/$id',
+      data: data,
+    );
+    return _legacyBranch(response);
+  }
+
   Future<List<Map<String, dynamic>>> listRooms({
     String? branchId,
     int limit = 100,
@@ -1621,6 +1638,7 @@ class MagicCrmService {
       'id': item['id'],
       'name': item['name'],
       'address': item['address'],
+      'utc_offset_minutes': item['utcOffsetMinutes'] ?? 180,
       'created_at': item['createdAt'],
     };
   }
