@@ -334,6 +334,29 @@ export class CrmController {
     return this.crm.listLeadStatuses(actor, query);
   }
 
+  @Get("loss-reasons")
+  listLossReasons(@CurrentActor() actor: ActorContext) {
+    return this.crm.listLossReasons(actor);
+  }
+
+  @Get("lead-sources")
+  listLeadSources(@CurrentActor() actor: ActorContext) {
+    return this.crm.listLeadSources(actor);
+  }
+
+  @Get("disciplines")
+  listDisciplines(@CurrentActor() actor: ActorContext) {
+    return this.crm.listDisciplines(actor);
+  }
+
+  @Get("branches/:branchId/disciplines")
+  listBranchDisciplines(
+    @CurrentActor() actor: ActorContext,
+    @Param("branchId") branchId: string,
+  ) {
+    return this.crm.listBranchDisciplines(actor, branchId);
+  }
+
   @Get("hollihop/disciplines")
   listHolliHopDisciplines(@CurrentActor() actor: ActorContext) {
     return this.crm.listHolliHopDisciplines(actor);

@@ -1738,6 +1738,28 @@ describe("CrmService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
   });
 
+  it("lists active loss reasons ordered by sort_order", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ id: "r1", name: "Дорого", kind: "lost", sort_order: 1, color: null }] },
+    ]);
+    const result = await service.listLossReasons(actor);
+    expect(result.items[0]).toEqual({ id: "r1", name: "Дорого", kind: "lost", sortOrder: 1, color: null });
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.lead_loss_reasons");
+    expect(query.mock.calls[0][0]).toContain("is_active");
+  });
+
+  it("lists branch disciplines ordered for a branch", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ id: "bd1", discipline_id: "d1", name: "Вокал", sort_order: 0 }] },
+    ]);
+    const result = await service.listBranchDisciplines(actor, "branch-1");
+    expect(result.items[0]).toEqual({ id: "bd1", disciplineId: "d1", name: "Вокал", sortOrder: 0 });
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.branch_disciplines");
+    expect(query.mock.calls[0][1]).toEqual(["branch-1"]);
+  });
+
   it("returns lead board columns with counts and aggregate lead fields", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       {

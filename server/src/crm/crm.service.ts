@@ -2587,6 +2587,88 @@ export class CrmService {
     return { items: result.rows.map((row) => this.toLeadStatusDto(row)) };
   }
 
+  async listLossReasons(actor: ActorContext) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{
+      id: string;
+      name: string;
+      kind: string;
+      sort_order: number;
+      color: string | null;
+    }>(
+      `select id, name, kind, sort_order, color
+         from app.lead_loss_reasons
+        where is_active and deleted_at is null
+        order by sort_order asc, name asc`,
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        kind: row.kind,
+        sortOrder: row.sort_order,
+        color: row.color,
+      })),
+    };
+  }
+
+  async listLeadSources(actor: ActorContext) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{
+      id: string;
+      canonical_name: string;
+      display_name: string;
+    }>(
+      `select id, canonical_name, display_name
+         from app.lead_sources
+        where is_active and deleted_at is null
+        order by display_name asc`,
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        canonicalName: row.canonical_name,
+        displayName: row.display_name,
+      })),
+    };
+  }
+
+  async listDisciplines(actor: ActorContext) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{ id: string; name: string }>(
+      `select id, name
+         from app.disciplines
+        where is_active and deleted_at is null
+        order by name asc`,
+    );
+    return { items: result.rows.map((row) => ({ id: row.id, name: row.name })) };
+  }
+
+  async listBranchDisciplines(actor: ActorContext, branchId: string) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{
+      id: string;
+      discipline_id: string;
+      name: string;
+      sort_order: number;
+    }>(
+      `select bd.id, bd.discipline_id, d.name, bd.sort_order
+         from app.branch_disciplines bd
+         join app.disciplines d on d.id = bd.discipline_id and d.deleted_at is null
+        where bd.branch_id = $1 and bd.deleted_at is null
+        order by bd.sort_order asc, d.name asc`,
+      [branchId],
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        disciplineId: row.discipline_id,
+        name: row.name,
+        sortOrder: row.sort_order,
+      })),
+    };
+  }
+
   async listHolliHopDisciplines(actor: ActorContext) {
     this.policy.assertCanWriteCrm(actor);
     return this.hollihop.listDisciplines();
