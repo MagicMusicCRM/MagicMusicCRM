@@ -32,7 +32,15 @@ create index if not exists family_members_entity_idx
 -- Guarded FK for the payer pointer (added after family_members exists; idempotent).
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'families_payer_member_fk') then
+  if not exists (
+    select 1
+    from pg_constraint c
+    join pg_class t on t.oid = c.conrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    where c.conname = 'families_payer_member_fk'
+      and n.nspname = 'app'
+      and t.relname = 'families'
+  ) then
     alter table app.families
       add constraint families_payer_member_fk
       foreign key (primary_payer_member_id) references app.family_members(id) on delete set null;
