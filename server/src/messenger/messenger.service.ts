@@ -9,7 +9,9 @@ import { AuditService } from "../audit/audit.service";
 import {
   ActorContext,
   isManagerOrAdminRole,
+  isStaffRole,
 } from "../common/security/actor-context";
+import { CrmService } from "../crm/crm.service";
 import { DatabaseService } from "../db/database.service";
 import { ChannelPermissionDto, UpsertChannelDto } from "./dto/channel.dto";
 import { CreateChannelPostDto } from "./dto/create-channel-post.dto";
@@ -121,6 +123,7 @@ export class MessengerService {
     private readonly audit: AuditService,
     private readonly policy: MessengerPolicy,
     private readonly realtime: RealtimeGateway,
+    private readonly crm: CrmService,
   ) {}
 
   async listChats(actor: ActorContext, query: MessengerListQuery) {
@@ -313,6 +316,9 @@ export class MessengerService {
 
     const payload = this.toMessageDto(message);
     this.realtime.publishChatEvent(chatId, "message.created", payload);
+    if (chat.type === "administration" && !isStaffRole(actor.role)) {
+      void this.crm.autoCreateLeadFromChat(actor, actor.userId).catch(() => undefined);
+    }
     return payload;
   }
 

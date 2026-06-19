@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
+import { CrmService } from "../crm/crm.service";
 import { DatabaseService } from "../db/database.service";
 import { MessengerPolicy } from "./messenger.policy";
 import { MessengerService } from "./messenger.service";
@@ -13,6 +14,7 @@ describe("MessengerService", () => {
     audit?: Partial<AuditService>;
     policy?: Partial<MessengerPolicy>;
     realtime?: Partial<RealtimeGateway>;
+    crm?: Partial<CrmService>;
   }) {
     const database = {
       query: jest.fn(),
@@ -40,13 +42,20 @@ describe("MessengerService", () => {
       publishChatEvent: jest.fn(),
       ...overrides?.realtime,
     } as unknown as RealtimeGateway;
+    const crm = {
+      autoCreateLeadFromChat: jest
+        .fn()
+        .mockResolvedValue({ leadId: "l1", created: true }),
+      ...overrides?.crm,
+    } as unknown as CrmService;
 
     return {
-      service: new MessengerService(database, audit, policy, realtime),
+      service: new MessengerService(database, audit, policy, realtime, crm),
       database,
       audit,
       policy,
       realtime,
+      crm,
     };
   }
 
@@ -108,6 +117,7 @@ describe("MessengerService", () => {
       { record: jest.fn() } as unknown as AuditService,
       policy,
       realtime,
+      { autoCreateLeadFromChat: jest.fn().mockResolvedValue({ leadId: "l1", created: true }) } as unknown as CrmService,
     );
 
     const result = await service.sendMessage(
@@ -588,5 +598,111 @@ describe("MessengerService", () => {
       ["user-a"],
     );
     expect(database.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto-creates a lead when a non-staff user posts to the administration chat", async () => {
+    const clientActor = { userId: "client-user-a", role: "client" as const };
+    const adminChatId = "chat-admin-a";
+    type MockClient = { query: jest.Mock };
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "msg-1",
+              chat_id: adminChatId,
+              sender_id: clientActor.userId,
+              content: "Здравствуйте",
+              message_type: "text",
+              attachment_file_id: null,
+              reply_to_id: null,
+              forwarded_from_id: null,
+              pinned_by: null,
+              pinned_at: null,
+              created_at: new Date("2026-06-20T10:00:00Z"),
+              updated_at: new Date("2026-06-20T10:00:00Z"),
+              deleted_at: null,
+              sender_email: null,
+              sender_first_name: null,
+              sender_last_name: null,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    const { service, crm } = createService({
+      database: {
+        transaction: jest.fn(
+          async (work: (client: MockClient) => Promise<unknown>) => work(client),
+        ) as never,
+      },
+      policy: {
+        getChatAccess: jest.fn().mockResolvedValue({
+          id: adminChatId,
+          type: "administration",
+          memberUserId: clientActor.userId,
+          memberRole: "member",
+        }),
+        assertCanWriteChat: jest.fn(),
+      },
+    });
+
+    await service.sendMessage(clientActor, adminChatId, { content: "Здравствуйте" } as never);
+
+    expect(crm.autoCreateLeadFromChat).toHaveBeenCalledWith(clientActor, clientActor.userId);
+  });
+
+  it("does NOT auto-create a lead for a staff sender or a non-administration chat", async () => {
+    const staffActor = { userId: "manager-user-a", role: "manager" as const };
+    const adminChatId = "chat-admin-a";
+    type MockClient = { query: jest.Mock };
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "msg-2",
+              chat_id: adminChatId,
+              sender_id: staffActor.userId,
+              content: "ok",
+              message_type: "text",
+              attachment_file_id: null,
+              reply_to_id: null,
+              forwarded_from_id: null,
+              pinned_by: null,
+              pinned_at: null,
+              created_at: new Date("2026-06-20T10:00:00Z"),
+              updated_at: new Date("2026-06-20T10:00:00Z"),
+              deleted_at: null,
+              sender_email: null,
+              sender_first_name: null,
+              sender_last_name: null,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    const { service, crm } = createService({
+      database: {
+        transaction: jest.fn(
+          async (work: (client: MockClient) => Promise<unknown>) => work(client),
+        ) as never,
+      },
+      policy: {
+        getChatAccess: jest.fn().mockResolvedValue({
+          id: adminChatId,
+          type: "administration",
+          memberUserId: staffActor.userId,
+          memberRole: "member",
+        }),
+        assertCanWriteChat: jest.fn(),
+      },
+    });
+
+    await service.sendMessage(staffActor, adminChatId, { content: "ok" } as never);
+
+    expect(crm.autoCreateLeadFromChat).not.toHaveBeenCalled();
   });
 });
