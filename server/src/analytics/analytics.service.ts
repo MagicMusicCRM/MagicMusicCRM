@@ -88,6 +88,53 @@ export class AnalyticsService {
     return { from, to, stages };
   }
 
+  async branchComparison(actor: ActorContext, query: { from?: string; to?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const { from, to } = this.rangeBounds(query);
+    // Mirror of CrmService.branchIdExpr (column preferred, custom_data fallback).
+    const branchOf = (a: string) =>
+      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
+    const result = await this.database.query<{
+      branch_id: string;
+      name: string;
+      revenue: string;
+      active_students: string;
+      new_leads: string;
+      completed_lessons: string;
+    }>(
+      `select b.id as branch_id, b.name,
+         (select coalesce(sum(p.amount), 0) from app.payments p
+            join app.students s on s.id = p.student_id and s.deleted_at is null
+           where p.deleted_at is null and p.payment_date >= $1::timestamptz and p.payment_date < $2::timestamptz
+             and ${branchOf("s")} = b.id::text) as revenue,
+         (select count(*) from app.students s
+           where s.deleted_at is null and s.status = 'active' and ${branchOf("s")} = b.id::text) as active_students,
+         (select count(*) from app.leads l
+           where l.deleted_at is null and l.created_at >= $1::timestamptz and l.created_at < $2::timestamptz
+             and ${branchOf("l")} = b.id::text) as new_leads,
+         (select count(*) from app.lessons les
+           where les.deleted_at is null and les.status in ('completed', 'done')
+             and les.scheduled_at >= $1::timestamptz and les.scheduled_at < $2::timestamptz
+             and les.branch_id = b.id) as completed_lessons
+       from app.branches b
+       where b.deleted_at is null
+       order by b.name`,
+      [from, to],
+    );
+    return {
+      from,
+      to,
+      branches: result.rows.map((r) => ({
+        branchId: r.branch_id,
+        name: r.name,
+        revenue: Number(r.revenue),
+        activeStudents: Number(r.active_students),
+        newLeads: Number(r.new_leads),
+        completedLessons: Number(r.completed_lessons),
+      })),
+    };
+  }
+
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const { items } = await this.financeMonthly(actor, query);
     const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";

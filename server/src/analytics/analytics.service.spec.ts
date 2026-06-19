@@ -52,4 +52,16 @@ describe("AnalyticsService", () => {
       { statusId: "s2", name: "Пробный", sortOrder: 1, leadsEntered: 40, conversionFromPrev: 40 },
     ]);
   });
+
+  it("branchComparison returns per-branch metrics, gated to manager/admin", async () => {
+    const { service, query, policy } = build([
+      { branch_id: "b1", name: "Сокол", revenue: "500000", active_students: "120", new_leads: "30", completed_lessons: "800" },
+    ]);
+    const result = await service.branchComparison(actor, { from: "2026-01-01", to: "2026-04-01" });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.branches");
+    expect(result.branches).toEqual([
+      { branchId: "b1", name: "Сокол", revenue: 500000, activeStudents: 120, newLeads: 30, completedLessons: 800 },
+    ]);
+  });
 });

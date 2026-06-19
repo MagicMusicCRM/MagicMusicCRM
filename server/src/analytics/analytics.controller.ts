@@ -28,6 +28,11 @@ export class AnalyticsController {
     return this.analytics.funnel(actor, query);
   }
 
+  @Get("branches")
+  branchComparison(@CurrentActor() actor: ActorContext, @Query() query: { from?: string; to?: string }) {
+    return this.analytics.branchComparison(actor, query);
+  }
+
   @Get("finance/monthly")
   financeMonthly(@CurrentActor() actor: ActorContext, @Query() query: { from?: string; to?: string }) {
     return this.analytics.financeMonthly(actor, query);
