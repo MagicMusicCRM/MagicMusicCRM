@@ -1,3 +1,4 @@
+import { BadRequestException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -3670,5 +3671,76 @@ describe("CrmService", () => {
       { rows: [], rowCount: 0 } as unknown as { rows: Record<string, unknown>[] },
     ]);
     await expect(service.removeFamilyMember(actor, "missing")).rejects.toThrow("Участник семьи не найден.");
+  });
+
+  const createMergeService = (results: { rows: Record<string, unknown>[] }[]) => {
+    const query = jest.fn();
+    for (const r of results) query.mockResolvedValueOnce(r);
+    const transaction = jest.fn(
+      async (work: (client: { query: jest.Mock }) => Promise<unknown>) => work({ query }),
+    );
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const notifications = { sendEmail: jest.fn().mockResolvedValue({ queued: true }) };
+    const policy = {
+      assertCanReadOperationalData: jest.fn(),
+      assertCanWriteCrm: jest.fn(),
+      assertCanListStudents: jest.fn(),
+      assertCanReadStudent: jest.fn(),
+    };
+    const hollihop = {
+      listDisciplines: jest.fn().mockResolvedValue({ configured: false, items: [] }),
+      listLevels: jest.fn().mockResolvedValue({ configured: false, items: [] }),
+      listCategories: jest.fn().mockResolvedValue({ configured: false, items: [] }),
+      listLeadStatuses: jest.fn().mockResolvedValue({ configured: false, items: [] }),
+    };
+    const service = new CrmService(
+      { query, transaction } as unknown as DatabaseService,
+      audit as unknown as AuditService,
+      policy as unknown as CrmPolicy,
+      hollihop as unknown as HolliHopMetadataService,
+      notifications as unknown as NotificationsService,
+    );
+    return { service, query, transaction, policy };
+  };
+
+  it("lists lead merge candidates by phone + name", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ loser_id: "l-lo", winner_id: "l-wi", phone: "+79091234567", name: "Иван Иванов" }] },
+    ]);
+    const result = await service.listMergeCandidates(actor);
+    expect(result.items[0]).toEqual({ loserId: "l-lo", winnerId: "l-wi", phone: "+79091234567", name: "Иван Иванов" });
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("phone_normalized");
+  });
+
+  it("mergeLeads re-points references, soft-deletes the loser, and logs", async () => {
+    const { service, query, transaction, policy } = createMergeService([
+      { rows: [{ id: "l-lo" }, { id: "l-wi" }] }, // validate both exist
+      { rows: [{ id: "s1" }] },                    // students.lead_id
+      { rows: [{ id: "le1" }] },                   // lessons.lead_id
+      { rows: [{ id: "h1" }] },                    // lead_status_history.lead_id
+      { rows: [] },                                // lead_comments.lead_id
+      { rows: [{ id: "t1" }] },                    // tasks.entity_id
+      { rows: [] },                                // entity_comments.entity_id
+      { rows: [{ id: "dc1" }] },                   // duplicate_candidates -> merged
+      { rows: [] },                                // soft-delete loser
+      { rows: [{ id: "ml1" }] },                   // insert merge_log
+    ]);
+    const result = await service.mergeLeads(actor, "l-lo", "l-wi");
+    expect(result).toEqual({ mergeLogId: "ml1", winnerId: "l-wi" });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(sql).toContain("update app.students set lead_id");
+    expect(sql).toContain("update app.leads set deleted_at = now()");
+    expect(sql).toContain("insert into app.merge_log");
+    // merge_log insert carries the captured repointed ids
+    const mlInsert = query.mock.calls.find((c) => String(c[0]).includes("insert into app.merge_log"));
+    expect(JSON.stringify(mlInsert?.[1])).toContain("students.lead_id");
+  });
+
+  it("mergeLeads rejects merging a lead into itself", async () => {
+    const { service } = createMergeService([]);
+    await expect(service.mergeLeads(actor, "same", "same")).rejects.toThrow(BadRequestException);
   });
 });

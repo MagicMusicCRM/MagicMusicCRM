@@ -704,4 +704,29 @@ export class CrmController {
   ) {
     return this.crm.setPrimaryPayer(actor, familyId, memberId);
   }
+
+  @Get("merge-candidates")
+  listMergeCandidates(
+    @CurrentActor() actor: ActorContext,
+    @Query("limit") limit?: string,
+  ) {
+    return this.crm.listMergeCandidates(actor, limit ? Number(limit) : undefined);
+  }
+
+  @Post("leads/:winnerId/merge/:loserId")
+  mergeLeads(
+    @CurrentActor() actor: ActorContext,
+    @Param("winnerId", ParseUUIDPipe) winnerId: string,
+    @Param("loserId", ParseUUIDPipe) loserId: string,
+  ) {
+    return this.crm.mergeLeads(actor, loserId, winnerId);
+  }
+
+  @Post("merges/:mergeLogId/undo")
+  undoMerge(
+    @CurrentActor() actor: ActorContext,
+    @Param("mergeLogId", ParseUUIDPipe) mergeLogId: string,
+  ) {
+    return this.crm.undoMerge(actor, mergeLogId);
+  }
 }
