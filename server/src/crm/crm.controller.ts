@@ -54,6 +54,8 @@ import { ReorderBranchDisciplinesDto } from "./dto/reorder-branch-disciplines.dt
 import { UpsertGroupDto } from "./dto/upsert-group.dto";
 import { UpsertRoomDto } from "./dto/upsert-room.dto";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
+import { CreateFamilyDto } from "./dto/create-family.dto";
+import { AddFamilyMemberDto } from "./dto/add-family-member.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -661,5 +663,45 @@ export class CrmController {
     @Query("limit") limit?: string,
   ) {
     return this.crm.listPhoneReviewQueue(actor, limit ? Number(limit) : undefined);
+  }
+
+  @Post("families")
+  createFamily(@CurrentActor() actor: ActorContext, @Body() dto: CreateFamilyDto) {
+    return this.crm.createFamily(actor, dto);
+  }
+
+  @Post("families/:familyId/members")
+  addFamilyMember(
+    @CurrentActor() actor: ActorContext,
+    @Param("familyId", ParseUUIDPipe) familyId: string,
+    @Body() dto: AddFamilyMemberDto,
+  ) {
+    return this.crm.addFamilyMember(actor, familyId, dto);
+  }
+
+  @Get("families/by-entity/:entityType/:entityId")
+  getFamilyForEntity(
+    @CurrentActor() actor: ActorContext,
+    @Param("entityType") entityType: string,
+    @Param("entityId", ParseUUIDPipe) entityId: string,
+  ) {
+    return this.crm.getFamilyForEntity(actor, entityType, entityId);
+  }
+
+  @Delete("family-members/:memberId")
+  removeFamilyMember(
+    @CurrentActor() actor: ActorContext,
+    @Param("memberId", ParseUUIDPipe) memberId: string,
+  ) {
+    return this.crm.removeFamilyMember(actor, memberId);
+  }
+
+  @Post("families/:familyId/primary-payer/:memberId")
+  setPrimaryPayer(
+    @CurrentActor() actor: ActorContext,
+    @Param("familyId", ParseUUIDPipe) familyId: string,
+    @Param("memberId", ParseUUIDPipe) memberId: string,
+  ) {
+    return this.crm.setPrimaryPayer(actor, familyId, memberId);
   }
 }

@@ -3614,4 +3614,35 @@ describe("CrmService", () => {
     expect(query.mock.calls[0][0]).toContain("app.lead_status_history");
     expect(query.mock.calls[0][1]).toEqual(["lead-1"]);
   });
+
+  it("creates a family", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ id: "fam-1", name: "Ивановы", branch_id: "b1" }] },
+    ]);
+    const result = await service.createFamily(actor, { name: "Ивановы", branchId: "b1" });
+    expect(result).toEqual({ id: "fam-1", name: "Ивановы", branchId: "b1" });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("insert into app.families");
+    expect(query.mock.calls[0][1]).toEqual(["Ивановы", "b1"]);
+  });
+
+  it("returns a family with members and resolved names for an entity", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ family_id: "fam-1", name: "Ивановы", branch_id: "b1", primary_payer_member_id: null }] }, // family lookup
+      {
+        rows: [
+          { id: "m1", entity_type: "student", entity_id: "s1", role: "child", is_primary_contact: false, member_name: "Петя Иванов" },
+          { id: "m2", entity_type: "profile", entity_id: "p1", role: "parent", is_primary_contact: true, member_name: "Иван Иванов" },
+        ],
+      }, // members
+    ]);
+    const result = await service.getFamilyForEntity(actor, "student", "s1");
+    expect(result.family).toEqual({ id: "fam-1", name: "Ивановы", branchId: "b1", primaryPayerMemberId: null });
+    expect(result.members).toEqual([
+      { id: "m1", entityType: "student", entityId: "s1", role: "child", isPrimaryContact: false, name: "Петя Иванов" },
+      { id: "m2", entityType: "profile", entityId: "p1", role: "parent", isPrimaryContact: true, name: "Иван Иванов" },
+    ]);
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][1]).toEqual(["student", "s1"]);
+  });
 });

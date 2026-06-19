@@ -5836,4 +5836,115 @@ export class CrmService {
       to: to.toISOString(),
     };
   }
+
+  async createFamily(actor: ActorContext, dto: { name?: string; branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{ id: string; name: string | null; branch_id: string | null }>(
+      `insert into app.families (name, branch_id) values ($1, $2) returning id, name, branch_id`,
+      [dto.name ?? null, dto.branchId ?? null],
+    );
+    const row = result.rows[0];
+    return { id: row.id, name: row.name, branchId: row.branch_id };
+  }
+
+  async addFamilyMember(
+    actor: ActorContext,
+    familyId: string,
+    dto: { entityType: string; entityId: string; role: string; isPrimaryContact?: boolean },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{
+      id: string;
+      family_id: string;
+      entity_type: string;
+      entity_id: string;
+      role: string;
+    }>(
+      `insert into app.family_members (family_id, entity_type, entity_id, role, is_primary_contact)
+       values ($1, $2, $3, $4, $5)
+       on conflict (family_id, entity_type, entity_id)
+       do update set role = excluded.role, is_primary_contact = excluded.is_primary_contact, deleted_at = null
+       returning id, family_id, entity_type, entity_id, role`,
+      [familyId, dto.entityType, dto.entityId, dto.role, dto.isPrimaryContact ?? false],
+    );
+    const row = result.rows[0];
+    return { id: row.id, familyId: row.family_id, entityType: row.entity_type, entityId: row.entity_id, role: row.role };
+  }
+
+  async getFamilyForEntity(actor: ActorContext, entityType: string, entityId: string) {
+    this.policy.assertCanReadOperationalData(actor);
+    const famRes = await this.database.query<{
+      family_id: string;
+      name: string | null;
+      branch_id: string | null;
+      primary_payer_member_id: string | null;
+    }>(
+      `select f.id as family_id, f.name, f.branch_id, f.primary_payer_member_id
+         from app.family_members m
+         join app.families f on f.id = m.family_id and f.deleted_at is null
+        where m.entity_type = $1 and m.entity_id = $2 and m.deleted_at is null
+        limit 1`,
+      [entityType, entityId],
+    );
+    const fam = famRes.rows[0];
+    if (!fam) return { family: null, members: [] };
+    const memRes = await this.database.query<{
+      id: string;
+      entity_type: string;
+      entity_id: string;
+      role: string;
+      is_primary_contact: boolean;
+      member_name: string | null;
+    }>(
+      `select m.id, m.entity_type, m.entity_id, m.role, m.is_primary_contact,
+              coalesce(
+                nullif(btrim(concat_ws(' ', l.first_name, l.last_name)), ''),
+                nullif(btrim(concat_ws(' ', sp.first_name, sp.last_name)), ''),
+                nullif(btrim(concat_ws(' ', pr.first_name, pr.last_name)), '')
+              ) as member_name
+         from app.family_members m
+         left join app.leads l    on m.entity_type = 'lead'    and l.id = m.entity_id
+         left join app.students st on m.entity_type = 'student' and st.id = m.entity_id
+         left join app.profiles sp on sp.id = st.profile_id
+         left join app.profiles pr on m.entity_type = 'profile' and pr.id = m.entity_id
+        where m.family_id = $1 and m.deleted_at is null
+        order by m.role, member_name`,
+      [fam.family_id],
+    );
+    return {
+      family: {
+        id: fam.family_id,
+        name: fam.name,
+        branchId: fam.branch_id,
+        primaryPayerMemberId: fam.primary_payer_member_id,
+      },
+      members: memRes.rows.map((row) => ({
+        id: row.id,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        role: row.role,
+        isPrimaryContact: row.is_primary_contact,
+        name: row.member_name,
+      })),
+    };
+  }
+
+  async removeFamilyMember(actor: ActorContext, memberId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    await this.database.query(
+      `update app.family_members set deleted_at = now() where id = $1 and deleted_at is null`,
+      [memberId],
+    );
+    return { success: true as const };
+  }
+
+  async setPrimaryPayer(actor: ActorContext, familyId: string, memberId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    await this.database.query(
+      `update app.families set primary_payer_member_id = $2, updated_at = now()
+        where id = $1 and deleted_at is null`,
+      [familyId, memberId],
+    );
+    return { success: true as const };
+  }
 }
