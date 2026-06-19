@@ -7,7 +7,7 @@ import '../../../../core/widgets/skeletons.dart';
 import 'create_student_dialog.dart';
 import 'create_teacher_dialog.dart';
 import 'create_group_dialog.dart';
-import 'student_detail_dialog.dart';
+import 'package:go_router/go_router.dart';
 import 'teacher_detail_dialog.dart';
 import 'staff_detail_dialog.dart';
 import 'group_detail_dialog.dart';
@@ -287,14 +287,13 @@ class _StudentsList extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   onTap: () async {
-                    final updated = await StudentDetailDialog.show(
-                      context,
-                      item,
-                    );
-                    if (updated == true) {
-                      ref.invalidate(entitiesProvider('students'));
-                      ref.invalidate(studentSearchProvider(query));
-                    }
+                    final id = item['id']?.toString();
+                    if (id == null || id.isEmpty) return;
+                    await context.push('/student/$id');
+                    // Refresh on return — the screen may have changed the
+                    // student (edits, payments, etc.).
+                    ref.invalidate(entitiesProvider('students'));
+                    ref.invalidate(studentSearchProvider(query));
                   },
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.primaryPurple.withAlpha(30),

@@ -30,7 +30,6 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_portal_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overview_widget.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/student_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
@@ -288,9 +287,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       final studentId = contact['studentId']?.toString();
       final leadId = contact['leadId']?.toString();
       if (studentId != null && studentId.isNotEmpty) {
-        final student = await crm.getStudent(studentId);
         if (!mounted) return;
-        await StudentDetailDialog.show(context, student);
+        // Open the canonical (rich, tabbed) student screen.
+        context.push('/student/$studentId');
       } else if (leadId != null && leadId.isNotEmpty) {
         if (!mounted) return;
         messenger.showSnackBar(
