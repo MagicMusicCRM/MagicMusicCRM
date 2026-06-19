@@ -3774,4 +3774,71 @@ describe("CrmService", () => {
     const { service } = createMergeService([{ rows: [] }]); // select merge_log → none
     await expect(service.undoMerge(actor, "missing")).rejects.toThrow(NotFoundException);
   });
+
+  it("autoCreateLeadFromChat is idempotent when the user is already linked", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [{ entity_type: "lead", entity_id: "lead-existing" }] }, // user_crm_links lookup → already linked
+    ]);
+    const result = await service.autoCreateLeadFromChat(actor, "user-1");
+    expect(result).toEqual({ leadId: "lead-existing", created: false });
+    const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(sql).not.toContain("insert into app.leads");
+  });
+
+  it("autoCreateLeadFromChat creates a lead and link when user is not yet linked", async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // user_crm_links lookup → not linked
+      .mockResolvedValueOnce({ rows: [{ first_name: "Иван", last_name: "Петров", phone: "+79991234567" }] }) // profile
+      .mockResolvedValueOnce({ rows: [{ id: "status-new" }] }); // lead_statuses
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ id: "lead-new" }] }) // insert lead
+      .mockResolvedValueOnce({ rows: [] }); // insert crm link
+    const transaction = jest.fn(
+      async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query: clientQuery }),
+    );
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const policy = {
+      assertCanReadOperationalData: jest.fn(),
+      assertCanWriteCrm: jest.fn(),
+      assertCanListStudents: jest.fn(),
+      assertCanReadStudent: jest.fn(),
+    };
+    const service = new CrmService(
+      { query, transaction } as unknown as DatabaseService,
+      audit as unknown as AuditService,
+      policy as unknown as CrmPolicy,
+      {} as unknown as HolliHopMetadataService,
+      {} as unknown as NotificationsService,
+    );
+    const result = await service.autoCreateLeadFromChat(actor, "user-1");
+    expect(result).toEqual({ leadId: "lead-new", created: true });
+    expect(clientQuery).toHaveBeenCalledTimes(2);
+    const insertSql = String(clientQuery.mock.calls[0][0]);
+    expect(insertSql).toContain("'Через приложение'");
+    const statusSql = String(query.mock.calls[2][0]);
+    expect(statusSql).toContain("'новый'");
+    const linkSql = String(clientQuery.mock.calls[1][0]);
+    expect(linkSql).toContain("'auto_phone'");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.lead_created",
+        entityType: "lead",
+        entityId: "lead-new",
+        metadata: expect.objectContaining({ fromApp: true, userId: "user-1" }),
+      }),
+    );
+  });
+
+  it("counts app-sourced leads", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ count: "7" }] },
+    ]);
+    const result = await service.countAppLeads(actor);
+    expect(result).toEqual({ count: 7 });
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("'Через приложение'");
+  });
 });

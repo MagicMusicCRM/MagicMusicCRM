@@ -590,6 +590,11 @@ export class CrmController {
     return this.crm.listLeadBoard(actor, query);
   }
 
+  @Get("leads/app-count")
+  countAppLeads(@CurrentActor() actor: ActorContext) {
+    return this.crm.countAppLeads(actor);
+  }
+
   @Get("leads/:id/card")
   getLeadCard(
     @CurrentActor() actor: ActorContext,
