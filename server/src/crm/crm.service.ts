@@ -2804,7 +2804,7 @@ export class CrmService {
           and bd.deleted_at is null`,
       [branchId, dto.disciplineIds],
     );
-    return { updated: result.rowCount ?? result.rows.length };
+    return { updated: result.rowCount ?? 0 };
   }
 
   async getScheduleMatrix(actor: ActorContext, query: ScheduleMatrixQuery) {

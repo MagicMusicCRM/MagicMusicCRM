@@ -3416,7 +3416,7 @@ describe("CrmService", () => {
 
   it("reorders branch disciplines by array position", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
-      { rows: [{ id: "bd1" }, { id: "bd2" }] },
+      { rows: [], rowCount: 2 } as unknown as { rows: Record<string, unknown>[] },
     ]);
     const result = await service.reorderBranchDisciplines(actor, "branch-1", {
       disciplineIds: ["d2", "d1"],
