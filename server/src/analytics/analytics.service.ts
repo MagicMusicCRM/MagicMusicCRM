@@ -135,6 +135,40 @@ export class AnalyticsService {
     };
   }
 
+  async lossReasons(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const { from, to } = this.rangeBounds(query);
+    const result = await this.database.query<{
+      reason_id: string;
+      name: string;
+      kind: string;
+      leads_lost: string;
+    }>(
+      `select lr.id as reason_id, lr.name, lr.kind,
+              count(distinct lsh.lead_id) as leads_lost
+         from app.lead_status_history lsh
+         join app.lead_statuses ls on ls.id = lsh.new_status_id and ls.is_terminal = true
+         join app.lead_loss_reasons lr on lr.id = lsh.reason_id
+        where lsh.reason_id is not null
+          and lsh.changed_at >= $1::timestamptz
+          and lsh.changed_at < $2::timestamptz
+          and ($3::uuid is null or lsh.branch_id = $3::uuid)
+        group by lr.id, lr.name, lr.kind
+        order by leads_lost desc`,
+      [from, to, query.branchId ?? null],
+    );
+    return {
+      from,
+      to,
+      reasons: result.rows.map((r) => ({
+        reasonId: r.reason_id,
+        name: r.name,
+        kind: r.kind,
+        leadsLost: Number(r.leads_lost),
+      })),
+    };
+  }
+
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const { items } = await this.financeMonthly(actor, query);
     const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";

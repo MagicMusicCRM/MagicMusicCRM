@@ -33,6 +33,14 @@ export class AnalyticsController {
     return this.analytics.branchComparison(actor, query);
   }
 
+  @Get("loss-reasons")
+  lossReasons(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: { from?: string; to?: string; branchId?: string },
+  ) {
+    return this.analytics.lossReasons(actor, query);
+  }
+
   @Get("finance/monthly")
   financeMonthly(@CurrentActor() actor: ActorContext, @Query() query: { from?: string; to?: string }) {
     return this.analytics.financeMonthly(actor, query);
