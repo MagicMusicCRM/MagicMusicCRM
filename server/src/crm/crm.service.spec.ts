@@ -3722,6 +3722,7 @@ describe("CrmService", () => {
       { rows: [] },                                // lead_comments.lead_id
       { rows: [{ id: "t1" }] },                    // tasks.entity_id
       { rows: [] },                                // entity_comments.entity_id
+      { rows: [{ id: "ch1" }] },                   // chats.lead_id
       { rows: [{ id: "dc1" }] },                   // duplicate_candidates -> merged
       { rows: [] },                                // soft-delete loser
       { rows: [{ id: "ml1" }] },                   // insert merge_log
@@ -3732,6 +3733,7 @@ describe("CrmService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
     expect(sql).toContain("update app.students set lead_id");
+    expect(sql).toContain("update app.chats set lead_id");
     expect(sql).toContain("update app.leads set deleted_at = now()");
     expect(sql).toContain("insert into app.merge_log");
     // merge_log insert carries the captured repointed ids
@@ -3765,6 +3767,7 @@ describe("CrmService", () => {
     expect((dupCall?.[1] as unknown[])[0]).toBeNull();
     const studCall = query.mock.calls.find((c) => String(c[0]).includes("update app.students set lead_id"));
     expect((studCall?.[1] as unknown[])[0]).toBe("l-lo");
+    expect((studCall?.[1] as unknown[])[1]).toEqual(["s1"]);
   });
 
   it("undoMerge 404s when the merge is missing or already undone", async () => {

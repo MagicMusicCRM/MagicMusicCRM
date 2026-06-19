@@ -6048,6 +6048,12 @@ export class CrmService {
           [loserId, winnerId],
         )).rows,
       );
+      repointed["chats.lead_id"] = ids(
+        (await client.query<{ id: string }>(
+          `update app.chats set lead_id = $2 where lead_id = $1 returning id`,
+          [loserId, winnerId],
+        )).rows,
+      );
       // Mark duplicate candidates merged (capture for undo).
       repointed["duplicate_candidates.status"] = ids(
         (await client.query<{ id: string }>(
@@ -6082,6 +6088,7 @@ export class CrmService {
     "lead_status_history.lead_id": "update app.lead_status_history set lead_id = $1 where id = any($2::uuid[])",
     "lead_comments.lead_id": "update app.lead_comments set lead_id = $1 where id = any($2::uuid[])",
     "tasks.entity_id": "update app.tasks set entity_id = $1 where id = any($2::uuid[])",
+    "chats.lead_id": "update app.chats set lead_id = $1 where id = any($2::uuid[])",
     "entity_comments.entity_id": "update app.entity_comments set entity_id = $1 where id = any($2::uuid[])",
     "duplicate_candidates.status": "update app.duplicate_candidates set status = 'pending', updated_at = now() where id = any($2::uuid[])",
   };
