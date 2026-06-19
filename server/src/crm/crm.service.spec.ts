@@ -3338,4 +3338,36 @@ describe("CrmService", () => {
       }),
     );
   });
+
+  it("resolveLeadChatUser phone-lookup SQL uses +7 canonical expression (regression KVA-184)", async () => {
+    // Query sequence for resolveLeadChatUser when there is no explicit link
+    // and we fall through to the phone-based profile lookup:
+    //   [0] fetch lead row
+    //   [1] check user_crm_links — returns nothing
+    //   [2] look up profile by normalised phone
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [{ id: "lead-a", name: "Иван Петров", phone: "89091234567" }],
+      },
+      { rows: [] }, // no explicit user_crm_link
+      { rows: [] }, // phone lookup – result doesn't matter for this assertion
+    ]);
+
+    await service.resolveLeadChatUser(actor, "lead-a");
+
+    // The third query (index 2) is the phone-match SELECT.
+    const phoneMatchSql: string = query.mock.calls[2][0];
+    const phoneMatchParam: string = query.mock.calls[2][1][0];
+
+    // The bound parameter must be the +7 canonical produced by normalizePhoneRu.
+    expect(phoneMatchParam).toBe("+79091234567");
+
+    // The SQL must use normalizedPhoneExpr which wraps a CASE that produces the
+    // '+7' canonical, so both sides of the equality are in the same form.
+    // A bare digit-only expression (regexp_replace ... '[^0-9]' ... = $1) would
+    // never match a +7-prefixed param; the CASE form is required.
+    expect(phoneMatchSql).toContain("'+7'");
+    // The expression must appear inside a CASE block (not as a bare equality).
+    expect(phoneMatchSql).toContain("case");
+  });
 });

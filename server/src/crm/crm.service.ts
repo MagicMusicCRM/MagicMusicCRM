@@ -3990,7 +3990,7 @@ export class CrmService {
           from app.profiles p
           join app.users u on u.id = p.user_id and u.deleted_at is null
           where p.deleted_at is null
-            and regexp_replace(coalesce(p.phone, ''), '[^0-9]', '', 'g') = $1
+            and ${normalizedPhoneExpr('p.phone')} = $1
             and u.role = 'client'
           order by u.created_at desc
           limit 1
