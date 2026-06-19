@@ -317,11 +317,11 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1A29),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Связь по телефону',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
         ),
         content: SizedBox(
           width: 460,
@@ -408,7 +408,10 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
         widget.currentRole == 'system_admin';
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -425,7 +428,9 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                         _loadProfiles,
                       );
                     },
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Поиск по имени, почте, телефону...',
                       hintStyle: TextStyle(
@@ -447,7 +452,10 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                 ),
                 SizedBox(width: 10),
                 IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.white70),
+                  icon: Icon(
+                    Icons.refresh,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   tooltip: 'Обновить',
                   onPressed: _loadProfiles,
                 ),
@@ -468,13 +476,17 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                   selected: selected,
                   label: Text(_roleLabels[role] ?? role),
                   labelStyle: TextStyle(
-                    color: selected ? Colors.black : Colors.white70,
+                    color: selected
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                   ),
                   selectedColor: color,
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   side: BorderSide(
-                    color: selected ? color : Colors.white.withAlpha(18),
+                    color: selected
+                        ? color
+                        : Theme.of(context).colorScheme.outlineVariant,
                   ),
                   onSelected: (_) {
                     setState(() => _selectedRole = role);
@@ -547,7 +559,9 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.white.withAlpha(10)),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -574,8 +588,10 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                                 children: [
                                   Text(
                                     _fullName(p),
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 15,
                                     ),
@@ -691,7 +707,9 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                                           }
                                         }
                                       : null,
-                                  dropdownColor: const Color(0xFF1E1A29),
+                                  dropdownColor: Theme.of(
+                                    context,
+                                  ).colorScheme.surface,
                                   icon: Icon(
                                     isRolePending
                                         ? Icons.sync_rounded
@@ -706,7 +724,10 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                                       child: Text(
                                         _roleLabels[r] ?? r,
                                         style: TextStyle(
-                                          color: _roleColors[r] ?? Colors.white,
+                                          color: _roleColors[r] ??
+                                              Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
                                           fontSize: 13,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -723,6 +744,8 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                   ),
           ),
         ],
+          ),
+        ),
       ),
     );
   }
@@ -747,9 +770,12 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1A29),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Изменить роль', style: TextStyle(color: Colors.white)),
+        title: Text(
+          'Изменить роль',
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+        ),
         content: Text(
           'Вы уверены, что хотите изменить роль пользователя «$name» с «${_roleLabels[oldRole]}» на «${_roleLabels[newRole]}»?',
           style: TextStyle(
@@ -834,8 +860,8 @@ class _LinkSection extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -860,7 +886,9 @@ class _LinkSection extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               title: Text(
                 name.isEmpty ? 'Без имени' : name,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
               subtitle: Text(
                 [phone, status].where((v) => v.isNotEmpty).join(' · '),
