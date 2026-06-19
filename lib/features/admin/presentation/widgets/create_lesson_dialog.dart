@@ -9,12 +9,16 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
   final DateTime? initialDate;
   final String? initialRoomId;
   final String? initialBranchId;
+  // When provided, the dialog edits this existing lesson instead of creating a
+  // new one (pre-filled fields, "Сохранить" updates via PATCH).
+  final Map<String, dynamic>? lesson;
 
   const CreateLessonDialog({
     super.key,
     this.initialDate,
     this.initialRoomId,
     this.initialBranchId,
+    this.lesson,
   });
 
   static Future<bool?> show(
@@ -22,6 +26,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     DateTime? initialDate,
     String? initialRoomId,
     String? initialBranchId,
+    Map<String, dynamic>? lesson,
   }) {
     return showDialog<bool>(
       context: context,
@@ -29,6 +34,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
         initialDate: initialDate,
         initialRoomId: initialRoomId,
         initialBranchId: initialBranchId,
+        lesson: lesson,
       ),
     );
   }
@@ -55,6 +61,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
 
+  bool get _isEdit => widget.lesson != null;
+
   @override
   void initState() {
     super.initState();
@@ -68,6 +76,24 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     if (widget.initialBranchId != null) {
       _selectedBranchId = widget.initialBranchId;
       _loadRooms(widget.initialBranchId!);
+    }
+    // Pre-fill from the lesson being edited.
+    final lesson = widget.lesson;
+    if (lesson != null) {
+      _selectedTeacherId = lesson['teacher_id']?.toString();
+      _selectedGroupId = lesson['group_id']?.toString();
+      _selectedStudentId = lesson['student_id']?.toString();
+      _selectedBranchId = lesson['branch_id']?.toString() ?? _selectedBranchId;
+      _selectedRoomId = lesson['room_id']?.toString() ?? _selectedRoomId;
+      final raw = lesson['scheduled_at']?.toString();
+      final parsed = raw == null ? null : DateTime.tryParse(raw);
+      if (parsed != null) {
+        // Stored as UTC; show in Moscow time (UTC+3) to match the schedule.
+        final local = parsed.toUtc().add(const Duration(hours: 3));
+        _selectedDate = DateTime(local.year, local.month, local.day);
+        _selectedTime = TimeOfDay(hour: local.hour, minute: local.minute);
+      }
+      if (_selectedBranchId != null) _loadRooms(_selectedBranchId!);
     }
     _loadData();
   }
@@ -148,21 +174,35 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
       final scheduledAt = moscowTime.toIso8601String();
 
-      await _crm.createLesson(
-        teacherId: _selectedTeacherId,
-        groupId: _selectedGroupId,
-        studentId: _selectedStudentId,
-        branchId: _selectedBranchId,
-        roomId: _selectedRoomId,
-        scheduledAt: scheduledAt,
-        status: 'scheduled',
-      );
+      if (_isEdit) {
+        await _crm.updateLesson(
+          widget.lesson!['id'].toString(),
+          teacherId: _selectedTeacherId,
+          groupId: _selectedGroupId,
+          studentId: _selectedStudentId,
+          branchId: _selectedBranchId,
+          roomId: _selectedRoomId,
+          scheduledAt: scheduledAt,
+        );
+      } else {
+        await _crm.createLesson(
+          teacherId: _selectedTeacherId,
+          groupId: _selectedGroupId,
+          studentId: _selectedStudentId,
+          branchId: _selectedBranchId,
+          roomId: _selectedRoomId,
+          scheduledAt: scheduledAt,
+          status: 'scheduled',
+        );
+      }
 
       if (mounted) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Занятие создано')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_isEdit ? 'Занятие обновлено' : 'Занятие создано'),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -191,7 +231,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     }
 
     return AlertDialog(
-      title: const Text('Новое занятие'),
+      title: Text(_isEdit ? 'Редактировать занятие' : 'Новое занятие'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -402,7 +442,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Создать'),
+              : Text(_isEdit ? 'Сохранить' : 'Создать'),
         ),
       ],
     );

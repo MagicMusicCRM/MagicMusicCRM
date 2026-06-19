@@ -1044,6 +1044,10 @@ class MagicCrmService {
     return _legacyLesson(response);
   }
 
+  Future<void> deleteLesson(String id) async {
+    await _api.delete<Map<String, dynamic>>('/crm/lessons/$id');
+  }
+
   Future<Map<String, dynamic>> getLessonAttendance(String lessonId) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/lessons/$lessonId/attendance',

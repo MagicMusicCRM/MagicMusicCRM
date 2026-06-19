@@ -2997,6 +2997,26 @@ describe("CrmService", () => {
     ]);
   });
 
+  it("soft-deletes a lesson and clears its reminder markers", async () => {
+    const { service, query, policy, audit } = createServiceWithQueryResults([
+      { rows: [{ id: "lesson-a" }] }, // update ... returning id
+      { rows: [] }, // delete from lesson_reminders
+    ]);
+    const result = await service.deleteLesson(actor, "lesson-a");
+    expect(result).toEqual({ success: true });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalled();
+    expect(query.mock.calls[0][0]).toContain("set deleted_at = now()");
+    expect(query.mock.calls[1][0]).toContain(
+      "delete from app.lesson_reminders",
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.lesson_deleted",
+        entityId: "lesson-a",
+      }),
+    );
+  });
+
   it("clears reminder markers when a lesson is rescheduled", async () => {
     // Manager actor: assertCanUpdateLesson returns without a query, so the
     // first DB call is the UPDATE, then the marker delete.

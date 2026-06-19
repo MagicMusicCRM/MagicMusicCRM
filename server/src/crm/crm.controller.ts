@@ -411,6 +411,14 @@ export class CrmController {
     return this.crm.updateLesson(actor, id, dto);
   }
 
+  @Delete("lessons/:id")
+  deleteLesson(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.deleteLesson(actor, id);
+  }
+
   @Get("lessons/:id/attendance")
   getLessonAttendance(
     @CurrentActor() actor: ActorContext,

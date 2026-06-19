@@ -2933,6 +2933,35 @@ export class CrmService {
     return this.toLessonDto(lesson);
   }
 
+  async deleteLesson(actor: ActorContext, lessonId: string) {
+    // Only managers/admins may delete a lesson outright; teachers can update
+    // status/notes via updateLesson but not remove a lesson from the schedule.
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{ id: string }>(
+      `
+        update app.lessons
+        set deleted_at = now(), updated_at = now()
+        where id = $1 and deleted_at is null
+        returning id
+      `,
+      [lessonId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("Урок не найден.");
+    // Drop any pending reminder markers for the removed lesson.
+    await this.database.query(
+      "delete from app.lesson_reminders where lesson_id = $1",
+      [lessonId],
+    );
+    await this.audit.record({
+      actor,
+      action: "crm.lesson_deleted",
+      entityType: "lesson",
+      entityId: row.id,
+    });
+    return { success: true };
+  }
+
   async getLessonAttendance(actor: ActorContext, lessonId: string) {
     const lesson = await this.findLessonForAttendance(actor, lessonId);
     const students = await this.listAttendanceStudents(lesson);

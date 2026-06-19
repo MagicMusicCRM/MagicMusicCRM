@@ -2080,6 +2080,52 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           ],
         ),
         actions: [
+          if (lessonId != null)
+            IconButton(
+              tooltip: 'Редактировать',
+              icon: const Icon(Icons.edit_rounded, size: 20),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _editLesson(lesson);
+              },
+            ),
+          if (lessonId != null)
+            IconButton(
+              tooltip: 'Удалить',
+              icon: const Icon(
+                Icons.delete_outline_rounded,
+                size: 20,
+                color: AppTheme.danger,
+              ),
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const Text('Удалить занятие?'),
+                    content: const Text(
+                      'Занятие будет удалено из расписания безвозвратно.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c, false),
+                        child: const Text('Нет'),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.danger,
+                        ),
+                        onPressed: () => Navigator.pop(c, true),
+                        child: const Text('Удалить'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  await _deleteLesson(lessonId);
+                }
+              },
+            ),
           if (lessonId != null && currentStatus != 'cancelled')
             TextButton(
               onPressed: () async {
@@ -2154,6 +2200,35 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         return 'Запланировано';
       default:
         return status ?? 'Запланировано';
+    }
+  }
+
+  Future<void> _editLesson(Map<String, dynamic> lesson) async {
+    final changed = await CreateLessonDialog.show(context, lesson: lesson);
+    if (changed == true) _fetchAll();
+  }
+
+  Future<void> _deleteLesson(String lessonId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(magicCrmServiceProvider).deleteLesson(lessonId);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Занятие удалено'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _fetchAll();
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось удалить занятие: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
     }
   }
 
