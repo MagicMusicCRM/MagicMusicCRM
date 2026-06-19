@@ -3351,7 +3351,7 @@ describe("CrmService", () => {
   });
 
   it("lists open phone-review-queue rows", async () => {
-    const { service, query } = createServiceWithQueryResults([
+    const { service, query, policy } = createServiceWithQueryResults([
       {
         rows: [
           {
@@ -3375,6 +3375,9 @@ describe("CrmService", () => {
       createdAt: "2026-06-19T00:00:00.000Z",
     });
     expect(query.mock.calls[0][1]).toEqual([25]);
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.phone_review_queue");
+    expect(query.mock.calls[0][0]).toContain("resolved_at is null");
   });
 
   it("resolveLeadChatUser phone-lookup SQL uses +7 canonical expression (regression KVA-184)", async () => {
