@@ -5931,20 +5931,31 @@ export class CrmService {
 
   async removeFamilyMember(actor: ActorContext, memberId: string) {
     this.policy.assertCanWriteCrm(actor);
-    await this.database.query(
+    const result = await this.database.query(
       `update app.family_members set deleted_at = now() where id = $1 and deleted_at is null`,
       [memberId],
     );
+    if (!result.rowCount) {
+      throw new NotFoundException("Участник семьи не найден.");
+    }
     return { success: true as const };
   }
 
   async setPrimaryPayer(actor: ActorContext, familyId: string, memberId: string) {
     this.policy.assertCanWriteCrm(actor);
-    await this.database.query(
-      `update app.families set primary_payer_member_id = $2, updated_at = now()
-        where id = $1 and deleted_at is null`,
+    const result = await this.database.query(
+      `update app.families
+          set primary_payer_member_id = $2, updated_at = now()
+        where id = $1 and deleted_at is null
+          and exists (
+            select 1 from app.family_members m
+            where m.id = $2 and m.family_id = $1 and m.deleted_at is null
+          )`,
       [familyId, memberId],
     );
+    if (!result.rowCount) {
+      throw new NotFoundException("Семья или участник не найдены.");
+    }
     return { success: true as const };
   }
 }

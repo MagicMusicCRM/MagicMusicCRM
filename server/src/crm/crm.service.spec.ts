@@ -3646,4 +3646,29 @@ describe("CrmService", () => {
     expect(query.mock.calls[0][1]).toEqual(["student", "s1"]);
     expect(query.mock.calls[1][1]).toEqual(["fam-1"]);
   });
+
+  it("setPrimaryPayer enforces member-in-family and 404s on no match", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [], rowCount: 0 } as unknown as { rows: Record<string, unknown>[] },
+    ]);
+    await expect(
+      service.setPrimaryPayer(actor, "fam-1", "other-fam-member"),
+    ).rejects.toThrow("Семья или участник не найдены.");
+    expect(query.mock.calls[0][0]).toContain("from app.family_members m");
+    expect(query.mock.calls[0][0]).toContain("m.family_id = $1");
+  });
+
+  it("setPrimaryPayer succeeds when the member belongs to the family", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [], rowCount: 1 } as unknown as { rows: Record<string, unknown>[] },
+    ]);
+    await expect(service.setPrimaryPayer(actor, "fam-1", "m1")).resolves.toEqual({ success: true });
+  });
+
+  it("removeFamilyMember 404s when nothing was deleted", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [], rowCount: 0 } as unknown as { rows: Record<string, unknown>[] },
+    ]);
+    await expect(service.removeFamilyMember(actor, "missing")).rejects.toThrow("Участник семьи не найден.");
+  });
 });
