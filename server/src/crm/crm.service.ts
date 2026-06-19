@@ -1279,6 +1279,12 @@ export class CrmService {
     this.policy.assertCanWriteCrm(actor);
     const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
     const branchId = this.extractBranchId(dto.customDataPatch);
+    const beforeStudent = (
+      await this.database.query<{ status: string | null; branch_id: string | null }>(
+        `select status, branch_id from app.students where id = $1 and deleted_at is null`,
+        [studentId],
+      )
+    ).rows[0] ?? null;
     const result = await this.database.query<StudentRow>(
       `
         with target as (
@@ -1361,6 +1367,13 @@ export class CrmService {
       entityType: "student",
       entityId: student.id,
     });
+    if (beforeStudent && beforeStudent.status !== student.status) {
+      await this.database.query(
+        `insert into app.student_status_history (student_id, status, branch_id)
+         values ($1, $2, $3)`,
+        [studentId, student.status, branchId ?? beforeStudent.branch_id],
+      );
+    }
     return this.toStudentDto(student);
   }
 
@@ -4408,6 +4421,15 @@ export class CrmService {
   async updateLead(actor: ActorContext, leadId: string, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
     const branchId = this.extractBranchId(dto.customDataPatch);
+    const beforeRes = await this.database.query<{
+      status_id: string | null;
+      assigned_to: string | null;
+      branch_id: string | null;
+    }>(
+      `select status_id, assigned_to, branch_id from app.leads where id = $1 and deleted_at is null`,
+      [leadId],
+    );
+    const before = beforeRes.rows[0] ?? null;
     const result = await this.database.query<LeadRow>(
       `
         update app.leads
@@ -4451,6 +4473,29 @@ export class CrmService {
       entityType: "lead",
       entityId: lead.id,
     });
+    if (
+      before &&
+      (before.status_id !== lead.status_id || before.assigned_to !== lead.assigned_to)
+    ) {
+      await this.database.query(
+        `insert into app.lead_status_history
+           (lead_id, old_status_id, new_status_id, old_owner_id, new_owner_id,
+            changed_by, reason_id, comment, branch_id, source_snapshot)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          leadId,
+          before.status_id,
+          lead.status_id,
+          before.assigned_to,
+          lead.assigned_to,
+          actor.userId,
+          dto.reasonId ?? null,
+          dto.statusComment ?? null,
+          branchId ?? before.branch_id,
+          lead.source,
+        ],
+      );
+    }
     return this.toLeadDto(lead);
   }
 

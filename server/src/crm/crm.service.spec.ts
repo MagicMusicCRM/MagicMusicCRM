@@ -2573,7 +2573,8 @@ describe("CrmService", () => {
     });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual([
+    // query.mock.calls[0] is the pre-select added by Task 2; the UPDATE CTE is now at index 1
+    expect(query.mock.calls[1][1]).toEqual([
       "student-a",
       "Анна",
       "Иванова",
@@ -3045,23 +3046,50 @@ describe("CrmService", () => {
 
   it("clears a lead's status when clearStatus is set (move to Без статуса)", async () => {
     const { service, query } = createServiceWithQueryResults([
-      { rows: [{ id: "lead-1", status_id: null }] }, // update ... returning
+      { rows: [{ status_id: "s0", assigned_to: "o0", branch_id: "b0" }] }, // pre-select
+      { rows: [{ id: "lead-1", status_id: null, assigned_to: "o0", source: "site", custom_data: {} }] }, // update ... returning
     ]);
     await service.updateLead(actor, "lead-1", { clearStatus: true } as never);
-    const sql = query.mock.calls[0][0] as string;
+    // query.mock.calls[0] is the pre-select; the UPDATE is now at index 1
+    const sql = query.mock.calls[1][0] as string;
     expect(sql).toContain("when $11::boolean then null");
     // 11th positional param ($11) carries the clearStatus flag.
-    expect((query.mock.calls[0][1] as unknown[])[10]).toBe(true);
+    expect((query.mock.calls[1][1] as unknown[])[10]).toBe(true);
   });
 
   it("preserves a lead's status when clearStatus is not set", async () => {
     const { service, query } = createServiceWithQueryResults([
-      { rows: [{ id: "lead-1", status_id: "status-a" }] },
+      { rows: [{ status_id: "status-a", assigned_to: "o0", branch_id: "b0" }] }, // pre-select
+      { rows: [{ id: "lead-1", status_id: "status-a", assigned_to: "o0", source: "site", custom_data: {} }] },
     ]);
     await service.updateLead(actor, "lead-1", {
       statusId: "11111111-1111-1111-1111-111111111111",
     } as never);
-    expect((query.mock.calls[0][1] as unknown[])[10]).toBe(false);
+    // query.mock.calls[0] is the pre-select; the UPDATE is now at index 1
+    expect((query.mock.calls[1][1] as unknown[])[10]).toBe(false);
+  });
+
+  it("records a lead_status_history row when status changes", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [{ status_id: "old-status", assigned_to: "owner-1", branch_id: "branch-1" }] }, // pre-select
+      { rows: [{ id: "lead-1", status_id: "new-status", assigned_to: "owner-1", source: "site", custom_data: {} }] }, // update returning
+      { rows: [] }, // history insert
+    ]);
+    await service.updateLead(actor, "lead-1", { statusId: "new-status" } as never);
+    const insert = query.mock.calls.map((c) => String(c[0])).find((s) => s.includes("insert into app.lead_status_history"));
+    expect(insert).toBeDefined();
+    const params = query.mock.calls.find((c) => String(c[0]).includes("insert into app.lead_status_history"))?.[1] as unknown[];
+    expect(params).toEqual(expect.arrayContaining(["lead-1", "old-status", "new-status"]));
+  });
+
+  it("does NOT record lead_status_history when neither status nor owner changed", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [{ status_id: "s1", assigned_to: "o1", branch_id: "b1" }] }, // pre-select
+      { rows: [{ id: "lead-1", status_id: "s1", assigned_to: "o1", source: "site", custom_data: {} }] }, // update returning (unchanged)
+    ]);
+    await service.updateLead(actor, "lead-1", { firstName: "X" } as never);
+    const insert = query.mock.calls.map((c) => String(c[0])).find((s) => s.includes("insert into app.lead_status_history"));
+    expect(insert).toBeUndefined();
   });
 
   it("clears reminder markers when a lesson is rescheduled", async () => {

@@ -55,4 +55,13 @@ export class UpsertLeadDto {
   @IsOptional()
   @IsObject()
   customDataPatch?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsUUID()
+  reasonId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  statusComment?: string;
 }
