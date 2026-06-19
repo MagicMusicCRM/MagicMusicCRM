@@ -21,7 +21,7 @@ export class AnalyticsService {
   }
 
   async financeMonthly(actor: ActorContext, query: { from?: string; to?: string }) {
-    this.policy.assertCanReadOperationalData(actor);
+    this.policy.assertCanWriteCrm(actor);
     const result = await this.database.query<{
       month_start: string;
       lessons: number;

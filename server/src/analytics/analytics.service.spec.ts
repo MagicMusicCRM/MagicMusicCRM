@@ -7,7 +7,7 @@ describe("AnalyticsService", () => {
   const actor = { userId: "u1", role: "manager" as const };
   const build = (rows: Record<string, unknown>[]) => {
     const query = jest.fn().mockResolvedValue({ rows });
-    const policy = { assertCanReadOperationalData: jest.fn() };
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
     const crm = {} as unknown as CrmService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
@@ -25,7 +25,7 @@ describe("AnalyticsService", () => {
     expect(result.items[0]).toEqual({
       monthStart: "2026-06-01", lessons: 10, completedLessons: 8, revenue: 5000, expenses: 1200, newStudents: 3,
     });
-    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.mv_finance_monthly");
   });
 

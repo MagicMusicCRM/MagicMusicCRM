@@ -18,6 +18,8 @@ describe("AnalyticsRefreshWorker", () => {
     const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
     expect(sql).toContain("insert into app.analytics_refresh_runs");
     expect(sql).toContain("refresh materialized view app.mv_finance_monthly");
+    expect(sql).toContain("refresh materialized view app.mv_teacher_performance");
+    expect(sql).toContain("refresh materialized view app.mv_room_load");
     expect(sql).toContain("update app.analytics_refresh_runs");
   });
 
