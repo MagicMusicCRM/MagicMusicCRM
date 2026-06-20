@@ -255,20 +255,25 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                 ? 'Мужской'
                 : (_student!['gender'] == 'female' ? 'Женский' : '—'),
           ),
-          _InfoRow(
-            icon: Icons.fingerprint_rounded,
-            label: 'Идентификатор HolliHop',
-            value: _student!['hollihop_id']?.toString() ?? '—',
-          ),
+          if ((_student!['hollihop_id']?.toString().trim().isNotEmpty ?? false))
+            _InfoRow(
+              icon: Icons.fingerprint_rounded,
+              label: 'Идентификатор HolliHop',
+              value: _student!['hollihop_id'].toString(),
+            ),
           ...customData.entries
+              .where(
+                (e) =>
+                    !_isHiddenCustomDataRow(e.key) &&
+                    (e.value?.toString().trim().isNotEmpty ?? false),
+              )
               .map(
                 (e) => _InfoRow(
                   icon: Icons.info_outline_rounded,
                   label: e.key,
-                  value: e.value?.toString() ?? '—',
+                  value: e.value.toString(),
                 ),
-              )
-              .where((row) => !_isHiddenCustomDataRow(row.label)),
+              ),
         ]),
         SizedBox(height: 16),
         _buildInfoCard('Финансовые настройки', [
@@ -373,13 +378,32 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   }
 
   bool _isHiddenCustomDataRow(String key) {
-    return {
-      'hollihopId',
+    // Internal / system custom_data keys that must never be surfaced to users.
+    // Matched case-insensitively so backend variants (camelCase / snake_case)
+    // are all caught.
+    const hidden = {
+      'hollihopid',
       'hollihop_id',
-      'sourceLeadId',
-      'branchId',
+      'hollihopstudentid',
+      'hollihop_student_id',
+      'externalid',
+      'external_id',
+      'demoaccount',
+      'demo_account',
+      'isdemo',
+      'is_demo',
+      'sourceleadid',
+      'source_lead_id',
+      'leadid',
+      'lead_id',
+      'branchid',
       'branch_id',
-    }.contains(key);
+      'disciplineid',
+      'discipline_id',
+      'disciplineinternal',
+      'discipline_internal',
+    };
+    return hidden.contains(key.trim().toLowerCase());
   }
 
   Widget? _buildFAB() {
