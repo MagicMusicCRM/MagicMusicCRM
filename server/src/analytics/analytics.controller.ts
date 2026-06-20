@@ -88,4 +88,25 @@ export class AnalyticsController {
     res.setHeader("Content-Disposition", 'attachment; filename="finance-monthly.csv"');
     return new StreamableFile(Buffer.from(csv, "utf-8"));
   }
+
+  @Get("sources")
+  sourceAnalytics(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: { from?: string; to?: string; branchId?: string },
+  ) {
+    return this.analytics.sourceAnalytics(actor, query);
+  }
+
+  @Get("data-quality")
+  dataQuality(@CurrentActor() actor: ActorContext, @Query() query: { branchId?: string }) {
+    return this.analytics.dataQuality(actor, query);
+  }
+
+  @Get("responsible")
+  responsibleDistribution(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: { from?: string; to?: string; branchId?: string },
+  ) {
+    return this.analytics.responsibleDistribution(actor, query);
+  }
 }
