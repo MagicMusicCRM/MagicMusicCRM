@@ -281,15 +281,19 @@ class _FunnelChart extends StatelessWidget {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              name.length > 8
-                                  ? '${name.substring(0, 7)}…'
-                                  : name,
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
+                            SizedBox(
+                              width: 48,
+                              child: Text(
+                                name,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                               ),
                             ),
                             if (ratio > 0)
@@ -398,11 +402,26 @@ class _DebtsContent extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _LegendItem(color: AppTheme.danger, label: 'Студентов'),
-              const SizedBox(width: 20),
-              _LegendItem(color: AppTheme.warning, label: 'Сумма долга'),
+              _LegendItem(color: AppTheme.danger, label: 'Должников'),
             ],
           ),
+          const SizedBox(height: 12),
+          // Per-bucket amount list (honest real values, not scaled)
+          ...buckets.map((b) {
+            final label = b['bucket']?.toString() ?? '—';
+            final students = _toInt(b['students']);
+            final amount = _toDouble(b['amount']);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '$label: $students уч. · ${_fmtMoney(amount)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            );
+          }),
         ] else
           Center(
             child: Text(
@@ -427,12 +446,6 @@ class _DebtsChart extends StatelessWidget {
     final maxStudents = buckets
         .map((b) => _toDouble(b['students']))
         .fold(1.0, (a, b) => a > b ? a : b);
-    final maxAmount = buckets
-        .map((b) => _toDouble(b['amount']))
-        .fold(1.0, (a, b) => a > b ? a : b);
-
-    // Normalize amounts to same scale as students for dual-bar display
-    final scale = maxStudents > 0 && maxAmount > 0 ? maxStudents / maxAmount : 1.0;
 
     return SizedBox(
       height: 200,
@@ -448,13 +461,7 @@ class _DebtsChart extends StatelessWidget {
                 BarChartRodData(
                   toY: _toDouble(b['students']),
                   color: AppTheme.danger,
-                  width: 14,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                BarChartRodData(
-                  toY: _toDouble(b['amount']) * scale,
-                  color: AppTheme.warning,
-                  width: 14,
+                  width: 22,
                   borderRadius: BorderRadius.circular(4),
                 ),
               ],
@@ -531,6 +538,17 @@ class _ForecastContent extends StatelessWidget {
     final next7 = _toDouble(data['next7']);
     final next14 = _toDouble(data['next14']);
     final next30 = _toDouble(data['next30']);
+
+    if (next7 == 0 && next14 == 0 && next30 == 0) {
+      return Center(
+        child: Text(
+          'Нет данных',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
 
     return Row(
       children: [
@@ -646,15 +664,19 @@ class _BranchesContent extends StatelessWidget {
                       final name = branches[idx]['name']?.toString() ?? '';
                       return Padding(
                         padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          name.length > 8
-                              ? '${name.substring(0, 7)}…'
-                              : name,
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                        child: SizedBox(
+                          width: 36,
+                          child: Text(
+                            name,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
                           ),
                         ),
                       );
@@ -790,6 +812,7 @@ class _ChurnSection extends ConsumerWidget {
   }
 }
 
+
 class _ChurnContent extends StatelessWidget {
   final Map<String, dynamic> data;
 
@@ -798,13 +821,25 @@ class _ChurnContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalAtRisk = _toInt(data['totalAtRisk']);
+    final inactiveDays = _toInt(data['inactiveDays']);
     final students = (data['students'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .take(10)
         .toList();
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (inactiveDays > 0) ...[
+          Text(
+            'Неактивны более $inactiveDays дней',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         _KpiCard(
           label: 'Под риском оттока',
           value: _fmtCount(totalAtRisk),
