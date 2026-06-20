@@ -6,15 +6,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
 import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
 import 'package:magic_music_crm/core/widgets/voice_recorder_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/broadcast_dialog.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
+import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
+
+// Bottom margin used for all floating SnackBars so they appear above the
+// message-input bar (~72 dp tall) and never obscure it.  KVA-173.
+const _kSnackBarBottomMargin = EdgeInsets.only(
+  bottom: 72,
+  left: 12,
+  right: 12,
+);
 
 class AdminChatDashboard extends ConsumerStatefulWidget {
   const AdminChatDashboard({super.key});
@@ -130,10 +143,13 @@ class _StudentChatListState extends ConsumerState<_StudentChatList> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
+      // KVA-173: floating so the toast never hides the input bar.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Ошибка загрузки учеников: $e'),
           backgroundColor: AppTheme.danger,
+          behavior: SnackBarBehavior.floating,
+          margin: _kSnackBarBottomMargin,
         ),
       );
     }
@@ -225,6 +241,15 @@ class _ChatViewState extends ConsumerState<_ChatView> {
   MagicRealtimeConnection? _realtime;
   bool _realtimeConnecting = false;
 
+  // KVA-174: track whether the list is at the bottom and how many new
+  // messages arrived while the user was scrolled away.
+  bool _isAtBottom = true;
+  int _unreadCount = 0;
+
+  // Threshold in pixels — within this distance of maxScrollExtent is
+  // considered "at the bottom".
+  static const double _atBottomThreshold = 80.0;
+
   MagicMessengerService get _messenger =>
       ref.read(magicMessengerServiceProvider);
 
@@ -234,7 +259,25 @@ class _ChatViewState extends ConsumerState<_ChatView> {
   @override
   void initState() {
     super.initState();
+    // KVA-174: listen for scroll position to track near-bottom state.
+    _scrollController.addListener(_onScroll);
     _loadMessages();
+  }
+
+  // KVA-174: called on every scroll event — update _isAtBottom and clear
+  // the unread badge when the user reaches the bottom.
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    final atBottom = pos.pixels >= pos.maxScrollExtent - _atBottomThreshold;
+    if (atBottom != _isAtBottom) {
+      setState(() {
+        _isAtBottom = atBottom;
+        if (atBottom) _unreadCount = 0;
+      });
+    } else if (atBottom && _unreadCount > 0) {
+      setState(() => _unreadCount = 0);
+    }
   }
 
   Future<void> _loadMessages() async {
@@ -255,10 +298,13 @@ class _ChatViewState extends ConsumerState<_ChatView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
+      // KVA-173: floating so the toast never hides the input bar.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Ошибка загрузки чата: $e'),
           backgroundColor: AppTheme.danger,
+          behavior: SnackBarBehavior.floating,
+          margin: _kSnackBarBottomMargin,
         ),
       );
     }
@@ -294,8 +340,14 @@ class _ChatViewState extends ConsumerState<_ChatView> {
       connection.onMessageCreated((payload) {
         if (payload['chatId'] != chatId) return;
         if (!mounted) return;
-        setState(() => _upsertMessage(_legacyRealtimeMessage(payload)));
-        _scrollToBottom();
+        setState(() {
+          _upsertMessage(_legacyRealtimeMessage(payload));
+          // KVA-174: increment unread badge only while scrolled away from
+          // the bottom.
+          if (!_isAtBottom) _unreadCount++;
+        });
+        // KVA-174: only auto-scroll when the user is already near the bottom.
+        if (_isAtBottom) _scrollToBottom();
         _markAsRead(_messages);
       });
       connection.onMessageUpdated((payload) {
@@ -423,14 +475,85 @@ class _ChatViewState extends ConsumerState<_ChatView> {
     });
   }
 
+  // KVA-175: save the chat partner into CRM as a lead, then offer to open the
+  // created lead card via a floating SnackBar action.
+  Future<void> _saveContactFromChat() async {
+    final partnerId = widget.targetUserId;
+    if (partnerId == null || partnerId.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .saveContactFromChat(userId: partnerId, as: 'lead');
+      if (!mounted) return;
+      final created = result['created'] == true;
+      final leadId = result['leadId']?.toString() ?? '';
+      // Build a minimal lead map so LeadDetailDialog can open immediately
+      // (the dialog loads its own full data; we only need `id`).
+      final leadStub = <String, dynamic>{'id': leadId};
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            created
+                ? 'Контакт сохранён как лид'
+                : 'Контакт уже был сохранён как лид',
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          margin: _kSnackBarBottomMargin,
+          action: leadId.isNotEmpty
+              ? SnackBarAction(
+                  label: 'Открыть карточку',
+                  textColor: Colors.white,
+                  onPressed: () => _openLeadCard(leadStub),
+                )
+              : null,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Не удалось сохранить контакт: $e');
+    }
+  }
+
+  // KVA-175: open the lead detail dialog for a given lead map.
+  Future<void> _openLeadCard(Map<String, dynamic> lead) async {
+    if (!mounted) return;
+    // We need the status list for LeadDetailDialog.  Use the cached provider.
+    List<StatusRecord> statuses = [];
+    try {
+      final raw = await ref.read(leadStatusesProvider.future);
+      for (final r in raw) {
+        final key = r['key'].toString();
+        final label = r['label'].toString();
+        final color = statusColorFromValue(r['color']);
+        statuses.add((key, label, color));
+      }
+    } catch (_) {
+      // Dialog still opens; it will fetch its own data.
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => LeadDetailDialog(lead: lead, allStatuses: statuses),
+    );
+  }
+
   void _showError(String message) {
+    // KVA-173: floating so the toast never hides the input bar.
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppTheme.danger,
+        behavior: SnackBarBehavior.floating,
+        margin: _kSnackBarBottomMargin,
+      ),
     );
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     final chatId = _chatId;
     if (chatId != null) _realtime?.leaveRoom(chatId);
     _realtime?.disconnect();
@@ -470,31 +593,101 @@ class _ChatViewState extends ConsumerState<_ChatView> {
               icon: const Icon(Icons.arrow_back),
               onPressed: widget.onBack,
             ),
+            // KVA-175: save-contact action, shown only for direct (student) chats.
+            actions: widget.targetUserId != null
+                ? [
+                    IconButton(
+                      icon: const Icon(Icons.person_add_alt_1_rounded),
+                      tooltip: 'Сохранить контакт как лид',
+                      onPressed: _saveContactFromChat,
+                    ),
+                  ]
+                : null,
           ),
         Expanded(
-          child: _messages.isEmpty
-              ? Center(
-                  child: Text(
-                    'Нет сообщений',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+          child: Stack(
+            children: [
+              _messages.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Нет сообщений',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        final isMe = message['sender_id'] == _currentUserId;
+                        return _MessageBubble(
+                          message: message,
+                          isMe: isMe,
+                          senderName: isMe ? 'Я' : _senderName(message),
+                        );
+                      },
+                    ),
+              // KVA-174: scroll-to-bottom FAB with unread badge.
+              if (!_isAtBottom)
+                Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isAtBottom = true;
+                        _unreadCount = 0;
+                      });
+                      _scrollToBottom();
+                    },
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor:
+                              Theme.of(context).colorScheme.surface,
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                            size: 28,
+                          ),
+                        ),
+                        if (_unreadCount > 0)
+                          Positioned(
+                            top: -4,
+                            right: -4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              decoration: const BoxDecoration(
+                                color: AppTheme.primaryGold,
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(10),
+                                ),
+                              ),
+                              child: Text(
+                                _unreadCount > 99 ? '99+' : '$_unreadCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: _messages.length,
-                  itemBuilder: (context, index) {
-                    final message = _messages[index];
-                    final isMe = message['sender_id'] == _currentUserId;
-                    return _MessageBubble(
-                      message: message,
-                      isMe: isMe,
-                      senderName: isMe ? 'Я' : _senderName(message),
-                    );
-                  },
                 ),
+            ],
+          ),
         ),
         _MessageInputWithAttachments(
           onSend: _sendText,
@@ -710,10 +903,13 @@ class _MessageInputWithAttachmentsState
 
   void _showError(String message) {
     if (!mounted) return;
+    // KVA-173: floating so the toast never hides the input bar.
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: const TextStyle(color: Colors.white)),
         backgroundColor: AppTheme.danger,
+        behavior: SnackBarBehavior.floating,
+        margin: _kSnackBarBottomMargin,
       ),
     );
   }
