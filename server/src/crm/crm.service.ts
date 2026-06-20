@@ -3325,13 +3325,13 @@ export class CrmService {
 
     // Notify the teacher who now owns the slot. If the teacher was swapped we
     // resolve the NEW teacher's user_id; otherwise reuse the snapshot value.
-    let teacherUserId = previous.teacher_user_id;
+    const oldTeacherUserId = previous.teacher_user_id;
+    let newTeacherUserId = oldTeacherUserId;
     if (teacherChanged) {
-      teacherUserId = lesson.teacher_id
+      newTeacherUserId = lesson.teacher_id
         ? await this.resolveTeacherUserId(lesson.teacher_id)
         : null;
     }
-    if (!teacherUserId) return;
 
     const whenLocal = this.formatLessonTimeMoscow(lesson.scheduled_at);
     const reasons: string[] = [];
@@ -3343,13 +3343,34 @@ export class CrmService {
       `Новое время — ${whenLocal} (по Москве).`;
 
     try {
-      await this.notifications.notifyUser({
-        userId: teacherUserId,
-        title: "Перенос занятия",
-        body,
-        data: { type: "lesson_rescheduled", lessonId },
-        channels: ["push", "in_app"],
-      });
+      if (newTeacherUserId) {
+        await this.notifications.notifyUser({
+          userId: newTeacherUserId,
+          title: "Перенос занятия",
+          body,
+          data: { type: "lesson_rescheduled", lessonId },
+          channels: ["push", "in_app"],
+        });
+      }
+      // On a teacher swap, also notify the REMOVED teacher so they know they
+      // are no longer assigned. Guard against null and against old==new (e.g.
+      // same person re-assigned: time-only reschedule leaves teacher unchanged).
+      if (
+        teacherChanged &&
+        oldTeacherUserId &&
+        oldTeacherUserId !== newTeacherUserId
+      ) {
+        const oldWhenLocal = this.formatLessonTimeMoscow(
+          previous.scheduled_at,
+        );
+        await this.notifications.notifyUser({
+          userId: oldTeacherUserId,
+          title: "Занятие переназначено",
+          body: `Вы откреплены от занятия ${oldWhenLocal} (по Москве) (передано другому преподавателю).`,
+          data: { type: "lesson_reassigned", lessonId },
+          channels: ["push", "in_app"],
+        });
+      }
     } catch {
       // A notification failure must never block the reschedule itself.
     }

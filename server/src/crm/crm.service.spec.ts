@@ -3394,6 +3394,79 @@ describe("CrmService", () => {
     expect(notifications.notifyUser).not.toHaveBeenCalled();
   });
 
+  it("notifies both the new and the removed teacher on a teacher swap (KVA-158)", async () => {
+    // The lesson is reassigned from teacher-a (old) to teacher-b (new). The new
+    // teacher gets the "Перенос занятия" push; the removed teacher must ALSO be
+    // told they are detached via a distinct "Занятие переназначено" message.
+    const { service, notifications } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            teacher_id: "teacher-a",
+            room_id: "room-a",
+            scheduled_at: "2026-06-20T15:00:00.000Z",
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      }, // pre-update snapshot (OLD teacher)
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            lead_id: null,
+            teacher_id: "teacher-b",
+            branch_id: null,
+            room_id: "room-a",
+            scheduled_at: "2026-06-20T15:00:00.000Z",
+            duration_minutes: 60,
+            status: "scheduled",
+            is_trial: false,
+            notes: null,
+            student_user_id: null,
+            teacher_user_id: null,
+            student_name: null,
+            teacher_name: null,
+            branch_name: null,
+            room_name: null,
+            group_name: null,
+            group_price_per_lesson: null,
+          },
+        ],
+      }, // UPDATE ... RETURNING (NEW teacher)
+      { rows: [{ user_id: "teacher-user-b" }] }, // resolveTeacherUserId(new)
+    ]);
+
+    await service.updateLesson(actor, "lesson-a", {
+      teacherId: "teacher-b",
+    });
+
+    expect(notifications.notifyUser).toHaveBeenCalledTimes(2);
+    // NEW teacher keeps the existing reschedule notification.
+    expect(notifications.notifyUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "teacher-user-b",
+        title: "Перенос занятия",
+        channels: ["push", "in_app"],
+        data: { type: "lesson_rescheduled", lessonId: "lesson-a" },
+      }),
+    );
+    // REMOVED teacher gets the new reassignment notification.
+    expect(notifications.notifyUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "teacher-user-a",
+        title: "Занятие переназначено",
+        channels: ["push", "in_app"],
+        data: { type: "lesson_reassigned", lessonId: "lesson-a" },
+      }),
+    );
+    const removed = notifications.notifyUser.mock.calls.find(
+      (c: { userId: string }[]) => c[0].userId === "teacher-user-a",
+    );
+    expect(removed?.[0].body).toContain("откреплены");
+  });
+
   it("creates trial lessons linked to leads", async () => {
     const { service, query, audit, policy } = createService([
       {
