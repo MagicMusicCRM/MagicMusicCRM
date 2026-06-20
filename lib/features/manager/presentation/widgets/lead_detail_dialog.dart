@@ -85,7 +85,12 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   void initState() {
     super.initState();
     _leadData = Map<String, dynamic>.from(widget.lead);
-    _isInternational = !isCanonicalRu(_leadData['phone']?.toString());
+    final initialPhone = _leadData['phone']?.toString();
+    // Auto-detect international only for a non-empty number that isn't canonical RU;
+    // an empty phone stays in the default RU/masked mode (don't pre-check the box).
+    _isInternational = initialPhone != null &&
+        initialPhone.isNotEmpty &&
+        !isCanonicalRu(initialPhone);
     _notesCtrl = TextEditingController(
       text: _leadData['notes']?.toString() ?? '',
     );
@@ -427,8 +432,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                     CheckboxListTile(
                       value: _isInternational,
                       onChanged: (v) => setState(() {
+                        // Keep the current number across a mode toggle — the field's
+                        // ValueKey rebuild reseeds it from _leadData['phone'], so an
+                        // accidental toggle can't wipe an existing phone.
                         _isInternational = v ?? false;
-                        _leadData['phone'] = null;
                         _edited = true;
                       }),
                       title: const Text('Международный номер'),
