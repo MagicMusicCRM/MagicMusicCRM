@@ -1386,6 +1386,106 @@ class MagicCrmService {
     await updateTask(id, status: status);
   }
 
+  // ── Analytics endpoints ───────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getAnalyticsFunnel({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/funnel',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsBranches({
+    String? from,
+    String? to,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/branches',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsLossReasons({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/loss-reasons',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsDebts({String? branchId}) async {
+    final q = <String, dynamic>{};
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/debts',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsForecast({String? branchId}) async {
+    final q = <String, dynamic>{};
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/forecast',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsChurn({
+    int? inactiveDays,
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (inactiveDays != null) q['inactiveDays'] = inactiveDays;
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/churn-risk',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsChatSla({
+    String? from,
+    String? to,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/chats/sla',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsWeeklyReport({
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/weekly-report',
+      queryParameters: q,
+    );
+  }
+
   List<Map<String, dynamic>> _items(Map<String, dynamic> response) {
     final items = response['items'];
     if (items is! List) return const <Map<String, dynamic>>[];

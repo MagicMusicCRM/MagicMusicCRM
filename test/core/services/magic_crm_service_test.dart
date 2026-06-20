@@ -2054,6 +2054,202 @@ void main() {
       expect(comments.single['profiles']['first_name'], 'Иван');
       expect(comments.single['profiles']['last_name'], 'Петров');
     });
+
+    // ── Analytics endpoints ───────────────────────────────────────────────
+
+    test('getAnalyticsFunnel requests /analytics/funnel and maps stages',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/funnel',
+          statusCode: 200,
+          body: {
+            'from': '2026-01-01',
+            'to': '2026-04-01',
+            'stages': [
+              {
+                'statusId': 's1',
+                'name': 'Новый',
+                'sortOrder': 0,
+                'leadsEntered': 100,
+                'ratioToPrevStage': null,
+              },
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final result = await service.getAnalyticsFunnel(
+        from: '2026-01-01',
+        to: '2026-04-01',
+      );
+
+      expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
+      expect(adapter.requests.single.queryParameters['to'], '2026-04-01');
+      expect((result['stages'] as List).first['name'], 'Новый');
+      expect((result['stages'] as List).first['leadsEntered'], 100);
+    });
+
+    test('getAnalyticsDebts requests /analytics/debts and maps buckets',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/debts',
+          statusCode: 200,
+          body: {
+            'buckets': [
+              {'bucket': '0-7', 'students': 5, 'amount': 50000},
+            ],
+            'bucketStudentSum': 5,
+            'distinctStudents': 5,
+            'totalAmount': 50000,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsDebts();
+
+      expect(adapter.requests.single.queryParameters, isEmpty);
+      expect((r['buckets'] as List).first['bucket'], '0-7');
+      expect(r['totalAmount'], 50000);
+    });
+
+    test(
+        'getAnalyticsBranches requests /analytics/branches with date params',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/branches',
+          statusCode: 200,
+          body: {
+            'from': '2026-01-01',
+            'to': '2026-04-01',
+            'branches': [
+              {'branchId': 'b1', 'branchName': 'Центр', 'newLeads': 20},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsBranches(
+        from: '2026-01-01',
+        to: '2026-04-01',
+      );
+
+      expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
+      expect((r['branches'] as List).first['branchName'], 'Центр');
+    });
+
+    test(
+        'getAnalyticsWeeklyReport requests /analytics/weekly-report',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/weekly-report',
+          statusCode: 200,
+          body: {
+            'weekStart': '2026-06-10',
+            'weekEnd': '2026-06-16',
+            'newLeads': 12,
+            'tasks': 8,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsWeeklyReport(branchId: 'b1');
+
+      expect(
+        adapter.requests.single.queryParameters['branchId'],
+        'b1',
+      );
+      expect(r['newLeads'], 12);
+    });
+
+    test('getAnalyticsLossReasons requests /analytics/loss-reasons', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/loss-reasons',
+          statusCode: 200,
+          body: {
+            'reasons': [
+              {'reason': 'Дорого', 'count': 10},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsLossReasons(from: '2026-01-01');
+
+      expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
+      expect((r['reasons'] as List).first['reason'], 'Дорого');
+    });
+
+    test('getAnalyticsForecast requests /analytics/forecast', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/forecast',
+          statusCode: 200,
+          body: {
+            'forecastAmount': 120000,
+            'confirmedAmount': 80000,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsForecast(branchId: 'b1');
+
+      expect(adapter.requests.single.queryParameters['branchId'], 'b1');
+      expect(r['forecastAmount'], 120000);
+    });
+
+    test('getAnalyticsChurn requests /analytics/churn-risk', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/churn-risk',
+          statusCode: 200,
+          body: {
+            'atRisk': 7,
+            'students': [
+              {'studentId': 's1', 'daysSinceLastLesson': 30},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsChurn(inactiveDays: 21);
+
+      expect(adapter.requests.single.queryParameters['inactiveDays'], 21);
+      expect(r['atRisk'], 7);
+    });
+
+    test('getAnalyticsChatSla requests /analytics/chats/sla', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/chats/sla',
+          statusCode: 200,
+          body: {
+            'avgResponseMs': 45000,
+            'withinSlaPercent': 92.5,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsChatSla(
+        from: '2026-06-01',
+        to: '2026-06-30',
+      );
+
+      expect(adapter.requests.single.queryParameters['from'], '2026-06-01');
+      expect(r['avgResponseMs'], 45000);
+    });
   });
 }
 
