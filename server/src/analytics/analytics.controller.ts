@@ -59,6 +59,11 @@ export class AnalyticsController {
     return this.analytics.churnRisk(actor, query);
   }
 
+  @Get("weekly-report")
+  weeklyReport(@CurrentActor() actor: ActorContext, @Query() query: { branchId?: string }) {
+    return this.analytics.weeklyReport(actor, query);
+  }
+
   @Get("chats/sla")
   chatsSla(
     @CurrentActor() actor: ActorContext,

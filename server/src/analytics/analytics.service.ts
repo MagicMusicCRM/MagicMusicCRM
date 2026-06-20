@@ -369,6 +369,33 @@ export class AnalyticsService {
     };
   }
 
+  async weeklyReport(actor: ActorContext, query: { branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const to = new Date().toISOString();
+    const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const branchId = query.branchId;
+    const dated = { from, to, branchId };
+    const [funnel, debts, forecast, churn, branches, lossReasons, chatSla] = await Promise.all([
+      this.funnel(actor, dated),
+      this.debts(actor, { branchId }),
+      this.revenueForecast(actor, { branchId }),
+      this.churnRisk(actor, { branchId }),
+      this.branchComparison(actor, { from, to }),
+      this.lossReasons(actor, dated),
+      this.chatsSla(actor, dated),
+    ]);
+    return {
+      window: { from, to },
+      funnel,
+      debts,
+      forecast,
+      churn: { inactiveDays: churn.inactiveDays, totalAtRisk: churn.totalAtRisk },
+      branches,
+      lossReasons,
+      chatSla,
+    };
+  }
+
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const { items } = await this.financeMonthly(actor, query);
     const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";

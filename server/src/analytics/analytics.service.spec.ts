@@ -159,6 +159,30 @@ describe("AnalyticsService", () => {
     expect(query.mock.calls[0][1][2]).toBe("11111111-1111-1111-1111-111111111111");
   });
 
+  it("weeklyReport composes the sub-reports over a 7-day window, gated", async () => {
+    const { service, policy } = build([]);
+    jest.spyOn(service, "funnel").mockResolvedValue({ from: "x", to: "y", stages: ["F"] } as never);
+    jest.spyOn(service, "debts").mockResolvedValue({ buckets: ["D"] } as never);
+    jest.spyOn(service, "revenueForecast").mockResolvedValue({ next7: 1, next14: 2, next30: 3 } as never);
+    jest.spyOn(service, "churnRisk").mockResolvedValue({ inactiveDays: 21, students: [{}], totalAtRisk: 42 } as never);
+    jest.spyOn(service, "branchComparison").mockResolvedValue({ branches: ["B"] } as never);
+    jest.spyOn(service, "lossReasons").mockResolvedValue({ reasons: ["L"], unspecifiedCount: 3 } as never);
+    jest.spyOn(service, "chatsSla").mockResolvedValue({ avgMinutes: 5 } as never);
+
+    const result = await service.weeklyReport(actor, {});
+
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(result.funnel).toEqual({ from: "x", to: "y", stages: ["F"] });
+    expect(result.debts).toEqual({ buckets: ["D"] });
+    expect(result.forecast).toEqual({ next7: 1, next14: 2, next30: 3 });
+    expect(result.churn).toEqual({ inactiveDays: 21, totalAtRisk: 42 }); // summary only, no student list
+    expect(result.branches).toEqual({ branches: ["B"] });
+    expect(result.lossReasons).toEqual({ reasons: ["L"], unspecifiedCount: 3 });
+    expect(result.chatSla).toEqual({ avgMinutes: 5 });
+    expect(result.window.from).toBeDefined();
+    expect(result.window.to).toBeDefined();
+  });
+
   it("lossReasons groups terminal-transition reasons, gated to manager/admin", async () => {
     const query = jest.fn()
       .mockResolvedValueOnce({ rows: [
