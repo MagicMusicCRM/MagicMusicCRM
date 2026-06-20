@@ -4345,14 +4345,20 @@ export class CrmService {
       if (existing.rows[0]) {
         return { leadId: existing.rows[0].entity_id, created: false };
       }
+      // KVA-175: stamp the funnel entry status «Новый» so a manually-saved
+      // lead doesn't land in «Без статуса» (mirrors C6 autoCreateLeadFromChat).
+      const statusRow = await this.database.query<{ id: string }>(
+        `select id from app.lead_statuses where lower(btrim(name)) = 'новый' limit 1`,
+      );
+      const defaultStatusId = statusRow.rows[0]?.id ?? null;
       const leadId = await this.database.transaction(async (client) => {
         const inserted = await client.query<{ id: string }>(
           `
-            insert into app.leads (first_name, last_name, phone, source, created_by)
-            values ($1, $2, $3, 'Чат', $4)
+            insert into app.leads (first_name, last_name, phone, source, status_id, created_by)
+            values ($1, $2, $3, 'Чат', $4, $5)
             returning id
           `,
-          [firstName, lastName, phone, actor.userId],
+          [firstName, lastName, phone, defaultStatusId, actor.userId],
         );
         const id = inserted.rows[0].id;
         await client.query(

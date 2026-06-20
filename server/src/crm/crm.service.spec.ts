@@ -3420,7 +3420,8 @@ describe("CrmService", () => {
           },
         ],
       })
-      .mockResolvedValueOnce({ rows: [] }); // no existing link
+      .mockResolvedValueOnce({ rows: [] }) // no existing link
+      .mockResolvedValueOnce({ rows: [{ id: "status-new" }] }); // «Новый» status lookup (KVA-175)
     const clientQuery = jest
       .fn()
       .mockResolvedValueOnce({ rows: [{ id: "lead-new" }] }) // insert lead
@@ -3444,6 +3445,9 @@ describe("CrmService", () => {
     });
     expect(result).toEqual({ leadId: "lead-new", created: true });
     expect(clientQuery).toHaveBeenCalledTimes(2);
+    // KVA-175: the new lead is stamped with the «Новый» funnel status so it
+    // doesn't land in «Без статуса».
+    expect(clientQuery.mock.calls[0][1]).toContain("status-new");
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.lead_created",
