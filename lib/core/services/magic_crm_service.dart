@@ -766,6 +766,34 @@ class MagicCrmService {
     };
   }
 
+  Future<List<Map<String, dynamic>>> getLeadStatusHistory(String leadId) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/leads/$leadId/status-history',
+    );
+    return _mapList(response['items'], _legacyStatusHistoryItem);
+  }
+
+  Future<Map<String, dynamic>> getFamilyForEntity({
+    required String entityType,
+    required String entityId,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/families/by-entity/$entityType/$entityId',
+    );
+    final family = response['family'];
+    return {
+      'family': family is Map<String, dynamic>
+          ? {
+              'id': family['id'],
+              'name': family['name'],
+              'branch_id': family['branchId'],
+              'primary_payer_member_id': family['primaryPayerMemberId'],
+            }
+          : null,
+      'members': _mapList(response['members'], _legacyFamilyMember),
+    };
+  }
+
   Future<Map<String, dynamic>> createLead({
     required String firstName,
     String? lastName,
@@ -2054,6 +2082,31 @@ class MagicCrmService {
         'first_name': _splitName(item['authorName']?.toString() ?? '').$1,
         'last_name': _splitName(item['authorName']?.toString() ?? '').$2,
       },
+    };
+  }
+
+  Map<String, dynamic> _legacyStatusHistoryItem(Map<String, dynamic> item) {
+    return {
+      'id': item['id'],
+      'old_status': item['oldStatus'],
+      'new_status': item['newStatus'],
+      'old_owner_id': item['oldOwnerId'],
+      'new_owner_id': item['newOwnerId'],
+      'changed_by': item['changedBy'],
+      'changed_at': item['changedAt'],
+      'reason_id': item['reasonId'],
+      'comment': item['comment'],
+    };
+  }
+
+  Map<String, dynamic> _legacyFamilyMember(Map<String, dynamic> item) {
+    return {
+      'id': item['id'],
+      'entity_type': item['entityType'],
+      'entity_id': item['entityId'],
+      'role': item['role'],
+      'is_primary_contact': item['isPrimaryContact'] == true,
+      'name': item['name'],
     };
   }
 

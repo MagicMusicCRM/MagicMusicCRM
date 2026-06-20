@@ -2336,6 +2336,112 @@ void main() {
       expect(items.single['name'], 'Вокал');
       expect(adapter.requests.single.queryParameters, isEmpty);
     });
+
+    test(
+      'getLeadStatusHistory requests /crm/leads/{id}/status-history and maps items',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/leads/lead-a/status-history',
+            statusCode: 200,
+            body: {
+              'items': [
+                {
+                  'id': 'h1',
+                  'oldStatus': 'Новый',
+                  'newStatus': 'В работе',
+                  'oldOwnerId': null,
+                  'newOwnerId': 'user-b',
+                  'changedBy': 'user-a',
+                  'changedAt': '2026-06-10T12:00:00.000Z',
+                  'reasonId': null,
+                  'comment': 'Перевёл в работу',
+                },
+              ],
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        final items = await service.getLeadStatusHistory('lead-a');
+
+        expect(adapter.requests.single, isNotNull);
+        expect(items.single['old_status'], 'Новый');
+        expect(items.single['new_status'], 'В работе');
+        expect(items.single['changed_at'], '2026-06-10T12:00:00.000Z');
+        expect(items.single['comment'], 'Перевёл в работу');
+      },
+    );
+
+    test(
+      'getFamilyForEntity requests /crm/families/by-entity/{type}/{id} and maps family + members',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/families/by-entity/lead/lead-a',
+            statusCode: 200,
+            body: {
+              'family': {
+                'id': 'fam-1',
+                'name': 'Ивановы',
+                'branchId': 'branch-a',
+                'primaryPayerMemberId': 'm2',
+              },
+              'members': [
+                {
+                  'id': 'm1',
+                  'entityType': 'lead',
+                  'entityId': 'lead-a',
+                  'role': 'child',
+                  'isPrimaryContact': false,
+                  'name': 'Аня Иванова',
+                },
+                {
+                  'id': 'm2',
+                  'entityType': 'profile',
+                  'entityId': 'prof-1',
+                  'role': 'parent',
+                  'isPrimaryContact': true,
+                  'name': 'Мария Иванова',
+                },
+              ],
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        final result = await service.getFamilyForEntity(
+          entityType: 'lead',
+          entityId: 'lead-a',
+        );
+
+        expect((result['family'] as Map)['name'], 'Ивановы');
+        expect((result['family'] as Map)['primary_payer_member_id'], 'm2');
+        final members = result['members'] as List;
+        expect(members.length, 2);
+        expect(members.last['is_primary_contact'], true);
+        expect(members.last['name'], 'Мария Иванова');
+      },
+    );
+
+    test('getFamilyForEntity returns null family when entity has no family', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/families/by-entity/student/student-x',
+          statusCode: 200,
+          body: {'family': null, 'members': <dynamic>[]},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final result = await service.getFamilyForEntity(
+        entityType: 'student',
+        entityId: 'student-x',
+      );
+
+      expect(result['family'], isNull);
+      expect((result['members'] as List), isEmpty);
+    });
   });
 }
 
