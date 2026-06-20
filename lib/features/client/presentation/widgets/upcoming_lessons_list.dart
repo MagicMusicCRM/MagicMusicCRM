@@ -10,17 +10,31 @@ import 'package:magic_music_crm/core/widgets/skeletons.dart';
 final upcomingLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
+  // Scope to the student selected in the portal switcher (KVA-156); falls back
+  // to the first linked student via magicCurrentStudentIdProvider.
+  final studentId = ref.watch(magicCurrentStudentIdProvider).asData?.value;
+  if (studentId == null) return const [];
   return ref
       .watch(magicCrmServiceProvider)
-      .listLessons(from: DateTime.now().toIso8601String(), limit: 20);
+      .listLessons(
+        studentId: studentId,
+        from: DateTime.now().toIso8601String(),
+        limit: 20,
+      );
 });
 
 final pastLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
+  final studentId = ref.watch(magicCurrentStudentIdProvider).asData?.value;
+  if (studentId == null) return const [];
   return ref
       .watch(magicCrmServiceProvider)
-      .listLessons(to: DateTime.now().toIso8601String(), limit: 50);
+      .listLessons(
+        studentId: studentId,
+        to: DateTime.now().toIso8601String(),
+        limit: 50,
+      );
 });
 
 class UpcomingLessonsList extends ConsumerStatefulWidget {

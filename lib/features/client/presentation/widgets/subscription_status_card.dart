@@ -6,6 +6,8 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 
 final subscriptionProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  // magicCurrentStudentIdProvider derives from the portal switcher selection
+  // (KVA-156), so switching children re-evaluates and re-renders this card.
   final studentIdAsync = ref.watch(magicCurrentStudentIdProvider);
   final studentId = studentIdAsync.asData?.value;
 
