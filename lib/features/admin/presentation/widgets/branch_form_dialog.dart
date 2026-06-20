@@ -57,7 +57,12 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
 
   Future<void> _save() async {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Введите название филиала')),
+      );
+      return;
+    }
 
     setState(() => _saving = true);
     try {
@@ -81,6 +86,12 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
         );
       }
       if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось сохранить филиал: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
