@@ -3037,8 +3037,10 @@ class _MessageListViewState extends State<_MessageListView> {
           // KVA-174: auto-scroll only when already at the bottom.
           WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
         } else {
-          // KVA-174: count unseen messages while user is scrolled up.
-          setState(() => _unreadCount++);
+          // KVA-174: count unseen messages while scrolled up — by the actual
+          // number added so a burst/batch delivery isn't undercounted.
+          final added = widget.messages.length - old.messages.length;
+          if (added > 0) setState(() => _unreadCount += added);
         }
       }
     }
