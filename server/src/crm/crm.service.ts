@@ -4826,6 +4826,28 @@ export class CrmService {
         )
       `);
     }
+    if (query.hideConverted === true) {
+      filters.push(`
+        not exists (
+          select 1
+          from app.students linked_conv
+          left join app.profiles p_conv
+            on p_conv.id = linked_conv.profile_id
+           and p_conv.deleted_at is null
+          where linked_conv.deleted_at is null
+            and linked_conv.status = 'active'
+            and (
+              linked_conv.lead_id = l.id
+              or (
+                l.phone_normalized is not null
+                and p_conv.phone_normalized = l.phone_normalized
+                and lower(btrim(coalesce(p_conv.first_name, ''))) = lower(btrim(coalesce(l.first_name, '')))
+                and lower(btrim(coalesce(p_conv.last_name, '')))  = lower(btrim(coalesce(l.last_name, '')))
+              )
+            )
+        )
+      `);
+    }
     const cursor = this.decodeLeadCursor(query.cursor);
     if (cursor) {
       const createdAt = add(cursor.createdAt);

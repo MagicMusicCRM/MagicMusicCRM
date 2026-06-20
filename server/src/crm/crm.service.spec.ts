@@ -1850,6 +1850,32 @@ describe("CrmService", () => {
     expect(query.mock.calls[2][1]).toContain(10);
   });
 
+  it("hides converted leads from the board when hideConverted is set", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // statuses
+      { rows: [] }, // counts
+      { rows: [] }, // leads
+    ]);
+    await service.listLeadBoard(actor, { hideConverted: true });
+    // count query (call 1) and lead query (call 2) both carry the predicate
+    expect(query.mock.calls[1][0]).toContain("from app.students");
+    expect(query.mock.calls[1][0]).toContain("linked_conv.lead_id = l.id");
+    expect(query.mock.calls[1][0]).toContain(
+      "p_conv.phone_normalized = l.phone_normalized",
+    );
+    expect(query.mock.calls[2][0]).toContain("not exists");
+  });
+
+  it("does not add the converted filter by default", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+    ]);
+    await service.listLeadBoard(actor, {});
+    expect(query.mock.calls[2][0]).not.toContain("linked_conv.lead_id = l.id");
+  });
+
   it("returns lead card aggregate with linked records and timeline", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       {

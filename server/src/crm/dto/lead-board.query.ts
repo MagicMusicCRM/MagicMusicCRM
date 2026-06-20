@@ -88,6 +88,11 @@ export class LeadBoardQuery {
   openTasks?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  hideConverted?: boolean;
+
+  @IsOptional()
   @IsString()
   @MaxLength(180)
   cursor?: string;
