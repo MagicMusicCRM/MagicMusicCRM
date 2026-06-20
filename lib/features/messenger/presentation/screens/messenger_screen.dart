@@ -42,6 +42,10 @@ import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_sc
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_students_widget.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
+import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
+import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:mime/mime.dart';
 
 void _logMessenger(String message) {
@@ -246,10 +250,28 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   // ── CRM actions from a chat (staff only) ───────────────────────────────────
 
+  // KVA-173/174/175 helper — floating above the input bar.
+  void _showChatSnack(
+    String text, {
+    Color? bg,
+    Duration? duration,
+    SnackBarAction? action,
+  }) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: bg,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 72, left: 12, right: 12),
+        duration: duration ?? const Duration(seconds: 4),
+        action: action,
+      ),
+    );
+  }
+
   Future<void> _saveContactFromChat(String as) async {
     final partnerId = _selectedPartnerId;
     if (partnerId == null || partnerId.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
     final label = as == 'lead' ? 'лид' : 'ученик';
     try {
       final result = await ref
@@ -257,32 +279,53 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           .saveContactFromChat(userId: partnerId, as: as);
       if (!mounted) return;
       final created = result['created'] == true;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            created
-                ? 'Контакт сохранён как $label'
-                : 'Контакт уже был сохранён как $label',
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
+      final leadId = result['leadId']?.toString() ?? '';
+      // KVA-175: offer to open the lead card straight from the snackbar.
+      final leadStub = <String, dynamic>{'id': leadId};
+      _showChatSnack(
+        created
+            ? 'Контакт сохранён как $label'
+            : 'Контакт уже был сохранён как $label',
+        bg: Colors.green,
+        action: (as == 'lead' && leadId.isNotEmpty)
+            ? SnackBarAction(
+                label: 'Открыть карточку',
+                textColor: Colors.white,
+                onPressed: () => _openLeadCard(leadStub),
+              )
+            : null,
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Не удалось сохранить: $e'),
-          backgroundColor: TelegramColors.danger,
-        ),
-      );
+      _showChatSnack('Не удалось сохранить: $e', bg: TelegramColors.danger);
     }
+  }
+
+  // KVA-175: open LeadDetailDialog for a given lead stub/map.
+  Future<void> _openLeadCard(Map<String, dynamic> lead) async {
+    if (!mounted) return;
+    List<StatusRecord> statuses = [];
+    try {
+      final raw = await ref.read(leadStatusesProvider.future);
+      for (final r in raw) {
+        final key = r['key'].toString();
+        final label = r['label'].toString();
+        final color = statusColorFromValue(r['color']);
+        statuses.add((key, label, color));
+      }
+    } catch (_) {
+      // Dialog still opens; it will fetch its own data.
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => LeadDetailDialog(lead: lead, allStatuses: statuses),
+    );
   }
 
   Future<void> _openContactCard() async {
     final partnerId = _selectedPartnerId;
     if (partnerId == null || partnerId.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final contact = await crm.resolveContactForUser(partnerId);
@@ -294,31 +337,20 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         context.push('/student/$studentId');
       } else if (leadId != null && leadId.isNotEmpty) {
         if (!mounted) return;
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Контакт связан с лидом — откройте его в разделе «Клиенты».',
-            ),
-          ),
-        );
+        // KVA-175: open lead card directly in a dialog instead of redirecting.
+        await _openLeadCard({'id': leadId});
       } else {
         if (!mounted) return;
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Этот контакт ещё не сохранён в CRM. '
-              'Сохраните его как лид или ученик.',
-            ),
-          ),
+        _showChatSnack(
+          'Этот контакт ещё не сохранён в CRM. '
+          'Сохраните его как лид или ученик.',
         );
       }
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Не удалось открыть карточку: $e'),
-          backgroundColor: TelegramColors.danger,
-        ),
+      _showChatSnack(
+        'Не удалось открыть карточку: $e',
+        bg: TelegramColors.danger,
       );
     }
   }
@@ -2898,7 +2930,9 @@ class _MessageListView extends StatefulWidget {
 
 class _MessageListViewState extends State<_MessageListView> {
   final ScrollController _scrollController = ScrollController();
-  bool _showScrollToBottom = false;
+  // KVA-174: replaced _showScrollToBottom with _isAtBottom + _unreadCount.
+  bool _isAtBottom = true;
+  int _unreadCount = 0;
   String? _highlightedMessageId;
   bool _isJumping = false;
 
@@ -2908,19 +2942,24 @@ class _MessageListViewState extends State<_MessageListView> {
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(() {
-      if (_scrollController.hasClients && !_isJumping) {
-        final isNearBottom =
-            _scrollController.position.maxScrollExtent -
-                _scrollController.offset <
-            200;
-        final shouldShow = !isNearBottom;
-        if (shouldShow != _showScrollToBottom) {
-          if (mounted) setState(() => _showScrollToBottom = shouldShow);
-        }
-      }
-    });
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  // KVA-174: track whether the list is scrolled to (near) the bottom.
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final atBottom =
+        _scrollController.offset >=
+        _scrollController.position.maxScrollExtent - 80;
+    if (atBottom && !_isAtBottom) {
+      setState(() {
+        _isAtBottom = true;
+        _unreadCount = 0;
+      });
+    } else if (!atBottom && _isAtBottom) {
+      setState(() => _isAtBottom = false);
+    }
   }
 
   void _jumpToMessage(String messageId) {
@@ -2994,7 +3033,13 @@ class _MessageListViewState extends State<_MessageListView> {
     super.didUpdateWidget(old);
     if (widget.messages.length != old.messages.length) {
       if (!_isJumping) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        if (_isAtBottom) {
+          // KVA-174: auto-scroll only when already at the bottom.
+          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        } else {
+          // KVA-174: count unseen messages while user is scrolled up.
+          setState(() => _unreadCount++);
+        }
       }
     }
   }
@@ -3064,6 +3109,7 @@ class _MessageListViewState extends State<_MessageListView> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
@@ -3135,22 +3181,53 @@ class _MessageListViewState extends State<_MessageListView> {
             );
           },
         ),
-        if (_showScrollToBottom)
+        // KVA-174: scroll-to-bottom button with unread badge.
+        if (!_isAtBottom)
           Positioned(
-            right: 16,
-            bottom: 16,
-            child: AnimatedOpacity(
-              opacity: _showScrollToBottom ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200),
-              child: FloatingActionButton.small(
-                onPressed: _scrollToBottom,
-                backgroundColor: isDark
-                    ? TelegramColors.darkSidebar
-                    : Colors.white,
-                foregroundColor: TelegramColors.brandPurple,
-                elevation: 4,
-                child: const Icon(Icons.arrow_downward_rounded),
-              ),
+            bottom: 12,
+            right: 12,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'scroll_to_bottom',
+                  onPressed: () {
+                    setState(() => _unreadCount = 0);
+                    if (_scrollController.hasClients) {
+                      _scrollController.animateTo(
+                        _scrollController.position.maxScrollExtent,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  },
+                  backgroundColor: isDark
+                      ? TelegramColors.darkSidebar
+                      : Colors.white,
+                  foregroundColor: TelegramColors.brandPurple,
+                  elevation: 4,
+                  child: const Icon(Icons.keyboard_arrow_down),
+                ),
+                if (_unreadCount > 0)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        _unreadCount > 99 ? '99+' : '$_unreadCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
       ],
