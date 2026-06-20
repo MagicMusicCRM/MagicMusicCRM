@@ -19,9 +19,11 @@ final studentBoardProvider =
   branchId,
 ) async {
   final service = ref.watch(magicCrmServiceProvider);
-  final disciplines = await service.listBranchDisciplines(branchId);
-  final search = await service.searchStudents(branchId: branchId, limit: 100);
-  final students = (search['items'] as List).cast<Map<String, dynamic>>();
+  final disciplines = await ref.watch(branchDisciplinesProvider(branchId).future);
+  // TODO: server-side student board endpoint if a branch exceeds this
+  final search = await service.searchStudents(branchId: branchId, limit: 2000);
+  final students =
+      (search['items'] as List? ?? const []).whereType<Map<String, dynamic>>().toList();
   return groupStudentsByDiscipline(disciplines, students);
 });
 
@@ -34,7 +36,8 @@ List<Map<String, dynamic>> groupStudentsByDiscipline(
 ) {
   final ordered = [...disciplines]
     ..sort((a, b) =>
-        ((a['sort_order'] as num?) ?? 0).compareTo((b['sort_order'] as num?) ?? 0));
+        ((a['sort_order'] as num?) ?? (1 << 30))
+            .compareTo((b['sort_order'] as num?) ?? (1 << 30)));
 
   final columns = <Map<String, dynamic>>[
     for (final d in ordered)
