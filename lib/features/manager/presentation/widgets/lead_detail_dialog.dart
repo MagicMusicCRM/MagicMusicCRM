@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
+import 'package:magic_music_crm/core/utils/ru_phone.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 
@@ -27,11 +29,19 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   bool _saving = false;
   bool _converting = false;
   bool _loadingCard = true;
+  // True when the stored phone is not a canonical +7XXXXXXXXXX number so that
+  // foreign numbers open correctly in the plain text field (not mangled by the
+  // RU mask).
+  late bool _isInternational;
   int _commentsRefreshKey = 0;
   Map<String, dynamic>? _leadCard;
   List<Map<String, dynamic>> _duplicateCandidates = [];
   bool _loadingDuplicates = true;
   bool _dirty = false;
+  List<Map<String, dynamic>> _statusHistory = [];
+  bool _loadingHistory = true;
+  Map<String, dynamic>? _family;
+  bool _loadingFamily = true;
   // True once the user has edited a field but not saved — used to warn before
   // discarding unsaved changes on close.
   bool _edited = false;
@@ -75,6 +85,12 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   void initState() {
     super.initState();
     _leadData = Map<String, dynamic>.from(widget.lead);
+    final initialPhone = _leadData['phone']?.toString();
+    // Auto-detect international only for a non-empty number that isn't canonical RU;
+    // an empty phone stays in the default RU/masked mode (don't pre-check the box).
+    _isInternational = initialPhone != null &&
+        initialPhone.isNotEmpty &&
+        !isCanonicalRu(initialPhone);
     _notesCtrl = TextEditingController(
       text: _leadData['notes']?.toString() ?? '',
     );
@@ -82,6 +98,8 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     _fetchMetadata();
     _fetchCard();
     _fetchDuplicateCandidates();
+    _fetchStatusHistory();
+    _fetchFamily();
   }
 
   Future<void> _fetchCard() async {
@@ -121,6 +139,39 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
       });
     } catch (_) {
       if (mounted) setState(() => _loadingDuplicates = false);
+    }
+  }
+
+  Future<void> _fetchStatusHistory() async {
+    try {
+      final items = await ref
+          .read(magicCrmServiceProvider)
+          .getLeadStatusHistory(widget.lead['id'].toString());
+      if (!mounted) return;
+      setState(() {
+        _statusHistory = items;
+        _loadingHistory = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingHistory = false);
+    }
+  }
+
+  Future<void> _fetchFamily() async {
+    try {
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .getFamilyForEntity(
+            entityType: 'lead',
+            entityId: widget.lead['id'].toString(),
+          );
+      if (!mounted) return;
+      setState(() {
+        _family = result;
+        _loadingFamily = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingFamily = false);
     }
   }
 
@@ -301,7 +352,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   Widget build(BuildContext context) {
     final fallbackStatus = widget.allStatuses.isNotEmpty
         ? widget.allStatuses.first
-        : ('new', 'Новый', AppTheme.primaryPurple);
+        : ('new', 'Новый', AppTheme.primaryGold);
     final curStatus = widget.allStatuses.firstWhere(
       (element) => element.$1 == _leadData['status'],
       orElse: () => fallbackStatus,
@@ -364,11 +415,35 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                     _buildStatusPicker(curStatus),
                     _buildTextField('Имя', 'name'),
                     _buildTextField('Фамилия', 'last_name'),
-                    _buildTextField(
-                      'Телефон',
-                      'phone',
-                      keyboard: TextInputType.phone,
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: RuPhoneField(
+                        key: ValueKey('phone:$_isInternational'),
+                        international: _isInternational,
+                        initialCanonical: _leadData['phone']?.toString(),
+                        onCanonicalChanged: (c) {
+                          setState(() {
+                            _leadData['phone'] = c.isEmpty ? null : c;
+                            _edited = true;
+                          });
+                        },
+                      ),
                     ),
+                    CheckboxListTile(
+                      value: _isInternational,
+                      onChanged: (v) => setState(() {
+                        // Keep the current number across a mode toggle — the field's
+                        // ValueKey rebuild reseeds it from _leadData['phone'], so an
+                        // accidental toggle can't wipe an existing phone.
+                        _isInternational = v ?? false;
+                        _edited = true;
+                      }),
+                      title: const Text('Международный номер'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
+                    const SizedBox(height: 8),
                     _buildTextField(
                       'Электронная почта',
                       'email',
@@ -413,6 +488,14 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                     _buildAggregateCard(),
 
                     const SizedBox(height: 16),
+                    _sectionTitle('Семья'),
+                    _buildFamilySection(),
+
+                    const SizedBox(height: 16),
+                    _sectionTitle('История статусов'),
+                    _buildStatusHistorySection(),
+
+                    const SizedBox(height: 16),
                     _sectionTitle('Комментарии'),
                     _CommentsList(
                       leadId: _leadData['id'].toString(),
@@ -425,41 +508,48 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
               ),
             ),
             const Divider(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _saving || _converting ? null : _convertToStudent,
-                  icon: _converting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.person_add_alt_1_rounded),
-                  label: const Text('Создать ученика'),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: _saving || _converting ? null : _handleClose,
-                  child: const Text('Отмена'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _saving || _converting ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryPurple,
-                    foregroundColor: Colors.white,
+            // Wrap so the action buttons reflow onto a second line on narrow
+            // (mobile) dialog widths instead of overflowing on the right.
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed:
+                        _saving || _converting ? null : _convertToStudent,
+                    icon: _converting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.person_add_alt_1_rounded),
+                    label: const Text('Создать ученика'),
                   ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Сохранить'),
-                ),
-              ],
+                  TextButton(
+                    onPressed: _saving || _converting ? null : _handleClose,
+                    child: const Text('Отмена'),
+                  ),
+                  ElevatedButton(
+                    onPressed: _saving || _converting ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryGold,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Сохранить'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -474,7 +564,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
       child: Text(
         title,
         style: const TextStyle(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -708,7 +798,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
         ),
         IconButton(
           onPressed: _addComment,
-          icon: const Icon(Icons.send_rounded, color: AppTheme.primaryPurple),
+          icon: const Icon(Icons.send_rounded, color: AppTheme.primaryGold),
         ),
       ],
     );
@@ -803,6 +893,151 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
           subtitleBuilder: (row) => _formatDate(row['occurred_at']),
         ),
       ],
+    );
+  }
+
+  String _familyRoleLabel(Object? role) {
+    return switch (role?.toString()) {
+      'parent' => 'Родитель',
+      'child' => 'Ребёнок',
+      'guardian' => 'Опекун',
+      'payer' => 'Плательщик',
+      'sibling' => 'Брат/сестра',
+      final value when value != null && value.isNotEmpty => value,
+      _ => 'Член семьи',
+    };
+  }
+
+  Widget _buildFamilySection() {
+    if (_loadingFamily) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(),
+      );
+    }
+    final family = _family?['family'] as Map<String, dynamic>?;
+    final members = _list(_family?['members']);
+    if (family == null) {
+      return Text(
+        'Семья не указана',
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      );
+    }
+    final primaryId = family['primary_payer_member_id']?.toString();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if ((family['name']?.toString().trim().isNotEmpty ?? false))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              family['name'].toString(),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        if (members.isEmpty)
+          Text(
+            'Участники не добавлены',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          )
+        else
+          ...members.map((m) {
+            final isPayer =
+                primaryId != null && m['id']?.toString() == primaryId;
+            final subtitle = [
+              _familyRoleLabel(m['role']),
+              if (m['is_primary_contact'] == true) 'Осн. контакт',
+              if (isPayer) 'Плательщик',
+            ].where((value) => value.isNotEmpty).join(' · ');
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: ListTile(
+                dense: true,
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                tileColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest.withAlpha(120),
+                leading: const Icon(
+                  Icons.people_alt_rounded,
+                  size: 18,
+                  color: AppTheme.primaryGold,
+                ),
+                title: Text(
+                  (m['name']?.toString().trim().isNotEmpty ?? false)
+                      ? m['name'].toString()
+                      : 'Без имени',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: subtitle.isEmpty ? null : Text(subtitle),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildStatusHistorySection() {
+    if (_loadingHistory) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(),
+      );
+    }
+    if (_statusHistory.isEmpty) {
+      return Text(
+        'Изменений статуса пока нет',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 12,
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _statusHistory.take(12).map((h) {
+        final from = h['old_status']?.toString();
+        final to = h['new_status']?.toString();
+        final transition = [
+          if (from != null && from.isNotEmpty) from else '—',
+          '→',
+          if (to != null && to.isNotEmpty) to else '—',
+        ].join(' ');
+        final comment = h['comment']?.toString().trim() ?? '';
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            tileColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withAlpha(120),
+            leading: const Icon(
+              Icons.history_rounded,
+              size: 18,
+              color: AppTheme.primaryGold,
+            ),
+            title: Text(transition, maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text(
+              [
+                _formatDate(h['changed_at']),
+                if (comment.isNotEmpty) comment,
+              ].where((value) => value.isNotEmpty).join(' · '),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -1111,7 +1346,7 @@ class _CommentsList extends ConsumerWidget {
                             ? c['author_name'].toString()
                             : 'Сотрудник',
                         style: const TextStyle(
-                          color: AppTheme.primaryPurple,
+                          color: AppTheme.primaryGold,
                           fontWeight: FontWeight.bold,
                           fontSize: 11,
                         ),

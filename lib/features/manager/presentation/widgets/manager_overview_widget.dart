@@ -161,68 +161,77 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _DashboardHeader(
-                  periodLabel: window.label(),
-                  loading: snapshot.connectionState == ConnectionState.waiting,
-                ),
-                const SizedBox(height: 14),
-                FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _branchesFuture,
-                  builder: (context, branchesSnapshot) {
-                    return _DashboardFilters(
-                      period: _period,
-                      branchId: _branchId,
-                      branches: branchesSnapshot.data ?? const [],
-                      branchesLoading:
-                          branchesSnapshot.connectionState ==
-                              ConnectionState.waiting &&
-                          !branchesSnapshot.hasData,
-                      onPeriodChanged: _setPeriod,
-                      onBranchChanged: _setBranch,
-                    );
-                  },
-                ),
-                const SizedBox(height: 14),
-                _AttentionPanel(
-                  overdueTasks: _asNum(kpis['overdue_tasks']),
-                  scheduleIssues: _asNum(kpis['schedule_issues']),
-                  debtStudents: _asNum(kpis['debt_students']),
-                  expectedPayments: _asNum(kpis['expected_payments']),
-                  onTasksTap: () => widget.onTabChange?.call(6, null),
-                  onScheduleTap: () => widget.onTabChange?.call(2, null),
-                  onDebtsTap: () => widget.onTabChange?.call(5, null),
-                ),
-                const SizedBox(height: 14),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final tileWidth = constraints.maxWidth >= 1040
-                        ? (constraints.maxWidth - 20) / 3
-                        : constraints.maxWidth >= 680
-                        ? (constraints.maxWidth - 10) / 2
-                        : constraints.maxWidth;
-                    return Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: _kpiSpecs(sources).map((spec) {
-                        return SizedBox(
-                          width: tileWidth,
-                          child: _KpiTile(
-                            icon: spec.icon,
-                            label: spec.label,
-                            value: spec.format(kpis[spec.key]),
-                            accent: spec.accent,
-                            sourceLabel: spec.sourceLabel,
-                            onTap: spec.onTap,
-                          ),
+            child: Center(
+              child: ConstrainedBox(
+                // Keep the dashboard readable instead of stretching cards and
+                // KPI tiles across the whole desktop window. Matches the
+                // AdminOverviewWidget constraint for cross-panel consistency.
+                constraints: const BoxConstraints(maxWidth: 1100),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _DashboardHeader(
+                      periodLabel: window.label(),
+                      loading:
+                          snapshot.connectionState == ConnectionState.waiting,
+                    ),
+                    const SizedBox(height: 14),
+                    FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _branchesFuture,
+                      builder: (context, branchesSnapshot) {
+                        return _DashboardFilters(
+                          period: _period,
+                          branchId: _branchId,
+                          branches: branchesSnapshot.data ?? const [],
+                          branchesLoading:
+                              branchesSnapshot.connectionState ==
+                                  ConnectionState.waiting &&
+                              !branchesSnapshot.hasData,
+                          onPeriodChanged: _setPeriod,
+                          onBranchChanged: _setBranch,
                         );
-                      }).toList(),
-                    );
-                  },
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    _AttentionPanel(
+                      overdueTasks: _asNum(kpis['overdue_tasks']),
+                      scheduleIssues: _asNum(kpis['schedule_issues']),
+                      debtStudents: _asNum(kpis['debt_students']),
+                      expectedPayments: _asNum(kpis['expected_payments']),
+                      onTasksTap: () => widget.onTabChange?.call(6, null),
+                      onScheduleTap: () => widget.onTabChange?.call(2, null),
+                      onDebtsTap: () => widget.onTabChange?.call(5, null),
+                    ),
+                    const SizedBox(height: 14),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final tileWidth = constraints.maxWidth >= 1040
+                            ? (constraints.maxWidth - 20) / 3
+                            : constraints.maxWidth >= 680
+                            ? (constraints.maxWidth - 10) / 2
+                            : constraints.maxWidth;
+                        return Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: _kpiSpecs(sources).map((spec) {
+                            return SizedBox(
+                              width: tileWidth,
+                              child: _KpiTile(
+                                icon: spec.icon,
+                                label: spec.label,
+                                value: spec.format(kpis[spec.key]),
+                                accent: spec.accent,
+                                sourceLabel: spec.sourceLabel,
+                                onTap: spec.onTap,
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );
@@ -263,7 +272,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         key: 'active_students',
         label: 'Активные ученики',
         icon: Icons.school_rounded,
-        accent: AppTheme.primaryPurple,
+        accent: AppTheme.primaryGold,
         sourceLabel: 'CRM',
         format: _count,
         onTap: () => widget.onTabChange?.call(4, null),
@@ -317,7 +326,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         key: 'room_load_lessons',
         label: 'Загрузка аудиторий',
         icon: Icons.meeting_room_rounded,
-        accent: AppTheme.primaryPurple,
+        accent: AppTheme.primaryGold,
         sourceLabel: _sourceLabel(sources['schedule'], 'Расписание'),
         format: _count,
         onTap: () => widget.onTabChange?.call(7, null),
@@ -621,7 +630,7 @@ class _KpiTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: Container(
           height: 86,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.white.withAlpha(10)),
@@ -642,6 +651,7 @@ class _KpiTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       value,

@@ -81,7 +81,7 @@ class _LessonAttendanceDialogState
     return AlertDialog(
       title: const Text('Посещаемость'),
       content: _loading
-          ? const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)))
+          ? const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: AppTheme.primaryGold)))
           : SizedBox(
               width: double.maxFinite,
               child: ListView.separated(

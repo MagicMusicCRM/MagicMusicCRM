@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
 
 class ReportsWidget extends ConsumerStatefulWidget {
   final int initialTab;
@@ -32,9 +33,9 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
+      length: 4,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 2),
+      initialIndex: widget.initialTab.clamp(0, 3),
     );
     _loadReports();
   }
@@ -42,7 +43,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   @override
   void didUpdateWidget(covariant ReportsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextTab = widget.initialTab.clamp(0, 2);
+    final nextTab = widget.initialTab.clamp(0, 3);
     if (nextTab != _tabController.index) {
       _tabController.index = nextTab;
     }
@@ -100,7 +101,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
       );
     }
     if (_loadError != null) {
@@ -111,13 +112,14 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       children: [
         TabBar(
           controller: _tabController,
-          labelColor: AppTheme.primaryPurple,
+          labelColor: AppTheme.primaryGold,
           unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
-          indicatorColor: AppTheme.primaryPurple,
+          indicatorColor: AppTheme.primaryGold,
           tabs: const [
             Tab(text: 'Аналитика'),
             Tab(text: 'Финансы'),
             Tab(text: 'Активность'),
+            Tab(text: 'Управление'),
           ],
         ),
         Expanded(
@@ -127,6 +129,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               _buildOverviewTab(),
               const FinancialDashboardWidget(),
               const _ActivityLogTab(),
+              const ManagementDashboardWidget(),
             ],
           ),
         ),
@@ -144,7 +147,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
         : _monthlyData.map((m) => m.lessons).reduce((a, b) => a > b ? a : b);
 
     return RefreshIndicator(
-      color: AppTheme.primaryPurple,
+      color: AppTheme.primaryGold,
       onRefresh: _loadReports,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -196,12 +199,12 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                         visualDensity: VisualDensity.compact,
                         backgroundColor: WidgetStateProperty.resolveWith(
                           (states) => states.contains(WidgetState.selected)
-                              ? AppTheme.primaryPurple.withAlpha(30)
+                              ? AppTheme.primaryGold.withAlpha(30)
                               : Colors.transparent,
                         ),
                         foregroundColor: WidgetStateProperty.resolveWith(
                           (states) => states.contains(WidgetState.selected)
-                              ? AppTheme.primaryPurple
+                              ? AppTheme.primaryGold
                               : Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
@@ -237,7 +240,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                     label: 'Занятий',
                     value: '${_summary['total_lessons'] ?? 0}',
                     icon: Icons.calendar_month_rounded,
-                    color: AppTheme.primaryPurple,
+                    color: AppTheme.primaryGold,
                   ),
                 ),
               ],
@@ -442,7 +445,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                       _SmallStat(
                         label: 'занятий',
                         value: '${m.lessons}',
-                        color: AppTheme.primaryPurple,
+                        color: AppTheme.primaryGold,
                       ),
                       const SizedBox(width: 16),
                       _SmallStat(
@@ -501,12 +504,12 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               final revenue = double.tryParse('${e['revenue']}') ?? 0;
               return ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                  backgroundColor: AppTheme.primaryGold.withAlpha(30),
                   radius: 16,
                   child: const Icon(
                     Icons.person_outline_rounded,
                     size: 16,
-                    color: AppTheme.primaryPurple,
+                    color: AppTheme.primaryGold,
                   ),
                 ),
                 title: Text(
@@ -836,7 +839,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
           child: _loading
               ? const Center(
                   child: CircularProgressIndicator(
-                    color: AppTheme.primaryPurple,
+                    color: AppTheme.primaryGold,
                   ),
                 )
               : _loadError != null
@@ -851,7 +854,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
                   ),
                 )
               : RefreshIndicator(
-                  color: AppTheme.primaryPurple,
+                  color: AppTheme.primaryGold,
                   onRefresh: _loadActivity,
                   child: ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -956,7 +959,7 @@ class _ActivityLogTile extends StatelessWidget {
                       if (entityType != null && entityType.isNotEmpty)
                         _ReportTag(
                           label: _activityEntityLabel(entityType),
-                          color: AppTheme.primaryPurple,
+                          color: AppTheme.primaryGold,
                         ),
                       if (historyType != null && historyType.isNotEmpty)
                         _ReportTag(
@@ -1084,7 +1087,7 @@ Color _activityColor(String action) {
   if (action.contains('created') || action.contains('create')) {
     return AppTheme.success;
   }
-  return AppTheme.primaryPurple;
+  return AppTheme.primaryGold;
 }
 
 String _activityLabel(String action) {

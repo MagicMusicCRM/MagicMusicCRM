@@ -6,7 +6,10 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
+import { normalizePhoneRu } from "../crm/phone.util";
 import { deterministicUuid, sha256Hex } from "./v3-import-utils";
+import { disciplineEntries, contactEntries, primaryBranchId } from "./hollihop-mappers";
+import { appendMoscowOffset, historyEntryFromRow } from "./hollihop-history-mappers";
 
 type JsonRow = Record<string, unknown>;
 type ImportMode = "dry_run" | "apply";
@@ -46,6 +49,7 @@ interface HolliHopData {
   leadLogs: JsonRow[];
   systemLogs: JsonRow[];
   comments: JsonRow[];
+  leadStatusHistory: JsonRow[];
 }
 
 interface WarningEntry {
@@ -264,6 +268,7 @@ async function importAll(
   const staffUserById = new Map<string, string>();
   const studentByClientId = new Map<string, string>();
   const leadById = new Map<string, string>();
+  const leadBranchById = new Map<string, string>();
   const groupById = new Map<string, string>();
   const groupMembers = new Map<string, string[]>();
   const roomByKey = new Map<string, string>();
@@ -297,6 +302,14 @@ async function importAll(
       message:
         "No HolliHop history/comment/action-log sources were available. Unified timeline import is limited to tasks/payments/lessons.",
       source: "timeline",
+    });
+  }
+  if (data.leadStatusHistory.length === 0) {
+    warn(ctx, {
+      code: "lead_status_history_source_missing",
+      message:
+        "No HolliHop GetHistoryModifyLeadStatus rows were available. Lead status-transition history was not imported.",
+      source: "leadStatusHistory",
     });
   }
 
@@ -622,6 +635,8 @@ async function importAll(
         "UseEMailBySystem",
       ],
     });
+    const branchIds = branchIdsFromRow(student, branchByOffice);
+    const studentBranchId = primaryBranchId(branchIds);
     await planUpsert(
       ctx,
       "students",
@@ -630,6 +645,7 @@ async function importAll(
         id: studentId,
         profile_id: studentProfile.profileId,
         status: normalizeStudentStatus(text(student.Status)),
+        branch_id: studentBranchId,
         custom_data: {
           hollihopId: externalId,
           hollihopClientId: clientId,
@@ -642,7 +658,7 @@ async function importAll(
           agents: student.Agents,
           adSource: text(student.AdSource),
           position: text(student.Position),
-          branchIds: branchIdsFromRow(student, branchByOffice),
+          branchIds: branchIds,
           hasPersonalCabinet: booleanValue(student.HasPersonalCabinet),
           hasPayments: booleanValue(student.HasPayments),
           blacklist: booleanValue(student.Blacklist) ?? false,
@@ -652,6 +668,57 @@ async function importAll(
       },
       ["id"],
     );
+
+    // Disciplines → app.disciplines + app.student_disciplines (is_primary).
+    for (const d of disciplineEntries(student.Disciplines)) {
+      const disciplineId = deterministicUuid("hollihop-discipline", d.name.toLowerCase());
+      await planUpsert(ctx, "disciplines", "app.disciplines", { id: disciplineId, name: d.name }, ["id"]);
+      await planUpsert(
+        ctx,
+        "student_disciplines",
+        "app.student_disciplines",
+        {
+          id: deterministicUuid("hollihop-student-discipline", `${studentId}:${disciplineId}`),
+          student_id: studentId,
+          discipline_id: disciplineId,
+          is_primary: d.isPrimary,
+        },
+        ["student_id", "discipline_id"],
+      );
+      // Make the discipline a column of the student's branch board.
+      if (studentBranchId) {
+        await planUpsert(
+          ctx,
+          "branch_disciplines",
+          "app.branch_disciplines",
+          {
+            id: deterministicUuid("hollihop-branch-discipline", `${studentBranchId}:${disciplineId}`),
+            branch_id: studentBranchId,
+            discipline_id: disciplineId,
+          },
+          ["branch_id", "discipline_id"],
+        );
+      }
+    }
+
+    // Contacts (parents/agents) → app.contacts.
+    for (const c of contactEntries(student.Agents, (p) => normalizePhoneRu(p).canonical)) {
+      await planUpsert(
+        ctx,
+        "contacts",
+        "app.contacts",
+        {
+          id: deterministicUuid("hollihop-contact", `student:${studentId}:${c.phoneNormalized ?? ""}:${c.name ?? ""}`),
+          entity_type: "student",
+          entity_id: studentId,
+          phone_normalized: c.phoneNormalized,
+          name: c.name,
+          role: c.role,
+        },
+        ["id"],
+      );
+    }
+
     duplicateSeeds.push({
       entityType: "student",
       entityId: studentId,
@@ -669,6 +736,8 @@ async function importAll(
     }
     const leadId = deterministicUuid("hollihop-lead", externalId);
     leadById.set(externalId, leadId);
+    const leadBranchId = primaryBranchId(branchIdsFromRow(lead, branchByOffice));
+    if (leadBranchId) leadBranchById.set(externalId, leadBranchId);
     const phone = text(lead.Mobile) ?? text(lead.Phone);
     await recordSource(ctx, {
       source: "leads",
@@ -723,6 +792,7 @@ async function importAll(
         source: text(lead.AdSource) ?? text(lead.Source),
         notes: text(lead.Description) ?? text(lead.Comment),
         assigned_to: firstAssigneeUserId(lead, staffUserById),
+        branch_id: leadBranchId,
         custom_data: {
           hollihopId: externalId,
           middleName: text(lead.MiddleName),
@@ -753,6 +823,25 @@ async function importAll(
       },
       ["id"],
     );
+
+    // Contacts (parents/agents) → app.contacts.
+    for (const c of contactEntries(lead.Agents, (p) => normalizePhoneRu(p).canonical)) {
+      await planUpsert(
+        ctx,
+        "contacts",
+        "app.contacts",
+        {
+          id: deterministicUuid("hollihop-contact", `lead:${leadId}:${c.phoneNormalized ?? ""}:${c.name ?? ""}`),
+          entity_type: "lead",
+          entity_id: leadId,
+          phone_normalized: c.phoneNormalized,
+          name: c.name,
+          role: c.role,
+        },
+        ["id"],
+      );
+    }
+
     duplicateSeeds.push({
       entityType: "lead",
       entityId: leadId,
@@ -979,6 +1068,11 @@ async function importAll(
     studentByClientId,
     leadById,
   });
+  await importLeadStatusHistory(ctx, data.leadStatusHistory, {
+    leadById,
+    statusById,
+    leadBranchById,
+  });
 
   const duplicateSummary = await importDuplicateCandidates(ctx, duplicateSeeds);
   await flushSourceRecords(ctx);
@@ -1173,6 +1267,91 @@ async function importTimeline(
         rowId: externalId,
       });
     }
+  }
+}
+
+async function importLeadStatusHistory(
+  ctx: ImportContext,
+  rows: JsonRow[],
+  maps: {
+    leadById: Map<string, string>;
+    statusById: Map<string, string>;
+    leadBranchById: Map<string, string>;
+  },
+) {
+  for (const row of rows) {
+    const entry = historyEntryFromRow(row);
+    if (!entry) {
+      skip(ctx, "leadStatusHistory");
+      continue;
+    }
+    const leadId = maps.leadById.get(entry.leadIdRaw);
+    if (!leadId) {
+      // lead_id is NOT NULL with an FK — never invent it.
+      skip(ctx, "leadStatusHistory");
+      warn(ctx, {
+        code: "lead_status_history_lead_unresolved",
+        message:
+          "HolliHop status-history row references a lead that is not in the imported set.",
+        source: "leadStatusHistory",
+        rowId: `${entry.leadIdRaw}:${entry.dateTimeRaw}`,
+      });
+      continue;
+    }
+    const changedAt = iso(appendMoscowOffset(entry.dateTimeRaw));
+    if (!changedAt) {
+      skip(ctx, "leadStatusHistory");
+      warn(ctx, {
+        code: "lead_status_history_datetime_invalid",
+        message: "HolliHop status-history row had an unparseable DateTime.",
+        source: "leadStatusHistory",
+        rowId: `${entry.leadIdRaw}:${entry.dateTimeRaw}`,
+      });
+      continue;
+    }
+    const newStatusId = entry.afterIdRaw
+      ? maps.statusById.get(entry.afterIdRaw) ?? null
+      : null;
+    if (entry.afterIdRaw && !newStatusId) {
+      // Keep the row (the transition time is real) but flag the lost mapping.
+      warn(ctx, {
+        code: "lead_status_history_status_unresolved",
+        message:
+          "HolliHop status-history AfterId did not match an imported lead status; new_status_id left null (AfterName kept in source_snapshot).",
+        source: "leadStatusHistory",
+        rowId: `${entry.leadIdRaw}:${entry.afterIdRaw ?? ""}`,
+      });
+    }
+    const externalId = `${entry.leadIdRaw}:${entry.afterIdRaw ?? ""}:${entry.dateTimeRaw}`;
+    const id = deterministicUuid("hollihop-lead-status-history", externalId);
+    await recordSource(ctx, {
+      source: "leadStatusHistory",
+      externalId,
+      row,
+      targetTable: "app.lead_status_history",
+      targetId: id,
+      mappedKeys: ["LeadId", "DateTime", "AfterId", "AfterName"],
+    });
+    await planUpsert(
+      ctx,
+      "leadStatusHistory",
+      "app.lead_status_history",
+      {
+        id,
+        lead_id: leadId,
+        old_status_id: null,
+        new_status_id: newStatusId,
+        old_owner_id: null,
+        new_owner_id: null,
+        changed_by: null,
+        changed_at: changedAt,
+        reason_id: null,
+        comment: null,
+        branch_id: maps.leadBranchById.get(entry.leadIdRaw) ?? null,
+        source_snapshot: entry.afterName,
+      },
+      ["id"],
+    );
   }
 }
 
@@ -1705,6 +1884,7 @@ async function readStoredCounts(
       (select count(*)::text from app.tasks where deleted_at is null) as tasks,
       (select count(*)::text from app.entity_comments where deleted_at is null) as entity_comments,
       (select count(*)::text from app.lead_comments where deleted_at is null) as lead_comments,
+      (select count(*)::text from app.lead_status_history) as lead_status_history,
       (select count(*)::text from app.duplicate_candidates where deleted_at is null) as duplicate_candidates,
       (select count(*)::text from app.import_source_records) as import_source_records
   `);
@@ -1751,6 +1931,11 @@ function loadFromDirectory(dir: string): HolliHopData {
       "SystemLogs",
     ),
     comments: readArrayFile(dir, ["comments.json"], "Comments"),
+    leadStatusHistory: readArrayFile(
+      dir,
+      ["lead_status_history.json", "leadstatushistory.json"],
+      "Actions",
+    ),
   };
 }
 
@@ -1837,6 +2022,7 @@ async function fetchFromApi(): Promise<HolliHopData> {
     leadLogs,
     systemLogs,
     comments,
+    leadStatusHistory,
   ] = await Promise.all([
     fetchRoot("GetLocations", "Locations"),
     fetchRoot("GetOffices", "Offices"),
@@ -1854,6 +2040,9 @@ async function fetchFromApi(): Promise<HolliHopData> {
     fetchOptionalPaged("GetLeadLogs", "LeadLogs"),
     fetchOptionalPaged("GetSystemLogs", "SystemLogs"),
     fetchOptionalPaged("GetComments", "Comments"),
+    // HolliHop returns the rows under the "Actions" root key (verified against
+    // a live page), not the method-name convention.
+    fetchOptionalPaged("GetHistoryModifyLeadStatus", "Actions"),
   ]);
   return {
     locations,
@@ -1871,6 +2060,7 @@ async function fetchFromApi(): Promise<HolliHopData> {
     leadLogs,
     systemLogs,
     comments,
+    leadStatusHistory,
   };
 }
 
@@ -2011,6 +2201,7 @@ function countSources(data: HolliHopData): Record<string, number> {
     leadLogs: data.leadLogs.length,
     systemLogs: data.systemLogs.length,
     comments: data.comments.length,
+    leadStatusHistory: data.leadStatusHistory.length,
   };
 }
 
@@ -2477,13 +2668,7 @@ function orderDuplicateSeeds(
 }
 
 function normalizePhone(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const digits = value.replace(/\D/g, "");
-  if (digits.length < 7) return undefined;
-  if (digits.length === 11 && digits.startsWith("8")) {
-    return `7${digits.slice(1)}`;
-  }
-  return digits;
+  return normalizePhoneRu(value).canonical ?? undefined;
 }
 
 function normalizeEmail(value: string | undefined): string | undefined {

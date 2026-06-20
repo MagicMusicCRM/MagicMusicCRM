@@ -18,66 +18,71 @@ class AdminOverviewWidget extends ConsumerWidget {
     return statsAsync.when(
       data: (stats) => SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Обзор системы',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Статистика по всей школе',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 20),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.4,
+        child: Center(
+          child: ConstrainedBox(
+            // Keep the overview readable instead of stretching cards across the
+            // whole desktop window.
+            constraints: const BoxConstraints(maxWidth: 1100),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StatCard(
-                  title: 'Учеников',
-                  value: '${stats['students'] ?? 0}',
-                  icon: Icons.school_rounded,
-                  color: AppTheme.primaryPurple,
-                  onTap: () => onTabChange?.call(1, 0),
+                const Text(
+                  'Обзор системы',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                 ),
-                _StatCard(
-                  title: 'Преподавателей',
-                  value: '${stats['teachers'] ?? 0}',
-                  icon: Icons.person_rounded,
-                  color: AppTheme.secondaryGold,
-                  onTap: () => onTabChange?.call(1, 1),
+                const SizedBox(height: 4),
+                Text(
+                  'Статистика по всей школе',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
-                _StatCard(
-                  title: 'Филиалов',
-                  value: '${stats['branches'] ?? 0}',
-                  icon: Icons.business_rounded,
-                  color: AppTheme.success,
-                  onTap: () {
-                    onTabChange?.call(1, 2);
-                  },
-                ),
-                _StatCard(
-                  title: 'Занятий сегодня',
-                  value: '${stats['today_lessons'] ?? 0}',
-                  icon: Icons.today_rounded,
-                  color: AppTheme.warning,
-                  onTap: () => onTabChange?.call(1, 3),
+                const SizedBox(height: 20),
+                // Fixed-size cards that wrap: 4-up on wide, fewer on narrow,
+                // never ballooning to half-screen-tall blocks.
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _StatCard(
+                      title: 'Учеников',
+                      value: '${stats['students'] ?? 0}',
+                      icon: Icons.school_rounded,
+                      color: AppTheme.primaryGold,
+                      onTap: () => onTabChange?.call(1, 0),
+                    ),
+                    _StatCard(
+                      title: 'Преподавателей',
+                      value: '${stats['teachers'] ?? 0}',
+                      icon: Icons.person_rounded,
+                      color: AppTheme.secondaryGold,
+                      onTap: () => onTabChange?.call(1, 1),
+                    ),
+                    _StatCard(
+                      title: 'Филиалов',
+                      value: '${stats['branches'] ?? 0}',
+                      icon: Icons.business_rounded,
+                      color: AppTheme.success,
+                      onTap: () {
+                        onTabChange?.call(1, 2);
+                      },
+                    ),
+                    _StatCard(
+                      title: 'Занятий сегодня',
+                      value: '${stats['today_lessons'] ?? 0}',
+                      icon: Icons.today_rounded,
+                      color: AppTheme.warning,
+                      onTap: () => onTabChange?.call(1, 3),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
       loading: () => const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
       ),
       error: (err, _) => Center(
         child: Column(
@@ -124,38 +129,42 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(icon, color: color, size: 24),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    value,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
+    return SizedBox(
+      width: 240,
+      height: 120,
+      child: Card(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, color: color, size: 24),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      value,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

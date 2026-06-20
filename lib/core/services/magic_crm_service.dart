@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// StateProvider lives in the legacy export under Riverpod 3.x; it backs the
+// portal's per-child switcher selection (selectedStudentIdProvider, KVA-156).
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 
@@ -6,9 +9,34 @@ final magicCrmServiceProvider = Provider<MagicCrmService>((ref) {
   return MagicCrmService(ref.watch(magicApiClientProvider));
 });
 
+/// All students linked to the signed-in account, sourced from `/crm/me`.
+/// A parent with two or more children sees every linked student here so the
+/// client portal can offer a per-child switcher (KVA-156).
+final myStudentsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  return ref.watch(magicCrmServiceProvider).listMyStudents();
+});
+
+/// The student the parent has explicitly picked in the portal switcher.
+/// `null` means "no manual selection" — consumers then fall back to the first
+/// linked student, preserving the single-student behaviour (KVA-156).
+final selectedStudentIdProvider = StateProvider<String?>((ref) => null);
+
+/// The student currently in focus across the client portal. Derived so that
+/// existing widgets keep working untouched: it honours an explicit selection
+/// from [selectedStudentIdProvider] when that id still belongs to the linked
+/// students, otherwise it falls back to the first linked student.
 final magicCurrentStudentIdProvider = FutureProvider<String?>((ref) async {
-  final students = await ref.watch(magicCrmServiceProvider).listMyStudents();
-  return students.isEmpty ? null : students.first['id']?.toString();
+  final students = await ref.watch(myStudentsProvider.future);
+  if (students.isEmpty) return null;
+
+  final selectedId = ref.watch(selectedStudentIdProvider);
+  if (selectedId != null &&
+      students.any((s) => s['id']?.toString() == selectedId)) {
+    return selectedId;
+  }
+  return students.first['id']?.toString();
 });
 
 class MagicCrmService {
@@ -466,6 +494,74 @@ class MagicCrmService {
     return _items(response).map(_legacyBranch).toList();
   }
 
+  Future<int> getAppLeadsCount() async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/leads/app-count',
+    );
+    final raw = response['count'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw?.toString() ?? '') ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> listBranchDisciplines(
+    String branchId,
+  ) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/branches/$branchId/disciplines',
+    );
+    return _items(response).map((item) {
+      return {
+        'id': item['id'],
+        'discipline_id': item['disciplineId'],
+        'name': item['name'],
+        'sort_order': (item['sortOrder'] as num?)?.toInt() ?? 0,
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listDisciplines() async {
+    final response = await _api.get<Map<String, dynamic>>('/crm/disciplines');
+    return _items(response)
+        .map((item) => {'id': item['id'], 'name': item['name']})
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createBranch({
+    required String name,
+    String? address,
+    int? utcOffsetMinutes,
+  }) async {
+    final data = <String, dynamic>{'name': name.trim()};
+    final trimmedAddress = address?.trim();
+    if (trimmedAddress != null && trimmedAddress.isNotEmpty) {
+      data['address'] = trimmedAddress;
+    }
+    if (utcOffsetMinutes != null) data['utcOffsetMinutes'] = utcOffsetMinutes;
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/branches',
+      data: data,
+    );
+    return _legacyBranch(response);
+  }
+
+  Future<Map<String, dynamic>> updateBranch(
+    String id, {
+    String? name,
+    String? address,
+    int? utcOffsetMinutes,
+  }) async {
+    final data = <String, dynamic>{};
+    if (name != null) data['name'] = name.trim();
+    if (address != null) data['address'] = address.trim();
+    if (utcOffsetMinutes != null) data['utcOffsetMinutes'] = utcOffsetMinutes;
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/branches/$id',
+      data: data,
+    );
+    return _legacyBranch(response);
+  }
+
   Future<List<Map<String, dynamic>>> listRooms({
     String? branchId,
     int limit = 100,
@@ -716,6 +812,34 @@ class MagicCrmService {
     };
   }
 
+  Future<List<Map<String, dynamic>>> getLeadStatusHistory(String leadId) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/leads/$leadId/status-history',
+    );
+    return _mapList(response['items'], _legacyStatusHistoryItem);
+  }
+
+  Future<Map<String, dynamic>> getFamilyForEntity({
+    required String entityType,
+    required String entityId,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/families/by-entity/$entityType/$entityId',
+    );
+    final family = response['family'];
+    return {
+      'family': family is Map<String, dynamic>
+          ? {
+              'id': family['id'],
+              'name': family['name'],
+              'branch_id': family['branchId'],
+              'primary_payer_member_id': family['primaryPayerMemberId'],
+            }
+          : null,
+      'members': _mapList(response['members'], _legacyFamilyMember),
+    };
+  }
+
   Future<Map<String, dynamic>> createLead({
     required String firstName,
     String? lastName,
@@ -756,6 +880,7 @@ class MagicCrmService {
     String? email,
     String? source,
     String? statusId,
+    bool clearStatus = false,
     String? notes,
     Map<String, dynamic>? customDataPatch,
   }) async {
@@ -766,6 +891,9 @@ class MagicCrmService {
     if (email != null) data['email'] = email.trim();
     if (source != null) data['source'] = source.trim();
     if (statusId != null) data['statusId'] = statusId.trim();
+    // Explicit request to un-assign the lead's status ("Без статуса" column);
+    // the backend treats this as set-to-null rather than coalesce-preserve.
+    if (clearStatus) data['clearStatus'] = true;
     if (notes != null) data['notes'] = notes.trim();
     if (customDataPatch != null) data['customDataPatch'] = customDataPatch;
 
@@ -825,6 +953,15 @@ class MagicCrmService {
 
   Future<void> deleteLeadStatus(String id) async {
     await _api.delete<Map<String, dynamic>>('/crm/lead-statuses/$id');
+  }
+
+  /// Persists a new funnel column order. [idsInOrder] is the ordered list of
+  /// lead-status ids; the backend writes their sort_order as 0..N accordingly.
+  Future<void> reorderLeadStatuses(List<String> idsInOrder) async {
+    await _api.patch<Map<String, dynamic>>(
+      '/crm/lead-statuses/order',
+      data: {'statusIds': idsInOrder},
+    );
   }
 
   Future<List<Map<String, dynamic>>> listDuplicateCandidates({
@@ -1025,6 +1162,10 @@ class MagicCrmService {
       data: data,
     );
     return _legacyLesson(response);
+  }
+
+  Future<void> deleteLesson(String id) async {
+    await _api.delete<Map<String, dynamic>>('/crm/lessons/$id');
   }
 
   Future<Map<String, dynamic>> getLessonAttendance(String lessonId) async {
@@ -1361,6 +1502,106 @@ class MagicCrmService {
     await updateTask(id, status: status);
   }
 
+  // ── Analytics endpoints ───────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getAnalyticsFunnel({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/funnel',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsBranches({
+    String? from,
+    String? to,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/branches',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsLossReasons({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/loss-reasons',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsDebts({String? branchId}) async {
+    final q = <String, dynamic>{};
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/debts',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsForecast({String? branchId}) async {
+    final q = <String, dynamic>{};
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/forecast',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsChurn({
+    int? inactiveDays,
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (inactiveDays != null) q['inactiveDays'] = inactiveDays;
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/churn-risk',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsChatSla({
+    String? from,
+    String? to,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/chats/sla',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsWeeklyReport({
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/weekly-report',
+      queryParameters: q,
+    );
+  }
+
   List<Map<String, dynamic>> _items(Map<String, dynamic> response) {
     final items = response['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
@@ -1621,6 +1862,7 @@ class MagicCrmService {
       'id': item['id'],
       'name': item['name'],
       'address': item['address'],
+      'utc_offset_minutes': item['utcOffsetMinutes'] ?? 180,
       'created_at': item['createdAt'],
     };
   }
@@ -1895,6 +2137,31 @@ class MagicCrmService {
         'first_name': _splitName(item['authorName']?.toString() ?? '').$1,
         'last_name': _splitName(item['authorName']?.toString() ?? '').$2,
       },
+    };
+  }
+
+  Map<String, dynamic> _legacyStatusHistoryItem(Map<String, dynamic> item) {
+    return {
+      'id': item['id'],
+      'old_status': item['oldStatus'],
+      'new_status': item['newStatus'],
+      'old_owner_id': item['oldOwnerId'],
+      'new_owner_id': item['newOwnerId'],
+      'changed_by': item['changedBy'],
+      'changed_at': item['changedAt'],
+      'reason_id': item['reasonId'],
+      'comment': item['comment'],
+    };
+  }
+
+  Map<String, dynamic> _legacyFamilyMember(Map<String, dynamic> item) {
+    return {
+      'id': item['id'],
+      'entity_type': item['entityType'],
+      'entity_id': item['entityId'],
+      'role': item['role'],
+      'is_primary_contact': item['isPrimaryContact'] == true,
+      'name': item['name'],
     };
   }
 

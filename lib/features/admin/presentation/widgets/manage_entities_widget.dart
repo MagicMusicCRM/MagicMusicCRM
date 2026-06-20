@@ -7,12 +7,13 @@ import '../../../../core/widgets/skeletons.dart';
 import 'create_student_dialog.dart';
 import 'create_teacher_dialog.dart';
 import 'create_group_dialog.dart';
-import 'student_detail_dialog.dart';
+import 'package:go_router/go_router.dart';
 import 'teacher_detail_dialog.dart';
 import 'staff_detail_dialog.dart';
 import 'group_detail_dialog.dart';
 import 'create_room_dialog.dart';
 import 'create_employee_dialog.dart';
+import 'branch_form_dialog.dart';
 
 final entitiesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((
@@ -34,6 +35,8 @@ final entitiesProvider =
         return crm.listRooms(limit: 100);
       } else if (table == 'employees') {
         return crm.listStaff(limit: 100);
+      } else if (table == 'branches') {
+        return crm.listBranches(limit: 100);
       }
 
       return const <Map<String, dynamic>>[];
@@ -91,7 +94,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   void setTab(int index) {
@@ -150,8 +153,8 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
               isScrollable: true,
               tabAlignment: TabAlignment.start,
               labelPadding: const EdgeInsets.symmetric(horizontal: 16),
-              indicatorColor: AppTheme.primaryPurple,
-              labelColor: AppTheme.primaryPurple,
+              indicatorColor: AppTheme.primaryGold,
+              labelColor: AppTheme.primaryGold,
               unselectedLabelColor: Theme.of(
                 context,
               ).colorScheme.onSurfaceVariant,
@@ -162,6 +165,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
                 Tab(text: 'Занятия'),
                 Tab(text: 'Аудитории'),
                 Tab(text: 'Сотрудники'),
+                Tab(text: 'Филиалы'),
               ],
             ),
           ],
@@ -176,11 +180,12 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
           const _LessonsList(),
           _RoomsList(searchQuery: _searchQuery),
           _EmployeesList(searchQuery: _searchQuery),
+          _BranchesList(searchQuery: _searchQuery),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _createNewEntity(context),
-        backgroundColor: AppTheme.primaryPurple,
+        backgroundColor: AppTheme.primaryGold,
         child: Icon(Icons.add_rounded, color: Colors.white),
       ),
     );
@@ -214,6 +219,9 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
       case 5:
         dialog = const CreateEmployeeDialog();
         break;
+      case 6:
+        dialog = const BranchFormDialog();
+        break;
     }
 
     if (dialog != null) {
@@ -237,6 +245,9 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
         if (_tabController.index == 5) {
           ref.invalidate(entitiesProvider('employees'));
           ref.invalidate(staffSearchProvider(_searchQuery.trim()));
+        }
+        if (_tabController.index == 6) {
+          ref.invalidate(entitiesProvider('branches'));
         }
       }
     }
@@ -270,7 +281,7 @@ class _StudentsList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(studentSearchProvider(query)),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -287,21 +298,20 @@ class _StudentsList extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   onTap: () async {
-                    final updated = await StudentDetailDialog.show(
-                      context,
-                      item,
-                    );
-                    if (updated == true) {
-                      ref.invalidate(entitiesProvider('students'));
-                      ref.invalidate(studentSearchProvider(query));
-                    }
+                    final id = item['id']?.toString();
+                    if (id == null || id.isEmpty) return;
+                    await context.push('/student/$id');
+                    // Refresh on return — the screen may have changed the
+                    // student (edits, payments, etc.).
+                    ref.invalidate(entitiesProvider('students'));
+                    ref.invalidate(studentSearchProvider(query));
                   },
                   leading: CircleAvatar(
-                    backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Text(
                       name.isNotEmpty ? name[0] : '?',
                       style: const TextStyle(
-                        color: AppTheme.primaryPurple,
+                        color: AppTheme.primaryGold,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -366,7 +376,7 @@ class _StudentSearchSummary extends StatelessWidget {
               _StudentMetricChip(
                 icon: Icons.groups_rounded,
                 label: 'Группы: $groups',
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
               ),
               _StudentMetricChip(
                 icon: Icons.event_available_rounded,
@@ -518,7 +528,7 @@ class _TeachersList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(teacherSearchProvider(query)),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -631,7 +641,7 @@ class _TeacherSearchSummary extends StatelessWidget {
               _StudentMetricChip(
                 icon: Icons.school_rounded,
                 label: 'Ученики: $students',
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
               ),
               _StudentMetricChip(
                 icon: Icons.event_available_rounded,
@@ -680,7 +690,7 @@ class _LessonsList extends ConsumerWidget {
       case 'cancelled':
         return AppTheme.danger;
       default:
-        return AppTheme.primaryPurple;
+        return AppTheme.primaryGold;
     }
   }
 
@@ -705,7 +715,7 @@ class _LessonsList extends ConsumerWidget {
           );
         }
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(entitiesProvider('lessons')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -966,7 +976,7 @@ class _GroupsList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(entitiesProvider('groups')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -1005,10 +1015,10 @@ class _GroupsList extends ConsumerWidget {
                     }
                   },
                   leading: CircleAvatar(
-                    backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Icon(
                       Icons.group_rounded,
-                      color: AppTheme.primaryPurple,
+                      color: AppTheme.primaryGold,
                     ),
                   ),
                   title: Text(name),
@@ -1063,7 +1073,7 @@ class _RoomsList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(entitiesProvider('rooms')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -1088,10 +1098,10 @@ class _RoomsList extends ConsumerWidget {
                     }
                   },
                   leading: CircleAvatar(
-                    backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Icon(
                       Icons.meeting_room_rounded,
-                      color: AppTheme.primaryPurple,
+                      color: AppTheme.primaryGold,
                     ),
                   ),
                   title: Text(name),
@@ -1145,7 +1155,7 @@ class _EmployeesList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(staffSearchProvider(query)),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -1272,6 +1282,119 @@ class _EmployeesList extends ConsumerWidget {
                       ref.invalidate(staffSearchProvider(query));
                     }
                   },
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────
+// Branches List
+// ─────────────────────────────────────────────────
+class _BranchesList extends ConsumerWidget {
+  final String searchQuery;
+  const _BranchesList({required this.searchQuery});
+
+  String _offsetLabel(int minutes) {
+    final sign = minutes >= 0 ? '+' : '-';
+    final abs = minutes.abs();
+    final h = abs ~/ 60;
+    final m = abs % 60;
+    final timeStr = m == 0
+        ? 'UTC$sign$h'
+        : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
+    return switch (minutes) {
+      180 => 'МСК ($timeStr)',
+      120 => 'EET ($timeStr)',
+      60 => 'CET ($timeStr)',
+      0 => 'UTC',
+      _ => timeStr,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(entitiesProvider('branches'));
+    return async.when(
+      loading: () =>
+          const Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
+      error: (e, _) => Center(
+        child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger)),
+      ),
+      data: (items) {
+        var filtered = items;
+        if (searchQuery.isNotEmpty) {
+          filtered = items.where((item) {
+            final name = (item['name'] as String? ?? '').toLowerCase();
+            final address = (item['address'] as String? ?? '').toLowerCase();
+            final q = searchQuery.toLowerCase();
+            return name.contains(q) || address.contains(q);
+          }).toList();
+        }
+
+        if (filtered.isEmpty) {
+          return Center(
+            child: Text(
+              searchQuery.isEmpty ? 'Нет филиалов' : 'Ничего не найдено',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          color: AppTheme.primaryGold,
+          onRefresh: () async => ref.invalidate(entitiesProvider('branches')),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: filtered.length,
+            itemBuilder: (ctx, i) {
+              final item = filtered[i];
+              final name = item['name'] as String? ?? 'Без названия';
+              final address = item['address'] as String? ?? '';
+              final offsetMinutes =
+                  (item['utc_offset_minutes'] as num?)?.toInt() ?? 180;
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  onTap: () async {
+                    final res = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => BranchFormDialog(branch: item),
+                    );
+                    if (res == true) {
+                      ref.invalidate(entitiesProvider('branches'));
+                    }
+                  },
+                  leading: CircleAvatar(
+                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
+                    child: Icon(
+                      Icons.location_city_rounded,
+                      color: AppTheme.primaryGold,
+                    ),
+                  ),
+                  title: Text(name),
+                  subtitle: Text(
+                    [
+                      if (address.isNotEmpty) address,
+                      _offsetLabel(offsetMinutes),
+                    ].join(' • '),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                  trailing: Icon(
+                    Icons.edit_rounded,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 18,
+                  ),
                 ),
               );
             },

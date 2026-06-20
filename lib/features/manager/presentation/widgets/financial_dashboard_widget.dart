@@ -86,7 +86,7 @@ class _FinancialDashboardWidgetState
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
       );
     }
 
@@ -358,7 +358,7 @@ class _FinancialDashboardWidgetState
                         value: e.value / maxLoad,
                         minHeight: 8,
                         backgroundColor: Colors.white10,
-                        color: AppTheme.primaryPurple,
+                        color: AppTheme.primaryGold,
                       ),
                     ),
                   ],

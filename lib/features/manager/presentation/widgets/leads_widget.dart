@@ -2,14 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/convert_lead_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'manage_statuses_dialog.dart';
 
@@ -21,6 +24,9 @@ class LeadsWidget extends ConsumerStatefulWidget {
 }
 
 class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
+  static final _uuidRegExp = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
   final _searchCtrl = TextEditingController();
   final _boardScrollController = ScrollController();
   List<StatusRecord> _activeStatuses = [];
@@ -102,9 +108,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
     for (final r in res) {
       final key = r['key'].toString();
       final label = r['label'].toString();
-      final rawColor = r['color']?.toString() ?? '8B5CF6';
-      final hexColor = rawColor.replaceAll('#', '');
-      final color = Color(int.parse('FF$hexColor', radix: 16));
+      final color = statusColorFromValue(r['color']);
       statuses.add((key, label, color));
     }
 
@@ -250,9 +254,18 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
       _pendingLeadIds.add(id);
     });
     try {
+      // The board's "Без статуса" column has id == "unassigned" (not a UUID);
+      // every real status column carries the lead_status UUID. Send statusId
+      // only for a real UUID, otherwise ask the server to clear the status —
+      // sending the raw column id was the cause of "statusId must be a UUID".
+      final isUuid = _uuidRegExp.hasMatch(newStatus);
       await ref
           .read(magicCrmServiceProvider)
-          .updateLead(id, statusId: newStatus);
+          .updateLead(
+            id,
+            statusId: isUuid ? newStatus : null,
+            clearStatus: !isUuid,
+          );
       _refreshBoard();
       await ref.read(leadBoardProvider(_filters).future);
       if (!mounted) return;
@@ -302,6 +315,75 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
       });
       _showError('Не удалось удалить лид: $e');
     }
+  }
+
+  /// Public entry-point for the lead→student conversion.
+  ///
+  /// Opens [ConvertLeadDialog], then performs an optimistic hide of the lead
+  /// card from the Лиды funnel and shows an «Отменить» SnackBar (undo reverts
+  /// the visual move only — the created student is not deleted).
+  ///
+  /// **DragTarget contract:** The future Ученики board's DragTarget should call
+  /// `convertLeadToStudent(leadById(dragData))` from
+  /// `DragTarget<String>.onAcceptWithDetails`.
+  Future<void> convertLeadToStudent(Map<String, dynamic> lead) async {
+    final id = lead['id']?.toString() ?? '';
+    if (id.isEmpty || _pendingLeadIds.contains(id)) return;
+    if ((lead['linked_student_id']?.toString() ?? '').isNotEmpty) {
+      _showError('Лид уже связан с учеником');
+      return;
+    }
+
+    final student = await ConvertLeadDialog.show(context, lead: lead);
+    if (student == null || !mounted) return; // cancelled or failed in-dialog
+
+    // Optimistic move: hide the card from the Лиды board immediately.
+    setState(() {
+      _hiddenLeadIds.add(id);
+      _pendingLeadIds.add(id);
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Лид конвертирован в ученика'),
+        backgroundColor: AppTheme.success,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Отменить',
+          textColor: Colors.white,
+          onPressed: () {
+            // Undo only reverts the visual move — the student stays created.
+            if (!mounted) return;
+            setState(() {
+              _hiddenLeadIds.remove(id);
+              _pendingLeadIds.remove(id);
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Карточка лида возвращена. Ученик остаётся созданным — '
+                  'удалите его вручную при необходимости.',
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    // Reconcile with the server: the lead now carries linked_student_id, so a
+    // board refresh keeps it out of the funnel on its own.
+    _refreshBoard();
+    try {
+      await ref.read(leadBoardProvider(_filters).future);
+    } catch (_) {
+      // Refresh failure is non-fatal; the optimistic hide already moved it.
+    }
+    if (!mounted) return;
+    setState(() => _pendingLeadIds.remove(id));
   }
 
   void _openDetail(Map<String, dynamic> lead) async {
@@ -431,9 +513,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   }
 
   StatusRecord _statusFromColumn(Map<String, dynamic> column) {
-    final rawColor = (column['color'] ?? '8B5CF6').toString();
-    final hexColor = rawColor.replaceAll('#', '');
-    final color = Color(int.tryParse('FF$hexColor', radix: 16) ?? 0xFF8B5CF6);
+    final color = statusColorFromValue(column['color']);
     return (
       column['key']?.toString() ?? column['id']?.toString() ?? 'new',
       column['label']?.toString() ??
@@ -869,10 +949,19 @@ class _KanbanColumnState extends State<_KanbanColumn> {
       },
       builder: (context, candidateData, rejectedData) {
         final hovering = candidateData.isNotEmpty;
+        // Cap the column to a fraction of the screen so cards are never
+        // horizontally clipped on a narrow (mobile) viewport, while keeping a
+        // comfortable fixed width on wider (desktop) screens. The 24 subtracts
+        // the column's own horizontal margins (6 + 6) plus board padding so a
+        // single column still fits fully inside the viewport on small phones.
+        final screenWidth = MediaQuery.of(context).size.width;
+        final columnWidth = screenWidth < 360
+            ? (screenWidth - 24).clamp(220.0, 300.0)
+            : 300.0;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOut,
-          width: 300,
+          width: columnWidth,
           margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             color: hovering
@@ -1077,9 +1166,17 @@ class _LeadCard extends ConsumerWidget {
         angle: 0.03,
         child: Material(
           color: Colors.transparent,
-          child: Container(
-            width: 276,
-            padding: const EdgeInsets.all(12),
+          child: Builder(
+            builder: (context) {
+              // Match the dragged card's width to the responsive column inner
+              // width so the feedback is not clipped on a narrow screen.
+              final screenWidth = MediaQuery.of(context).size.width;
+              final feedbackWidth = screenWidth < 360
+                  ? (screenWidth - 24).clamp(220.0, 300.0) - 24
+                  : 276.0;
+              return Container(
+                width: feedbackWidth,
+                padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
@@ -1133,6 +1230,8 @@ class _LeadCard extends ConsumerWidget {
                 const Icon(Icons.drag_indicator_rounded, size: 18),
               ],
             ),
+              );
+            },
           ),
         ),
       ),
@@ -1190,7 +1289,7 @@ class _LeadCard extends ConsumerWidget {
                           icon: const Icon(
                             Icons.chat_bubble_outline_rounded,
                             size: 18,
-                            color: AppTheme.primaryPurple,
+                            color: AppTheme.primaryGold,
                           ),
                           onPressed: () => _openChat(context, ref),
                         ),
@@ -1330,8 +1429,8 @@ class _LeadCard extends ConsumerWidget {
                         if (discipline.isNotEmpty)
                           _InfoBadge(
                             text: discipline,
-                            color: AppTheme.primaryPurple.withAlpha(51),
-                            textColor: AppTheme.primaryPurple,
+                            color: AppTheme.primaryGold.withAlpha(51),
+                            textColor: AppTheme.primaryGold,
                           ),
                         if (level.isNotEmpty)
                           Padding(
@@ -1544,99 +1643,24 @@ class _LeadCard extends ConsumerWidget {
   }
 
   Future<void> _convertToStudent(BuildContext context, WidgetRef ref) async {
-    final firstName = lead['name']?.toString().trim() ?? '';
-    final lastName = lead['last_name']?.toString().trim() ?? '';
-    final phone = lead['phone']?.toString().trim() ?? '';
-    final displayName = [
-      firstName,
-      lastName,
-    ].where((s) => s.isNotEmpty).join(' ');
-    final muted = TextStyle(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-      fontSize: 12,
-    );
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Сделать учеником'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Создать карточку ученика из лида'
-              '${displayName.isEmpty ? '' : ' «$displayName»'}?',
-            ),
-            if (phone.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text('Телефон: $phone', style: muted),
-            ],
-            const SizedBox(height: 8),
-            Text(
-              'Данные лида перенесутся в карточку ученика, лид останется '
-              'связанным с ним.',
-              style: muted,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.success),
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.school_rounded, size: 18),
-            label: const Text('Создать ученика'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      final customData = lead['custom_data'] as Map<String, dynamic>? ?? {};
-      final patch = <String, dynamic>{};
-      final discipline = customData['discipline']?.toString();
-      final level = customData['level']?.toString();
-      final branchId = lead['branch_id']?.toString();
-      if (discipline != null && discipline.isNotEmpty) {
-        patch['discipline'] = discipline;
-      }
-      if (level != null && level.isNotEmpty) patch['level'] = level;
-      if (branchId != null && branchId.isNotEmpty) patch['branchId'] = branchId;
-
-      await ref
-          .read(magicCrmServiceProvider)
-          .createStudent(
-            firstName: firstName.isEmpty ? 'Без имени' : firstName,
-            lastName: lastName.isEmpty ? null : lastName,
-            phone: phone.isEmpty ? null : phone,
-            leadId: lead['id'].toString(),
-            customDataPatch: patch.isEmpty ? null : patch,
-          );
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Лид конвертирован в ученика'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      onRefresh();
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Не удалось конвертировать: $e'),
-            backgroundColor: AppTheme.danger,
-          ),
-        );
-      }
+    if ((lead['linked_student_id']?.toString() ?? '').isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Лид уже связан с учеником')),
+      );
+      return;
     }
+    final student = await ConvertLeadDialog.show(context, lead: lead);
+    if (student == null) return; // cancelled / failed in-dialog
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Лид конвертирован в ученика'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+    onRefresh();
   }
 
   Future<void> _scheduleTrial(BuildContext context, WidgetRef ref) async {
@@ -1886,13 +1910,13 @@ class _LeadDialog extends StatefulWidget {
 
 class _LeadDialogState extends State<_LeadDialog> {
   final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
+  String _canonicalPhone = '';
+  bool _isInternational = false;
   final _sourceCtrl = TextEditingController();
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _phoneCtrl.dispose();
     _sourceCtrl.dispose();
     super.dispose();
   }
@@ -1910,10 +1934,21 @@ class _LeadDialogState extends State<_LeadDialog> {
             decoration: const InputDecoration(labelText: 'Имя'),
           ),
           const SizedBox(height: 10),
-          TextField(
-            controller: _phoneCtrl,
-            decoration: const InputDecoration(labelText: 'Телефон'),
-            keyboardType: TextInputType.phone,
+          RuPhoneField(
+            key: ValueKey('phone:$_isInternational'),
+            international: _isInternational,
+            onCanonicalChanged: (c) => _canonicalPhone = c,
+          ),
+          CheckboxListTile(
+            value: _isInternational,
+            onChanged: (v) => setState(() {
+              _isInternational = v ?? false;
+              _canonicalPhone = '';
+            }),
+            title: const Text('Международный номер'),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
           ),
           const SizedBox(height: 10),
           TextField(
@@ -1934,7 +1969,7 @@ class _LeadDialogState extends State<_LeadDialog> {
             if (_nameCtrl.text.trim().isNotEmpty) {
               Navigator.pop(context, {
                 'name': _nameCtrl.text.trim(),
-                'phone': _phoneCtrl.text.trim(),
+                'phone': _canonicalPhone,
                 'source': _sourceCtrl.text.trim(),
               });
             }

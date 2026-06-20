@@ -70,7 +70,7 @@ class _NextLessonCountdownState extends ConsumerState<NextLessonCountdown> {
 
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(

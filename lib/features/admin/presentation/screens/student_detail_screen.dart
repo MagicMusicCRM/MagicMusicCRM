@@ -26,6 +26,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   List<Map<String, dynamic>> _comments = [];
   List<Map<String, dynamic>> _groups = [];
   List<Map<String, dynamic>> _expectedPayments = [];
+  Map<String, dynamic>? _family;
   bool _loading = true;
 
   @override
@@ -51,6 +52,10 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           limit: 100,
         ),
         crm.listExpectedPayments(studentId: widget.studentId, limit: 100),
+        crm.getFamilyForEntity(
+          entityType: 'student',
+          entityId: widget.studentId,
+        ),
       ]);
 
       final studentRes = results[0] as Map<String, dynamic>;
@@ -61,6 +66,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
       final balanceRows = results[5] as List<Map<String, dynamic>>;
       final commentsRes = results[6] as List<Map<String, dynamic>>;
       final expectedPaymentsRes = results[7] as List<Map<String, dynamic>>;
+      final familyRes = results[8] as Map<String, dynamic>;
 
       if (mounted) {
         setState(() {
@@ -72,6 +78,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           _comments = commentsRes;
           _groups = groupsRes;
           _expectedPayments = expectedPaymentsRes;
+          _family = familyRes;
           _tasks.sort(
             (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
           );
@@ -106,9 +113,29 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           .trim();
     }
     final displayName = name.isEmpty ? 'Без имени' : name;
-    final phone = profile?['phone'] ?? '—';
-    final email = _student!['email'] ?? '—';
+    // Contact fallback across both sources (student record + profile), matching
+    // StudentDetailDialog so the same student shows the same contacts both ways.
+    final phone =
+        (_student!['phone']?.toString().trim().isNotEmpty == true
+            ? _student!['phone']
+            : profile?['phone']) ??
+        '—';
+    final email =
+        (_student!['email']?.toString().trim().isNotEmpty == true
+            ? _student!['email']
+            : profile?['email']) ??
+        '—';
     final customData = _student!['custom_data'] as Map<String, dynamic>? ?? {};
+    // Parse balance defensively (it can arrive as a string) and color it
+    // consistently: red < 0, green > 0, neutral at exactly 0.
+    final balanceNum = _balance == null
+        ? null
+        : (_balance!['balance'] is num
+              ? _balance!['balance'] as num
+              : num.tryParse(_balance!['balance']?.toString() ?? ''));
+    final balanceColor = balanceNum == null || balanceNum == 0
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : (balanceNum < 0 ? AppTheme.danger : AppTheme.success);
 
     return DefaultTabController(
       length: 7,
@@ -123,9 +150,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                   'Баланс: ${_balance!['balance']} ₽',
                   style: TextStyle(
                     fontSize: 12,
-                    color: (_balance!['balance'] as num) < 0
-                        ? AppTheme.danger
-                        : AppTheme.success,
+                    color: balanceColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -141,7 +166,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               IconButton(
                 icon: const Icon(
                   Icons.chat_bubble_outline_rounded,
-                  color: AppTheme.primaryPurple,
+                  color: AppTheme.primaryGold,
                 ),
                 tooltip: 'Перейти в чат',
                 onPressed: () {
@@ -168,11 +193,11 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           ],
           bottom: TabBar(
             isScrollable: true,
-            labelColor: AppTheme.primaryPurple,
+            labelColor: AppTheme.primaryGold,
             unselectedLabelColor: Theme.of(
               context,
             ).colorScheme.onSurfaceVariant,
-            indicatorColor: AppTheme.primaryPurple,
+            indicatorColor: AppTheme.primaryGold,
             tabs: const [
               Tab(text: 'Инфо'),
               Tab(text: 'Оплаты'),
@@ -230,20 +255,25 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                 ? 'Мужской'
                 : (_student!['gender'] == 'female' ? 'Женский' : '—'),
           ),
-          _InfoRow(
-            icon: Icons.fingerprint_rounded,
-            label: 'Идентификатор HolliHop',
-            value: _student!['hollihop_id']?.toString() ?? '—',
-          ),
+          if ((_student!['hollihop_id']?.toString().trim().isNotEmpty ?? false))
+            _InfoRow(
+              icon: Icons.fingerprint_rounded,
+              label: 'Идентификатор HolliHop',
+              value: _student!['hollihop_id'].toString(),
+            ),
           ...customData.entries
+              .where(
+                (e) =>
+                    !_isHiddenCustomDataRow(e.key) &&
+                    (e.value?.toString().trim().isNotEmpty ?? false),
+              )
               .map(
                 (e) => _InfoRow(
                   icon: Icons.info_outline_rounded,
                   label: e.key,
-                  value: e.value?.toString() ?? '—',
+                  value: e.value.toString(),
                 ),
-              )
-              .where((row) => !_isHiddenCustomDataRow(row.label)),
+              ),
         ]),
         SizedBox(height: 16),
         _buildInfoCard('Финансовые настройки', [
@@ -299,18 +329,81 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               );
             }),
         ]),
+        const SizedBox(height: 16),
+        _buildInfoCard('Семья', _buildFamilyRows()),
       ],
     );
   }
 
+  List<Widget> _buildFamilyRows() {
+    final family = _family?['family'] as Map<String, dynamic>?;
+    final members = (_family?['members'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .toList() ??
+        const <Map<String, dynamic>>[];
+    if (family == null || members.isEmpty) {
+      return const [
+        _InfoRow(
+          icon: Icons.people_outline_rounded,
+          label: 'Семья',
+          value: 'Не указана',
+        ),
+      ];
+    }
+    final primaryId = family['primary_payer_member_id']?.toString();
+    return members.map((m) {
+      final role = switch (m['role']?.toString()) {
+        'parent' => 'Родитель',
+        'child' => 'Ребёнок',
+        'guardian' => 'Опекун',
+        'payer' => 'Плательщик',
+        'sibling' => 'Брат/сестра',
+        final v when v != null && v.isNotEmpty => v,
+        _ => 'Член семьи',
+      };
+      final isPayer = primaryId != null && m['id']?.toString() == primaryId;
+      final label = [
+        role,
+        if (m['is_primary_contact'] == true) 'осн. контакт',
+        if (isPayer) 'плательщик',
+      ].join(' · ');
+      return _InfoRow(
+        icon: Icons.people_alt_rounded,
+        label: label,
+        value: (m['name']?.toString().trim().isNotEmpty ?? false)
+            ? m['name'].toString()
+            : 'Без имени',
+      );
+    }).toList();
+  }
+
   bool _isHiddenCustomDataRow(String key) {
-    return {
-      'hollihopId',
+    // Internal / system custom_data keys that must never be surfaced to users.
+    // Matched case-insensitively so backend variants (camelCase / snake_case)
+    // are all caught.
+    const hidden = {
+      'hollihopid',
       'hollihop_id',
-      'sourceLeadId',
-      'branchId',
+      'hollihopstudentid',
+      'hollihop_student_id',
+      'externalid',
+      'external_id',
+      'demoaccount',
+      'demo_account',
+      'isdemo',
+      'is_demo',
+      'sourceleadid',
+      'source_lead_id',
+      'leadid',
+      'lead_id',
+      'branchid',
       'branch_id',
-    }.contains(key);
+      'disciplineid',
+      'discipline_id',
+      'disciplineinternal',
+      'discipline_internal',
+    };
+    return hidden.contains(key.trim().toLowerCase());
   }
 
   Widget? _buildFAB() {
@@ -322,7 +415,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             onPressed: _showAddHistoryDialog,
             label: Text('Добавить'),
             icon: Icon(Icons.add_rounded),
-            backgroundColor: AppTheme.primaryPurple,
+            backgroundColor: AppTheme.primaryGold,
           );
         }
         return const SizedBox.shrink();
@@ -337,7 +430,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: Icon(Icons.comment_rounded, color: AppTheme.primaryPurple),
+            leading: Icon(Icons.comment_rounded, color: AppTheme.primaryGold),
             title: Text('Добавить комментарий'),
             onTap: () => Navigator.pop(ctx, 'comment'),
           ),
@@ -548,7 +641,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
               ),
             ),
             const Divider(height: 24),
@@ -662,7 +755,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                 color:
                     (l['status'] == 'completed'
                             ? AppTheme.success
-                            : AppTheme.primaryPurple)
+                            : AppTheme.primaryGold)
                         .withAlpha(30),
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -672,7 +765,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                   fontSize: 11,
                   color: l['status'] == 'completed'
                       ? AppTheme.success
-                      : AppTheme.primaryPurple,
+                      : AppTheme.primaryGold,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -755,7 +848,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           ListTile(
             leading: Icon(
               Icons.description_rounded,
-              color: AppTheme.primaryPurple,
+              color: AppTheme.primaryGold,
             ),
             title: Text('Основной договор'),
             subtitle: Text(contractUrl ?? 'Не прикреплен'),
@@ -894,7 +987,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                           size: 16,
                           color: isTask
                               ? AppTheme.warning
-                              : AppTheme.primaryPurple,
+                              : AppTheme.primaryGold,
                         ),
                         SizedBox(width: 8),
                         Text(
@@ -904,7 +997,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                             fontWeight: FontWeight.w700,
                             color: isTask
                                 ? AppTheme.warning
-                                : AppTheme.primaryPurple,
+                                : AppTheme.primaryGold,
                           ),
                         ),
                       ],
@@ -1077,7 +1170,7 @@ class _InfoRow extends StatelessWidget {
               Icon(
                 Icons.edit_outlined,
                 size: 14,
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
               ),
           ],
         ),

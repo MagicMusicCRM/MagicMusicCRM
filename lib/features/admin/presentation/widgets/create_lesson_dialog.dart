@@ -9,12 +9,16 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
   final DateTime? initialDate;
   final String? initialRoomId;
   final String? initialBranchId;
+  // When provided, the dialog edits this existing lesson instead of creating a
+  // new one (pre-filled fields, "Сохранить" updates via PATCH).
+  final Map<String, dynamic>? lesson;
 
   const CreateLessonDialog({
     super.key,
     this.initialDate,
     this.initialRoomId,
     this.initialBranchId,
+    this.lesson,
   });
 
   static Future<bool?> show(
@@ -22,6 +26,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     DateTime? initialDate,
     String? initialRoomId,
     String? initialBranchId,
+    Map<String, dynamic>? lesson,
   }) {
     return showDialog<bool>(
       context: context,
@@ -29,6 +34,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
         initialDate: initialDate,
         initialRoomId: initialRoomId,
         initialBranchId: initialBranchId,
+        lesson: lesson,
       ),
     );
   }
@@ -55,6 +61,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
 
+  bool get _isEdit => widget.lesson != null;
+
   @override
   void initState() {
     super.initState();
@@ -68,6 +76,24 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     if (widget.initialBranchId != null) {
       _selectedBranchId = widget.initialBranchId;
       _loadRooms(widget.initialBranchId!);
+    }
+    // Pre-fill from the lesson being edited.
+    final lesson = widget.lesson;
+    if (lesson != null) {
+      _selectedTeacherId = lesson['teacher_id']?.toString();
+      _selectedGroupId = lesson['group_id']?.toString();
+      _selectedStudentId = lesson['student_id']?.toString();
+      _selectedBranchId = lesson['branch_id']?.toString() ?? _selectedBranchId;
+      _selectedRoomId = lesson['room_id']?.toString() ?? _selectedRoomId;
+      final raw = lesson['scheduled_at']?.toString();
+      final parsed = raw == null ? null : DateTime.tryParse(raw);
+      if (parsed != null) {
+        // Stored as UTC; show in Moscow time (UTC+3) to match the schedule.
+        final local = parsed.toUtc().add(const Duration(hours: 3));
+        _selectedDate = DateTime(local.year, local.month, local.day);
+        _selectedTime = TimeOfDay(hour: local.hour, minute: local.minute);
+      }
+      if (_selectedBranchId != null) _loadRooms(_selectedBranchId!);
     }
     _loadData();
   }
@@ -148,21 +174,47 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
       final scheduledAt = moscowTime.toIso8601String();
 
-      await _crm.createLesson(
-        teacherId: _selectedTeacherId,
-        groupId: _selectedGroupId,
-        studentId: _selectedStudentId,
-        branchId: _selectedBranchId,
-        roomId: _selectedRoomId,
-        scheduledAt: scheduledAt,
-        status: 'scheduled',
+      // KVA-154: pre-save soft conflict check. Ask the backend whether the
+      // chosen room is free at this slot; if it reports a busy/overlapping room
+      // we surface a confirmable warning instead of silently creating a clashing
+      // lesson. This is a soft warn — the manager may still proceed.
+      final proceed = await _confirmIfConflicting(
+        slotStartUtc: moscowTime,
       );
+      if (!proceed) {
+        if (mounted) setState(() => _saving = false);
+        return;
+      }
+
+      if (_isEdit) {
+        await _crm.updateLesson(
+          widget.lesson!['id'].toString(),
+          teacherId: _selectedTeacherId,
+          groupId: _selectedGroupId,
+          studentId: _selectedStudentId,
+          branchId: _selectedBranchId,
+          roomId: _selectedRoomId,
+          scheduledAt: scheduledAt,
+        );
+      } else {
+        await _crm.createLesson(
+          teacherId: _selectedTeacherId,
+          groupId: _selectedGroupId,
+          studentId: _selectedStudentId,
+          branchId: _selectedBranchId,
+          roomId: _selectedRoomId,
+          scheduledAt: scheduledAt,
+          status: 'scheduled',
+        );
+      }
 
       if (mounted) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Занятие создано')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_isEdit ? 'Занятие обновлено' : 'Занятие создано'),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -175,6 +227,98 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     }
   }
 
+  // KVA-154: returns true if it's safe to proceed with the save. Queries room
+  // availability for the chosen slot and, on a detected conflict (room busy or a
+  // listed conflict type), prompts the user with a confirmable soft warning.
+  // Any read failure is treated as "proceed" — the conflict check must never
+  // hard-block lesson creation if the backend is momentarily unreachable.
+  Future<bool> _confirmIfConflicting({required DateTime slotStartUtc}) async {
+    final branchId = _selectedBranchId;
+    final roomId = _selectedRoomId;
+    // No room selected → nothing to conflict on (the lesson has no room).
+    if (branchId == null || roomId == null || roomId.isEmpty) return true;
+
+    const durationMinutes = 60; // matches the backend's default lesson length.
+
+    List<String> conflictTypes = const [];
+    bool busy = false;
+    try {
+      final dayUtc = DateTime.utc(
+        slotStartUtc.year,
+        slotStartUtc.month,
+        slotStartUtc.day,
+      );
+      final availability = await _crm.listRoomAvailability(
+        branchId: branchId,
+        roomId: roomId,
+        date:
+            '${dayUtc.year.toString().padLeft(4, '0')}-'
+            '${dayUtc.month.toString().padLeft(2, '0')}-'
+            '${dayUtc.day.toString().padLeft(2, '0')}',
+        from: slotStartUtc.toIso8601String(),
+        durationMinutes: durationMinutes,
+        limit: 100,
+      );
+      final items = availability['items'];
+      if (items is List) {
+        for (final raw in items) {
+          if (raw is! Map) continue;
+          if (raw['room_id']?.toString() != roomId) continue;
+          busy = raw['is_available'] == false;
+          final ct = raw['conflict_types'];
+          if (ct is List) {
+            conflictTypes = ct.map((e) => e.toString()).toList();
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('Room availability pre-check failed: $e');
+      return true; // soft-fail open — never block on a read error.
+    }
+
+    if (!busy && conflictTypes.isEmpty) return true;
+
+    if (!mounted) return true;
+    final detail = _conflictDetail(conflictTypes);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Возможен конфликт'),
+        content: Text(
+          'В это время возможен конфликт$detail. Создать всё равно?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Создать всё равно'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  String _conflictDetail(List<String> conflictTypes) {
+    final labels = <String>[];
+    for (final type in conflictTypes) {
+      switch (type) {
+        case 'room_overlap':
+          labels.add('аудитория занята');
+          break;
+        case 'teacher_overlap':
+          labels.add('преподаватель занят');
+          break;
+      }
+    }
+    if (labels.isEmpty) return ' (аудитория занята)';
+    return ' (${labels.join(', ')})';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -182,7 +326,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: AppTheme.primaryPurple),
+            CircularProgressIndicator(color: AppTheme.primaryGold),
             SizedBox(height: 16),
             Text('Загрузка данных...'),
           ],
@@ -191,7 +335,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     }
 
     return AlertDialog(
-      title: const Text('Новое занятие'),
+      title: Text(_isEdit ? 'Редактировать занятие' : 'Новое занятие'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -402,7 +546,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Создать'),
+              : Text(_isEdit ? 'Сохранить' : 'Создать'),
         ),
       ],
     );

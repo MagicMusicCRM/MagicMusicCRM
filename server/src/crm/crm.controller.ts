@@ -32,6 +32,8 @@ import { PaymentQuery } from "./dto/payment.query";
 import { ReportQuery } from "./dto/report.query";
 import { RoomAvailabilityQuery } from "./dto/room-availability.query";
 import { SaveContactFromChatDto } from "./dto/save-contact-from-chat.dto";
+import { CreateBranchDto } from "./dto/create-branch.dto";
+import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { ScheduleMatrixQuery } from "./dto/schedule-matrix.query";
 import { StaffListQuery } from "./dto/staff-list.query";
 import { StudentBalanceQuery } from "./dto/student-balance.query";
@@ -46,9 +48,15 @@ import { UpsertAttendanceDto } from "./dto/upsert-attendance.dto";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { UpsertLeadStatusDto } from "./dto/upsert-lead-status.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
+import { CreateDisciplineDto } from "./dto/create-discipline.dto";
+import { CreateLossReasonDto } from "./dto/create-loss-reason.dto";
+import { UpsertBranchDisciplineDto } from "./dto/upsert-branch-discipline.dto";
+import { ReorderBranchDisciplinesDto } from "./dto/reorder-branch-disciplines.dto";
 import { UpsertGroupDto } from "./dto/upsert-group.dto";
 import { UpsertRoomDto } from "./dto/upsert-room.dto";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
+import { CreateFamilyDto } from "./dto/create-family.dto";
+import { AddFamilyMemberDto } from "./dto/add-family-member.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -238,6 +246,23 @@ export class CrmController {
     return this.crm.listBranches(actor, query);
   }
 
+  @Post("branches")
+  createBranch(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: CreateBranchDto,
+  ) {
+    return this.crm.createBranch(actor, dto);
+  }
+
+  @Patch("branches/:id")
+  updateBranch(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateBranchDto,
+  ) {
+    return this.crm.updateBranch(actor, id, dto);
+  }
+
   @Get("rooms")
   listRooms(@CurrentActor() actor: ActorContext, @Query() query: CrmListQuery) {
     return this.crm.listRooms(actor, query);
@@ -324,6 +349,63 @@ export class CrmController {
     return this.crm.listLeadStatuses(actor, query);
   }
 
+  @Get("loss-reasons")
+  listLossReasons(@CurrentActor() actor: ActorContext) {
+    return this.crm.listLossReasons(actor);
+  }
+
+  @Get("lead-sources")
+  listLeadSources(@CurrentActor() actor: ActorContext) {
+    return this.crm.listLeadSources(actor);
+  }
+
+  @Get("disciplines")
+  listDisciplines(@CurrentActor() actor: ActorContext) {
+    return this.crm.listDisciplines(actor);
+  }
+
+  @Get("branches/:branchId/disciplines")
+  listBranchDisciplines(
+    @CurrentActor() actor: ActorContext,
+    @Param("branchId", ParseUUIDPipe) branchId: string,
+  ) {
+    return this.crm.listBranchDisciplines(actor, branchId);
+  }
+
+  @Post("disciplines")
+  createDiscipline(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: CreateDisciplineDto,
+  ) {
+    return this.crm.createDiscipline(actor, dto);
+  }
+
+  @Post("loss-reasons")
+  createLossReason(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: CreateLossReasonDto,
+  ) {
+    return this.crm.createLossReason(actor, dto);
+  }
+
+  @Post("branches/:branchId/disciplines")
+  assignBranchDiscipline(
+    @CurrentActor() actor: ActorContext,
+    @Param("branchId", ParseUUIDPipe) branchId: string,
+    @Body() dto: UpsertBranchDisciplineDto,
+  ) {
+    return this.crm.assignBranchDiscipline(actor, branchId, dto);
+  }
+
+  @Patch("branches/:branchId/disciplines/order")
+  reorderBranchDisciplines(
+    @CurrentActor() actor: ActorContext,
+    @Param("branchId", ParseUUIDPipe) branchId: string,
+    @Body() dto: ReorderBranchDisciplinesDto,
+  ) {
+    return this.crm.reorderBranchDisciplines(actor, branchId, dto);
+  }
+
   @Get("hollihop/disciplines")
   listHolliHopDisciplines(@CurrentActor() actor: ActorContext) {
     return this.crm.listHolliHopDisciplines(actor);
@@ -350,6 +432,14 @@ export class CrmController {
     @Body() dto: UpsertLeadStatusDto,
   ) {
     return this.crm.createLeadStatus(actor, dto);
+  }
+
+  @Patch("lead-statuses/order")
+  reorderLeadStatuses(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: { statusIds: string[] },
+  ) {
+    return this.crm.reorderLeadStatuses(actor, dto);
   }
 
   @Delete("lead-statuses/:id")
@@ -399,6 +489,14 @@ export class CrmController {
     @Body() dto: UpsertLessonDto,
   ) {
     return this.crm.updateLesson(actor, id, dto);
+  }
+
+  @Delete("lessons/:id")
+  deleteLesson(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.deleteLesson(actor, id);
   }
 
   @Get("lessons/:id/attendance")
@@ -509,12 +607,25 @@ export class CrmController {
     return this.crm.listLeadBoard(actor, query);
   }
 
+  @Get("leads/app-count")
+  countAppLeads(@CurrentActor() actor: ActorContext) {
+    return this.crm.countAppLeads(actor);
+  }
+
   @Get("leads/:id/card")
   getLeadCard(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
     return this.crm.getLeadCard(actor, id);
+  }
+
+  @Get("leads/:leadId/status-history")
+  listLeadStatusHistory(
+    @CurrentActor() actor: ActorContext,
+    @Param("leadId", ParseUUIDPipe) leadId: string,
+  ) {
+    return this.crm.listLeadStatusHistory(actor, leadId);
   }
 
   @Get("leads/:id/chat-user")
@@ -561,5 +672,83 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
   ) {
     return this.crm.deleteLead(actor, id);
+  }
+
+  @Get("phone-review-queue/count")
+  countPhoneReviewQueue(@CurrentActor() actor: ActorContext) {
+    return this.crm.countPhoneReviewQueue(actor);
+  }
+
+  @Get("phone-review-queue")
+  listPhoneReviewQueue(
+    @CurrentActor() actor: ActorContext,
+    @Query("limit") limit?: string,
+  ) {
+    return this.crm.listPhoneReviewQueue(actor, limit ? Number(limit) : undefined);
+  }
+
+  @Post("families")
+  createFamily(@CurrentActor() actor: ActorContext, @Body() dto: CreateFamilyDto) {
+    return this.crm.createFamily(actor, dto);
+  }
+
+  @Post("families/:familyId/members")
+  addFamilyMember(
+    @CurrentActor() actor: ActorContext,
+    @Param("familyId", ParseUUIDPipe) familyId: string,
+    @Body() dto: AddFamilyMemberDto,
+  ) {
+    return this.crm.addFamilyMember(actor, familyId, dto);
+  }
+
+  @Get("families/by-entity/:entityType/:entityId")
+  getFamilyForEntity(
+    @CurrentActor() actor: ActorContext,
+    @Param("entityType") entityType: string,
+    @Param("entityId", ParseUUIDPipe) entityId: string,
+  ) {
+    return this.crm.getFamilyForEntity(actor, entityType, entityId);
+  }
+
+  @Delete("family-members/:memberId")
+  removeFamilyMember(
+    @CurrentActor() actor: ActorContext,
+    @Param("memberId", ParseUUIDPipe) memberId: string,
+  ) {
+    return this.crm.removeFamilyMember(actor, memberId);
+  }
+
+  @Post("families/:familyId/primary-payer/:memberId")
+  setPrimaryPayer(
+    @CurrentActor() actor: ActorContext,
+    @Param("familyId", ParseUUIDPipe) familyId: string,
+    @Param("memberId", ParseUUIDPipe) memberId: string,
+  ) {
+    return this.crm.setPrimaryPayer(actor, familyId, memberId);
+  }
+
+  @Get("merge-candidates")
+  listMergeCandidates(
+    @CurrentActor() actor: ActorContext,
+    @Query("limit") limit?: string,
+  ) {
+    return this.crm.listMergeCandidates(actor, limit ? Number(limit) : undefined);
+  }
+
+  @Post("leads/:winnerId/merge/:loserId")
+  mergeLeads(
+    @CurrentActor() actor: ActorContext,
+    @Param("winnerId", ParseUUIDPipe) winnerId: string,
+    @Param("loserId", ParseUUIDPipe) loserId: string,
+  ) {
+    return this.crm.mergeLeads(actor, loserId, winnerId);
+  }
+
+  @Post("merges/:mergeLogId/undo")
+  undoMerge(
+    @CurrentActor() actor: ActorContext,
+    @Param("mergeLogId", ParseUUIDPipe) mergeLogId: string,
+  ) {
+    return this.crm.undoMerge(actor, mergeLogId);
   }
 }

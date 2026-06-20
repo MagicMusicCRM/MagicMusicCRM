@@ -137,11 +137,11 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
         ? _position.inMilliseconds / _duration.inMilliseconds
         : 0.0;
 
-    final iconColor = widget.isMe ? Colors.white : AppTheme.primaryPurple;
+    final iconColor = widget.isMe ? Colors.white : AppTheme.primaryGold;
     final trackBg = widget.isMe
         ? Colors.white.withAlpha(50)
-        : AppTheme.primaryPurple.withAlpha(30);
-    final trackActive = widget.isMe ? Colors.white : AppTheme.primaryPurple;
+        : AppTheme.primaryGold.withAlpha(30);
+    final trackActive = widget.isMe ? Colors.white : AppTheme.primaryGold;
     final textColor = widget.isMe
         ? Colors.white.withAlpha(200)
         : Theme.of(context).colorScheme.onSurfaceVariant;

@@ -666,7 +666,7 @@ class _DebtorDetailSheet extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: Icon(
         _timelineIcon(item['type']?.toString()),
-        color: AppTheme.primaryPurple,
+        color: AppTheme.primaryGold,
       ),
       title: Text(title),
       subtitle: Text(

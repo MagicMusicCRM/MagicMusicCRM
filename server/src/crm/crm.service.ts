@@ -16,6 +16,8 @@ import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
+import { CreateBranchDto } from "./dto/create-branch.dto";
+import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { CreateCommentDto } from "./dto/create-comment.dto";
 import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
 import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
@@ -49,6 +51,7 @@ import { UpsertRoomDto } from "./dto/upsert-room.dto";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
 import { CrmPolicy } from "./crm.policy";
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
+import { normalizePhoneRu, normalizedPhoneExpr } from "./phone.util";
 
 interface StudentRow {
   id: string;
@@ -157,12 +160,25 @@ interface LessonRow {
 
 interface ScheduleLessonRow extends LessonRow {
   conflict_types: string[] | null;
+  // Partner lesson ids this lesson overlaps with, per conflict type. Used to
+  // deduplicate the aggregated conflicts list to one entry per pair (KVA-166).
+  room_overlap_ids?: string[] | null;
+  teacher_overlap_ids?: string[] | null;
 }
 
 interface LessonAccessRow {
   id: string;
   student_id: string | null;
   group_id: string | null;
+  teacher_user_id: string | null;
+}
+
+// Pre-update snapshot used by updateLesson to detect a genuine reschedule
+// (time / room / teacher delta) and resolve the assigned teacher (KVA-158).
+interface RescheduleSnapshotRow {
+  teacher_id: string | null;
+  room_id: string | null;
+  scheduled_at: Date | string | null;
   teacher_user_id: string | null;
 }
 
@@ -341,6 +357,7 @@ interface BranchRow {
   id: string;
   name: string;
   address: string | null;
+  utc_offset_minutes: number | string;
   created_at: Date | string;
 }
 
@@ -443,7 +460,16 @@ export class CrmService {
   ) {}
 
   async getMySummary(actor: ActorContext) {
-    const students = await this.listClientStudents(actor.userId);
+    const ownStudents = await this.listClientStudents(actor.userId);
+    // KVA-156: a parent/payer account also sees children linked via Families.
+    const familyStudents = await this.listFamilyLinkedStudents(actor.userId);
+    // Union own + family-linked students; dedup by student id (own wins).
+    const byId = new Map<string, StudentRow>();
+    for (const row of ownStudents) byId.set(row.id, row);
+    for (const row of familyStudents) {
+      if (!byId.has(row.id)) byId.set(row.id, row);
+    }
+    const students = Array.from(byId.values());
     const lessons = await this.listLessons(actor, { limit: 20 });
     const tasks = await this.listTasks(actor, { limit: 20 });
     const payments = await this.listPayments(actor, { limit: 20 });
@@ -535,7 +561,7 @@ export class CrmService {
             where p.deleted_at is null
               and p.payment_date >= $1::timestamptz
               and p.payment_date < $2::timestamptz
-              and ($3::uuid is null or coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('s')} = $3::text)
           ) as revenue,
           (
             select coalesce(sum(ep.amount), 0)
@@ -543,21 +569,21 @@ export class CrmService {
             join app.students s on s.id = ep.student_id and s.deleted_at is null
             where ep.status in ('pending', 'open')
               and (ep.due_date is null or ep.due_date < $2::date)
-              and ($3::uuid is null or coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('s')} = $3::text)
           ) as expected_payments,
           (
             select count(*)
             from app.student_balances sb
             join app.students s on s.id = sb.student_id and s.deleted_at is null
             where sb.balance < 0
-              and ($3::uuid is null or coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('s')} = $3::text)
           ) as debt_students,
           (
             select count(*)
             from app.students s
             where s.deleted_at is null
               and s.status = 'active'
-              and ($3::uuid is null or coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('s')} = $3::text)
           ) as active_students,
           (
             select count(*)
@@ -565,7 +591,7 @@ export class CrmService {
             where l.deleted_at is null
               and l.created_at >= $1::timestamptz
               and l.created_at < $2::timestamptz
-              and ($3::uuid is null or coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id') = $3::text)
+              and ($3::uuid is null or ${this.branchIdExpr('l')} = $3::text)
           ) as new_leads,
           (
             select count(*)
@@ -608,6 +634,11 @@ export class CrmService {
                     and other_room.status <> 'cancelled'
                     and other_room.id <> l.id
                     and other_room.room_id = l.room_id
+                    -- Lessons of the SAME group share a room legitimately (one
+                    -- group class = many participant rows). Only a different
+                    -- group (or an individual lesson) is a real double-booking.
+                    and (l.group_id is null or other_room.group_id is null
+                         or other_room.group_id <> l.group_id)
                     and other_room.scheduled_at < l.scheduled_at + l.duration_minutes * interval '1 minute'
                     and other_room.scheduled_at + other_room.duration_minutes * interval '1 minute' > l.scheduled_at
                 ))
@@ -872,7 +903,7 @@ export class CrmService {
           s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone,
           s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids,
-          coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') as branch_id,
+          ${this.branchIdExpr('s')} as branch_id,
           b.name as branch_name,
           (
             select count(*)
@@ -910,7 +941,7 @@ export class CrmService {
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         left join app.branches b
-          on b.id::text = coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id')
+          on b.id::text = ${this.branchIdExpr('s')}
          and b.deleted_at is null
         left join app.user_crm_links link
           on link.entity_type = 'student'
@@ -945,6 +976,7 @@ export class CrmService {
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
     const leadId = dto.leadId ?? null;
     const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
+    const branchId = this.extractBranchId(dto.customDataPatch);
 
     if (leadId) {
       const lead = await this.database.query<{ id: string }>(
@@ -981,8 +1013,8 @@ export class CrmService {
             returning id, user_id, first_name, last_name, phone
           ),
           inserted_student as (
-            insert into app.students (profile_id, status, lead_id, custom_data)
-            select id, $6, $7, $8::jsonb
+            insert into app.students (profile_id, status, lead_id, custom_data, branch_id)
+            select id, $6, $7, $8::jsonb, $9::uuid
             from inserted_profile
             returning id, status, profile_id, lead_id, custom_data, created_at
           )
@@ -1003,6 +1035,7 @@ export class CrmService {
           status,
           leadId,
           JSON.stringify(customDataPatch),
+          branchId,
         ],
       );
       const student = result.rows[0];
@@ -1268,6 +1301,13 @@ export class CrmService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
+    const branchId = this.extractBranchId(dto.customDataPatch);
+    const beforeStudent = (
+      await this.database.query<{ status: string | null; branch_id: string | null }>(
+        `select status, branch_id from app.students where id = $1 and deleted_at is null`,
+        [studentId],
+      )
+    ).rows[0] ?? null;
     const result = await this.database.query<StudentRow>(
       `
         with target as (
@@ -1299,6 +1339,7 @@ export class CrmService {
           update app.students s
           set status = coalesce($6, s.status),
             custom_data = coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb,
+            branch_id = coalesce($8::uuid, s.branch_id),
             updated_at = now()
           from target
           where s.id = target.id
@@ -1338,6 +1379,7 @@ export class CrmService {
         this.trimOptional(dto.email)?.toLowerCase() ?? null,
         this.trimOptional(dto.status),
         JSON.stringify(customDataPatch),
+        branchId,
       ],
     );
     const student = result.rows[0];
@@ -1348,6 +1390,13 @@ export class CrmService {
       entityType: "student",
       entityId: student.id,
     });
+    if (beforeStudent && beforeStudent.status !== student.status) {
+      await this.database.query(
+        `insert into app.student_status_history (student_id, status, branch_id)
+         values ($1, $2, $3)`,
+        [studentId, student.status, branchId ?? beforeStudent.branch_id],
+      );
+    }
     return this.toStudentDto(student);
   }
 
@@ -2098,7 +2147,7 @@ export class CrmService {
     const q = query.q?.trim();
     const result = await this.database.query<BranchRow>(
       `
-        select id, name, address, created_at
+        select id, name, address, utc_offset_minutes, created_at
         from app.branches
         where deleted_at is null
           and (
@@ -2204,14 +2253,26 @@ export class CrmService {
               and overlap_lesson.scheduled_at + overlap_lesson.duration_minutes * interval '1 minute' > $5::timestamptz
           ) as is_available,
           array_remove(array[
+            -- room_overlap = TWO lessons actually overlapping each other in the
+            -- room (different groups), not merely the room being occupied during
+            -- the queried window (which a whole-day window would always be).
             case when exists (
               select 1
-              from app.lessons overlap_lesson
-              where overlap_lesson.deleted_at is null
-                and overlap_lesson.status <> 'cancelled'
-                and overlap_lesson.room_id = rr.room_id
-                and overlap_lesson.scheduled_at < $6::timestamptz
-                and overlap_lesson.scheduled_at + overlap_lesson.duration_minutes * interval '1 minute' > $5::timestamptz
+              from app.lessons a
+              join app.lessons b
+                on b.room_id = a.room_id
+                and b.id <> a.id
+                and b.deleted_at is null
+                and b.status <> 'cancelled'
+                and (a.group_id is null or b.group_id is null
+                     or a.group_id <> b.group_id)
+                and b.scheduled_at < a.scheduled_at + a.duration_minutes * interval '1 minute'
+                and b.scheduled_at + b.duration_minutes * interval '1 minute' > a.scheduled_at
+              where a.room_id = rr.room_id
+                and a.deleted_at is null
+                and a.status <> 'cancelled'
+                and a.scheduled_at < $6::timestamptz
+                and a.scheduled_at + a.duration_minutes * interval '1 minute' > $5::timestamptz
             ) then 'room_overlap' end,
             case when $7::uuid is not null and exists (
               select 1
@@ -2513,6 +2574,44 @@ export class CrmService {
     return { success: true };
   }
 
+  async countPhoneReviewQueue(actor: ActorContext): Promise<{ count: number }> {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{ count: string }>(
+      `select count(*)::text as count from app.phone_review_queue where resolved_at is null`,
+    );
+    return { count: Number(result.rows[0]?.count ?? 0) };
+  }
+
+  async listPhoneReviewQueue(actor: ActorContext, limit = 50) {
+    this.policy.assertCanReadOperationalData(actor);
+    const capped = Math.min(Math.max(limit, 1), 200);
+    const result = await this.database.query<{
+      id: string;
+      entity_type: string;
+      entity_id: string;
+      raw_phone: string | null;
+      reason: string;
+      created_at: string;
+    }>(
+      `select id, entity_type, entity_id, raw_phone, reason, created_at
+         from app.phone_review_queue
+        where resolved_at is null
+        order by created_at desc
+        limit $1`,
+      [capped],
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        rawPhone: row.raw_phone,
+        reason: row.reason,
+        createdAt: row.created_at,
+      })),
+    };
+  }
+
   async listLeadStatuses(actor: ActorContext, query: CrmListQuery) {
     this.policy.assertCanWriteCrm(actor);
     const limit = Math.min(query.limit ?? 100, 100);
@@ -2527,6 +2626,88 @@ export class CrmService {
     );
 
     return { items: result.rows.map((row) => this.toLeadStatusDto(row)) };
+  }
+
+  async listLossReasons(actor: ActorContext) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{
+      id: string;
+      name: string;
+      kind: string;
+      sort_order: number;
+      color: string | null;
+    }>(
+      `select id, name, kind, sort_order, color
+         from app.lead_loss_reasons
+        where is_active and deleted_at is null
+        order by sort_order asc, name asc`,
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        kind: row.kind,
+        sortOrder: row.sort_order,
+        color: row.color,
+      })),
+    };
+  }
+
+  async listLeadSources(actor: ActorContext) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{
+      id: string;
+      canonical_name: string;
+      display_name: string;
+    }>(
+      `select id, canonical_name, display_name
+         from app.lead_sources
+        where is_active and deleted_at is null
+        order by display_name asc`,
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        canonicalName: row.canonical_name,
+        displayName: row.display_name,
+      })),
+    };
+  }
+
+  async listDisciplines(actor: ActorContext) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{ id: string; name: string }>(
+      `select id, name
+         from app.disciplines
+        where is_active and deleted_at is null
+        order by name asc`,
+    );
+    return { items: result.rows.map((row) => ({ id: row.id, name: row.name })) };
+  }
+
+  async listBranchDisciplines(actor: ActorContext, branchId: string) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{
+      id: string;
+      discipline_id: string;
+      name: string;
+      sort_order: number;
+    }>(
+      `select bd.id, bd.discipline_id, d.name, bd.sort_order
+         from app.branch_disciplines bd
+         join app.disciplines d on d.id = bd.discipline_id and d.deleted_at is null and d.is_active
+        where bd.branch_id = $1 and bd.deleted_at is null
+        order by bd.sort_order asc, d.name asc`,
+      [branchId],
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        disciplineId: row.discipline_id,
+        name: row.name,
+        sortOrder: row.sort_order,
+      })),
+    };
   }
 
   async listHolliHopDisciplines(actor: ActorContext) {
@@ -2593,6 +2774,105 @@ export class CrmService {
     return { success: true };
   }
 
+  async reorderLeadStatuses(
+    actor: ActorContext,
+    dto: { statusIds: string[] },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const statusIds = Array.isArray(dto.statusIds) ? dto.statusIds : [];
+    if (statusIds.length === 0) {
+      throw new BadRequestException("Список статусов воронки пуст.");
+    }
+    const result = await this.database.query(
+      `update app.lead_statuses ls
+          set sort_order = t.ord - 1
+         from unnest($1::uuid[]) with ordinality as t(status_id, ord)
+        where ls.id = t.status_id`,
+      [statusIds],
+    );
+    await this.audit.record({
+      actor,
+      action: "crm.lead_statuses_reordered",
+      entityType: "lead",
+      metadata: { order: statusIds },
+    });
+    return { updated: result.rowCount ?? 0 };
+  }
+
+  async createDiscipline(actor: ActorContext, dto: { name: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{ id: string; name: string }>(
+      `insert into app.disciplines (name) values ($1) returning id, name`,
+      [dto.name],
+    );
+    return { id: result.rows[0].id, name: result.rows[0].name };
+  }
+
+  async createLossReason(
+    actor: ActorContext,
+    dto: { name: string; kind?: "lost" | "paused"; sortOrder?: number },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{
+      id: string;
+      name: string;
+      kind: string;
+      sort_order: number;
+    }>(
+      `insert into app.lead_loss_reasons (name, kind, sort_order)
+       values ($1, $2, $3)
+       returning id, name, kind, sort_order`,
+      [dto.name, dto.kind ?? "lost", dto.sortOrder ?? 0],
+    );
+    const row = result.rows[0];
+    return { id: row.id, name: row.name, kind: row.kind, sortOrder: row.sort_order };
+  }
+
+  async assignBranchDiscipline(
+    actor: ActorContext,
+    branchId: string,
+    dto: { disciplineId: string; sortOrder?: number },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{
+      id: string;
+      discipline_id: string;
+      sort_order: number;
+    }>(
+      `insert into app.branch_disciplines (branch_id, discipline_id, sort_order)
+       values (
+         $1, $2,
+         coalesce($3, (select coalesce(max(sort_order) + 1, 0)
+                         from app.branch_disciplines
+                        where branch_id = $1 and deleted_at is null))
+       )
+       on conflict (branch_id, discipline_id)
+       do update set sort_order = coalesce($3, app.branch_disciplines.sort_order), deleted_at = null
+       returning id, discipline_id, sort_order`,
+      [branchId, dto.disciplineId, dto.sortOrder ?? null],
+    );
+    const row = result.rows[0];
+    return { id: row.id, disciplineId: row.discipline_id, sortOrder: row.sort_order };
+  }
+
+  async reorderBranchDisciplines(
+    actor: ActorContext,
+    branchId: string,
+    dto: { disciplineIds: string[] },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query(
+      `update app.branch_disciplines bd
+          set sort_order = t.ord - 1
+         from unnest($2::uuid[]) with ordinality as t(discipline_id, ord)
+        where bd.branch_id = $1
+          and bd.discipline_id = t.discipline_id
+          and bd.deleted_at is null`,
+      [branchId, dto.disciplineIds],
+    );
+    return { updated: result.rowCount ?? 0 };
+  }
+
   async getScheduleMatrix(actor: ActorContext, query: ScheduleMatrixQuery) {
     this.policy.assertCanReadOperationalData(actor);
     const limit = Math.min(query.limit ?? 300, 500);
@@ -2650,6 +2930,9 @@ export class CrmService {
                 and other_room.status <> 'cancelled'
                 and other_room.id <> scoped.id
                 and other_room.room_id = scoped.room_id
+                -- Same group sharing a room is not a conflict (see schedule_issues).
+                and (scoped.group_id is null or other_room.group_id is null
+                     or other_room.group_id <> scoped.group_id)
                 and other_room.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
                 and other_room.scheduled_at + other_room.duration_minutes * interval '1 minute' > scoped.scheduled_at
             ) then 'room_overlap' end,
@@ -2660,10 +2943,44 @@ export class CrmService {
                 and other_teacher.status <> 'cancelled'
                 and other_teacher.id <> scoped.id
                 and other_teacher.teacher_id = scoped.teacher_id
+                -- One teacher running one group class spans many participant
+                -- rows at the same time — not a teacher double-booking.
+                and (scoped.group_id is null or other_teacher.group_id is null
+                     or other_teacher.group_id <> scoped.group_id)
                 and other_teacher.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
                 and other_teacher.scheduled_at + other_teacher.duration_minutes * interval '1 minute' > scoped.scheduled_at
             ) then 'teacher_overlap' end
-          ], null) as conflict_types
+          ], null) as conflict_types,
+          -- The id of every OTHER lesson this lesson collides with, per type.
+          -- Used to deduplicate the aggregated conflicts list so each unordered
+          -- overlapping PAIR is counted once instead of once per participant
+          -- (KVA-166: prevents the "Конфликты: N" badge double-counting).
+          (
+            select coalesce(array_agg(other_room.id), '{}')
+            from app.lessons other_room
+            where scoped.room_id is not null
+              and other_room.deleted_at is null
+              and other_room.status <> 'cancelled'
+              and other_room.id <> scoped.id
+              and other_room.room_id = scoped.room_id
+              and (scoped.group_id is null or other_room.group_id is null
+                   or other_room.group_id <> scoped.group_id)
+              and other_room.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
+              and other_room.scheduled_at + other_room.duration_minutes * interval '1 minute' > scoped.scheduled_at
+          ) as room_overlap_ids,
+          (
+            select coalesce(array_agg(other_teacher.id), '{}')
+            from app.lessons other_teacher
+            where scoped.teacher_id is not null
+              and other_teacher.deleted_at is null
+              and other_teacher.status <> 'cancelled'
+              and other_teacher.id <> scoped.id
+              and other_teacher.teacher_id = scoped.teacher_id
+              and (scoped.group_id is null or other_teacher.group_id is null
+                   or other_teacher.group_id <> scoped.group_id)
+              and other_teacher.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
+              and other_teacher.scheduled_at + other_teacher.duration_minutes * interval '1 minute' > scoped.scheduled_at
+          ) as teacher_overlap_ids
         from scoped
         order by scoped.scheduled_at asc, scoped.id asc
       `,
@@ -2682,17 +2999,64 @@ export class CrmService {
       conflictTypes: row.conflict_types ?? [],
     }));
     const groups = this.groupScheduleItems(items, groupBy);
-    const conflicts = items.flatMap((item) => {
-      const conflictTypes = Array.isArray(item.conflictTypes)
-        ? item.conflictTypes
-        : [];
-      return conflictTypes.map((type) => ({
-        type,
-        lessonId: item.id,
-        scheduledAt: item.scheduledAt,
-        roomId: item.roomId,
-        teacherId: item.teacherId,
-      }));
+
+    // KVA-166: each overlapping PAIR previously produced TWO conflict entries
+    // (one keyed to lesson A because B overlaps it, one keyed to lesson B
+    // because A overlaps it), so the "Конфликты: N" badge double-counted —
+    // ~242 reported for ~199 real room overlaps. The per-lesson `conflictTypes`
+    // above stays per-lesson (the red borders/tooltips need every participant
+    // flagged); only the aggregated list is deduplicated to one entry per
+    // unordered pair. `*_overlap_ids` give the partner lesson ids, so we key
+    // each conflict by `type:minId:maxId` and emit it once, using the
+    // earlier-scheduled (first-seen) lesson as the representative for the
+    // existing scheduledAt/roomId/teacherId fields and per-day filtering.
+    const seenPairs = new Set<string>();
+    const conflicts: Array<{
+      type: string;
+      lessonId: string;
+      scheduledAt: Date | string;
+      roomId: string | null;
+      teacherId: string | null;
+    }> = [];
+    const partnerIdsByType = (
+      row: ScheduleLessonRow,
+      type: string,
+    ): string[] => {
+      if (type === "room_overlap") return row.room_overlap_ids ?? [];
+      if (type === "teacher_overlap") return row.teacher_overlap_ids ?? [];
+      return [];
+    };
+    result.rows.forEach((row, index) => {
+      const item = items[index];
+      const conflictTypes = row.conflict_types ?? [];
+      for (const type of conflictTypes) {
+        const partners = partnerIdsByType(row, type);
+        if (partners.length === 0) {
+          // No partner ids surfaced (e.g. branch_mismatch / missing_teacher are
+          // single-lesson issues): keep the per-lesson entry as before.
+          conflicts.push({
+            type,
+            lessonId: item.id,
+            scheduledAt: item.scheduledAt,
+            roomId: item.roomId,
+            teacherId: item.teacherId,
+          });
+          continue;
+        }
+        for (const partnerId of partners) {
+          const [a, b] = [item.id, partnerId].sort();
+          const key = `${type}:${a}:${b}`;
+          if (seenPairs.has(key)) continue;
+          seenPairs.add(key);
+          conflicts.push({
+            type,
+            lessonId: item.id,
+            scheduledAt: item.scheduledAt,
+            roomId: item.roomId,
+            teacherId: item.teacherId,
+          });
+        }
+      }
     });
 
     return {
@@ -2875,6 +3239,24 @@ export class CrmService {
     dto: UpsertLessonDto,
   ) {
     await this.assertCanUpdateLesson(actor, lessonId, dto);
+    // Snapshot the pre-update state so we can tell a genuine RESCHEDULE
+    // (time / room / teacher change) from an ordinary save (e.g. notes or
+    // status edit). The UPDATE ... RETURNING below cannot surface the OLD
+    // values, so we read them first. Also resolves the currently-assigned
+    // teacher's user_id for the reschedule notification (KVA-158).
+    const before = await this.database.query<RescheduleSnapshotRow>(
+      `
+        select l.teacher_id, l.room_id, l.scheduled_at,
+          tp.user_id as teacher_user_id
+        from app.lessons l
+        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        where l.id = $1 and l.deleted_at is null
+        limit 1
+      `,
+      [lessonId],
+    );
+    const previous = before.rows[0] ?? null;
     const result = await this.database.query<LessonRow>(
       `
         update app.lessons
@@ -2922,6 +3304,7 @@ export class CrmService {
         [lesson.id],
       );
     }
+    await this.notifyTeacherOfReschedule(lessonId, previous, lesson);
     await this.audit.record({
       actor,
       action: "crm.lesson_updated",
@@ -2929,6 +3312,141 @@ export class CrmService {
       entityId: lesson.id,
     });
     return this.toLessonDto(lesson);
+  }
+
+  // KVA-158: when a lesson is actually rescheduled — its time, room or
+  // assigned teacher changes — push an in-app + FCM notification to the
+  // ASSIGNED teacher. We deliberately do NOT fire on every save (status,
+  // notes, etc.) so teachers are not spammed.
+  private async notifyTeacherOfReschedule(
+    lessonId: string,
+    previous: RescheduleSnapshotRow | null,
+    lesson: LessonRow,
+  ): Promise<void> {
+    if (!previous) return;
+    const sameInstant = (a: Date | string | null, b: Date | string | null) => {
+      if (a === null || b === null) return a === b;
+      return new Date(a).getTime() === new Date(b).getTime();
+    };
+    const timeChanged = !sameInstant(previous.scheduled_at, lesson.scheduled_at);
+    const roomChanged = previous.room_id !== lesson.room_id;
+    const teacherChanged = previous.teacher_id !== lesson.teacher_id;
+    if (!timeChanged && !roomChanged && !teacherChanged) return;
+
+    // Notify the teacher who now owns the slot. If the teacher was swapped we
+    // resolve the NEW teacher's user_id; otherwise reuse the snapshot value.
+    const oldTeacherUserId = previous.teacher_user_id;
+    let newTeacherUserId = oldTeacherUserId;
+    if (teacherChanged) {
+      newTeacherUserId = lesson.teacher_id
+        ? await this.resolveTeacherUserId(lesson.teacher_id)
+        : null;
+    }
+
+    const whenLocal = this.formatLessonTimeMoscow(lesson.scheduled_at);
+    const reasons: string[] = [];
+    if (timeChanged) reasons.push("время");
+    if (roomChanged) reasons.push("аудитория");
+    if (teacherChanged) reasons.push("назначение");
+    const body =
+      `Изменено: ${reasons.join(", ")}. ` +
+      `Новое время — ${whenLocal} (по Москве).`;
+
+    try {
+      if (newTeacherUserId) {
+        await this.notifications.notifyUser({
+          userId: newTeacherUserId,
+          title: "Перенос занятия",
+          body,
+          data: { type: "lesson_rescheduled", lessonId },
+          channels: ["push", "in_app"],
+        });
+      }
+      // On a teacher swap, also notify the REMOVED teacher so they know they
+      // are no longer assigned. Guard against null and against old==new (e.g.
+      // same person re-assigned: time-only reschedule leaves teacher unchanged).
+      if (
+        teacherChanged &&
+        oldTeacherUserId &&
+        oldTeacherUserId !== newTeacherUserId
+      ) {
+        const oldWhenLocal = this.formatLessonTimeMoscow(
+          previous.scheduled_at,
+        );
+        await this.notifications.notifyUser({
+          userId: oldTeacherUserId,
+          title: "Занятие переназначено",
+          body: `Вы откреплены от занятия ${oldWhenLocal} (по Москве) (передано другому преподавателю).`,
+          data: { type: "lesson_reassigned", lessonId },
+          channels: ["push", "in_app"],
+        });
+      }
+    } catch {
+      // A notification failure must never block the reschedule itself.
+    }
+  }
+
+  private async resolveTeacherUserId(
+    teacherId: string,
+  ): Promise<string | null> {
+    const result = await this.database.query<{ user_id: string | null }>(
+      `
+        select tp.user_id
+        from app.teachers t
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        where t.id = $1 and t.deleted_at is null
+        limit 1
+      `,
+      [teacherId],
+    );
+    return result.rows[0]?.user_id ?? null;
+  }
+
+  private formatLessonTimeMoscow(value: Date | string | null): string {
+    if (value === null) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    // Mirror the reminder format ("DD.MM HH24:MI", Europe/Moscow).
+    const parts = new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Europe/Moscow",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+    const get = (type: string) =>
+      parts.find((part) => part.type === type)?.value ?? "";
+    return `${get("day")}.${get("month")} ${get("hour")}:${get("minute")}`;
+  }
+
+  async deleteLesson(actor: ActorContext, lessonId: string) {
+    // Only managers/admins may delete a lesson outright; teachers can update
+    // status/notes via updateLesson but not remove a lesson from the schedule.
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{ id: string }>(
+      `
+        update app.lessons
+        set deleted_at = now(), updated_at = now()
+        where id = $1 and deleted_at is null
+        returning id
+      `,
+      [lessonId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("Урок не найден.");
+    // Drop any pending reminder markers for the removed lesson.
+    await this.database.query(
+      "delete from app.lesson_reminders where lesson_id = $1",
+      [lessonId],
+    );
+    await this.audit.record({
+      actor,
+      action: "crm.lesson_deleted",
+      entityType: "lesson",
+      entityId: row.id,
+    });
+    return { success: true };
   }
 
   async getLessonAttendance(actor: ActorContext, lessonId: string) {
@@ -3031,8 +3549,8 @@ export class CrmService {
             grp.name
           ) as entity_name,
           coalesce(
-            nullif(coalesce(student.custom_data->>'branchId', student.custom_data->>'branch_id'), ''),
-            nullif(coalesce(lead.custom_data->>'branchId', lead.custom_data->>'branch_id'), ''),
+            nullif(${this.branchIdExpr('student')}, ''),
+            nullif(${this.branchIdExpr('lead')}, ''),
             grp.branch_id::text,
             lesson.branch_id::text
           ) as branch_id,
@@ -3052,8 +3570,8 @@ export class CrmService {
         left join app.groups grp on task.entity_type = 'group' and grp.id = task.entity_id and grp.deleted_at is null
         left join app.lessons lesson on task.entity_type = 'lesson' and lesson.id = task.entity_id and lesson.deleted_at is null
         left join app.branches branch on branch.id::text = coalesce(
-          nullif(coalesce(student.custom_data->>'branchId', student.custom_data->>'branch_id'), ''),
-          nullif(coalesce(lead.custom_data->>'branchId', lead.custom_data->>'branch_id'), ''),
+          nullif(${this.branchIdExpr('student')}, ''),
+          nullif(${this.branchIdExpr('lead')}, ''),
           grp.branch_id::text,
           lesson.branch_id::text
         ) and branch.deleted_at is null
@@ -3094,8 +3612,8 @@ export class CrmService {
           and (
             $11::uuid is null
             or coalesce(
-              nullif(coalesce(student.custom_data->>'branchId', student.custom_data->>'branch_id'), ''),
-              nullif(coalesce(lead.custom_data->>'branchId', lead.custom_data->>'branch_id'), ''),
+              nullif(${this.branchIdExpr('student')}, ''),
+              nullif(${this.branchIdExpr('lead')}, ''),
               grp.branch_id::text,
               lesson.branch_id::text
             ) = $11::text
@@ -3661,7 +4179,7 @@ export class CrmService {
             l.email, l.source, l.notes, l.assigned_to, l.custom_data,
             assigned_profile.first_name as assigned_first_name,
             assigned_profile.last_name as assigned_last_name,
-            coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id') as branch_id,
+            ${this.branchIdExpr('l')} as branch_id,
             b.name as branch_name,
             linked_student.id as linked_student_id,
             (
@@ -3696,7 +4214,7 @@ export class CrmService {
           left join app.users assigned_user on assigned_user.id = l.assigned_to and assigned_user.deleted_at is null
           left join app.profiles assigned_profile on assigned_profile.user_id = assigned_user.id and assigned_profile.deleted_at is null
           left join app.branches b
-            on b.id::text = coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id')
+            on b.id::text = ${this.branchIdExpr('l')}
            and b.deleted_at is null
           left join app.students linked_student
             on linked_student.lead_id = l.id
@@ -3769,7 +4287,7 @@ export class CrmService {
           l.email, l.source, l.notes, l.assigned_to, l.custom_data,
           assigned_profile.first_name as assigned_first_name,
           assigned_profile.last_name as assigned_last_name,
-          coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id') as branch_id,
+          ${this.branchIdExpr('l')} as branch_id,
           b.name as branch_name,
           linked_student.id as linked_student_id,
           (
@@ -3800,7 +4318,7 @@ export class CrmService {
         left join app.users assigned_user on assigned_user.id = l.assigned_to and assigned_user.deleted_at is null
         left join app.profiles assigned_profile on assigned_profile.user_id = assigned_user.id and assigned_profile.deleted_at is null
         left join app.branches b
-          on b.id::text = coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id')
+          on b.id::text = ${this.branchIdExpr('l')}
          and b.deleted_at is null
         left join app.students linked_student
           on linked_student.lead_id = l.id
@@ -3860,6 +4378,46 @@ export class CrmService {
       tasks,
       trials,
       timeline,
+    };
+  }
+
+  async listLeadStatusHistory(actor: ActorContext, leadId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{
+      id: string;
+      old_status: string | null;
+      new_status: string | null;
+      old_owner_id: string | null;
+      new_owner_id: string | null;
+      changed_by: string | null;
+      changed_at: string;
+      reason_id: string | null;
+      comment: string | null;
+    }>(
+      `select h.id,
+              os.name as old_status,
+              ns.name as new_status,
+              h.old_owner_id, h.new_owner_id, h.changed_by, h.changed_at,
+              h.reason_id, h.comment
+         from app.lead_status_history h
+         left join app.lead_statuses os on os.id = h.old_status_id
+         left join app.lead_statuses ns on ns.id = h.new_status_id
+        where h.lead_id = $1
+        order by h.changed_at desc`,
+      [leadId],
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        oldStatus: row.old_status,
+        newStatus: row.new_status,
+        oldOwnerId: row.old_owner_id,
+        newOwnerId: row.new_owner_id,
+        changedBy: row.changed_by,
+        changedAt: row.changed_at,
+        reasonId: row.reason_id,
+        comment: row.comment,
+      })),
     };
   }
 
@@ -3934,7 +4492,7 @@ export class CrmService {
           from app.profiles p
           join app.users u on u.id = p.user_id and u.deleted_at is null
           where p.deleted_at is null
-            and regexp_replace(coalesce(p.phone, ''), '[^0-9]', '', 'g') = $1
+            and ${normalizedPhoneExpr('p.phone')} = $1
             and u.role = 'client'
           order by u.created_at desc
           limit 1
@@ -3989,9 +4547,7 @@ export class CrmService {
   }
 
   private normalizeContactPhone(phone: string | null | undefined): string | null {
-    if (!phone) return null;
-    const digits = phone.replace(/[^0-9]/g, "");
-    return digits.length >= 10 ? digits : null;
+    return normalizePhoneRu(phone).canonical;
   }
 
   // Save a chat partner (an existing messenger user) into the CRM as a lead or
@@ -4039,14 +4595,20 @@ export class CrmService {
       if (existing.rows[0]) {
         return { leadId: existing.rows[0].entity_id, created: false };
       }
+      // KVA-175: stamp the funnel entry status «Новый» so a manually-saved
+      // lead doesn't land in «Без статуса» (mirrors C6 autoCreateLeadFromChat).
+      const statusRow = await this.database.query<{ id: string }>(
+        `select id from app.lead_statuses where lower(btrim(name)) = 'новый' limit 1`,
+      );
+      const defaultStatusId = statusRow.rows[0]?.id ?? null;
       const leadId = await this.database.transaction(async (client) => {
         const inserted = await client.query<{ id: string }>(
           `
-            insert into app.leads (first_name, last_name, phone, source, created_by)
-            values ($1, $2, $3, 'Чат', $4)
+            insert into app.leads (first_name, last_name, phone, source, status_id, created_by)
+            values ($1, $2, $3, 'Чат', $4, $5)
             returning id
           `,
-          [firstName, lastName, phone, actor.userId],
+          [firstName, lastName, phone, defaultStatusId, actor.userId],
         );
         const id = inserted.rows[0].id;
         await client.query(
@@ -4116,13 +4678,14 @@ export class CrmService {
 
   async createLead(actor: ActorContext, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
+    const branchId = this.extractBranchId(dto.customDataPatch);
     const result = await this.database.query<LeadRow>(
       `
         insert into app.leads (
           status_id, first_name, last_name, phone, email,
-          source, notes, assigned_to, custom_data, created_by
+          source, notes, assigned_to, custom_data, created_by, branch_id
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         returning id, status_id, null::text as status_name, first_name,
           last_name, phone, email, source, notes, assigned_to,
           custom_data, created_by, created_at, updated_at
@@ -4138,6 +4701,7 @@ export class CrmService {
         dto.assignedTo ?? null,
         this.sanitizeJsonObject(dto.customDataPatch),
         actor.userId,
+        branchId,
       ],
     );
     const lead = result.rows[0];
@@ -4152,10 +4716,21 @@ export class CrmService {
 
   async updateLead(actor: ActorContext, leadId: string, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
+    const branchId = this.extractBranchId(dto.customDataPatch);
+    const beforeRes = await this.database.query<{
+      status_id: string | null;
+      assigned_to: string | null;
+      branch_id: string | null;
+    }>(
+      `select status_id, assigned_to, branch_id from app.leads where id = $1 and deleted_at is null`,
+      [leadId],
+    );
+    const before = beforeRes.rows[0] ?? null;
     const result = await this.database.query<LeadRow>(
       `
         update app.leads
-        set status_id = coalesce($2, status_id),
+        set status_id = case when $11::boolean then null
+                             else coalesce($2, status_id) end,
           first_name = coalesce($3, first_name),
           last_name = coalesce($4, last_name),
           phone = coalesce($5, phone),
@@ -4164,6 +4739,7 @@ export class CrmService {
           notes = coalesce($8, notes),
           assigned_to = coalesce($9, assigned_to),
           custom_data = custom_data || $10::jsonb,
+          branch_id = coalesce($12::uuid, branch_id),
           updated_at = now()
         where id = $1 and deleted_at is null
         returning id, status_id, null::text as status_name, first_name,
@@ -4181,6 +4757,8 @@ export class CrmService {
         dto.notes?.trim() || null,
         dto.assignedTo ?? null,
         this.sanitizeJsonObject(dto.customDataPatch),
+        dto.clearStatus ?? false,
+        branchId,
       ],
     );
     const lead = result.rows[0];
@@ -4191,6 +4769,29 @@ export class CrmService {
       entityType: "lead",
       entityId: lead.id,
     });
+    if (
+      before &&
+      (before.status_id !== lead.status_id || before.assigned_to !== lead.assigned_to)
+    ) {
+      await this.database.query(
+        `insert into app.lead_status_history
+           (lead_id, old_status_id, new_status_id, old_owner_id, new_owner_id,
+            changed_by, reason_id, comment, branch_id, source_snapshot)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          leadId,
+          before.status_id,
+          lead.status_id,
+          before.assigned_to,
+          lead.assigned_to,
+          actor.userId,
+          dto.reasonId ?? null,
+          dto.statusComment ?? null,
+          branchId ?? before.branch_id,
+          lead.source,
+        ],
+      );
+    }
     return this.toLeadDto(lead);
   }
 
@@ -4214,6 +4815,25 @@ export class CrmService {
       entityId: row.id,
     });
     return { success: true };
+  }
+
+  // Transition-safe branch read: prefer the real branch_id column, fall back to
+  // the legacy custom_data keys. Returns text to preserve the existing
+  // text-based comparison semantics (no jsonb::uuid casts).
+  private branchIdExpr(alias: string): string {
+    return `coalesce(${alias}.branch_id::text, ${alias}.custom_data->>'branchId', ${alias}.custom_data->>'branch_id')`;
+  }
+
+  private static readonly UUID_RE =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+  // Pull a valid branch UUID out of a customDataPatch (branchId or branch_id),
+  // for dual-writing the real column alongside the legacy json.
+  private extractBranchId(
+    patch: Record<string, unknown> | undefined | null,
+  ): string | null {
+    const raw = patch?.["branchId"] ?? patch?.["branch_id"];
+    return typeof raw === "string" && CrmService.UUID_RE.test(raw) ? raw : null;
   }
 
   private buildStudentSearchFilter(
@@ -4248,7 +4868,7 @@ export class CrmService {
     if (query.branchId) {
       const p = add(query.branchId);
       filters.push(
-        `coalesce(s.custom_data->>'branchId', s.custom_data->>'branch_id') = ${p}::text`,
+        `${this.branchIdExpr('s')} = ${p}::text`,
       );
     }
     if (query.groupId) {
@@ -4397,7 +5017,7 @@ export class CrmService {
     if (query.branchId) {
       const p = add(query.branchId);
       filters.push(
-        `coalesce(l.custom_data->>'branchId', l.custom_data->>'branch_id') = ${p}::text`,
+        `${this.branchIdExpr('l')} = ${p}::text`,
       );
     }
     this.addLeadTextFilter(filters, add, "l.source", query.source);
@@ -4459,6 +5079,28 @@ export class CrmService {
             and open_task.entity_type = 'lead'
             and open_task.entity_id = l.id
             and open_task.status in ('open', 'in_progress')
+        )
+      `);
+    }
+    if (query.hideConverted === true) {
+      filters.push(`
+        not exists (
+          select 1
+          from app.students linked_conv
+          left join app.profiles p_conv
+            on p_conv.id = linked_conv.profile_id
+           and p_conv.deleted_at is null
+          where linked_conv.deleted_at is null
+            and linked_conv.status = 'active'
+            and (
+              linked_conv.lead_id = l.id
+              or (
+                l.phone_normalized is not null
+                and p_conv.phone_normalized = l.phone_normalized
+                and lower(btrim(coalesce(p_conv.first_name, ''))) = lower(btrim(coalesce(l.first_name, '')))
+                and lower(btrim(coalesce(p_conv.last_name, '')))  = lower(btrim(coalesce(l.last_name, '')))
+              )
+            )
         )
       `);
     }
@@ -4654,6 +5296,47 @@ export class CrmService {
         join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
         where s.deleted_at is null and p.user_id = $1
+        order by s.created_at desc
+      `,
+      [userId],
+    );
+    return result.rows;
+  }
+
+  /**
+   * KVA-156: students linked to the account-holder via Families.
+   *
+   * The account-holder's user maps to a profile (app.profiles.user_id). We find
+   * the active families where that profile is a parent/payer member, then return
+   * the active STUDENT members of those families. Only active rows are
+   * considered (deleted_at is null on families, family_members and students),
+   * and the result shape mirrors listClientStudents so toStudentDto stays valid.
+   */
+  private async listFamilyLinkedStudents(
+    userId: string,
+  ): Promise<StudentRow[]> {
+    const result = await this.database.query<StudentRow>(
+      `
+        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          '{}'::uuid[] as teacher_user_ids
+        from app.profiles acct
+        join app.family_members parent_m
+          on parent_m.entity_type = 'profile'
+          and parent_m.entity_id = acct.id
+          and parent_m.role in ('parent', 'payer')
+          and parent_m.deleted_at is null
+        join app.families f
+          on f.id = parent_m.family_id and f.deleted_at is null
+        join app.family_members child_m
+          on child_m.family_id = f.id
+          and child_m.entity_type = 'student'
+          and child_m.deleted_at is null
+        join app.students s
+          on s.id = child_m.entity_id and s.deleted_at is null
+        join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+        left join app.users u on u.id = p.user_id and u.deleted_at is null
+        where acct.user_id = $1 and acct.deleted_at is null
         order by s.created_at desc
       `,
       [userId],
@@ -5371,8 +6054,71 @@ export class CrmService {
       id: row.id,
       name: row.name,
       address: row.address,
+      utcOffsetMinutes: Number(row.utc_offset_minutes ?? 180),
       createdAt: row.created_at,
     };
+  }
+
+  async createBranch(actor: ActorContext, dto: CreateBranchDto) {
+    this.policy.assertCanWriteCrm(actor);
+    const name = dto.name?.trim();
+    if (!name) {
+      throw new BadRequestException("Название филиала обязательно.");
+    }
+    // Default to Moscow (UTC+3 / 180 minutes) when no offset is provided.
+    const utcOffsetMinutes = dto.utcOffsetMinutes ?? 180;
+    const result = await this.database.query<BranchRow>(
+      `
+        insert into app.branches (name, address, utc_offset_minutes)
+        values ($1, $2, $3)
+        returning id, name, address, utc_offset_minutes, created_at
+      `,
+      [name, dto.address?.trim() || null, utcOffsetMinutes],
+    );
+    const branch = result.rows[0];
+    await this.audit.record({
+      actor,
+      action: "crm.branch_created",
+      entityType: "branch",
+      entityId: branch.id,
+      metadata: { utcOffsetMinutes },
+    });
+    return this.toBranchDto(branch);
+  }
+
+  async updateBranch(
+    actor: ActorContext,
+    branchId: string,
+    dto: UpdateBranchDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<BranchRow>(
+      `
+        update app.branches
+        set name = coalesce($2, name),
+          address = coalesce($3, address),
+          utc_offset_minutes = coalesce($4, utc_offset_minutes),
+          updated_at = now()
+        where id = $1 and deleted_at is null
+        returning id, name, address, utc_offset_minutes, created_at
+      `,
+      [
+        branchId,
+        dto.name?.trim() || null,
+        dto.address?.trim() ?? null,
+        dto.utcOffsetMinutes ?? null,
+      ],
+    );
+    const branch = result.rows[0];
+    if (!branch) throw new NotFoundException("Филиал не найден.");
+    await this.audit.record({
+      actor,
+      action: "crm.branch_updated",
+      entityType: "branch",
+      entityId: branch.id,
+      metadata: { utcOffsetMinutes: dto.utcOffsetMinutes },
+    });
+    return this.toBranchDto(branch);
   }
 
   private toRoomDto(row: RoomRow) {
@@ -5435,5 +6181,397 @@ export class CrmService {
       from: from.toISOString(),
       to: to.toISOString(),
     };
+  }
+
+  async createFamily(actor: ActorContext, dto: { name?: string; branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{ id: string; name: string | null; branch_id: string | null }>(
+      `insert into app.families (name, branch_id) values ($1, $2) returning id, name, branch_id`,
+      [dto.name ?? null, dto.branchId ?? null],
+    );
+    const row = result.rows[0];
+    return { id: row.id, name: row.name, branchId: row.branch_id };
+  }
+
+  async addFamilyMember(
+    actor: ActorContext,
+    familyId: string,
+    dto: { entityType: string; entityId: string; role: string; isPrimaryContact?: boolean },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{
+      id: string;
+      family_id: string;
+      entity_type: string;
+      entity_id: string;
+      role: string;
+    }>(
+      `insert into app.family_members (family_id, entity_type, entity_id, role, is_primary_contact)
+       values ($1, $2, $3, $4, $5)
+       on conflict (family_id, entity_type, entity_id)
+       do update set role = excluded.role, is_primary_contact = excluded.is_primary_contact, deleted_at = null
+       returning id, family_id, entity_type, entity_id, role`,
+      [familyId, dto.entityType, dto.entityId, dto.role, dto.isPrimaryContact ?? false],
+    );
+    const row = result.rows[0];
+    return { id: row.id, familyId: row.family_id, entityType: row.entity_type, entityId: row.entity_id, role: row.role };
+  }
+
+  async getFamilyForEntity(actor: ActorContext, entityType: string, entityId: string) {
+    this.policy.assertCanReadOperationalData(actor);
+    const famRes = await this.database.query<{
+      family_id: string;
+      name: string | null;
+      branch_id: string | null;
+      primary_payer_member_id: string | null;
+    }>(
+      `select f.id as family_id, f.name, f.branch_id, f.primary_payer_member_id
+         from app.family_members m
+         join app.families f on f.id = m.family_id and f.deleted_at is null
+        where m.entity_type = $1 and m.entity_id = $2 and m.deleted_at is null
+        limit 1`,
+      [entityType, entityId],
+    );
+    const fam = famRes.rows[0];
+    if (!fam) return { family: null, members: [] };
+    const memRes = await this.database.query<{
+      id: string;
+      entity_type: string;
+      entity_id: string;
+      role: string;
+      is_primary_contact: boolean;
+      member_name: string | null;
+    }>(
+      `select m.id, m.entity_type, m.entity_id, m.role, m.is_primary_contact,
+              coalesce(
+                nullif(btrim(concat_ws(' ', l.first_name, l.last_name)), ''),
+                nullif(btrim(concat_ws(' ', sp.first_name, sp.last_name)), ''),
+                nullif(btrim(concat_ws(' ', pr.first_name, pr.last_name)), '')
+              ) as member_name
+         from app.family_members m
+         left join app.leads l    on m.entity_type = 'lead'    and l.id = m.entity_id and l.deleted_at is null
+         left join app.students st on m.entity_type = 'student' and st.id = m.entity_id and st.deleted_at is null
+         left join app.profiles sp on sp.id = st.profile_id and sp.deleted_at is null
+         left join app.profiles pr on m.entity_type = 'profile' and pr.id = m.entity_id and pr.deleted_at is null
+        where m.family_id = $1 and m.deleted_at is null
+        order by m.role, member_name`,
+      [fam.family_id],
+    );
+    return {
+      family: {
+        id: fam.family_id,
+        name: fam.name,
+        branchId: fam.branch_id,
+        primaryPayerMemberId: fam.primary_payer_member_id,
+      },
+      members: memRes.rows.map((row) => ({
+        id: row.id,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        role: row.role,
+        isPrimaryContact: row.is_primary_contact,
+        name: row.member_name,
+      })),
+    };
+  }
+
+  async removeFamilyMember(actor: ActorContext, memberId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query(
+      `update app.family_members set deleted_at = now() where id = $1 and deleted_at is null`,
+      [memberId],
+    );
+    if (!result.rowCount) {
+      throw new NotFoundException("Участник семьи не найден.");
+    }
+    return { success: true as const };
+  }
+
+  async setPrimaryPayer(actor: ActorContext, familyId: string, memberId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query(
+      `update app.families
+          set primary_payer_member_id = $2, updated_at = now()
+        where id = $1 and deleted_at is null
+          and exists (
+            select 1 from app.family_members m
+            where m.id = $2 and m.family_id = $1 and m.deleted_at is null
+          )`,
+      [familyId, memberId],
+    );
+    if (!result.rowCount) {
+      throw new NotFoundException("Семья или участник не найдены.");
+    }
+    return { success: true as const };
+  }
+
+  async listMergeCandidates(actor: ActorContext, limit = 50) {
+    this.policy.assertCanReadOperationalData(actor);
+    const safeLimit = Number.isFinite(limit) ? limit : 50;
+    const capped = Math.min(Math.max(safeLimit, 1), 200);
+    const result = await this.database.query<{
+      loser_id: string;
+      winner_id: string;
+      phone: string | null;
+      name: string;
+    }>(
+      `select l1.id as loser_id, l2.id as winner_id, l2.phone_normalized as phone,
+              btrim(concat_ws(' ', l2.first_name, l2.last_name)) as name
+         from app.leads l1
+         join app.leads l2
+           on l1.phone_normalized = l2.phone_normalized
+          and lower(btrim(coalesce(l1.first_name, ''))) = lower(btrim(coalesce(l2.first_name, '')))
+          and lower(btrim(coalesce(l1.last_name, '')))  = lower(btrim(coalesce(l2.last_name, '')))
+          and l1.id < l2.id
+        where l1.deleted_at is null and l2.deleted_at is null
+          and l1.phone_normalized is not null
+        order by l2.phone_normalized
+        limit $1`,
+      [capped],
+    );
+    return {
+      items: result.rows.map((row) => ({
+        loserId: row.loser_id,
+        winnerId: row.winner_id,
+        phone: row.phone,
+        name: row.name,
+      })),
+    };
+  }
+
+  async mergeLeads(actor: ActorContext, loserId: string, winnerId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    if (loserId === winnerId) {
+      throw new BadRequestException("Нельзя объединить лид сам с собой.");
+    }
+    return this.database.transaction(async (client) => {
+      const existing = await client.query<{ id: string }>(
+        `select id from app.leads where id in ($1, $2) and deleted_at is null`,
+        [loserId, winnerId],
+      );
+      if (existing.rows.length !== 2) {
+        throw new NotFoundException("Один из лидов не найден.");
+      }
+
+      const repointed: Record<string, string[]> = {};
+      const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
+
+      // Real-FK lead references.
+      repointed["students.lead_id"] = ids(
+        (await client.query<{ id: string }>(
+          `update app.students set lead_id = $2, updated_at = now() where lead_id = $1 and deleted_at is null returning id`,
+          [loserId, winnerId],
+        )).rows,
+      );
+      repointed["lessons.lead_id"] = ids(
+        (await client.query<{ id: string }>(
+          `update app.lessons set lead_id = $2 where lead_id = $1 returning id`,
+          [loserId, winnerId],
+        )).rows,
+      );
+      repointed["lead_status_history.lead_id"] = ids(
+        (await client.query<{ id: string }>(
+          `update app.lead_status_history set lead_id = $2 where lead_id = $1 returning id`,
+          [loserId, winnerId],
+        )).rows,
+      );
+      repointed["lead_comments.lead_id"] = ids(
+        (await client.query<{ id: string }>(
+          `update app.lead_comments set lead_id = $2 where lead_id = $1 returning id`,
+          [loserId, winnerId],
+        )).rows,
+      );
+      // Polymorphic (no unique constraint).
+      repointed["tasks.entity_id"] = ids(
+        (await client.query<{ id: string }>(
+          `update app.tasks set entity_id = $2 where entity_type = 'lead' and entity_id = $1 returning id`,
+          [loserId, winnerId],
+        )).rows,
+      );
+      repointed["entity_comments.entity_id"] = ids(
+        (await client.query<{ id: string }>(
+          `update app.entity_comments set entity_id = $2 where entity_type = 'lead' and entity_id = $1 returning id`,
+          [loserId, winnerId],
+        )).rows,
+      );
+      repointed["chats.lead_id"] = ids(
+        (await client.query<{ id: string }>(
+          `update app.chats set lead_id = $2 where lead_id = $1 returning id`,
+          [loserId, winnerId],
+        )).rows,
+      );
+      // Mark duplicate candidates merged (capture for undo).
+      repointed["duplicate_candidates.status"] = ids(
+        (await client.query<{ id: string }>(
+          `update app.duplicate_candidates set status = 'merged', updated_at = now()
+            where status = 'pending'
+              and ((entity_type_a = 'lead' and entity_id_a = $1) or (entity_type_b = 'lead' and entity_id_b = $1))
+            returning id`,
+          [loserId],
+        )).rows,
+      );
+
+      // Soft-delete the loser (CASCADE never fires — no hard delete).
+      await client.query(
+        `update app.leads set deleted_at = now(), updated_at = now() where id = $1`,
+        [loserId],
+      );
+
+      const log = await client.query<{ id: string }>(
+        `insert into app.merge_log (entity_type, loser_id, winner_id, repointed, merged_by)
+         values ('lead', $1, $2, $3::jsonb, $4) returning id`,
+        [loserId, winnerId, JSON.stringify(repointed), actor.userId],
+      );
+      return { mergeLogId: log.rows[0].id, winnerId };
+    });
+  }
+
+  // Reverse-op for each known repointed key. Hard-coded — never derives a table
+  // name from stored data.
+  private static readonly UNDO_REPOINT: Record<string, string> = {
+    "students.lead_id": "update app.students set lead_id = $1, updated_at = now() where id = any($2::uuid[])",
+    "lessons.lead_id": "update app.lessons set lead_id = $1 where id = any($2::uuid[])",
+    "lead_status_history.lead_id": "update app.lead_status_history set lead_id = $1 where id = any($2::uuid[])",
+    "lead_comments.lead_id": "update app.lead_comments set lead_id = $1 where id = any($2::uuid[])",
+    "tasks.entity_id": "update app.tasks set entity_id = $1 where id = any($2::uuid[])",
+    "chats.lead_id": "update app.chats set lead_id = $1 where id = any($2::uuid[])",
+    "entity_comments.entity_id": "update app.entity_comments set entity_id = $1 where id = any($2::uuid[])",
+    "duplicate_candidates.status": "update app.duplicate_candidates set status = 'pending', updated_at = now() where id = any($2::uuid[])",
+  };
+
+  // Auto-create a lead when a non-staff user first writes to the admin chat.
+  // Idempotent: skips if the user is already linked to a lead or student.
+  // Uses a pg advisory lock (per-user) to serialize concurrent first messages
+  // so that both the check and the create happen inside a single transaction,
+  // preventing duplicate leads from a race between two rapid chat messages.
+  async autoCreateLeadFromChat(
+    actor: ActorContext,
+    senderUserId: string,
+  ): Promise<{ leadId: string | null; created: boolean }> {
+    type Sentinel =
+      | { linkedLeadId: string | null }
+      | { noProfile: true }
+      | { createdLeadId: string };
+
+    const sentinel = await this.database.transaction<Sentinel>(async (client) => {
+      // 1. Acquire an advisory lock scoped to this transaction — serializes
+      //    concurrent autoCreateLeadFromChat calls for the same senderUserId.
+      await client.query(
+        `select pg_advisory_xact_lock(hashtext($1))`,
+        [`autolead:${senderUserId}`],
+      );
+
+      // 2. Re-check the link inside the transaction (after the lock is held).
+      const linkedRes = await client.query<{ entity_type: string; entity_id: string }>(
+        `select entity_type, entity_id from app.user_crm_links
+          where user_id = $1 and entity_type in ('lead', 'student') and deleted_at is null
+          limit 1`,
+        [senderUserId],
+      );
+      if (linkedRes.rows[0]) {
+        const existing = linkedRes.rows[0];
+        return {
+          linkedLeadId: existing.entity_type !== "student" ? existing.entity_id : null,
+        };
+      }
+
+      // 3. Fetch the user profile.
+      const profileRes = await client.query<{
+        first_name: string | null;
+        last_name: string | null;
+        phone: string | null;
+      }>(
+        `select p.first_name, p.last_name, p.phone
+           from app.profiles p
+           join app.users u on u.id = p.user_id and u.deleted_at is null
+          where p.user_id = $1 and p.deleted_at is null
+          limit 1`,
+        [senderUserId],
+      );
+      const profile = profileRes.rows[0];
+      if (!profile) return { noProfile: true };
+
+      // 4. Look up the «Новый» status (null fallback is fine).
+      const statusRes = await client.query<{ id: string }>(
+        `select id from app.lead_statuses where lower(btrim(name)) = 'новый' limit 1`,
+      );
+      const newStatusId = statusRes.rows[0]?.id ?? null;
+      const matchedPhone = this.normalizeContactPhone(profile.phone);
+
+      // 5. Insert the lead and the link row in the same transaction.
+      const insertedLead = await client.query<{ id: string }>(
+        `insert into app.leads (first_name, last_name, phone, source, status_id, created_by)
+         values ($1, $2, $3, 'Через приложение', $4, $5)
+         returning id`,
+        [profile.first_name, profile.last_name, profile.phone, newStatusId, actor.userId],
+      );
+      const createdLeadId = insertedLead.rows[0].id;
+      await client.query(
+        `insert into app.user_crm_links
+           (user_id, entity_type, entity_id, matched_phone, link_source, created_by, confirmed_at)
+         values ($1, 'lead', $2, $3, 'auto_phone', $4, now())
+         on conflict do nothing`,
+        [senderUserId, createdLeadId, matchedPhone, actor.userId],
+      );
+      return { createdLeadId };
+    });
+
+    if ("linkedLeadId" in sentinel) {
+      return { leadId: sentinel.linkedLeadId, created: false };
+    }
+    if ("noProfile" in sentinel) {
+      return { leadId: null, created: false };
+    }
+
+    // 6. Audit only on actual creation, outside the transaction.
+    await this.audit.record({
+      actor,
+      action: "crm.lead_created",
+      entityType: "lead",
+      entityId: sentinel.createdLeadId,
+      metadata: { fromApp: true, userId: senderUserId },
+    });
+    return { leadId: sentinel.createdLeadId, created: true };
+  }
+
+  async countAppLeads(actor: ActorContext): Promise<{ count: number }> {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{ count: string }>(
+      `select count(*)::text as count from app.leads where source = 'Через приложение' and deleted_at is null`,
+    );
+    return { count: Number(result.rows[0]?.count ?? 0) };
+  }
+
+  async undoMerge(actor: ActorContext, mergeLogId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    return this.database.transaction(async (client) => {
+      const logRes = await client.query<{
+        loser_id: string;
+        repointed: Record<string, string[]>;
+      }>(
+        `select loser_id, repointed from app.merge_log where id = $1 and undone_at is null`,
+        [mergeLogId],
+      );
+      const log = logRes.rows[0];
+      if (!log) {
+        throw new NotFoundException("Слияние не найдено или уже отменено.");
+      }
+      for (const [key, sql] of Object.entries(CrmService.UNDO_REPOINT)) {
+        const movedIds = log.repointed[key];
+        if (!movedIds || movedIds.length === 0) continue;
+        const isDupCandidate = key === "duplicate_candidates.status";
+        await client.query(sql, isDupCandidate ? [null, movedIds] : [log.loser_id, movedIds]);
+      }
+      // The duplicate_candidates reverse SQL ignores $1; pass null there.
+      await client.query(
+        `update app.leads set deleted_at = null, updated_at = now() where id = $1`,
+        [log.loser_id],
+      );
+      await client.query(
+        `update app.merge_log set undone_at = now(), undone_by = $2 where id = $1`,
+        [mergeLogId, actor.userId],
+      );
+      return { success: true as const };
+    });
   }
 }

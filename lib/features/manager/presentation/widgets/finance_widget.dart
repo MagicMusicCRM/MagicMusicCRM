@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/student_detail_dialog.dart';
+import 'package:go_router/go_router.dart';
 
 class FinanceWidget extends ConsumerStatefulWidget {
   const FinanceWidget({super.key});
@@ -267,12 +267,10 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                           child: ListTile(
                             onTap: student != null
                                 ? () async {
-                                    final updated =
-                                        await StudentDetailDialog.show(
-                                          context,
-                                          Map<String, dynamic>.from(student),
-                                        );
-                                    if (updated == true) _loadPayments();
+                                    final id = student['id']?.toString();
+                                    if (id == null || id.isEmpty) return;
+                                    await context.push('/student/$id');
+                                    _loadPayments();
                                   }
                                 : null,
                             leading: Container(

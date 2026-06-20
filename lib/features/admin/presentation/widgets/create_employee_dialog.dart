@@ -114,7 +114,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(
-              color: AppTheme.primaryPurple,
+              color: AppTheme.primaryGold,
               width: 2,
             ),
           ),
@@ -231,12 +231,12 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? AppTheme.primaryPurple.withAlpha(40)
+                                      ? AppTheme.primaryGold.withAlpha(40)
                                       : Theme.of(context).colorScheme.surface,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: isSelected
-                                        ? AppTheme.primaryPurple
+                                        ? AppTheme.primaryGold
                                         : Colors.white12,
                                     width: isSelected ? 2 : 1,
                                   ),
@@ -246,7 +246,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: isSelected
-                                        ? AppTheme.primaryPurple
+                                        ? AppTheme.primaryGold
                                         : Colors.white70,
                                     fontWeight: isSelected
                                         ? FontWeight.w700
@@ -276,7 +276,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
                   Expanded(
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryPurple,
+                        backgroundColor: AppTheme.primaryGold,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),

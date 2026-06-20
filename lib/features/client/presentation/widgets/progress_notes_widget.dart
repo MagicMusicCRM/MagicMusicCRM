@@ -7,6 +7,8 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 final progressNotesProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
+  // magicCurrentStudentIdProvider derives from the portal switcher selection
+  // (KVA-156), so switching children re-evaluates and re-renders these notes.
   final studentIdAsync = ref.watch(magicCurrentStudentIdProvider);
   final studentId = studentIdAsync.asData?.value;
   if (studentId == null) return [];
@@ -25,7 +27,7 @@ class ProgressNotesWidget extends ConsumerWidget {
 
     return notesAsync.when(
       loading: () => Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
       ),
       error: (err, _) => Center(
         child: Text(

@@ -59,7 +59,7 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
       );
     }
 
@@ -89,7 +89,7 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
     }
 
     return RefreshIndicator(
-      color: AppTheme.primaryPurple,
+      color: AppTheme.primaryGold,
       onRefresh: _loadStudents,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -140,11 +140,11 @@ class _StudentCardState extends State<_StudentCard> {
                 children: [
                   CircleAvatar(
                     radius: 22,
-                    backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Text(
                       fullName.isNotEmpty ? fullName[0].toUpperCase() : '?',
                       style: const TextStyle(
-                        color: AppTheme.primaryPurple,
+                        color: AppTheme.primaryGold,
                         fontWeight: FontWeight.w700,
                         fontSize: 18,
                       ),
@@ -181,13 +181,13 @@ class _StudentCardState extends State<_StudentCard> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryPurple.withAlpha(25),
+                      color: AppTheme.primaryGold.withAlpha(25),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       '$lessonCount занятий',
                       style: const TextStyle(
-                        color: AppTheme.primaryPurple,
+                        color: AppTheme.primaryGold,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),

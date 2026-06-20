@@ -206,12 +206,12 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
               const SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryPurple),
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGold),
               )
             else
               Container(
                 decoration: const BoxDecoration(
-                  color: AppTheme.primaryPurple,
+                  color: AppTheme.primaryGold,
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(

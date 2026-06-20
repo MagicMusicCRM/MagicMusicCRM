@@ -10,17 +10,31 @@ import 'package:magic_music_crm/core/widgets/skeletons.dart';
 final upcomingLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
+  // Scope to the student selected in the portal switcher (KVA-156); falls back
+  // to the first linked student via magicCurrentStudentIdProvider.
+  final studentId = ref.watch(magicCurrentStudentIdProvider).asData?.value;
+  if (studentId == null) return const [];
   return ref
       .watch(magicCrmServiceProvider)
-      .listLessons(from: DateTime.now().toIso8601String(), limit: 20);
+      .listLessons(
+        studentId: studentId,
+        from: DateTime.now().toIso8601String(),
+        limit: 20,
+      );
 });
 
 final pastLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
+  final studentId = ref.watch(magicCurrentStudentIdProvider).asData?.value;
+  if (studentId == null) return const [];
   return ref
       .watch(magicCrmServiceProvider)
-      .listLessons(to: DateTime.now().toIso8601String(), limit: 50);
+      .listLessons(
+        studentId: studentId,
+        to: DateTime.now().toIso8601String(),
+        limit: 50,
+      );
 });
 
 class UpcomingLessonsList extends ConsumerStatefulWidget {
@@ -52,7 +66,7 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
       case 'cancelled':
         return AppTheme.danger;
       default:
-        return AppTheme.primaryPurple;
+        return AppTheme.primaryGold;
     }
   }
 
@@ -70,7 +84,7 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.primaryPurple.withAlpha(30)),
+              border: Border.all(color: AppTheme.primaryGold.withAlpha(30)),
             ),
             child: Row(
               children: [
@@ -140,7 +154,7 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
               }
 
               return RefreshIndicator(
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
                 onRefresh: () async {
                   ref.invalidate(upcomingLessonsRichProvider);
                   ref.invalidate(pastLessonsRichProvider);
@@ -190,12 +204,12 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                               width: 52,
                               height: 52,
                               decoration: BoxDecoration(
-                                color: AppTheme.primaryPurple.withAlpha(25),
+                                color: AppTheme.primaryGold.withAlpha(25),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(
                                 Icons.music_note_rounded,
-                                color: AppTheme.primaryPurple,
+                                color: AppTheme.primaryGold,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -326,7 +340,7 @@ class _TabButton extends StatelessWidget {
         child: Container(
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: isActive ? AppTheme.primaryPurple : Colors.transparent,
+            color: isActive ? AppTheme.primaryGold : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(

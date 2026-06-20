@@ -2054,6 +2054,394 @@ void main() {
       expect(comments.single['profiles']['first_name'], 'Иван');
       expect(comments.single['profiles']['last_name'], 'Петров');
     });
+
+    // ── Analytics endpoints ───────────────────────────────────────────────
+
+    test('getAnalyticsFunnel requests /analytics/funnel and maps stages',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/funnel',
+          statusCode: 200,
+          body: {
+            'from': '2026-01-01',
+            'to': '2026-04-01',
+            'stages': [
+              {
+                'statusId': 's1',
+                'name': 'Новый',
+                'sortOrder': 0,
+                'leadsEntered': 100,
+                'ratioToPrevStage': null,
+              },
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final result = await service.getAnalyticsFunnel(
+        from: '2026-01-01',
+        to: '2026-04-01',
+      );
+
+      expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
+      expect(adapter.requests.single.queryParameters['to'], '2026-04-01');
+      expect((result['stages'] as List).first['name'], 'Новый');
+      expect((result['stages'] as List).first['leadsEntered'], 100);
+    });
+
+    test('getAnalyticsDebts requests /analytics/debts and maps buckets',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/debts',
+          statusCode: 200,
+          body: {
+            'buckets': [
+              {'bucket': '0-7', 'students': 5, 'amount': 50000},
+            ],
+            'bucketStudentSum': 5,
+            'distinctStudents': 5,
+            'totalAmount': 50000,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsDebts();
+
+      expect(adapter.requests.single.queryParameters, isEmpty);
+      expect((r['buckets'] as List).first['bucket'], '0-7');
+      expect(r['totalAmount'], 50000);
+    });
+
+    test(
+        'getAnalyticsBranches requests /analytics/branches with date params',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/branches',
+          statusCode: 200,
+          body: {
+            'from': '2026-01-01',
+            'to': '2026-04-01',
+            'branches': [
+              {'branchId': 'b1', 'branchName': 'Центр', 'newLeads': 20},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsBranches(
+        from: '2026-01-01',
+        to: '2026-04-01',
+      );
+
+      expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
+      expect((r['branches'] as List).first['branchName'], 'Центр');
+    });
+
+    test(
+        'getAnalyticsWeeklyReport requests /analytics/weekly-report',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/weekly-report',
+          statusCode: 200,
+          body: {
+            'weekStart': '2026-06-10',
+            'weekEnd': '2026-06-16',
+            'newLeads': 12,
+            'tasks': 8,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsWeeklyReport(branchId: 'b1');
+
+      expect(
+        adapter.requests.single.queryParameters['branchId'],
+        'b1',
+      );
+      expect(r['newLeads'], 12);
+    });
+
+    test('getAnalyticsLossReasons requests /analytics/loss-reasons', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/loss-reasons',
+          statusCode: 200,
+          body: {
+            'reasons': [
+              {'reason': 'Дорого', 'count': 10},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsLossReasons(from: '2026-01-01');
+
+      expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
+      expect((r['reasons'] as List).first['reason'], 'Дорого');
+    });
+
+    test('getAnalyticsForecast requests /analytics/forecast', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/forecast',
+          statusCode: 200,
+          body: {
+            'forecastAmount': 120000,
+            'confirmedAmount': 80000,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsForecast(branchId: 'b1');
+
+      expect(adapter.requests.single.queryParameters['branchId'], 'b1');
+      expect(r['forecastAmount'], 120000);
+    });
+
+    test('getAnalyticsChurn requests /analytics/churn-risk', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/churn-risk',
+          statusCode: 200,
+          body: {
+            'atRisk': 7,
+            'students': [
+              {'studentId': 's1', 'daysSinceLastLesson': 30},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsChurn(inactiveDays: 21);
+
+      expect(adapter.requests.single.queryParameters['inactiveDays'], 21);
+      expect(r['atRisk'], 7);
+    });
+
+    test('getAnalyticsChatSla requests /analytics/chats/sla', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/analytics/chats/sla',
+          statusCode: 200,
+          body: {
+            'avgResponseMs': 45000,
+            'withinSlaPercent': 92.5,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final r = await service.getAnalyticsChatSla(
+        from: '2026-06-01',
+        to: '2026-06-30',
+      );
+
+      expect(adapter.requests.single.queryParameters['from'], '2026-06-01');
+      expect(r['avgResponseMs'], 45000);
+    });
+
+    test('getAppLeadsCount reads /crm/leads/app-count and returns the count',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/leads/app-count',
+          statusCode: 200,
+          body: {'count': 7},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final count = await service.getAppLeadsCount();
+
+      expect(count, 7);
+      expect(adapter.requests.single.queryParameters, isEmpty);
+    });
+
+    test('getAppLeadsCount coerces a string count to int', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/leads/app-count',
+          statusCode: 200,
+          body: {'count': '12'},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      expect(await service.getAppLeadsCount(), 12);
+    });
+
+    test('listBranchDisciplines maps items to snake keys', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/branches/branch-a/disciplines',
+          statusCode: 200,
+          body: {
+            'items': [
+              {
+                'id': 'bd-1',
+                'disciplineId': 'disc-1',
+                'name': 'Вокал',
+                'sortOrder': 0,
+              },
+              {
+                'id': 'bd-2',
+                'disciplineId': 'disc-2',
+                'name': 'Гитара',
+                'sortOrder': 1,
+              },
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final items = await service.listBranchDisciplines('branch-a');
+
+      expect(items, hasLength(2));
+      expect(items.first['id'], 'bd-1');
+      expect(items.first['discipline_id'], 'disc-1');
+      expect(items.first['name'], 'Вокал');
+      expect(items.first['sort_order'], 0);
+      expect(adapter.requests.single.queryParameters, isEmpty);
+    });
+
+    test('listDisciplines maps items to {id, name}', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/disciplines',
+          statusCode: 200,
+          body: {
+            'items': [
+              {'id': 'disc-1', 'name': 'Вокал'},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final items = await service.listDisciplines();
+
+      expect(items.single['id'], 'disc-1');
+      expect(items.single['name'], 'Вокал');
+      expect(adapter.requests.single.queryParameters, isEmpty);
+    });
+
+    test(
+      'getLeadStatusHistory requests /crm/leads/{id}/status-history and maps items',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/leads/lead-a/status-history',
+            statusCode: 200,
+            body: {
+              'items': [
+                {
+                  'id': 'h1',
+                  'oldStatus': 'Новый',
+                  'newStatus': 'В работе',
+                  'oldOwnerId': null,
+                  'newOwnerId': 'user-b',
+                  'changedBy': 'user-a',
+                  'changedAt': '2026-06-10T12:00:00.000Z',
+                  'reasonId': null,
+                  'comment': 'Перевёл в работу',
+                },
+              ],
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        final items = await service.getLeadStatusHistory('lead-a');
+
+        expect(adapter.requests.single, isNotNull);
+        expect(items.single['old_status'], 'Новый');
+        expect(items.single['new_status'], 'В работе');
+        expect(items.single['changed_at'], '2026-06-10T12:00:00.000Z');
+        expect(items.single['comment'], 'Перевёл в работу');
+      },
+    );
+
+    test(
+      'getFamilyForEntity requests /crm/families/by-entity/{type}/{id} and maps family + members',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/families/by-entity/lead/lead-a',
+            statusCode: 200,
+            body: {
+              'family': {
+                'id': 'fam-1',
+                'name': 'Ивановы',
+                'branchId': 'branch-a',
+                'primaryPayerMemberId': 'm2',
+              },
+              'members': [
+                {
+                  'id': 'm1',
+                  'entityType': 'lead',
+                  'entityId': 'lead-a',
+                  'role': 'child',
+                  'isPrimaryContact': false,
+                  'name': 'Аня Иванова',
+                },
+                {
+                  'id': 'm2',
+                  'entityType': 'profile',
+                  'entityId': 'prof-1',
+                  'role': 'parent',
+                  'isPrimaryContact': true,
+                  'name': 'Мария Иванова',
+                },
+              ],
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        final result = await service.getFamilyForEntity(
+          entityType: 'lead',
+          entityId: 'lead-a',
+        );
+
+        expect((result['family'] as Map)['name'], 'Ивановы');
+        expect((result['family'] as Map)['primary_payer_member_id'], 'm2');
+        final members = result['members'] as List;
+        expect(members.length, 2);
+        expect(members.last['is_primary_contact'], true);
+        expect(members.last['name'], 'Мария Иванова');
+      },
+    );
+
+    test('getFamilyForEntity returns null family when entity has no family', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/families/by-entity/student/student-x',
+          statusCode: 200,
+          body: {'family': null, 'members': <dynamic>[]},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final result = await service.getFamilyForEntity(
+        entityType: 'student',
+        entityId: 'student-x',
+      );
+
+      expect(result['family'], isNull);
+      expect((result['members'] as List), isEmpty);
+    });
   });
 }
 

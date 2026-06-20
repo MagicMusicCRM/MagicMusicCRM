@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext, UserRole } from "../common/security/actor-context";
+import { normalizePhoneRu, normalizedPhoneExpr } from "../crm/phone.util";
 import { DatabaseService } from "../db/database.service";
 import { LinkProfileCrmDto } from "./dto/link-profile-crm.dto";
 import { ListProfilesQuery } from "./dto/list-profiles.query";
@@ -1324,22 +1325,10 @@ export class ProfileService {
   }
 
   private normalizePhone(phone: string | null | undefined): string | null {
-    const digits = phone?.replace(/\D/g, "") ?? "";
-    if (!digits) return null;
-    if (digits.length === 11 && digits.startsWith("8")) {
-      return `7${digits.slice(1)}`;
-    }
-    return digits;
+    return normalizePhoneRu(phone).canonical;
   }
 
   private normalizedPhoneSql(column: string): string {
-    const digits = `regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g')`;
-    return `
-      case
-        when length(${digits}) = 11 and left(${digits}, 1) = '8'
-          then '7' || substr(${digits}, 2)
-        else ${digits}
-      end
-    `;
+    return normalizedPhoneExpr(column);
   }
 }

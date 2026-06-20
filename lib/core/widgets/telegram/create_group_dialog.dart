@@ -129,7 +129,7 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
       case 'teacher':
         return TelegramColors.success;
       case 'client':
-        return TelegramColors.brandPurple;
+        return TelegramColors.brandGold;
       default:
         return TelegramColors.darkTextSecondary;
     }

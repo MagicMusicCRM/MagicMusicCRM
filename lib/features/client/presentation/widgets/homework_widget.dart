@@ -53,7 +53,7 @@ class HomeworkWidget extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(homeworkProvider),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),

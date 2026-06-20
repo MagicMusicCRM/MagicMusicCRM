@@ -253,13 +253,13 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
           width: 200,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: (widget.isMe ? Colors.white : AppTheme.primaryPurple)
+            color: (widget.isMe ? Colors.white : AppTheme.primaryGold)
                 .withAlpha(15),
             borderRadius: BorderRadius.circular(8),
           ),
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            color: widget.isMe ? Colors.white : AppTheme.primaryPurple,
+            color: widget.isMe ? Colors.white : AppTheme.primaryGold,
           ),
         );
       }
@@ -280,7 +280,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
                   width: 200,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (widget.isMe ? Colors.white : AppTheme.primaryPurple)
+                    color: (widget.isMe ? Colors.white : AppTheme.primaryGold)
                         .withAlpha(15),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -290,7 +290,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
                               progress.expectedTotalBytes!
                         : null,
                     strokeWidth: 2,
-                    color: widget.isMe ? Colors.white : AppTheme.primaryPurple,
+                    color: widget.isMe ? Colors.white : AppTheme.primaryGold,
                   ),
                 );
               },
@@ -299,7 +299,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
                 width: 200,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: (widget.isMe ? Colors.white : AppTheme.primaryPurple)
+                  color: (widget.isMe ? Colors.white : AppTheme.primaryGold)
                       .withAlpha(15),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -333,7 +333,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
 
     // ── Non-image file: show as downloadable card ──
     final sizeStr = ChatAttachmentService.formatFileSize(widget.fileSize);
-    final iconColor = widget.isMe ? Colors.white : AppTheme.primaryPurple;
+    final iconColor = widget.isMe ? Colors.white : AppTheme.primaryGold;
     final textCol = widget.isMe
         ? Colors.white
         : Theme.of(context).colorScheme.onSurface;
@@ -347,7 +347,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: (widget.isMe ? Colors.white : AppTheme.primaryPurple)
+          color: (widget.isMe ? Colors.white : AppTheme.primaryGold)
               .withAlpha(15),
           borderRadius: BorderRadius.circular(8),
         ),

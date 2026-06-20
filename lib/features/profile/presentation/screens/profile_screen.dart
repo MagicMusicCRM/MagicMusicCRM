@@ -287,45 +287,52 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: checkmarkIcon,
             )
           : null,
-      body: ResponsiveConstraint(
-        child: ListView(
+      body: SafeArea(
+        child: ResponsiveConstraint(
+          child: ListView(
           padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
           children: [
             // Avatar Section
             Center(
               child: GestureDetector(
                 onTap: _pickAvatar,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (_newAvatarBytes != null)
-                      CircleAvatar(
-                        radius: 60,
-                        backgroundImage: MemoryImage(_newAvatarBytes!),
-                      )
-                    else
-                      TelegramAvatar(
-                        name: _ogFirstName.isNotEmpty
-                            ? '$_ogFirstName $_ogLastName'
-                            : 'Имя',
-                        avatarUrl: _ogAvatarUrl,
-                        uniqueId: _userId,
-                        radius: 60,
+                child: SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    fit: StackFit.expand,
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (_newAvatarBytes != null)
+                        CircleAvatar(
+                          radius: 60,
+                          backgroundImage: MemoryImage(_newAvatarBytes!),
+                        )
+                      else
+                        TelegramAvatar(
+                          name: _ogFirstName.isNotEmpty
+                              ? '$_ogFirstName $_ogLastName'
+                              : 'Имя',
+                          avatarUrl: _ogAvatarUrl,
+                          uniqueId: _userId,
+                          radius: 60,
+                        ),
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withAlpha(100),
+                        ),
+                        child: const Icon(
+                          Icons.add_a_photo_outlined,
+                          color: Colors.white,
+                          size: 36,
+                        ),
                       ),
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.black.withAlpha(100),
-                      ),
-                      child: const Icon(
-                        Icons.add_a_photo_outlined,
-                        color: Colors.white,
-                        size: 36,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -496,6 +503,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
