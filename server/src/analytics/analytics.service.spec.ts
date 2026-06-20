@@ -70,10 +70,19 @@ describe("AnalyticsService", () => {
   });
 
   it("debts buckets overdue payments in fixed order with zero-fill, gated to manager/admin", async () => {
-    const { service, query, policy } = build([
-      { bucket: "0-7", students: "5", amount: "50000" },
-      { bucket: "30+", students: "2", amount: "30000" },
-    ]);
+    const query = jest.fn()
+      .mockResolvedValueOnce({ rows: [
+        { bucket: "0-7", students: "5", amount: "50000" },
+        { bucket: "30+", students: "2", amount: "30000" },
+      ] })
+      .mockResolvedValueOnce({ rows: [{ distinct_students: "6" }] });
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
+    const crm = {} as unknown as CrmService;
+    const service = new AnalyticsService(
+      { query } as unknown as DatabaseService,
+      crm,
+      policy as unknown as CrmPolicy,
+    );
     const result = await service.debts(actor, {});
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.expected_payments");
@@ -83,7 +92,8 @@ describe("AnalyticsService", () => {
       { bucket: "15-30", students: 0, amount: 0 },
       { bucket: "30+", students: 2, amount: 30000 },
     ]);
-    expect(result.totalStudents).toBe(7);
+    expect(result.bucketStudentSum).toBe(7);
+    expect(result.distinctStudents).toBe(6);
     expect(result.totalAmount).toBe(80000);
   });
 
@@ -97,8 +107,8 @@ describe("AnalyticsService", () => {
 
   it("churnRisk lists active students with no recent completed lesson, gated", async () => {
     const { service, query, policy } = build([
-      { student_id: "stu1", name: "Иван Петров", last_completed_at: "2026-03-01T10:00:00Z", days_since_last: "40" },
-      { student_id: "stu2", name: "Без занятий", last_completed_at: null, days_since_last: null },
+      { student_id: "stu1", name: "Иван Петров", last_completed_at: "2026-03-01T10:00:00Z", days_since_last: "40", total_at_risk: "250" },
+      { student_id: "stu2", name: "Без занятий", last_completed_at: null, days_since_last: null, total_at_risk: "250" },
     ]);
     const result = await service.churnRisk(actor, { inactiveDays: 30 });
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
@@ -106,6 +116,7 @@ describe("AnalyticsService", () => {
     expect(sql).toContain("app.lessons");
     expect(sql).toContain("lesson_participation");
     expect(result.inactiveDays).toBe(30);
+    expect(result.totalAtRisk).toBe(250);
     expect(result.students).toEqual([
       { studentId: "stu1", name: "Иван Петров", lastCompletedAt: "2026-03-01T10:00:00Z", daysSinceLast: 40 },
       { studentId: "stu2", name: "Без занятий", lastCompletedAt: null, daysSinceLast: null },

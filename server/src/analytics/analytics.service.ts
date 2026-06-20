@@ -206,6 +206,16 @@ export class AnalyticsService {
       group by 1`,
       [query.branchId ?? null],
     );
+    const distinctResult = await this.database.query<{ distinct_students: string }>(
+      `select count(distinct ep.student_id) as distinct_students
+         from app.expected_payments ep
+         join app.students s on s.id = ep.student_id and s.deleted_at is null
+        where ep.status in ('pending', 'open')
+          and ep.due_date is not null
+          and ep.due_date <= now()::date
+          and ($1::uuid is null or ${branchOf("s")} = $1::text)`,
+      [query.branchId ?? null],
+    );
     const order = ["0-7", "8-14", "15-30", "30+"];
     const byBucket = new Map(result.rows.map((r) => [r.bucket, r]));
     const buckets = order.map((bucket) => {
@@ -214,7 +224,8 @@ export class AnalyticsService {
     });
     return {
       buckets,
-      totalStudents: buckets.reduce((n, b) => n + b.students, 0),
+      bucketStudentSum: buckets.reduce((n, b) => n + b.students, 0),
+      distinctStudents: Number(distinctResult.rows[0]?.distinct_students ?? 0),
       totalAmount: buckets.reduce((n, b) => n + b.amount, 0),
     };
   }
@@ -248,6 +259,7 @@ export class AnalyticsService {
       name: string;
       last_completed_at: string | null;
       days_since_last: string | null;
+      total_at_risk: string;
     }>(
       `with last_lesson as (
          select coalesce(l.student_id, lp.student_id) as student_id,
@@ -257,13 +269,15 @@ export class AnalyticsService {
           where l.deleted_at is null
             and l.status in ('completed', 'done')
             and coalesce(l.student_id, lp.student_id) is not null
+            and (lp.id is null or lp.status not in ('absent', 'missed', 'no_show'))
           group by coalesce(l.student_id, lp.student_id)
        )
        select s.id as student_id,
               btrim(concat_ws(' ', p.first_name, p.last_name)) as name,
               ll.last_completed_at,
               case when ll.last_completed_at is null then null
-                   else (now()::date - ll.last_completed_at::date) end as days_since_last
+                   else (now()::date - ll.last_completed_at::date) end as days_since_last,
+              count(*) over () as total_at_risk
          from app.students s
          left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
          left join last_lesson ll on ll.student_id = s.id
@@ -277,6 +291,7 @@ export class AnalyticsService {
     );
     return {
       inactiveDays,
+      totalAtRisk: Number(result.rows[0]?.total_at_risk ?? 0),
       students: result.rows.map((r) => ({
         studentId: r.student_id,
         name: r.name,
