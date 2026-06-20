@@ -67,9 +67,9 @@ export class AnalyticsController {
   @Get("chats/sla")
   chatsSla(
     @CurrentActor() actor: ActorContext,
-    @Query() query: { from?: string; to?: string; branchId?: string },
+    @Query() query: { from?: string; to?: string },
   ) {
-    return this.analytics.chatsSla(actor, query);
+    return this.analytics.chatsSla(actor, { from: query.from, to: query.to });
   }
 
   @Get("finance/monthly")

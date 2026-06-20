@@ -150,15 +150,6 @@ describe("AnalyticsService", () => {
     });
   });
 
-  it("chatsSla applies the branch filter", async () => {
-    const { service, query } = build([
-      { inbound_count: "0", responded_count: "0", avg_minutes: "0", median_minutes: "0", p90_minutes: "0" },
-    ]);
-    await service.chatsSla(actor, { branchId: "11111111-1111-1111-1111-111111111111" });
-    expect(String(query.mock.calls[0][0])).toContain("c.branch_id");
-    expect(query.mock.calls[0][1][2]).toBe("11111111-1111-1111-1111-111111111111");
-  });
-
   it("weeklyReport composes the sub-reports over a 7-day window, gated", async () => {
     const { service, policy } = build([]);
     jest.spyOn(service, "funnel").mockResolvedValue({ from: "x", to: "y", stages: ["F"] } as never);
@@ -181,6 +172,27 @@ describe("AnalyticsService", () => {
     expect(result.chatSla).toEqual({ avgMinutes: 5 });
     expect(result.window.from).toBeDefined();
     expect(result.window.to).toBeDefined();
+  });
+
+  it("weeklyReport degrades gracefully when one sub-report rejects (Promise.allSettled)", async () => {
+    const { service } = build([]);
+    jest.spyOn(service, "funnel").mockResolvedValue({ from: "x", to: "y", stages: ["F"] } as never);
+    jest.spyOn(service, "debts").mockResolvedValue({ buckets: ["D"] } as never);
+    jest.spyOn(service, "revenueForecast").mockResolvedValue({ next7: 1, next14: 2, next30: 3 } as never);
+    jest.spyOn(service, "churnRisk").mockRejectedValue(new Error("boom"));
+    jest.spyOn(service, "branchComparison").mockResolvedValue({ branches: ["B"] } as never);
+    jest.spyOn(service, "lossReasons").mockResolvedValue({ reasons: ["L"], unspecifiedCount: 3 } as never);
+    jest.spyOn(service, "chatsSla").mockResolvedValue({ avgMinutes: 5 } as never);
+
+    const result = await service.weeklyReport(actor, {});
+
+    expect(result.churn).toEqual({ error: "boom" });
+    expect(result.funnel).toEqual({ from: "x", to: "y", stages: ["F"] });
+    expect(result.debts).toEqual({ buckets: ["D"] });
+    expect(result.forecast).toEqual({ next7: 1, next14: 2, next30: 3 });
+    expect(result.branches).toEqual({ branches: ["B"] });
+    expect(result.lossReasons).toEqual({ reasons: ["L"], unspecifiedCount: 3 });
+    expect(result.chatSla).toEqual({ avgMinutes: 5 });
   });
 
   it("lossReasons groups terminal-transition reasons, gated to manager/admin", async () => {

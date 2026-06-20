@@ -301,7 +301,8 @@ export class AnalyticsService {
     };
   }
 
-  async chatsSla(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
+  // Org-wide only — chats.branch_id is not populated, so chat SLA is not branch-scoped (branch attribution for chats is a follow-up).
+  async chatsSla(actor: ActorContext, query: { from?: string; to?: string }) {
     this.policy.assertCanWriteCrm(actor);
     const { from, to } = this.rangeBounds(query);
     const result = await this.database.query<{
@@ -320,7 +321,6 @@ export class AnalyticsService {
           where m.deleted_at is null
             and m.message_type <> 'system'
             and m.sender_id is not null
-            and ($3::uuid is null or c.branch_id = $3::uuid)
        ),
        seq as (
          select chat_id, created_at, cls,
@@ -351,7 +351,7 @@ export class AnalyticsService {
          coalesce(percentile_cont(0.5) within group (order by minutes), 0) as median_minutes,
          coalesce(percentile_cont(0.9) within group (order by minutes), 0) as p90_minutes
        from gaps`,
-      [from, to, query.branchId ?? null],
+      [from, to],
     );
     const row = result.rows[0];
     const inboundCount = Number(row?.inbound_count ?? 0);
@@ -375,24 +375,36 @@ export class AnalyticsService {
     const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const branchId = query.branchId;
     const dated = { from, to, branchId };
-    const [funnel, debts, forecast, churn, branches, lossReasons, chatSla] = await Promise.all([
+
+    const settle = <T>(r: PromiseSettledResult<T>): T | { error: string } =>
+      r.status === "fulfilled"
+        ? r.value
+        : { error: r.reason instanceof Error ? r.reason.message : String(r.reason) };
+
+    const [funnelR, debtsR, forecastR, churnR, branchesR, lossR, slaR] = await Promise.allSettled([
       this.funnel(actor, dated),
       this.debts(actor, { branchId }),
       this.revenueForecast(actor, { branchId }),
       this.churnRisk(actor, { branchId }),
       this.branchComparison(actor, { from, to }),
       this.lossReasons(actor, dated),
-      this.chatsSla(actor, dated),
+      this.chatsSla(actor, { from, to }),
     ]);
+
+    const churn =
+      churnR.status === "fulfilled"
+        ? { inactiveDays: churnR.value.inactiveDays, totalAtRisk: churnR.value.totalAtRisk }
+        : { error: churnR.reason instanceof Error ? churnR.reason.message : String(churnR.reason) };
+
     return {
       window: { from, to },
-      funnel,
-      debts,
-      forecast,
-      churn: { inactiveDays: churn.inactiveDays, totalAtRisk: churn.totalAtRisk },
-      branches,
-      lossReasons,
-      chatSla,
+      funnel: settle(funnelR),
+      debts: settle(debtsR),
+      forecast: settle(forecastR),
+      churn,
+      branches: settle(branchesR),
+      lossReasons: settle(lossR),
+      chatSla: settle(slaR),
     };
   }
 
