@@ -949,10 +949,19 @@ class _KanbanColumnState extends State<_KanbanColumn> {
       },
       builder: (context, candidateData, rejectedData) {
         final hovering = candidateData.isNotEmpty;
+        // Cap the column to a fraction of the screen so cards are never
+        // horizontally clipped on a narrow (mobile) viewport, while keeping a
+        // comfortable fixed width on wider (desktop) screens. The 24 subtracts
+        // the column's own horizontal margins (6 + 6) plus board padding so a
+        // single column still fits fully inside the viewport on small phones.
+        final screenWidth = MediaQuery.of(context).size.width;
+        final columnWidth = screenWidth < 360
+            ? (screenWidth - 24).clamp(220.0, 300.0)
+            : 300.0;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOut,
-          width: 300,
+          width: columnWidth,
           margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             color: hovering
@@ -1157,9 +1166,17 @@ class _LeadCard extends ConsumerWidget {
         angle: 0.03,
         child: Material(
           color: Colors.transparent,
-          child: Container(
-            width: 276,
-            padding: const EdgeInsets.all(12),
+          child: Builder(
+            builder: (context) {
+              // Match the dragged card's width to the responsive column inner
+              // width so the feedback is not clipped on a narrow screen.
+              final screenWidth = MediaQuery.of(context).size.width;
+              final feedbackWidth = screenWidth < 360
+                  ? (screenWidth - 24).clamp(220.0, 300.0) - 24
+                  : 276.0;
+              return Container(
+                width: feedbackWidth,
+                padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
@@ -1213,6 +1230,8 @@ class _LeadCard extends ConsumerWidget {
                 const Icon(Icons.drag_indicator_rounded, size: 18),
               ],
             ),
+              );
+            },
           ),
         ),
       ),
