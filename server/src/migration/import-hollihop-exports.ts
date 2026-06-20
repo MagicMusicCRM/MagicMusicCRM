@@ -160,8 +160,11 @@ async function main() {
 
     try {
       // Build phone→id lookup caches
-      const studentCache = new Map<string, string>();
-      const leadCache = new Map<string, string>();
+      // Typed Map<string, string | null> so a cached miss (null) round-trips correctly.
+      // We store the real value (id or null) rather than an empty-string sentinel; the
+      // getter `cache.get(key) ?? null` is then safe because null ?? null === null.
+      const studentCache = new Map<string, string | null>();
+      const leadCache = new Map<string, string | null>();
       const userCache = new Map<string, string | null>();
 
       const matchStudentId = async (canonical: string): Promise<string | null> => {
@@ -174,7 +177,7 @@ async function main() {
           [canonical],
         );
         const id = r.rows[0]?.id ?? null;
-        studentCache.set(canonical, id ?? "");
+        studentCache.set(canonical, id);
         return id;
       };
 
@@ -187,7 +190,7 @@ async function main() {
           [canonical],
         );
         const id = r.rows[0]?.id ?? null;
-        leadCache.set(canonical, id ?? "");
+        leadCache.set(canonical, id);
         return id;
       };
 
@@ -209,7 +212,7 @@ async function main() {
           [key],
         );
         const id = r.rows[0]?.id ?? null;
-        userCache.set(key, id ?? "");
+        userCache.set(key, id);
         return id;
       };
 
@@ -237,13 +240,14 @@ async function main() {
         const studentId = await matchStudentId(canonical);
         const leadId = studentId ? null : await matchLeadId(canonical);
 
+        // Treat as unmatched if id is null or (belt-and-suspenders) an empty string
         if (!studentId && !leadId) {
           tasksReport.unmatched++;
           continue;
         }
 
         const entityType = studentId ? "student" : "lead";
-        const entityId = (studentId ?? leadId)!;
+        const entityId = (studentId || leadId)!;
         if (studentId) tasksReport.matchedStudent++;
         else tasksReport.matchedLead++;
 
@@ -263,7 +267,7 @@ async function main() {
           description: mapped.description || null,
           status: "open",
           due_at: parseRuDate(mapped.dueRaw),
-          assigned_to: assignedTo,
+          assigned_to: assignedTo || null,
           created_by: null,
         }, ["id"]);
 
