@@ -1,5 +1,13 @@
 import 'package:flutter/services.dart';
 
+/// Returns true when [phone] is a canonical Russian number (`+7` followed by
+/// exactly 10 digits).  Used to decide whether to open the edit form in
+/// international mode or RU-masked mode.
+bool isCanonicalRu(String? phone) {
+  if (phone == null) return false;
+  return RegExp(r'^\+7\d{10}$').hasMatch(phone);
+}
+
 /// All digit characters of [raw], in order.
 String digitsFrom(String raw) => raw.replaceAll(RegExp(r'\D'), '');
 

@@ -15,6 +15,7 @@ class _CreateStudentDialogState extends ConsumerState<CreateStudentDialog> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   String _canonicalPhone = '';
+  bool _isInternational = false;
   bool _saving = false;
 
   @override
@@ -70,7 +71,20 @@ class _CreateStudentDialogState extends ConsumerState<CreateStudentDialog> {
           ),
           const SizedBox(height: 12),
           RuPhoneField(
+            key: ValueKey('phone:$_isInternational'),
+            international: _isInternational,
             onCanonicalChanged: (c) => _canonicalPhone = c,
+          ),
+          CheckboxListTile(
+            value: _isInternational,
+            onChanged: (v) => setState(() {
+              _isInternational = v ?? false;
+              _canonicalPhone = '';
+            }),
+            title: const Text('Международный номер'),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
           ),
         ],
       ),

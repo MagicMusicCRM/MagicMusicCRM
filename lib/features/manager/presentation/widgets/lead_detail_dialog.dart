@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
+import 'package:magic_music_crm/core/utils/ru_phone.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/models/types.dart';
@@ -28,6 +29,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   bool _saving = false;
   bool _converting = false;
   bool _loadingCard = true;
+  // True when the stored phone is not a canonical +7XXXXXXXXXX number so that
+  // foreign numbers open correctly in the plain text field (not mangled by the
+  // RU mask).
+  late bool _isInternational;
   int _commentsRefreshKey = 0;
   Map<String, dynamic>? _leadCard;
   List<Map<String, dynamic>> _duplicateCandidates = [];
@@ -80,6 +85,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   void initState() {
     super.initState();
     _leadData = Map<String, dynamic>.from(widget.lead);
+    _isInternational = !isCanonicalRu(_leadData['phone']?.toString());
     _notesCtrl = TextEditingController(
       text: _leadData['notes']?.toString() ?? '',
     );
@@ -405,8 +411,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                     _buildTextField('Имя', 'name'),
                     _buildTextField('Фамилия', 'last_name'),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.only(bottom: 4),
                       child: RuPhoneField(
+                        key: ValueKey('phone:$_isInternational'),
+                        international: _isInternational,
                         initialCanonical: _leadData['phone']?.toString(),
                         onCanonicalChanged: (c) {
                           setState(() {
@@ -416,6 +424,19 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                         },
                       ),
                     ),
+                    CheckboxListTile(
+                      value: _isInternational,
+                      onChanged: (v) => setState(() {
+                        _isInternational = v ?? false;
+                        _leadData['phone'] = null;
+                        _edited = true;
+                      }),
+                      title: const Text('Международный номер'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
+                    const SizedBox(height: 8),
                     _buildTextField(
                       'Электронная почта',
                       'email',

@@ -44,4 +44,27 @@ void main() {
     await tester.pump();
     expect(find.text('+7 (909) 123 45 67'), findsOneWidget);
   });
+
+  testWidgets(
+    'international mode: emits raw value, no +7 mask applied',
+    (tester) async {
+      String? captured;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: RuPhoneField(
+            international: true,
+            onCanonicalChanged: (c) => captured = c,
+          ),
+        ),
+      ));
+
+      await tester.enterText(find.byType(TextField), '+1 202 555 0123');
+      await tester.pump();
+
+      // Raw value is emitted (not a +7 canonical).
+      expect(captured, '+1 202 555 0123');
+      // No +7 ( mask should appear.
+      expect(find.textContaining('+7 ('), findsNothing);
+    },
+  );
 }
