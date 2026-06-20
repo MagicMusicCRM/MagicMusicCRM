@@ -408,6 +408,60 @@ export class AnalyticsService {
     };
   }
 
+  async dataQuality(actor: ActorContext, query: { branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const branchOf = (a: string) =>
+      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
+
+    const leadsResult = await this.database.query<{
+      total: string;
+      missing_phone: string;
+      missing_branch: string;
+    }>(
+      `select count(*) as total,
+              count(*) filter (where l.phone_normalized is null or btrim(l.phone_normalized) = '') as missing_phone,
+              count(*) filter (where l.branch_id is null) as missing_branch
+         from app.leads l
+        where l.deleted_at is null
+          and ($1::uuid is null or l.branch_id = $1::uuid)`,
+      [query.branchId ?? null],
+    );
+
+    const studentsResult = await this.database.query<{
+      total: string;
+      missing_branch: string;
+      missing_discipline: string;
+    }>(
+      `select count(*) as total,
+              count(*) filter (where ${branchOf("s")} is null) as missing_branch,
+              count(*) filter (
+                where not exists (
+                  select 1 from app.student_disciplines sd
+                   where sd.student_id = s.id and sd.deleted_at is null
+                )
+              ) as missing_discipline
+         from app.students s
+        where s.deleted_at is null
+          and ($1::uuid is null or ${branchOf("s")} = $1::text)`,
+      [query.branchId ?? null],
+    );
+
+    const l = leadsResult.rows[0];
+    const st = studentsResult.rows[0];
+    return {
+      leads: {
+        total: Number(l?.total ?? 0),
+        missingPhone: Number(l?.missing_phone ?? 0),
+        missingBranch: Number(l?.missing_branch ?? 0),
+      },
+      students: {
+        total: Number(st?.total ?? 0),
+        missingBranch: Number(st?.missing_branch ?? 0),
+        missingDiscipline: Number(st?.missing_discipline ?? 0),
+      },
+    };
+  }
+
   async sourceAnalytics(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
     this.policy.assertCanWriteCrm(actor);
     const { from, to } = this.rangeBounds(query);

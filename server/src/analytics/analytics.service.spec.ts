@@ -223,6 +223,28 @@ describe("AnalyticsService", () => {
     expect(result.unspecifiedCount).toBe(5);
   });
 
+  it("dataQuality counts leads/students missing phone/branch/discipline, gated", async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce({ rows: [{ total: "200", missing_phone: "15", missing_branch: "8" }] })
+      .mockResolvedValueOnce({ rows: [{ total: "300", missing_branch: "5", missing_discipline: "40" }] });
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
+    const crm = {} as unknown as CrmService;
+    const service = new AnalyticsService(
+      { query } as unknown as DatabaseService,
+      crm,
+      policy as unknown as CrmPolicy,
+    );
+    const result = await service.dataQuality(actor, {});
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(String(query.mock.calls[0][0])).toContain("app.leads");
+    expect(String(query.mock.calls[1][0])).toContain("app.students");
+    expect(String(query.mock.calls[1][0])).toContain("student_disciplines");
+    expect(result).toEqual({
+      leads: { total: 200, missingPhone: 15, missingBranch: 8 },
+      students: { total: 300, missingBranch: 5, missingDiscipline: 40 },
+    });
+  });
+
   it("sourceAnalytics groups new leads by source with display names + shares, gated", async () => {
     const { service, query, policy } = build([
       { source: "site", display_name: "Сайт", leads: "60" },
