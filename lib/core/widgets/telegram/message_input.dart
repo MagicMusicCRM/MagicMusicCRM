@@ -211,6 +211,9 @@ class _MessageInputState extends State<MessageInput> {
         ),
       ),
       child: SafeArea(
+        // When the emoji panel is open it provides its own bottom SafeArea,
+        // so avoid double-padding the bottom inset here.
+        bottom: !_showEmojiPicker,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -283,12 +286,7 @@ class _MessageInputState extends State<MessageInput> {
                               ? TelegramColors.darkTextSecondary
                               : TelegramColors.lightTextSecondary,
                     ),
-                    onPressed: widget.enabled
-                        ? () {
-                            setState(() => _showEmojiPicker = !_showEmojiPicker);
-                            if (!_showEmojiPicker) _focusNode.requestFocus();
-                          }
-                        : null,
+                    onPressed: widget.enabled ? _toggleEmojiPicker : null,
                     splashRadius: 20,
                     tooltip: _showEmojiPicker ? 'Клавиатура' : 'Эмодзи',
                   ),
@@ -395,6 +393,18 @@ class _MessageInputState extends State<MessageInput> {
     );
   }
 
+  void _toggleEmojiPicker() {
+    final willShow = !_showEmojiPicker;
+    setState(() => _showEmojiPicker = willShow);
+    if (willShow) {
+      // KVA-172: dismiss the soft keyboard so the emoji panel occupies the
+      // freed space in the layout instead of colliding with the keyboard.
+      FocusScope.of(context).unfocus();
+    } else {
+      _focusNode.requestFocus();
+    }
+  }
+
   void _insertEmoji(String emoji) {
     final text = _controller.text;
     final selection = _controller.selection;
@@ -407,11 +417,18 @@ class _MessageInputState extends State<MessageInput> {
   }
 
   Widget _buildEmojiPanel(bool isDark) {
-    return SizedBox(
-      height: 250,
-      child: _EmojiGrid(
-        onEmojiSelected: _insertEmoji,
-        isDark: isDark,
+    // KVA-171/172: cap the panel height to a fraction of the available screen
+    // so it never overflows on short viewports, and respect the bottom inset
+    // via SafeArea. The grid inside scrolls, so content is always reachable.
+    final maxPanelHeight = MediaQuery.of(context).size.height * 0.4;
+    return SafeArea(
+      top: false,
+      child: SizedBox(
+        height: maxPanelHeight < 250 ? maxPanelHeight : 250,
+        child: _EmojiGrid(
+          onEmojiSelected: _insertEmoji,
+          isDark: isDark,
+        ),
       ),
     );
   }
