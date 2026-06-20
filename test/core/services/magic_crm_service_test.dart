@@ -2250,6 +2250,92 @@ void main() {
       expect(adapter.requests.single.queryParameters['from'], '2026-06-01');
       expect(r['avgResponseMs'], 45000);
     });
+
+    test('getAppLeadsCount reads /crm/leads/app-count and returns the count',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/leads/app-count',
+          statusCode: 200,
+          body: {'count': 7},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final count = await service.getAppLeadsCount();
+
+      expect(count, 7);
+      expect(adapter.requests.single.queryParameters, isEmpty);
+    });
+
+    test('getAppLeadsCount coerces a string count to int', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/leads/app-count',
+          statusCode: 200,
+          body: {'count': '12'},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      expect(await service.getAppLeadsCount(), 12);
+    });
+
+    test('listBranchDisciplines maps items to snake keys', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/branches/branch-a/disciplines',
+          statusCode: 200,
+          body: {
+            'items': [
+              {
+                'id': 'bd-1',
+                'disciplineId': 'disc-1',
+                'name': 'Вокал',
+                'sortOrder': 0,
+              },
+              {
+                'id': 'bd-2',
+                'disciplineId': 'disc-2',
+                'name': 'Гитара',
+                'sortOrder': 1,
+              },
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final items = await service.listBranchDisciplines('branch-a');
+
+      expect(items, hasLength(2));
+      expect(items.first['id'], 'bd-1');
+      expect(items.first['discipline_id'], 'disc-1');
+      expect(items.first['name'], 'Вокал');
+      expect(items.first['sort_order'], 0);
+      expect(adapter.requests.single.queryParameters, isEmpty);
+    });
+
+    test('listDisciplines maps items to {id, name}', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/disciplines',
+          statusCode: 200,
+          body: {
+            'items': [
+              {'id': 'disc-1', 'name': 'Вокал'},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final items = await service.listDisciplines();
+
+      expect(items.single['id'], 'disc-1');
+      expect(items.single['name'], 'Вокал');
+      expect(adapter.requests.single.queryParameters, isEmpty);
+    });
   });
 }
 

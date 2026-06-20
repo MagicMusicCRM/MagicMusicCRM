@@ -466,6 +466,39 @@ class MagicCrmService {
     return _items(response).map(_legacyBranch).toList();
   }
 
+  Future<int> getAppLeadsCount() async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/leads/app-count',
+    );
+    final raw = response['count'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw?.toString() ?? '') ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> listBranchDisciplines(
+    String branchId,
+  ) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/branches/$branchId/disciplines',
+    );
+    return _items(response).map((item) {
+      return {
+        'id': item['id'],
+        'discipline_id': item['disciplineId'],
+        'name': item['name'],
+        'sort_order': (item['sortOrder'] as num?)?.toInt() ?? 0,
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listDisciplines() async {
+    final response = await _api.get<Map<String, dynamic>>('/crm/disciplines');
+    return _items(response)
+        .map((item) => {'id': item['id'], 'name': item['name']})
+        .toList();
+  }
+
   Future<Map<String, dynamic>> updateBranch(
     String id, {
     String? name,
