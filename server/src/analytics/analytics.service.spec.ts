@@ -87,6 +87,14 @@ describe("AnalyticsService", () => {
     expect(result.totalAmount).toBe(80000);
   });
 
+  it("revenueForecast sums unpaid payments due within 7/14/30 days, gated", async () => {
+    const { service, query, policy } = build([{ next7: "10000", next14: "25000", next30: "60000" }]);
+    const result = await service.revenueForecast(actor, {});
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.expected_payments");
+    expect(result).toEqual({ next7: 10000, next14: 25000, next30: 60000 });
+  });
+
   it("lossReasons groups terminal-transition reasons, gated to manager/admin", async () => {
     const query = jest.fn()
       .mockResolvedValueOnce({ rows: [

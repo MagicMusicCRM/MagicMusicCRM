@@ -219,6 +219,25 @@ export class AnalyticsService {
     };
   }
 
+  async revenueForecast(actor: ActorContext, query: { branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const branchOf = (a: string) =>
+      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
+    const result = await this.database.query<{ next7: string; next14: string; next30: string }>(
+      `select
+         coalesce(sum(ep.amount) filter (where ep.due_date >= now()::date and ep.due_date <= now()::date + 7), 0) as next7,
+         coalesce(sum(ep.amount) filter (where ep.due_date >= now()::date and ep.due_date <= now()::date + 14), 0) as next14,
+         coalesce(sum(ep.amount) filter (where ep.due_date >= now()::date and ep.due_date <= now()::date + 30), 0) as next30
+       from app.expected_payments ep
+       join app.students s on s.id = ep.student_id and s.deleted_at is null
+      where ep.status in ('pending', 'open')
+        and ($1::uuid is null or ${branchOf("s")} = $1::text)`,
+      [query.branchId ?? null],
+    );
+    const row = result.rows[0];
+    return { next7: Number(row?.next7 ?? 0), next14: Number(row?.next14 ?? 0), next30: Number(row?.next30 ?? 0) };
+  }
+
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const { items } = await this.financeMonthly(actor, query);
     const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";
