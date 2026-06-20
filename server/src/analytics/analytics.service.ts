@@ -474,7 +474,7 @@ export class AnalyticsService {
               u.full_name as name,
               count(*) as leads
          from app.leads l
-         join app.users u on u.id = l.assigned_to and u.deleted_at is null
+         left join app.users u on u.id = l.assigned_to and u.deleted_at is null
         where l.deleted_at is null
           and l.assigned_to is not null
           and l.created_at >= $1::timestamptz
@@ -538,7 +538,7 @@ export class AnalyticsService {
         const leads = Number(r.leads);
         return {
           source: r.source,
-          displayName: r.display_name ?? (r.source ?? "(не указан)"),
+          displayName: r.display_name ?? (r.source || "(не указан)"),
           leads,
           share: total === 0 ? 0 : Math.round((leads / total) * 100),
         };

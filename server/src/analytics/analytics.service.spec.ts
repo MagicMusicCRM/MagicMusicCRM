@@ -271,6 +271,8 @@ describe("AnalyticsService", () => {
       { userId: "u2", name: "Борис Менеджер", leads: 30 },
     ]);
     expect(result.unassignedLeads).toBe(12);
+    expect(query.mock.calls[1]).toBeDefined();
+    expect(String(query.mock.calls[1][0])).toContain("assigned_to is null");
   });
 
   it("sourceAnalytics groups new leads by source with display names + shares, gated", async () => {
