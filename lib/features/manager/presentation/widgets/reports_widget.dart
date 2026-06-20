@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
 
 class ReportsWidget extends ConsumerStatefulWidget {
   final int initialTab;
@@ -32,9 +33,9 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
+      length: 4,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 2),
+      initialIndex: widget.initialTab.clamp(0, 3),
     );
     _loadReports();
   }
@@ -42,7 +43,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   @override
   void didUpdateWidget(covariant ReportsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextTab = widget.initialTab.clamp(0, 2);
+    final nextTab = widget.initialTab.clamp(0, 3);
     if (nextTab != _tabController.index) {
       _tabController.index = nextTab;
     }
@@ -118,6 +119,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             Tab(text: 'Аналитика'),
             Tab(text: 'Финансы'),
             Tab(text: 'Активность'),
+            Tab(text: 'Управление'),
           ],
         ),
         Expanded(
@@ -127,6 +129,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               _buildOverviewTab(),
               const FinancialDashboardWidget(),
               const _ActivityLogTab(),
+              const ManagementDashboardWidget(),
             ],
           ),
         ),
