@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
 import 'package:intl/intl.dart';
 
 class TeacherScheduleWidget extends ConsumerStatefulWidget {
@@ -17,6 +18,10 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
   bool _isLoading = true;
 
   List<Appointment> _appointments = [];
+  // Keeps the raw lesson payload keyed by lesson id so a tapped appointment can
+  // open the attendance dialog (which needs the full lesson map, not just the
+  // Appointment) — KVA-152.
+  final Map<String, Map<String, dynamic>> _lessonsById = {};
   final CalendarController _calendarController = CalendarController();
 
   @override
@@ -43,8 +48,11 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
       );
 
       final appointments = <Appointment>[];
+      _lessonsById.clear();
       for (final lesson in lessonsRes) {
         if (lesson['scheduled_at'] == null) continue;
+        final lessonId = lesson['id']?.toString();
+        if (lessonId != null) _lessonsById[lessonId] = lesson;
         final dbTime = DateTime.parse(lesson['scheduled_at']).toUtc();
         final start = dbTime.add(const Duration(hours: 3));
         final duration = lesson['duration_minutes'] as int? ?? 60;
@@ -133,6 +141,14 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
     }
   }
 
+  // Opens the attendance dialog for a lesson. The teacher can mark any lesson
+  // (the backend already permits both teacher and manager) — KVA-152.
+  Future<void> _openAttendance(String lessonId) async {
+    final lesson =
+        _lessonsById[lessonId] ?? <String, dynamic>{'id': lessonId};
+    await LessonAttendanceDialog.show(context, lesson);
+  }
+
   void _showLessonDetails(Appointment appointment) {
     if (appointment.id == null) return;
     final lessonId = appointment.id.toString();
@@ -180,6 +196,14 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
                 _editLessonPlan(lessonId, appointment.notes ?? '');
               },
               child: const Text('Изменить план'),
+            ),
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _openAttendance(lessonId);
+              },
+              icon: const Icon(Icons.how_to_reg_rounded, size: 18),
+              label: const Text('Посещаемость'),
             ),
             if (appointment.color == AppTheme.primaryPurple)
               TextButton(
@@ -292,15 +316,39 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                app.subject,
-                                style: TextStyle(
-                                  color: app.color,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      app.subject,
+                                      style: TextStyle(
+                                        color: app.color,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  // Per-card attendance shortcut (KVA-152). Opens
+                                  // the same dialog reachable from the details
+                                  // popup so a teacher can mark posещаемость in
+                                  // one tap.
+                                  if (app.id != null)
+                                    GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () =>
+                                          _openAttendance(app.id.toString()),
+                                      child: Tooltip(
+                                        message: 'Посещаемость',
+                                        child: Icon(
+                                          Icons.how_to_reg_rounded,
+                                          size: 14,
+                                          color: app.color,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                               Text(
                                 app.location ?? '',

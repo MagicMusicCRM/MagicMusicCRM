@@ -174,6 +174,18 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
       final scheduledAt = moscowTime.toIso8601String();
 
+      // KVA-154: pre-save soft conflict check. Ask the backend whether the
+      // chosen room is free at this slot; if it reports a busy/overlapping room
+      // we surface a confirmable warning instead of silently creating a clashing
+      // lesson. This is a soft warn — the manager may still proceed.
+      final proceed = await _confirmIfConflicting(
+        slotStartUtc: moscowTime,
+      );
+      if (!proceed) {
+        if (mounted) setState(() => _saving = false);
+        return;
+      }
+
       if (_isEdit) {
         await _crm.updateLesson(
           widget.lesson!['id'].toString(),
@@ -213,6 +225,98 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  // KVA-154: returns true if it's safe to proceed with the save. Queries room
+  // availability for the chosen slot and, on a detected conflict (room busy or a
+  // listed conflict type), prompts the user with a confirmable soft warning.
+  // Any read failure is treated as "proceed" — the conflict check must never
+  // hard-block lesson creation if the backend is momentarily unreachable.
+  Future<bool> _confirmIfConflicting({required DateTime slotStartUtc}) async {
+    final branchId = _selectedBranchId;
+    final roomId = _selectedRoomId;
+    // No room selected → nothing to conflict on (the lesson has no room).
+    if (branchId == null || roomId == null || roomId.isEmpty) return true;
+
+    const durationMinutes = 60; // matches the backend's default lesson length.
+
+    List<String> conflictTypes = const [];
+    bool busy = false;
+    try {
+      final dayUtc = DateTime.utc(
+        slotStartUtc.year,
+        slotStartUtc.month,
+        slotStartUtc.day,
+      );
+      final availability = await _crm.listRoomAvailability(
+        branchId: branchId,
+        roomId: roomId,
+        date:
+            '${dayUtc.year.toString().padLeft(4, '0')}-'
+            '${dayUtc.month.toString().padLeft(2, '0')}-'
+            '${dayUtc.day.toString().padLeft(2, '0')}',
+        from: slotStartUtc.toIso8601String(),
+        durationMinutes: durationMinutes,
+        limit: 100,
+      );
+      final items = availability['items'];
+      if (items is List) {
+        for (final raw in items) {
+          if (raw is! Map) continue;
+          if (raw['room_id']?.toString() != roomId) continue;
+          busy = raw['is_available'] == false;
+          final ct = raw['conflict_types'];
+          if (ct is List) {
+            conflictTypes = ct.map((e) => e.toString()).toList();
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('Room availability pre-check failed: $e');
+      return true; // soft-fail open — never block on a read error.
+    }
+
+    if (!busy && conflictTypes.isEmpty) return true;
+
+    if (!mounted) return true;
+    final detail = _conflictDetail(conflictTypes);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Возможен конфликт'),
+        content: Text(
+          'В это время возможен конфликт$detail. Создать всё равно?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Создать всё равно'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  String _conflictDetail(List<String> conflictTypes) {
+    final labels = <String>[];
+    for (final type in conflictTypes) {
+      switch (type) {
+        case 'room_overlap':
+          labels.add('аудитория занята');
+          break;
+        case 'teacher_overlap':
+          labels.add('преподаватель занят');
+          break;
+      }
+    }
+    if (labels.isEmpty) return ' (аудитория занята)';
+    return ' (${labels.join(', ')})';
   }
 
   @override
