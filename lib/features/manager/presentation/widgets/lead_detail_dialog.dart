@@ -508,41 +508,48 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
               ),
             ),
             const Divider(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _saving || _converting ? null : _convertToStudent,
-                  icon: _converting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.person_add_alt_1_rounded),
-                  label: const Text('Создать ученика'),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: _saving || _converting ? null : _handleClose,
-                  child: const Text('Отмена'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _saving || _converting ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryPurple,
-                    foregroundColor: Colors.white,
+            // Wrap so the action buttons reflow onto a second line on narrow
+            // (mobile) dialog widths instead of overflowing on the right.
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed:
+                        _saving || _converting ? null : _convertToStudent,
+                    icon: _converting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.person_add_alt_1_rounded),
+                    label: const Text('Создать ученика'),
                   ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Сохранить'),
-                ),
-              ],
+                  TextButton(
+                    onPressed: _saving || _converting ? null : _handleClose,
+                    child: const Text('Отмена'),
+                  ),
+                  ElevatedButton(
+                    onPressed: _saving || _converting ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryPurple,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Сохранить'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
