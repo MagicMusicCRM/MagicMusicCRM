@@ -4081,6 +4081,89 @@ describe("CrmService", () => {
     await expect(service.removeFamilyMember(actor, "missing")).rejects.toThrow("Участник семьи не найден.");
   });
 
+  it("getMySummary includes family-linked children and dedups own students (KVA-156)", async () => {
+    const clientActor = { userId: "parent-user-a", role: "client" as const };
+    const { service, query } = createServiceWithQueryResults([
+      // 1) own students (account-holder's own student records)
+      {
+        rows: [
+          {
+            id: "student-own",
+            lead_id: null,
+            status: "active",
+            custom_data: null,
+            profile_id: "profile-own",
+            profile_user_id: "parent-user-a",
+            first_name: "Иван",
+            last_name: "Иванов",
+            email: "parent@example.com",
+            phone: null,
+            teacher_user_ids: [],
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      // 2) family-linked students: one new child + the own student again (dedup target)
+      {
+        rows: [
+          {
+            id: "student-child",
+            lead_id: null,
+            status: "active",
+            custom_data: null,
+            profile_id: "profile-child",
+            profile_user_id: null,
+            first_name: "Петя",
+            last_name: "Иванов",
+            email: null,
+            phone: null,
+            teacher_user_ids: [],
+            created_at: "2026-06-02T00:00:00.000Z",
+          },
+          {
+            id: "student-own",
+            lead_id: null,
+            status: "active",
+            custom_data: null,
+            profile_id: "profile-own",
+            profile_user_id: "parent-user-a",
+            first_name: "Иван",
+            last_name: "Иванов",
+            email: "parent@example.com",
+            phone: null,
+            teacher_user_ids: [],
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      { rows: [] }, // 3) listLessons
+      { rows: [] }, // 4) listTasks
+      { rows: [] }, // 5) listPayments items
+      { rows: [{ total_amount: "0", total_count: "0" }] }, // 6) listPayments total
+    ]);
+
+    const result = await service.getMySummary(clientActor);
+
+    // Own + family-linked, deduped by student id (student-own listed once).
+    expect(result.students.map((s) => s.id)).toEqual([
+      "student-own",
+      "student-child",
+    ]);
+    expect(result.students).toHaveLength(2);
+    expect(result.students.find((s) => s.id === "student-child")?.firstName).toBe(
+      "Петя",
+    );
+
+    // The family-discovery query gates on active families/members/students and
+    // the parent/payer role of the account profile.
+    const familyQuery = query.mock.calls[1][0] as string;
+    expect(familyQuery).toContain("app.family_members");
+    expect(familyQuery).toContain("app.families");
+    expect(familyQuery).toContain("'parent', 'payer'");
+    expect(familyQuery).toContain("child_m.entity_type = 'student'");
+    expect(query.mock.calls[1][1]).toEqual(["parent-user-a"]);
+  });
+
   const createMergeService = (results: { rows: Record<string, unknown>[] }[]) => {
     const query = jest.fn();
     for (const r of results) query.mockResolvedValueOnce(r);

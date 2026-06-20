@@ -460,7 +460,16 @@ export class CrmService {
   ) {}
 
   async getMySummary(actor: ActorContext) {
-    const students = await this.listClientStudents(actor.userId);
+    const ownStudents = await this.listClientStudents(actor.userId);
+    // KVA-156: a parent/payer account also sees children linked via Families.
+    const familyStudents = await this.listFamilyLinkedStudents(actor.userId);
+    // Union own + family-linked students; dedup by student id (own wins).
+    const byId = new Map<string, StudentRow>();
+    for (const row of ownStudents) byId.set(row.id, row);
+    for (const row of familyStudents) {
+      if (!byId.has(row.id)) byId.set(row.id, row);
+    }
+    const students = Array.from(byId.values());
     const lessons = await this.listLessons(actor, { limit: 20 });
     const tasks = await this.listTasks(actor, { limit: 20 });
     const payments = await this.listPayments(actor, { limit: 20 });
@@ -5287,6 +5296,47 @@ export class CrmService {
         join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
         where s.deleted_at is null and p.user_id = $1
+        order by s.created_at desc
+      `,
+      [userId],
+    );
+    return result.rows;
+  }
+
+  /**
+   * KVA-156: students linked to the account-holder via Families.
+   *
+   * The account-holder's user maps to a profile (app.profiles.user_id). We find
+   * the active families where that profile is a parent/payer member, then return
+   * the active STUDENT members of those families. Only active rows are
+   * considered (deleted_at is null on families, family_members and students),
+   * and the result shape mirrors listClientStudents so toStudentDto stays valid.
+   */
+  private async listFamilyLinkedStudents(
+    userId: string,
+  ): Promise<StudentRow[]> {
+    const result = await this.database.query<StudentRow>(
+      `
+        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          '{}'::uuid[] as teacher_user_ids
+        from app.profiles acct
+        join app.family_members parent_m
+          on parent_m.entity_type = 'profile'
+          and parent_m.entity_id = acct.id
+          and parent_m.role in ('parent', 'payer')
+          and parent_m.deleted_at is null
+        join app.families f
+          on f.id = parent_m.family_id and f.deleted_at is null
+        join app.family_members child_m
+          on child_m.family_id = f.id
+          and child_m.entity_type = 'student'
+          and child_m.deleted_at is null
+        join app.students s
+          on s.id = child_m.entity_id and s.deleted_at is null
+        join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+        left join app.users u on u.id = p.user_id and u.deleted_at is null
+        where acct.user_id = $1 and acct.deleted_at is null
         order by s.created_at desc
       `,
       [userId],
