@@ -77,6 +77,8 @@ function readArrayFile(dir: string, name: string, rootKey: string): JsonRow[] {
 // Dry-run-aware upsert
 // ---------------------------------------------------------------------------
 
+const ALLOWED_TABLES = ["app.tasks", "app.entity_comments", "app.lead_comments"];
+
 async function planUpsert(
   mode: ImportMode,
   client: PoolClient,
@@ -84,6 +86,9 @@ async function planUpsert(
   data: JsonRow,
   conflictColumns: string[],
 ): Promise<boolean> {
+  if (!ALLOWED_TABLES.includes(table)) {
+    throw new Error(`unexpected table: ${table}`);
+  }
   if (mode !== "apply") return false;
   const entries = Object.entries(data).filter(([, v]) => v !== undefined);
   const columns = entries.map(([k]) => k);
@@ -124,8 +129,11 @@ async function main() {
   if (!EXPORTS_DIR) {
     throw new Error("HOLLIHOP_EXPORTS_DIR is required.");
   }
-  if (MODE === "apply" && !CONNECTION_STRING) {
-    throw new Error("MIGRATION_DATABASE_URL or DATABASE_URL is required in apply mode.");
+  if (!existsSync(EXPORTS_DIR)) {
+    throw new Error(`HOLLIHOP_EXPORTS_DIR does not exist: ${EXPORTS_DIR}`);
+  }
+  if (!CONNECTION_STRING) {
+    throw new Error("MIGRATION_DATABASE_URL or DATABASE_URL is required.");
   }
 
   // Load source files
@@ -133,29 +141,23 @@ async function main() {
   const studentRows = readArrayFile(EXPORTS_DIR, "students.json", "Students");
   const leadRows = readArrayFile(EXPORTS_DIR, "leads.json", "Leads");
 
-  if (MODE === "dry_run") {
-    // Dry-run: count without connecting to DB
-    const report: RunReport = {
-      mode: MODE,
-      tasks: countSection(taskRows, "task"),
-      studentNotes: countSection(studentRows, "studentNote"),
-      leadComments: countSection(leadRows, "leadComment"),
-    };
-    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-    return;
-  }
-
-  // Apply mode: connect and run in a transaction
+  // Always connect to DB — dry_run needs it to compute real match counts (read-only SELECTs).
   const pool = new Pool({
-    connectionString: CONNECTION_STRING!,
+    connectionString: CONNECTION_STRING,
     max: 2,
     connectionTimeoutMillis: 10_000,
     idleTimeoutMillis: 30_000,
   });
 
-  const client = await pool.connect();
+  let client: PoolClient | undefined;
   try {
-    await client.query("begin");
+    client = await pool.connect();
+
+    // Only wrap in a transaction when writing
+    if (MODE === "apply") {
+      await client.query("begin");
+    }
+
     try {
       // Build phone→id lookup caches
       const studentCache = new Map<string, string>();
@@ -164,7 +166,7 @@ async function main() {
 
       const matchStudentId = async (canonical: string): Promise<string | null> => {
         if (studentCache.has(canonical)) return studentCache.get(canonical) ?? null;
-        const r = await client.query<{ id: string }>(
+        const r = await client!.query<{ id: string }>(
           `select s.id from app.students s
            join app.profiles p on p.id = s.profile_id and p.deleted_at is null
            where p.phone_normalized = $1 and s.deleted_at is null
@@ -178,7 +180,7 @@ async function main() {
 
       const matchLeadId = async (canonical: string): Promise<string | null> => {
         if (leadCache.has(canonical)) return leadCache.get(canonical) ?? null;
-        const r = await client.query<{ id: string }>(
+        const r = await client!.query<{ id: string }>(
           `select l.id from app.leads l
            where l.phone_normalized = $1 and l.deleted_at is null
            limit 1`,
@@ -194,7 +196,7 @@ async function main() {
         const key = name.toLowerCase().trim();
         if (userCache.has(key)) return userCache.get(key) ?? null;
         // Try matching last+first against profiles, then full_name on users
-        const r = await client.query<{ id: string }>(
+        const r = await client!.query<{ id: string }>(
           `select u.id from app.users u
            join app.profiles p on p.user_id = u.id and p.deleted_at is null
            where u.deleted_at is null
@@ -249,7 +251,8 @@ async function main() {
         const cleanName = cleanResponsible(mapped.responsible);
         const assignedTo = await matchUserId(cleanName);
 
-        const taskKey = `export:task:${mapped.phoneRaw}:${mapped.dueRaw}:${mapped.description}`;
+        // Use canonical phone so re-exports with different raw formats produce the same id
+        const taskKey = `export:task:${canonical}:${mapped.dueRaw}:${mapped.description}`;
         const id = deterministicUuid("hollihop-export-task", taskKey);
 
         const written = await planUpsert(MODE, client, "app.tasks", {
@@ -294,7 +297,8 @@ async function main() {
         }
         studentNotesReport.matchedStudent++;
 
-        const noteKey = `export:student-note:${mapped.phoneRaw}:${mapped.note}`;
+        // Use canonical phone for stable idempotency key
+        const noteKey = `export:student-note:${canonical}:${mapped.note}`;
         const id = deterministicUuid("hollihop-export-student-note", noteKey);
 
         const written = await planUpsert(MODE, client, "app.entity_comments", {
@@ -335,7 +339,8 @@ async function main() {
         }
         leadCommentsReport.matchedLead++;
 
-        const commentKey = `export:lead-comment:${mapped.phoneRaw}:${mapped.body}`;
+        // Use canonical phone for stable idempotency key
+        const commentKey = `export:lead-comment:${canonical}:${mapped.body}`;
         const id = deterministicUuid("hollihop-export-lead-comment", commentKey);
 
         const written = await planUpsert(MODE, client, "app.lead_comments", {
@@ -348,7 +353,9 @@ async function main() {
         if (written) leadCommentsReport.written++;
       }
 
-      await client.query("commit");
+      if (MODE === "apply") {
+        await client.query("commit");
+      }
 
       const report: RunReport = {
         mode: MODE,
@@ -358,49 +365,15 @@ async function main() {
       };
       process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     } catch (err) {
-      await client.query("rollback");
+      if (MODE === "apply") {
+        await client.query("rollback");
+      }
       throw err;
     }
   } finally {
-    client.release();
+    client?.release();
     await pool.end();
   }
-}
-
-// ---------------------------------------------------------------------------
-// Dry-run helper: parse rows without DB
-// ---------------------------------------------------------------------------
-
-function countSection(rows: JsonRow[], kind: "task" | "studentNote" | "leadComment"): SectionReport {
-  let total = 0;
-  let unmatched = 0; // can't match without DB; count parseable rows as "total"
-
-  for (const row of rows) {
-    const mapped =
-      kind === "task"
-        ? taskFromRow(row)
-        : kind === "studentNote"
-          ? studentNoteFromRow(row)
-          : leadCommentFromRow(row);
-    if (!mapped) continue;
-    total++;
-    const phone =
-      kind === "task"
-        ? (mapped as ReturnType<typeof taskFromRow>)!.phoneRaw
-        : kind === "studentNote"
-          ? (mapped as ReturnType<typeof studentNoteFromRow>)!.phoneRaw
-          : (mapped as ReturnType<typeof leadCommentFromRow>)!.phoneRaw;
-    const { canonical } = normalizePhoneRu(phone);
-    if (!canonical) unmatched++;
-  }
-
-  return {
-    total,
-    matchedStudent: 0, // unknown without DB
-    matchedLead: 0,
-    unmatched,
-    written: 0,
-  };
 }
 
 main().catch((err: unknown) => {
