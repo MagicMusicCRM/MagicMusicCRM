@@ -41,6 +41,11 @@ export class AnalyticsController {
     return this.analytics.lossReasons(actor, query);
   }
 
+  @Get("debts")
+  debts(@CurrentActor() actor: ActorContext, @Query() query: { branchId?: string }) {
+    return this.analytics.debts(actor, query);
+  }
+
   @Get("finance/monthly")
   financeMonthly(@CurrentActor() actor: ActorContext, @Query() query: { from?: string; to?: string }) {
     return this.analytics.financeMonthly(actor, query);

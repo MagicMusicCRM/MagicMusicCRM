@@ -183,6 +183,42 @@ export class AnalyticsService {
     };
   }
 
+  async debts(actor: ActorContext, query: { branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const branchOf = (a: string) =>
+      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
+    const result = await this.database.query<{ bucket: string; students: string; amount: string }>(
+      `select
+         case
+           when now()::date - ep.due_date between 0 and 7 then '0-7'
+           when now()::date - ep.due_date between 8 and 14 then '8-14'
+           when now()::date - ep.due_date between 15 and 30 then '15-30'
+           else '30+'
+         end as bucket,
+         count(distinct ep.student_id) as students,
+         coalesce(sum(ep.amount), 0) as amount
+       from app.expected_payments ep
+       join app.students s on s.id = ep.student_id and s.deleted_at is null
+      where ep.status in ('pending', 'open')
+        and ep.due_date is not null
+        and ep.due_date <= now()::date
+        and ($1::uuid is null or ${branchOf("s")} = $1::text)
+      group by 1`,
+      [query.branchId ?? null],
+    );
+    const order = ["0-7", "8-14", "15-30", "30+"];
+    const byBucket = new Map(result.rows.map((r) => [r.bucket, r]));
+    const buckets = order.map((bucket) => {
+      const row = byBucket.get(bucket);
+      return { bucket, students: Number(row?.students ?? 0), amount: Number(row?.amount ?? 0) };
+    });
+    return {
+      buckets,
+      totalStudents: buckets.reduce((n, b) => n + b.students, 0),
+      totalAmount: buckets.reduce((n, b) => n + b.amount, 0),
+    };
+  }
+
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const { items } = await this.financeMonthly(actor, query);
     const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";

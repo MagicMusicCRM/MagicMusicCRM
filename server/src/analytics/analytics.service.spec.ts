@@ -69,6 +69,24 @@ describe("AnalyticsService", () => {
     ]);
   });
 
+  it("debts buckets overdue payments in fixed order with zero-fill, gated to manager/admin", async () => {
+    const { service, query, policy } = build([
+      { bucket: "0-7", students: "5", amount: "50000" },
+      { bucket: "30+", students: "2", amount: "30000" },
+    ]);
+    const result = await service.debts(actor, {});
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.expected_payments");
+    expect(result.buckets).toEqual([
+      { bucket: "0-7", students: 5, amount: 50000 },
+      { bucket: "8-14", students: 0, amount: 0 },
+      { bucket: "15-30", students: 0, amount: 0 },
+      { bucket: "30+", students: 2, amount: 30000 },
+    ]);
+    expect(result.totalStudents).toBe(7);
+    expect(result.totalAmount).toBe(80000);
+  });
+
   it("lossReasons groups terminal-transition reasons, gated to manager/admin", async () => {
     const query = jest.fn()
       .mockResolvedValueOnce({ rows: [
