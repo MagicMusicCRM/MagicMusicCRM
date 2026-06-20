@@ -1867,7 +1867,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         label: Text('Расписание'),
       ),
       NavigationRailDestination(
-        icon: _leadsBadge(const Icon(Icons.people_outline_rounded)),
+        icon: _clientsBadge(const Icon(Icons.people_outline_rounded)),
         selectedIcon: Icon(
           Icons.people_rounded,
           color: TelegramColors.brandPurple,
@@ -1909,7 +1909,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     ];
   }
 
-  Widget _leadsBadge(Widget child) {
+  Widget _clientsBadge(Widget child) {
     final count = ref.watch(appLeadsCountProvider).asData?.value ?? 0;
     if (count <= 0) return child;
     return Badge(
@@ -1950,7 +1950,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: Icon(Icons.calendar_month_rounded),
         label: 'Распис.',
       ),
-      BottomNavigationBarItem(icon: _leadsBadge(const Icon(Icons.people_rounded)), label: 'Клиенты'),
+      BottomNavigationBarItem(icon: _clientsBadge(const Icon(Icons.people_rounded)), label: 'Клиенты'),
       BottomNavigationBarItem(
         icon: Icon(Icons.manage_accounts_rounded),
         label: 'Пользов.',
