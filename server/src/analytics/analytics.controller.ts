@@ -89,6 +89,18 @@ export class AnalyticsController {
     return new StreamableFile(Buffer.from(csv, "utf-8"));
   }
 
+  @Get("finance/monthly.xlsx")
+  async financeMonthlyXlsx(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: { from?: string; to?: string },
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const xlsx = await this.analytics.financeMonthlyXlsx(actor, query);
+    res.setHeader("Content-Type", "application/vnd.ms-excel");
+    res.setHeader("Content-Disposition", 'attachment; filename="finance-monthly.xls"');
+    return new StreamableFile(Buffer.from(xlsx, "utf-8"));
+  }
+
   @Get("sources")
   sourceAnalytics(
     @CurrentActor() actor: ActorContext,

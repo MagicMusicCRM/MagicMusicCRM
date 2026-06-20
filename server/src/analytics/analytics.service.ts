@@ -546,16 +546,68 @@ export class AnalyticsService {
     };
   }
 
-  async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
+  // Shared header + row data for the finance-monthly exports (CSV and XLSX),
+  // so both formats serialize the exact same columns from the same query.
+  private static readonly FINANCE_MONTHLY_HEADER = [
+    "month_start",
+    "lessons",
+    "completed_lessons",
+    "revenue",
+    "expenses",
+    "new_students",
+  ];
+
+  private async financeMonthlyRows(
+    actor: ActorContext,
+    query: { from?: string; to?: string },
+  ): Promise<(string | number)[][]> {
     const { items } = await this.financeMonthly(actor, query);
-    const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";
+    return items.map((i) => [
+      i.monthStart,
+      i.lessons,
+      i.completedLessons,
+      i.revenue,
+      i.expenses,
+      i.newStudents,
+    ]);
+  }
+
+  async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
+    const rows = await this.financeMonthlyRows(actor, query);
+    const header = AnalyticsService.FINANCE_MONTHLY_HEADER.join(",");
     const escape = (v: unknown) => {
       const s = String(v ?? "");
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const lines = items.map((i) =>
-      [i.monthStart, i.lessons, i.completedLessons, i.revenue, i.expenses, i.newStudents].map(escape).join(","),
-    );
+    const lines = rows.map((cells) => cells.map(escape).join(","));
     return [header, ...lines].join("\n") + "\n";
+  }
+
+  // Dependency-free SpreadsheetML 2003 (XML) workbook. Excel opens this natively
+  // when served as application/vnd.ms-excel with an .xls filename — no exceljs needed.
+  async financeMonthlyXlsx(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
+    const rows = await this.financeMonthlyRows(actor, query);
+    const escapeXml = (v: unknown) =>
+      String(v ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    const cell = (v: string | number) => {
+      const type = typeof v === "number" ? "Number" : "String";
+      return `<Cell><Data ss:Type="${type}">${escapeXml(v)}</Data></Cell>`;
+    };
+    const rowXml = (cells: (string | number)[]) => `<Row>${cells.map(cell).join("")}</Row>`;
+    const headerRow = rowXml(AnalyticsService.FINANCE_MONTHLY_HEADER);
+    const dataRows = rows.map(rowXml).join("");
+    return (
+      `<?xml version="1.0" encoding="UTF-8"?>` +
+      `<?mso-application progid="Excel.Sheet"?>` +
+      `<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"` +
+      ` xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">` +
+      `<Worksheet ss:Name="Finance Monthly"><Table>${headerRow}${dataRows}</Table></Worksheet>` +
+      `</Workbook>`
+    );
   }
 }

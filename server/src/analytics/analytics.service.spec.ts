@@ -39,6 +39,33 @@ describe("AnalyticsService", () => {
     expect(lines[1]).toBe("2026-06-01,10,8,5000,1200,3");
   });
 
+  it("renders finance monthly as a SpreadsheetML 2003 workbook with header + escaped cells", async () => {
+    const { service } = build([
+      { month_start: "2026-06-01", lessons: 10, completed_lessons: 8, revenue: 5000, expenses: 1200, new_students: 3 },
+    ]);
+    const xlsx = await service.financeMonthlyXlsx(actor, {});
+    expect(xlsx.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
+    expect(xlsx).toContain('<?mso-application progid="Excel.Sheet"?>');
+    expect(xlsx).toContain('xmlns="urn:schemas-microsoft-com:office:spreadsheet"');
+    expect(xlsx).toContain("<Worksheet");
+    expect(xlsx).toContain("<Table>");
+    // Header row carries the same columns as the CSV export.
+    expect(xlsx).toContain('<Data ss:Type="String">month_start</Data>');
+    expect(xlsx).toContain('<Data ss:Type="String">new_students</Data>');
+    // Numbers serialize as ss:Type="Number"; the date string stays a String cell.
+    expect(xlsx).toContain('<Data ss:Type="Number">5000</Data>');
+    expect(xlsx).toContain('<Data ss:Type="String">2026-06-01</Data>');
+  });
+
+  it("escapes XML special characters in finance monthly XLSX cell values", async () => {
+    const { service } = build([
+      { month_start: "<a>&\"'", lessons: 1, completed_lessons: 1, revenue: 1, expenses: 1, new_students: 1 },
+    ]);
+    const xlsx = await service.financeMonthlyXlsx(actor, {});
+    expect(xlsx).toContain("&lt;a&gt;&amp;&quot;&apos;");
+    expect(xlsx).not.toContain("<a>&\"'");
+  });
+
   it("funnel returns stage counts ordered by sort_order, gated to manager/admin", async () => {
     const { service, query, policy } = build([
       { status_id: "s1", name: "Новый", sort_order: 0, leads_entered: "100" },
