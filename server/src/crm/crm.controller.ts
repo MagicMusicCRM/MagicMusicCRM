@@ -425,6 +425,14 @@ export class CrmController {
     return this.crm.createLeadStatus(actor, dto);
   }
 
+  @Patch("lead-statuses/order")
+  reorderLeadStatuses(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: { statusIds: string[] },
+  ) {
+    return this.crm.reorderLeadStatuses(actor, dto);
+  }
+
   @Delete("lead-statuses/:id")
   deleteLeadStatus(
     @CurrentActor() actor: ActorContext,

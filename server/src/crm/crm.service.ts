@@ -2751,6 +2751,31 @@ export class CrmService {
     return { success: true };
   }
 
+  async reorderLeadStatuses(
+    actor: ActorContext,
+    dto: { statusIds: string[] },
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const statusIds = Array.isArray(dto.statusIds) ? dto.statusIds : [];
+    if (statusIds.length === 0) {
+      throw new BadRequestException("Список статусов воронки пуст.");
+    }
+    const result = await this.database.query(
+      `update app.lead_statuses ls
+          set sort_order = t.ord - 1
+         from unnest($1::uuid[]) with ordinality as t(status_id, ord)
+        where ls.id = t.status_id`,
+      [statusIds],
+    );
+    await this.audit.record({
+      actor,
+      action: "crm.lead_statuses_reordered",
+      entityType: "lead",
+      metadata: { order: statusIds },
+    });
+    return { updated: result.rowCount ?? 0 };
+  }
+
   async createDiscipline(actor: ActorContext, dto: { name: string }) {
     this.policy.assertCanWriteCrm(actor);
     const result = await this.database.query<{ id: string; name: string }>(

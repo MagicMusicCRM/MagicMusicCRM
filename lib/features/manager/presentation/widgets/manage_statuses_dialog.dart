@@ -73,6 +73,35 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
     }
   }
 
+  Future<void> _onReorder(int oldIndex, int newIndex) async {
+    // ReorderableListView passes newIndex assuming the item is still present,
+    // so adjust when moving an item further down the list.
+    if (newIndex > oldIndex) newIndex -= 1;
+    if (oldIndex == newIndex) return;
+
+    final previous = List<Map<String, dynamic>>.from(_statuses);
+    final reordered = List<Map<String, dynamic>>.from(_statuses);
+    final moved = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex, moved);
+
+    // Optimistic update: reflect the new order immediately.
+    setState(() => _statuses = reordered);
+
+    final idsInOrder = reordered.map((s) => s['id'].toString()).toList();
+    try {
+      await ref.read(magicCrmServiceProvider).reorderLeadStatuses(idsInOrder);
+      ref.invalidate(leadStatusesProvider);
+    } catch (e) {
+      // Revert to the previous order on failure.
+      if (mounted) {
+        setState(() => _statuses = previous);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось изменить порядок колонок: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _deleteStatus(String id) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -172,19 +201,35 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
         ),
       );
     }
-    return ListView.builder(
+    return ReorderableListView.builder(
+      buildDefaultDragHandles: false,
       itemCount: _statuses.length,
+      onReorder: _onReorder,
       itemBuilder: (context, index) {
         final s = _statuses[index];
         final c = statusColorFromValue(s['color']);
 
         return Card(
+          key: ValueKey(s['id'].toString()),
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            leading: Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ReorderableDragStartListener(
+                  index: index,
+                  child: Icon(
+                    Icons.drag_indicator,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+                ),
+              ],
             ),
             title: Text(s['label']),
             subtitle: Text('Ключ: ${s['key']}'),

@@ -3521,6 +3521,41 @@ describe("CrmService", () => {
     expect(query.mock.calls[0][1]).toEqual(["branch-1", ["d2", "d1"]]);
   });
 
+  it("reorders lead statuses by array position through CRM write policy", async () => {
+    const { service, query, audit, policy } = createServiceWithQueryResults([
+      { rows: [], rowCount: 3 } as unknown as {
+        rows: Record<string, unknown>[];
+      },
+    ]);
+    const result = await service.reorderLeadStatuses(actor, {
+      statusIds: ["status-c", "status-a", "status-b"],
+    });
+    expect(result).toEqual({ updated: 3 });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.lead_statuses");
+    expect(query.mock.calls[0][0]).toContain("with ordinality");
+    expect(query.mock.calls[0][0]).toContain("sort_order = t.ord - 1");
+    expect(query.mock.calls[0][1]).toEqual([
+      ["status-c", "status-a", "status-b"],
+    ]);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.lead_statuses_reordered",
+        entityType: "lead",
+        metadata: { order: ["status-c", "status-a", "status-b"] },
+      }),
+    );
+  });
+
+  it("rejects lead status reorder when the id list is empty", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([]);
+    await expect(
+      service.reorderLeadStatuses(actor, { statusIds: [] }),
+    ).rejects.toThrow("Список статусов воронки пуст.");
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("assignBranchDiscipline upserts with conflict preservation and returns DTO", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       { rows: [{ id: "bd1", discipline_id: "d1", sort_order: 3 }] },
