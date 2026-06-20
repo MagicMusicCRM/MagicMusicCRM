@@ -16,6 +16,7 @@ import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
+import { CreateBranchDto } from "./dto/create-branch.dto";
 import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { CreateCommentDto } from "./dto/create-comment.dto";
 import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
@@ -6006,6 +6007,33 @@ export class CrmService {
       utcOffsetMinutes: Number(row.utc_offset_minutes ?? 180),
       createdAt: row.created_at,
     };
+  }
+
+  async createBranch(actor: ActorContext, dto: CreateBranchDto) {
+    this.policy.assertCanWriteCrm(actor);
+    const name = dto.name?.trim();
+    if (!name) {
+      throw new BadRequestException("Название филиала обязательно.");
+    }
+    // Default to Moscow (UTC+3 / 180 minutes) when no offset is provided.
+    const utcOffsetMinutes = dto.utcOffsetMinutes ?? 180;
+    const result = await this.database.query<BranchRow>(
+      `
+        insert into app.branches (name, address, utc_offset_minutes)
+        values ($1, $2, $3)
+        returning id, name, address, utc_offset_minutes, created_at
+      `,
+      [name, dto.address?.trim() || null, utcOffsetMinutes],
+    );
+    const branch = result.rows[0];
+    await this.audit.record({
+      actor,
+      action: "crm.branch_created",
+      entityType: "branch",
+      entityId: branch.id,
+      metadata: { utcOffsetMinutes },
+    });
+    return this.toBranchDto(branch);
   }
 
   async updateBranch(

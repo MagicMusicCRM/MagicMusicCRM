@@ -32,6 +32,7 @@ import { PaymentQuery } from "./dto/payment.query";
 import { ReportQuery } from "./dto/report.query";
 import { RoomAvailabilityQuery } from "./dto/room-availability.query";
 import { SaveContactFromChatDto } from "./dto/save-contact-from-chat.dto";
+import { CreateBranchDto } from "./dto/create-branch.dto";
 import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { ScheduleMatrixQuery } from "./dto/schedule-matrix.query";
 import { StaffListQuery } from "./dto/staff-list.query";
@@ -243,6 +244,14 @@ export class CrmController {
     @Query() query: CrmListQuery,
   ) {
     return this.crm.listBranches(actor, query);
+  }
+
+  @Post("branches")
+  createBranch(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: CreateBranchDto,
+  ) {
+    return this.crm.createBranch(actor, dto);
   }
 
   @Patch("branches/:id")

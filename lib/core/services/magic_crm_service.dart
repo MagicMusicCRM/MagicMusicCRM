@@ -499,6 +499,24 @@ class MagicCrmService {
         .toList();
   }
 
+  Future<Map<String, dynamic>> createBranch({
+    required String name,
+    String? address,
+    int? utcOffsetMinutes,
+  }) async {
+    final data = <String, dynamic>{'name': name.trim()};
+    final trimmedAddress = address?.trim();
+    if (trimmedAddress != null && trimmedAddress.isNotEmpty) {
+      data['address'] = trimmedAddress;
+    }
+    if (utcOffsetMinutes != null) data['utcOffsetMinutes'] = utcOffsetMinutes;
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/branches',
+      data: data,
+    );
+    return _legacyBranch(response);
+  }
+
   Future<Map<String, dynamic>> updateBranch(
     String id, {
     String? name,

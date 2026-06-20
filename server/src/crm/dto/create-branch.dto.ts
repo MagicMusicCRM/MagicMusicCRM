@@ -1,0 +1,21 @@
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+
+export class CreateBranchDto {
+  @IsString()
+  @MaxLength(200)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  address?: string;
+
+  // UTC offset in minutes. Russia spans UTC+2..UTC+12 and observes no DST, so a
+  // fixed per-branch offset is sufficient. Bounded to a sane global range.
+  // Defaults to 180 (UTC+3, Moscow) when omitted.
+  @IsOptional()
+  @IsInt()
+  @Min(-720)
+  @Max(840)
+  utcOffsetMinutes?: number;
+}
