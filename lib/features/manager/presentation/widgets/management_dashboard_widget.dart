@@ -61,7 +61,7 @@ String _fmtCount(int v) => NumberFormat.decimalPattern('ru').format(v);
 Widget _loadingWidget() => const Padding(
   padding: EdgeInsets.symmetric(vertical: 40),
   child: Center(
-    child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+    child: CircularProgressIndicator(color: AppTheme.primaryGold),
   ),
 );
 
@@ -256,7 +256,7 @@ class _FunnelChart extends StatelessWidget {
                   barRods: [
                     BarChartRodData(
                       toY: _toDouble(e.value['leadsEntered']),
-                      color: AppTheme.primaryPurple,
+                      color: AppTheme.primaryGold,
                       width: 18,
                       borderRadius: BorderRadius.circular(4),
                     ),
@@ -329,7 +329,7 @@ class _FunnelChart extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _LegendItem(color: AppTheme.primaryPurple, label: 'Лиды в стадии'),
+            _LegendItem(color: AppTheme.primaryGold, label: 'Лиды в стадии'),
           ],
         ),
       ],
@@ -557,7 +557,7 @@ class _ForecastContent extends StatelessWidget {
             label: '7 дней',
             value: _fmtMoney(next7),
             icon: Icons.event_rounded,
-            color: AppTheme.primaryPurple,
+            color: AppTheme.primaryGold,
           ),
         ),
         const SizedBox(width: 10),
@@ -732,7 +732,7 @@ class _BranchesContent extends StatelessWidget {
                 _SmallStat(
                   label: 'учеников',
                   value: '${_toInt(b['activeStudents'])}',
-                  color: AppTheme.primaryPurple,
+                  color: AppTheme.primaryGold,
                 ),
                 const SizedBox(width: 12),
                 _SmallStat(
@@ -941,7 +941,7 @@ class _SlaContent extends StatelessWidget {
             label: 'Среднее мин.',
             value: avgMinutes.toStringAsFixed(1),
             icon: Icons.timer_outlined,
-            color: AppTheme.primaryPurple,
+            color: AppTheme.primaryGold,
           ),
         ),
         const SizedBox(width: 8),

@@ -146,7 +146,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
           ? SizedBox(
               height: 200,
               child: Center(
-                child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+                child: CircularProgressIndicator(color: AppTheme.primaryGold),
               ),
             )
           : SizedBox(
@@ -187,14 +187,14 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
                             contentPadding: EdgeInsets.zero,
                             leading: CircleAvatar(
                               radius: 14,
-                              backgroundColor: AppTheme.primaryPurple.withAlpha(
+                              backgroundColor: AppTheme.primaryGold.withAlpha(
                                 50,
                               ),
                               child: Text(
                                 displayName.isNotEmpty ? displayName[0] : '?',
                                 style: const TextStyle(
                                   fontSize: 10,
-                                  color: AppTheme.primaryPurple,
+                                  color: AppTheme.primaryGold,
                                 ),
                               ),
                             ),

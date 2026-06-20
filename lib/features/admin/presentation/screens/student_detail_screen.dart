@@ -166,7 +166,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               IconButton(
                 icon: const Icon(
                   Icons.chat_bubble_outline_rounded,
-                  color: AppTheme.primaryPurple,
+                  color: AppTheme.primaryGold,
                 ),
                 tooltip: 'Перейти в чат',
                 onPressed: () {
@@ -193,11 +193,11 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           ],
           bottom: TabBar(
             isScrollable: true,
-            labelColor: AppTheme.primaryPurple,
+            labelColor: AppTheme.primaryGold,
             unselectedLabelColor: Theme.of(
               context,
             ).colorScheme.onSurfaceVariant,
-            indicatorColor: AppTheme.primaryPurple,
+            indicatorColor: AppTheme.primaryGold,
             tabs: const [
               Tab(text: 'Инфо'),
               Tab(text: 'Оплаты'),
@@ -415,7 +415,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             onPressed: _showAddHistoryDialog,
             label: Text('Добавить'),
             icon: Icon(Icons.add_rounded),
-            backgroundColor: AppTheme.primaryPurple,
+            backgroundColor: AppTheme.primaryGold,
           );
         }
         return const SizedBox.shrink();
@@ -430,7 +430,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: Icon(Icons.comment_rounded, color: AppTheme.primaryPurple),
+            leading: Icon(Icons.comment_rounded, color: AppTheme.primaryGold),
             title: Text('Добавить комментарий'),
             onTap: () => Navigator.pop(ctx, 'comment'),
           ),
@@ -641,7 +641,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
               ),
             ),
             const Divider(height: 24),
@@ -755,7 +755,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                 color:
                     (l['status'] == 'completed'
                             ? AppTheme.success
-                            : AppTheme.primaryPurple)
+                            : AppTheme.primaryGold)
                         .withAlpha(30),
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -765,7 +765,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                   fontSize: 11,
                   color: l['status'] == 'completed'
                       ? AppTheme.success
-                      : AppTheme.primaryPurple,
+                      : AppTheme.primaryGold,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -848,7 +848,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           ListTile(
             leading: Icon(
               Icons.description_rounded,
-              color: AppTheme.primaryPurple,
+              color: AppTheme.primaryGold,
             ),
             title: Text('Основной договор'),
             subtitle: Text(contractUrl ?? 'Не прикреплен'),
@@ -987,7 +987,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                           size: 16,
                           color: isTask
                               ? AppTheme.warning
-                              : AppTheme.primaryPurple,
+                              : AppTheme.primaryGold,
                         ),
                         SizedBox(width: 8),
                         Text(
@@ -997,7 +997,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                             fontWeight: FontWeight.w700,
                             color: isTask
                                 ? AppTheme.warning
-                                : AppTheme.primaryPurple,
+                                : AppTheme.primaryGold,
                           ),
                         ),
                       ],
@@ -1170,7 +1170,7 @@ class _InfoRow extends StatelessWidget {
               Icon(
                 Icons.edit_outlined,
                 size: 14,
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
               ),
           ],
         ),

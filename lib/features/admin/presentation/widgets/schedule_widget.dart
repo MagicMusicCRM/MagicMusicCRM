@@ -695,7 +695,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     : DateTime.now(),
                 null,
               ),
-              backgroundColor: AppTheme.primaryPurple,
+              backgroundColor: AppTheme.primaryGold,
               child: Icon(Icons.add_rounded, color: Colors.white),
             ),
     );
@@ -795,7 +795,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                   b['name'].toString(),
                   style: TextStyle(
                     color: isSelected
-                        ? AppTheme.primaryPurple
+                        ? AppTheme.primaryGold
                         : Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                     fontSize: 14,
@@ -807,12 +807,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                   _fetchAll();
                 },
                 backgroundColor: Theme.of(context).colorScheme.surface,
-                selectedColor: AppTheme.primaryPurple.withAlpha(25),
+                selectedColor: AppTheme.primaryGold.withAlpha(25),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
                     color: isSelected
-                        ? AppTheme.primaryPurple
+                        ? AppTheme.primaryGold
                         : Theme.of(
                             context,
                           ).colorScheme.onSurfaceVariant.withAlpha(60),
@@ -1378,7 +1378,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: isToday
-                ? Border.all(color: AppTheme.primaryPurple, width: 1.5)
+                ? Border.all(color: AppTheme.primaryGold, width: 1.5)
                 : null,
           ),
           child: Column(
@@ -1391,7 +1391,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 alignment: Alignment.center,
                 decoration: isToday
                     ? BoxDecoration(
-                        color: AppTheme.primaryPurple,
+                        color: AppTheme.primaryGold,
                         borderRadius: BorderRadius.circular(8),
                       )
                     : null,
@@ -1979,12 +1979,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? AppTheme.primaryPurple.withAlpha(30)
+                          ? AppTheme.primaryGold.withAlpha(30)
                           : Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isSelected
-                            ? AppTheme.primaryPurple
+                            ? AppTheme.primaryGold
                             : Colors.transparent,
                         width: 1.5,
                       ),
@@ -1996,13 +1996,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                           height: 40,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: AppTheme.primaryPurple.withAlpha(50),
+                            color: AppTheme.primaryGold.withAlpha(50),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             initials,
                             style: const TextStyle(
-                              color: AppTheme.primaryPurple,
+                              color: AppTheme.primaryGold,
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
                             ),
@@ -2183,7 +2183,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       case 'cancelled':
         return AppTheme.danger;
       default:
-        return AppTheme.primaryPurple;
+        return AppTheme.primaryGold;
     }
   }
 
@@ -2431,7 +2431,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Widget _detailRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppTheme.primaryPurple),
+        Icon(icon, size: 18, color: AppTheme.primaryGold),
         SizedBox(width: 8),
         Text(
           '$label: ',

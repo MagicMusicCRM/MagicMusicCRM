@@ -138,7 +138,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: AppTheme.primaryPurple),
+          Icon(icon, size: 16, color: AppTheme.primaryGold),
           const SizedBox(width: 8),
           Expanded(
             child: Text(text, overflow: TextOverflow.ellipsis),
@@ -192,7 +192,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Row(
         children: [
-          const Icon(Icons.school_rounded, size: 20, color: AppTheme.primaryPurple),
+          const Icon(Icons.school_rounded, size: 20, color: AppTheme.primaryGold),
           const SizedBox(width: 10),
           const Text(
             'Ученики',
@@ -477,7 +477,7 @@ class _DisciplineColumn extends StatelessWidget {
                 const Icon(
                   Icons.school_rounded,
                   size: 14,
-                  color: AppTheme.primaryPurple,
+                  color: AppTheme.primaryGold,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -603,13 +603,13 @@ class _StudentCard extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryPurple.withAlpha(51),
+                    color: AppTheme.primaryGold.withAlpha(51),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     discipline,
                     style: TextStyle(
-                      color: AppTheme.primaryPurple,
+                      color: AppTheme.primaryGold,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),

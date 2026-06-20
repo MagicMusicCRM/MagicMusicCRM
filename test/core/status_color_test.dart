@@ -11,7 +11,7 @@ void main() {
       expect(statusColorFromValue('danger'), AppTheme.danger);
       expect(statusColorFromValue('success'), AppTheme.success);
       expect(statusColorFromValue('warning'), AppTheme.warning);
-      expect(statusColorFromValue('primaryPurple'), AppTheme.primaryPurple);
+      expect(statusColorFromValue('primaryPurple'), AppTheme.primaryGold);
     });
 
     test('parses hex with and without # / alpha', () {
@@ -21,9 +21,9 @@ void main() {
     });
 
     test('falls back for null / empty / garbage instead of throwing', () {
-      expect(statusColorFromValue(null), AppTheme.primaryPurple);
-      expect(statusColorFromValue(''), AppTheme.primaryPurple);
-      expect(statusColorFromValue('not-a-color'), AppTheme.primaryPurple);
+      expect(statusColorFromValue(null), AppTheme.primaryGold);
+      expect(statusColorFromValue(''), AppTheme.primaryGold);
+      expect(statusColorFromValue('not-a-color'), AppTheme.primaryGold);
       expect(
         statusColorFromValue('zzz', fallback: AppTheme.success),
         AppTheme.success,

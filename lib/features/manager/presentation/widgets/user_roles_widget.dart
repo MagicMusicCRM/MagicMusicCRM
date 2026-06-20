@@ -823,7 +823,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryPurple,
+              backgroundColor: AppTheme.primaryGold,
               foregroundColor: Colors.white,
             ),
             onPressed: () {

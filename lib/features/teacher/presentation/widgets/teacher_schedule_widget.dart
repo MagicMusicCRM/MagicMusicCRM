@@ -77,7 +77,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
             ? '$roomName ($branchName)'
             : roomName;
 
-        Color bgColor = AppTheme.primaryPurple;
+        Color bgColor = AppTheme.primaryGold;
         if (status == 'completed') bgColor = AppTheme.success;
         if (status == 'cancelled') bgColor = AppTheme.danger;
 
@@ -182,7 +182,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
                   'План занятия:',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryPurple,
+                    color: AppTheme.primaryGold,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -213,7 +213,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
               icon: const Icon(Icons.how_to_reg_rounded, size: 18),
               label: const Text('Посещаемость'),
             ),
-            if (appointment.color == AppTheme.primaryPurple)
+            if (appointment.color == AppTheme.primaryGold)
               TextButton(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -284,7 +284,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
           child: _isLoading
               ? const Center(
                   child: CircularProgressIndicator(
-                    color: AppTheme.primaryPurple,
+                    color: AppTheme.primaryGold,
                   ),
                 )
               : SfCalendar(

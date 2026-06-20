@@ -352,7 +352,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   Widget build(BuildContext context) {
     final fallbackStatus = widget.allStatuses.isNotEmpty
         ? widget.allStatuses.first
-        : ('new', 'Новый', AppTheme.primaryPurple);
+        : ('new', 'Новый', AppTheme.primaryGold);
     final curStatus = widget.allStatuses.firstWhere(
       (element) => element.$1 == _leadData['status'],
       orElse: () => fallbackStatus,
@@ -537,7 +537,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                   ElevatedButton(
                     onPressed: _saving || _converting ? null : _save,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryPurple,
+                      backgroundColor: AppTheme.primaryGold,
                       foregroundColor: Colors.white,
                     ),
                     child: _saving
@@ -564,7 +564,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
       child: Text(
         title,
         style: const TextStyle(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -798,7 +798,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
         ),
         IconButton(
           onPressed: _addComment,
-          icon: const Icon(Icons.send_rounded, color: AppTheme.primaryPurple),
+          icon: const Icon(Icons.send_rounded, color: AppTheme.primaryGold),
         ),
       ],
     );
@@ -966,7 +966,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                 leading: const Icon(
                   Icons.people_alt_rounded,
                   size: 18,
-                  color: AppTheme.primaryPurple,
+                  color: AppTheme.primaryGold,
                 ),
                 title: Text(
                   (m['name']?.toString().trim().isNotEmpty ?? false)
@@ -1346,7 +1346,7 @@ class _CommentsList extends ConsumerWidget {
                             ? c['author_name'].toString()
                             : 'Сотрудник',
                         style: const TextStyle(
-                          color: AppTheme.primaryPurple,
+                          color: AppTheme.primaryGold,
                           fontWeight: FontWeight.bold,
                           fontSize: 11,
                         ),

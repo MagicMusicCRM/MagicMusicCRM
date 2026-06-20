@@ -1712,7 +1712,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       selectedIndex: selectedCrmTab,
                       useIndicator: true,
                       labelType: NavigationRailLabelType.all,
-                      indicatorColor: TelegramColors.brandPurple.withAlpha(51),
+                      indicatorColor: TelegramColors.brandGold.withAlpha(51),
                       onDestinationSelected: (idx) {
                         setState(() {
                           _selectedCrmTab = idx;
@@ -1750,7 +1750,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               : BottomNavigationBar(
                   currentIndex: selectedCrmTab,
                   type: BottomNavigationBarType.fixed,
-                  selectedItemColor: TelegramColors.brandPurple,
+                  selectedItemColor: TelegramColors.brandGold,
                   unselectedItemColor: isDark
                       ? TelegramColors.darkTextSecondary
                       : TelegramColors.lightTextSecondary,
@@ -1850,7 +1850,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           icon: Icon(Icons.chat_bubble_outline_rounded),
           selectedIcon: Icon(
             Icons.chat_bubble_rounded,
-            color: TelegramColors.brandPurple,
+            color: TelegramColors.brandGold,
           ),
           label: Text('Чат'),
         ),
@@ -1858,7 +1858,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           icon: Icon(Icons.calendar_today_outlined),
           selectedIcon: Icon(
             Icons.calendar_today_rounded,
-            color: TelegramColors.brandPurple,
+            color: TelegramColors.brandGold,
           ),
           label: Text('Расписание'),
         ),
@@ -1866,7 +1866,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           icon: Icon(Icons.school_outlined),
           selectedIcon: Icon(
             Icons.school_rounded,
-            color: TelegramColors.brandPurple,
+            color: TelegramColors.brandGold,
           ),
           label: Text('Ученики'),
         ),
@@ -1878,7 +1878,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: Icon(Icons.chat_bubble_outline_rounded),
         selectedIcon: Icon(
           Icons.chat_bubble_rounded,
-          color: TelegramColors.brandPurple,
+          color: TelegramColors.brandGold,
         ),
         label: Text('Чат'),
       ),
@@ -1886,7 +1886,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: Icon(Icons.dashboard_outlined),
         selectedIcon: Icon(
           Icons.dashboard_rounded,
-          color: TelegramColors.brandPurple,
+          color: TelegramColors.brandGold,
         ),
         label: Text('Обзор'),
       ),
@@ -1894,7 +1894,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: Icon(Icons.calendar_today_outlined),
         selectedIcon: Icon(
           Icons.calendar_today_rounded,
-          color: TelegramColors.brandPurple,
+          color: TelegramColors.brandGold,
         ),
         label: Text('Расписание'),
       ),
@@ -1902,7 +1902,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: _clientsBadge(const Icon(Icons.people_outline_rounded)),
         selectedIcon: Icon(
           Icons.people_rounded,
-          color: TelegramColors.brandPurple,
+          color: TelegramColors.brandGold,
         ),
         label: Text('Клиенты'),
       ),
@@ -1910,7 +1910,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: Icon(Icons.manage_accounts_outlined),
         selectedIcon: Icon(
           Icons.manage_accounts_rounded,
-          color: TelegramColors.brandPurple,
+          color: TelegramColors.brandGold,
         ),
         label: Text('Пользователи'),
       ),
@@ -1918,7 +1918,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: Icon(Icons.account_balance_wallet_outlined),
         selectedIcon: Icon(
           Icons.account_balance_wallet_rounded,
-          color: TelegramColors.brandPurple,
+          color: TelegramColors.brandGold,
         ),
         label: Text('Финансы'),
       ),
@@ -1926,7 +1926,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: Icon(Icons.task_alt_outlined),
         selectedIcon: Icon(
           Icons.task_alt_rounded,
-          color: TelegramColors.brandPurple,
+          color: TelegramColors.brandGold,
         ),
         label: Text('Задачи'),
       ),
@@ -1934,7 +1934,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: Icon(Icons.insert_chart_outlined_rounded),
         selectedIcon: Icon(
           Icons.insert_chart_rounded,
-          color: TelegramColors.brandPurple,
+          color: TelegramColors.brandGold,
         ),
         label: Text('Отчёты'),
       ),
@@ -3206,7 +3206,7 @@ class _MessageListViewState extends State<_MessageListView> {
                   backgroundColor: isDark
                       ? TelegramColors.darkSidebar
                       : Colors.white,
-                  foregroundColor: TelegramColors.brandPurple,
+                  foregroundColor: TelegramColors.brandGold,
                   elevation: 4,
                   child: const Icon(Icons.keyboard_arrow_down),
                 ),

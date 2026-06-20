@@ -326,7 +326,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: AppTheme.primaryPurple),
+            CircularProgressIndicator(color: AppTheme.primaryGold),
             SizedBox(height: 16),
             Text('Загрузка данных...'),
           ],

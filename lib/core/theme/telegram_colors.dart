@@ -50,7 +50,6 @@ class TelegramColors {
 
   // ── Shared Accent ──────────────────────────────────────────────────────────
   static const Color accentBlue = brandGold; // Using gold instead of previous purple
-  static const Color brandPurple = brandGold; // Alias to prevent breakage 
   static const Color success = Color(0xFF10B981);
   static const Color danger = Color(0xFFEF4444);
   static const Color warning = Color(0xFFF59E0B);

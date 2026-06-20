@@ -153,8 +153,8 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
               isScrollable: true,
               tabAlignment: TabAlignment.start,
               labelPadding: const EdgeInsets.symmetric(horizontal: 16),
-              indicatorColor: AppTheme.primaryPurple,
-              labelColor: AppTheme.primaryPurple,
+              indicatorColor: AppTheme.primaryGold,
+              labelColor: AppTheme.primaryGold,
               unselectedLabelColor: Theme.of(
                 context,
               ).colorScheme.onSurfaceVariant,
@@ -185,7 +185,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _createNewEntity(context),
-        backgroundColor: AppTheme.primaryPurple,
+        backgroundColor: AppTheme.primaryGold,
         child: Icon(Icons.add_rounded, color: Colors.white),
       ),
     );
@@ -281,7 +281,7 @@ class _StudentsList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(studentSearchProvider(query)),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -307,11 +307,11 @@ class _StudentsList extends ConsumerWidget {
                     ref.invalidate(studentSearchProvider(query));
                   },
                   leading: CircleAvatar(
-                    backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Text(
                       name.isNotEmpty ? name[0] : '?',
                       style: const TextStyle(
-                        color: AppTheme.primaryPurple,
+                        color: AppTheme.primaryGold,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -376,7 +376,7 @@ class _StudentSearchSummary extends StatelessWidget {
               _StudentMetricChip(
                 icon: Icons.groups_rounded,
                 label: 'Группы: $groups',
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
               ),
               _StudentMetricChip(
                 icon: Icons.event_available_rounded,
@@ -528,7 +528,7 @@ class _TeachersList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(teacherSearchProvider(query)),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -641,7 +641,7 @@ class _TeacherSearchSummary extends StatelessWidget {
               _StudentMetricChip(
                 icon: Icons.school_rounded,
                 label: 'Ученики: $students',
-                color: AppTheme.primaryPurple,
+                color: AppTheme.primaryGold,
               ),
               _StudentMetricChip(
                 icon: Icons.event_available_rounded,
@@ -690,7 +690,7 @@ class _LessonsList extends ConsumerWidget {
       case 'cancelled':
         return AppTheme.danger;
       default:
-        return AppTheme.primaryPurple;
+        return AppTheme.primaryGold;
     }
   }
 
@@ -715,7 +715,7 @@ class _LessonsList extends ConsumerWidget {
           );
         }
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(entitiesProvider('lessons')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -976,7 +976,7 @@ class _GroupsList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(entitiesProvider('groups')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -1015,10 +1015,10 @@ class _GroupsList extends ConsumerWidget {
                     }
                   },
                   leading: CircleAvatar(
-                    backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Icon(
                       Icons.group_rounded,
-                      color: AppTheme.primaryPurple,
+                      color: AppTheme.primaryGold,
                     ),
                   ),
                   title: Text(name),
@@ -1073,7 +1073,7 @@ class _RoomsList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(entitiesProvider('rooms')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -1098,10 +1098,10 @@ class _RoomsList extends ConsumerWidget {
                     }
                   },
                   leading: CircleAvatar(
-                    backgroundColor: AppTheme.primaryPurple.withAlpha(30),
+                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Icon(
                       Icons.meeting_room_rounded,
-                      color: AppTheme.primaryPurple,
+                      color: AppTheme.primaryGold,
                     ),
                   ),
                   title: Text(name),
@@ -1155,7 +1155,7 @@ class _EmployeesList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(staffSearchProvider(query)),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -1348,7 +1348,7 @@ class _BranchesList extends ConsumerWidget {
         }
 
         return RefreshIndicator(
-          color: AppTheme.primaryPurple,
+          color: AppTheme.primaryGold,
           onRefresh: () async => ref.invalidate(entitiesProvider('branches')),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),

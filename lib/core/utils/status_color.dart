@@ -12,7 +12,7 @@ const Color _infoBlue = Color(0xFF3B82F6);
 /// `FormatException: Invalid radix-16` on tokens like `info`).
 Color statusColorFromValue(
   Object? value, {
-  Color fallback = AppTheme.primaryPurple,
+  Color fallback = AppTheme.primaryGold,
 }) {
   final raw = value?.toString().trim() ?? '';
   if (raw.isEmpty) return fallback;
@@ -32,7 +32,7 @@ Color statusColorFromValue(
     case 'primary':
     case 'purple':
     case 'gold':
-      return AppTheme.primaryPurple;
+      return AppTheme.primaryGold;
     case 'info':
     case 'blue':
       return _infoBlue;

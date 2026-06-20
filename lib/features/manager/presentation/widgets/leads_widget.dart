@@ -1289,7 +1289,7 @@ class _LeadCard extends ConsumerWidget {
                           icon: const Icon(
                             Icons.chat_bubble_outline_rounded,
                             size: 18,
-                            color: AppTheme.primaryPurple,
+                            color: AppTheme.primaryGold,
                           ),
                           onPressed: () => _openChat(context, ref),
                         ),
@@ -1429,8 +1429,8 @@ class _LeadCard extends ConsumerWidget {
                         if (discipline.isNotEmpty)
                           _InfoBadge(
                             text: discipline,
-                            color: AppTheme.primaryPurple.withAlpha(51),
-                            textColor: AppTheme.primaryPurple,
+                            color: AppTheme.primaryGold.withAlpha(51),
+                            textColor: AppTheme.primaryGold,
                           ),
                         if (level.isNotEmpty)
                           Padding(

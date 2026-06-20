@@ -115,7 +115,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       ),
       backgroundColor: Theme.of(context).colorScheme.surface,
       content: _loading
-          ? const CircularProgressIndicator(color: AppTheme.primaryPurple)
+          ? const CircularProgressIndicator(color: AppTheme.primaryGold)
           : Column(
               mainAxisSize: MainAxisSize.min,
               children: [

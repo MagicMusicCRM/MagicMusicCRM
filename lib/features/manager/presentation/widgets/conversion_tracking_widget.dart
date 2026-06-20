@@ -66,7 +66,7 @@ class _ConversionTrackingWidgetState
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
       );
     }
 
@@ -85,7 +85,7 @@ class _ConversionTrackingWidgetState
             '${_stats['conversion_rate'].toStringAsFixed(1)}%',
             'Из лидов в платящих учеников',
             Icons.analytics_rounded,
-            AppTheme.primaryPurple,
+            AppTheme.primaryGold,
           ),
           const SizedBox(height: 16),
           Row(

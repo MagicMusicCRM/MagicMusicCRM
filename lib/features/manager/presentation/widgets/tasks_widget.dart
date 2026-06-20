@@ -408,7 +408,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                     ),
                   )
                 : RefreshIndicator(
-                    color: AppTheme.primaryPurple,
+                    color: AppTheme.primaryGold,
                     onRefresh: _loadTasks,
                     child: ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -762,7 +762,7 @@ class _FilterChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: selected
-              ? AppTheme.primaryPurple
+              ? AppTheme.primaryGold
               : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
         ),
@@ -968,7 +968,7 @@ class _TaskCard extends StatelessWidget {
                 children: [
                   _Tag(
                     label: _statusLabel(status),
-                    color: AppTheme.primaryPurple,
+                    color: AppTheme.primaryGold,
                   ),
                   if (dueDate != null)
                     _Tag(
@@ -989,7 +989,7 @@ class _TaskCard extends StatelessWidget {
                   if (entityText != null)
                     _Tag(
                       label: entityText,
-                      color: AppTheme.primaryPurple,
+                      color: AppTheme.primaryGold,
                       onTap: onEntityTap,
                     ),
                 ],

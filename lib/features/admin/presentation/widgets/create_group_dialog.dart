@@ -242,7 +242,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
         FilledButton(
           onPressed: _loading || _saving ? null : _save,
           style: FilledButton.styleFrom(
-            backgroundColor: AppTheme.primaryPurple,
+            backgroundColor: AppTheme.primaryGold,
           ),
           child: _saving
               ? const SizedBox(

@@ -25,7 +25,7 @@ class ProgressNotesWidget extends ConsumerWidget {
 
     return notesAsync.when(
       loading: () => Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
       ),
       error: (err, _) => Center(
         child: Text(

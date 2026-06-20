@@ -48,7 +48,7 @@ class AdminOverviewWidget extends ConsumerWidget {
                       title: 'Учеников',
                       value: '${stats['students'] ?? 0}',
                       icon: Icons.school_rounded,
-                      color: AppTheme.primaryPurple,
+                      color: AppTheme.primaryGold,
                       onTap: () => onTabChange?.call(1, 0),
                     ),
                     _StatCard(
@@ -82,7 +82,7 @@ class AdminOverviewWidget extends ConsumerWidget {
         ),
       ),
       loading: () => const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryPurple),
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
       ),
       error: (err, _) => Center(
         child: Column(

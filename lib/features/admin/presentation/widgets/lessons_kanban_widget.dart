@@ -317,7 +317,7 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
                 avatar: Icon(
                   Icons.calendar_today_rounded,
                   size: 16,
-                  color: AppTheme.primaryPurple,
+                  color: AppTheme.primaryGold,
                 ),
                 label: Text(
                   DateFormat('d MMM yyyy', 'ru').format(_selectedDate),
@@ -364,7 +364,7 @@ class _FilterDropdown extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: value != null ? AppTheme.primaryPurple : Colors.transparent,
+          color: value != null ? AppTheme.primaryGold : Colors.transparent,
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -430,7 +430,7 @@ class _KanbanColumn extends StatelessWidget {
                   width: 8,
                   height: 8,
                   decoration: const BoxDecoration(
-                    color: AppTheme.primaryPurple,
+                    color: AppTheme.primaryGold,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -632,7 +632,7 @@ class _LessonKanbanCard extends ConsumerWidget {
                       Text(
                         timeStr,
                         style: const TextStyle(
-                          color: AppTheme.primaryPurple,
+                          color: AppTheme.primaryGold,
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
                         ),

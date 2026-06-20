@@ -183,10 +183,10 @@ class _SearchableSelectState extends State<SearchableSelect> {
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         decoration: BoxDecoration(
-                          color: isSelected ? AppTheme.primaryPurple.withAlpha(30) : Colors.transparent,
+                          color: isSelected ? AppTheme.primaryGold.withAlpha(30) : Colors.transparent,
                           borderRadius: BorderRadius.circular(12),
                           border: isSelected 
-                            ? Border.all(color: AppTheme.primaryPurple.withAlpha(100))
+                            ? Border.all(color: AppTheme.primaryGold.withAlpha(100))
                             : null,
                         ),
                         child: ListTile(
@@ -196,16 +196,16 @@ class _SearchableSelectState extends State<SearchableSelect> {
                           },
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           leading: CircleAvatar(
-                            backgroundColor: AppTheme.primaryPurple.withAlpha(50),
+                            backgroundColor: AppTheme.primaryGold.withAlpha(50),
                             child: Text(
                               item.label.isNotEmpty ? item.label[0].toUpperCase() : '?',
-                              style: const TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.bold),
+                              style: const TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.bold),
                             ),
                           ),
                           title: Text(
                             item.label.isEmpty ? 'Без имени' : item.label,
                             style: TextStyle(
-                              color: isSelected ? AppTheme.primaryPurple : Theme.of(context).colorScheme.onSurface,
+                              color: isSelected ? AppTheme.primaryGold : Theme.of(context).colorScheme.onSurface,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
@@ -213,7 +213,7 @@ class _SearchableSelectState extends State<SearchableSelect> {
                               ? Text(item.subtitle!, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12))
                               : null,
                           trailing: isSelected 
-                              ? const Icon(Icons.check_circle_rounded, color: AppTheme.primaryPurple)
+                              ? const Icon(Icons.check_circle_rounded, color: AppTheme.primaryGold)
                               : null,
                         ),
                       );

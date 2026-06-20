@@ -6,7 +6,6 @@ class AppTheme {
   static const Color primaryGold = TelegramColors.primaryGold;
   static const Color secondaryGold = TelegramColors.secondaryGold;
   static const Color softGold = TelegramColors.softGold;
-  static const Color primaryPurple = TelegramColors.primaryGold; // Alias for backward compatibility
   static const Color bgDark = TelegramColors.darkBg;
   static const Color surfaceDark = TelegramColors.darkSurface;
   static const Color cardDark = TelegramColors.darkInputBg;
