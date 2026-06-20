@@ -22,6 +22,8 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   final _boardScrollController = ScrollController();
   List<Map<String, dynamic>> _branches = [];
   String? _selectedBranchId;
+  bool _branchesLoaded = false;
+  String? _branchLoadError;
 
   @override
   void initState() {
@@ -45,10 +47,15 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
         if (_branches.isNotEmpty && _selectedBranchId == null) {
           _selectedBranchId = _branches.first['id']?.toString();
         }
+        _branchesLoaded = true;
+        _branchLoadError = null;
       });
-    } catch (_) {
-      // Branches are progressive; the widget remains in the "no branches"
-      // placeholder state until loaded.
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _branchLoadError = 'Не удалось загрузить филиалы';
+        _branchesLoaded = true;
+      });
     }
   }
 
@@ -192,7 +199,16 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(width: 16),
-          if (_branches.isNotEmpty)
+          if (!_branchesLoaded && _branchLoadError == null)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else if (_branchLoadError != null)
+            // error inline placeholder — full error block is in build()
+            const SizedBox.shrink()
+          else if (_branches.isNotEmpty)
             SizedBox(
               width: 220,
               child: DropdownButtonFormField<String>(
@@ -210,12 +226,6 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
                   }
                 },
               ),
-            )
-          else
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
             ),
           const Spacer(),
           IconButton(
@@ -230,8 +240,70 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Show "no branches" placeholder when branches haven't loaded yet or are
-    // absent.
+    // Loading state — branches not yet fetched.
+    if (!_branchesLoaded && _branchLoadError == null) {
+      return Column(
+        children: [
+          _buildBranchSelector(),
+          const Expanded(
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        ],
+      );
+    }
+
+    // Error state — failed to load branches.
+    if (_branchLoadError != null) {
+      return Column(
+        children: [
+          _buildBranchSelector(),
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: AppTheme.danger,
+                      size: 42,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _branchLoadError!,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Проверьте подключение и попробуйте снова.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _branchesLoaded = false;
+                          _branchLoadError = null;
+                        });
+                        _loadBranches();
+                      },
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Повторить'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Loaded-empty state — no branches configured.
     if (_branches.isEmpty) {
       return Column(
         children: [
@@ -487,6 +559,7 @@ class _StudentCard extends StatelessWidget {
         : '';
     final openTasks = _intValue(student['open_tasks_count']);
     final lessonsCount = _intValue(student['lessons_count']);
+    final groupsCount = _intValue(student['groups_count']);
 
     return GestureDetector(
       onTap: () => onTap(student),
@@ -551,8 +624,8 @@ class _StudentCard extends StatelessWidget {
                     text: branchName,
                   ),
                 ),
-              // ── Metric badges (tasks / lessons) ────────────────────────
-              if (openTasks > 0 || lessonsCount > 0)
+              // ── Metric badges (tasks / lessons / groups) ───────────────
+              if (openTasks > 0 || lessonsCount > 0 || groupsCount > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Wrap(
@@ -568,6 +641,11 @@ class _StudentCard extends StatelessWidget {
                         _MetricBadge(
                           icon: Icons.event_rounded,
                           text: '$lessonsCount',
+                        ),
+                      if (groupsCount > 0)
+                        _MetricBadge(
+                          icon: Icons.group_rounded,
+                          text: '$groupsCount',
                         ),
                     ],
                   ),
