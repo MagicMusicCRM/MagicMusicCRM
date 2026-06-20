@@ -71,6 +71,9 @@ class ScheduleWidget extends ConsumerStatefulWidget {
 class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   bool _isLoading = true;
   Object? _loadError;
+  // Guards the one-shot "auto-pick a branch with data" re-fetch so it can never
+  // loop when every branch is genuinely empty (KVA-166).
+  bool _autoBranchRetried = false;
 
   // Data
   List<Map<String, dynamic>> _branches = [];
@@ -258,17 +261,33 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       }
 
       // If the auto-selected branch returned no lessons, try to pick one that
-      // has data (from month-summary which covers all branches).
+      // has data (from month-summary which covers all branches). The matrix was
+      // fetched for the original branch, so switching here alone would leave the
+      // day view empty (lessons belong to the old branch) — we must re-fetch the
+      // matrix for the newly chosen branch. Guard with _autoBranchRetried so this
+      // happens at most once and never loops (KVA-166).
+      var rerunForBranch = false;
       if (enrichedLessons.isEmpty &&
           _selectedBranchId == null &&
+          !_autoBranchRetried &&
           branches.length > 1) {
         for (final b in branches) {
           final bid = b['id'].toString();
           if (bid != defaultBranch) {
             defaultBranch = bid;
+            rerunForBranch = true;
             break;
           }
         }
+      }
+
+      if (rerunForBranch) {
+        _autoBranchRetried = true;
+        _selectedBranchId = defaultBranch;
+        // Re-fetch the full payload for the branch that actually has lessons so
+        // the day grid isn't left empty against the original (empty) branch.
+        if (mounted) await _fetchAll();
+        return;
       }
 
       setState(() {
@@ -1200,6 +1219,17 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     return value.map((item) => item.toString()).toList();
   }
 
+  // Defensive: the backend may send duration as int, double, or string. A bare
+  // `as int?` cast throws on a double and blanks the whole card (the lesson then
+  // never renders), so parse leniently and fall back to a 60-minute slot.
+  int _durationMinutes(Map<String, dynamic> lesson) {
+    final raw = lesson['duration_minutes'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.round();
+    final parsed = int.tryParse(raw?.toString() ?? '');
+    return parsed ?? 60;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  MONTH VIEW
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1470,7 +1500,20 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final rooms = _filteredRooms;
     final dayLessons = _lessonsForDate(_selectedDate);
 
-    if (rooms.isEmpty) {
+    // Lessons whose room is NOT among the rendered room columns (no room_id, or
+    // a room missing from the loaded list / a different branch). Without a home
+    // column these would be silently dropped — the manager would see an empty
+    // grid even though занятия exist. We surface them in a «Без аудитории»
+    // column so every lesson for the day is visible (KVA-166).
+    final renderedRoomIds = rooms.map((r) => r['id'].toString()).toSet();
+    final unassignedLessons = dayLessons.where((l) {
+      final rid = l['room_id']?.toString();
+      return rid == null || rid.isEmpty || !renderedRoomIds.contains(rid);
+    }).toList();
+
+    // No rooms at all for the branch: still show any day lessons (e.g. trials
+    // with no room) instead of a dead-end message that hides real занятия.
+    if (rooms.isEmpty && unassignedLessons.isEmpty) {
       return Center(
         child: Text(
           'Нет аудиторий для выбранного филиала',
@@ -1487,6 +1530,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     const headerHeight = 50.0;
 
     _scheduleDayGridAutoScroll(dayLessons, startHour, hourHeight);
+
+    if (dayLessons.isEmpty) {
+      return _buildEmptyScheduleHint();
+    }
+
+    final unassignedColor = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Column(
       children: [
@@ -1532,12 +1581,17 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             if (roomConflicts.isNotEmpty)
-                              const Padding(
-                                padding: EdgeInsets.only(right: 4),
-                                child: Icon(
-                                  Icons.warning_amber_rounded,
-                                  size: 13,
-                                  color: AppTheme.danger,
+                              Padding(
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Tooltip(
+                                  message: roomConflicts
+                                      .map(_conflictLabel)
+                                      .join(', '),
+                                  child: const Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 13,
+                                    color: AppTheme.danger,
+                                  ),
                                 ),
                               ),
                             Flexible(
@@ -1560,6 +1614,34 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                   ),
                 );
               }),
+              if (unassignedLessons.isNotEmpty)
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 6,
+                      horizontal: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: unassignedColor.withAlpha(20),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: unassignedColor.withAlpha(50)),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Без аудитории',
+                        style: TextStyle(
+                          color: unassignedColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1649,6 +1731,44 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                       ),
                     );
                   }),
+                  // «Без аудитории» column — lessons with no/unknown room so they
+                  // are never silently dropped from the day grid (KVA-166).
+                  if (unassignedLessons.isNotEmpty)
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          ...List.generate(endHour - startHour, (i) {
+                            return Positioned(
+                              top: i * hourHeight,
+                              left: 0,
+                              right: 0,
+                              child: Container(
+                                height: hourHeight,
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    top: BorderSide(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant
+                                          .withAlpha(20),
+                                      width: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                          ...unassignedLessons.map(
+                            (l) => _buildDayLessonCard(
+                              l,
+                              startHour,
+                              hourHeight,
+                              unassignedColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1698,7 +1818,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final start = _parseLessonTime(lesson);
     if (start == null) return const SizedBox.shrink();
 
-    final duration = lesson['duration_minutes'] as int? ?? 60;
+    final duration = _durationMinutes(lesson);
     final end = start.add(Duration(minutes: duration));
 
     final topOffset =
@@ -1956,7 +2076,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final start = _parseLessonTime(lesson);
     if (start == null) return const SizedBox.shrink();
 
-    final duration = lesson['duration_minutes'] as int? ?? 60;
+    final duration = _durationMinutes(lesson);
     final end = start.add(Duration(minutes: duration));
 
     final timeStr =
@@ -2072,7 +2192,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final start = _parseLessonTime(lesson);
     if (start == null) return;
 
-    final duration = lesson['duration_minutes'] as int? ?? 60;
+    final duration = _durationMinutes(lesson);
     final end = start.add(Duration(minutes: duration));
 
     final teacherName =
