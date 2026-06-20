@@ -123,6 +123,33 @@ describe("AnalyticsService", () => {
     ]);
   });
 
+  it("chatsSla computes first-response stats over administration chats, gated", async () => {
+    const { service, query, policy } = build([
+      {
+        inbound_count: "10",
+        responded_count: "8",
+        avg_minutes: "12.5",
+        median_minutes: "9",
+        p90_minutes: "30",
+      },
+    ]);
+    const result = await service.chatsSla(actor, { from: "2026-06-01", to: "2026-06-08" });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("'administration'");
+    expect(sql).toContain("percentile_cont");
+    expect(result).toEqual({
+      from: "2026-06-01",
+      to: "2026-06-08",
+      inboundCount: 10,
+      respondedCount: 8,
+      responseRate: 0.8,
+      avgMinutes: 12.5,
+      medianMinutes: 9,
+      p90Minutes: 30,
+    });
+  });
+
   it("lossReasons groups terminal-transition reasons, gated to manager/admin", async () => {
     const query = jest.fn()
       .mockResolvedValueOnce({ rows: [

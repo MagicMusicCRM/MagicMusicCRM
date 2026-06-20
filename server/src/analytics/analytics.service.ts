@@ -301,6 +301,74 @@ export class AnalyticsService {
     };
   }
 
+  async chatsSla(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const { from, to } = this.rangeBounds(query);
+    const result = await this.database.query<{
+      inbound_count: string;
+      responded_count: string;
+      avg_minutes: string | null;
+      median_minutes: string | null;
+      p90_minutes: string | null;
+    }>(
+      `with classified as (
+         select m.chat_id, m.created_at,
+                case when u.role in ('admin', 'manager', 'system_admin') then 'staff' else 'client' end as cls
+           from app.messages m
+           join app.chats c on c.id = m.chat_id and c.type = 'administration' and c.deleted_at is null
+           left join app.users u on u.id = m.sender_id and u.deleted_at is null
+          where m.deleted_at is null
+            and m.message_type <> 'system'
+            and m.sender_id is not null
+            and ($3::uuid is null or c.branch_id = $3::uuid)
+       ),
+       seq as (
+         select chat_id, created_at, cls,
+                lag(cls) over (partition by chat_id order by created_at) as prev_cls
+           from classified
+       ),
+       inbound as (
+         select chat_id, created_at as inbound_at
+           from seq
+          where cls = 'client'
+            and (prev_cls is null or prev_cls = 'staff')
+            and created_at >= $1::timestamptz and created_at < $2::timestamptz
+       ),
+       gaps as (
+         select extract(epoch from (resp.response_at - i.inbound_at)) / 60.0 as minutes
+           from inbound i
+           cross join lateral (
+             select min(s.created_at) as response_at
+               from classified s
+              where s.chat_id = i.chat_id and s.cls = 'staff' and s.created_at > i.inbound_at
+           ) resp
+          where resp.response_at is not null
+       )
+       select
+         (select count(*) from inbound) as inbound_count,
+         (select count(*) from gaps) as responded_count,
+         coalesce(avg(minutes), 0) as avg_minutes,
+         coalesce(percentile_cont(0.5) within group (order by minutes), 0) as median_minutes,
+         coalesce(percentile_cont(0.9) within group (order by minutes), 0) as p90_minutes
+       from gaps`,
+      [from, to, query.branchId ?? null],
+    );
+    const row = result.rows[0];
+    const inboundCount = Number(row?.inbound_count ?? 0);
+    const respondedCount = Number(row?.responded_count ?? 0);
+    const round1 = (v: string | null) => Math.round(Number(v ?? 0) * 10) / 10;
+    return {
+      from,
+      to,
+      inboundCount,
+      respondedCount,
+      responseRate: inboundCount === 0 ? 0 : Math.round((respondedCount / inboundCount) * 100) / 100,
+      avgMinutes: round1(row?.avg_minutes ?? null),
+      medianMinutes: round1(row?.median_minutes ?? null),
+      p90Minutes: round1(row?.p90_minutes ?? null),
+    };
+  }
+
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const { items } = await this.financeMonthly(actor, query);
     const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";

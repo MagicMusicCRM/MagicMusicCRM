@@ -59,6 +59,14 @@ export class AnalyticsController {
     return this.analytics.churnRisk(actor, query);
   }
 
+  @Get("chats/sla")
+  chatsSla(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: { from?: string; to?: string; branchId?: string },
+  ) {
+    return this.analytics.chatsSla(actor, query);
+  }
+
   @Get("finance/monthly")
   financeMonthly(@CurrentActor() actor: ActorContext, @Query() query: { from?: string; to?: string }) {
     return this.analytics.financeMonthly(actor, query);
