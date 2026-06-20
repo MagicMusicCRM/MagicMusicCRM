@@ -238,6 +238,54 @@ export class AnalyticsService {
     return { next7: Number(row?.next7 ?? 0), next14: Number(row?.next14 ?? 0), next30: Number(row?.next30 ?? 0) };
   }
 
+  async churnRisk(actor: ActorContext, query: { inactiveDays?: number | string; branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const inactiveDays = Number(query.inactiveDays ?? 21);
+    const branchOf = (a: string) =>
+      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
+    const result = await this.database.query<{
+      student_id: string;
+      name: string;
+      last_completed_at: string | null;
+      days_since_last: string | null;
+    }>(
+      `with last_lesson as (
+         select coalesce(l.student_id, lp.student_id) as student_id,
+                max(l.scheduled_at) as last_completed_at
+           from app.lessons l
+           left join app.lesson_participation lp on lp.lesson_id = l.id
+          where l.deleted_at is null
+            and l.status in ('completed', 'done')
+            and coalesce(l.student_id, lp.student_id) is not null
+          group by coalesce(l.student_id, lp.student_id)
+       )
+       select s.id as student_id,
+              btrim(concat_ws(' ', p.first_name, p.last_name)) as name,
+              ll.last_completed_at,
+              case when ll.last_completed_at is null then null
+                   else (now()::date - ll.last_completed_at::date) end as days_since_last
+         from app.students s
+         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+         left join last_lesson ll on ll.student_id = s.id
+        where s.deleted_at is null and s.status = 'active'
+          and ($2::uuid is null or ${branchOf("s")} = $2::text)
+          and (ll.last_completed_at is null
+               or ll.last_completed_at < now() - make_interval(days => $1::int))
+        order by ll.last_completed_at asc nulls first
+        limit 200`,
+      [inactiveDays, query.branchId ?? null],
+    );
+    return {
+      inactiveDays,
+      students: result.rows.map((r) => ({
+        studentId: r.student_id,
+        name: r.name,
+        lastCompletedAt: r.last_completed_at,
+        daysSinceLast: r.days_since_last === null ? null : Number(r.days_since_last),
+      })),
+    };
+  }
+
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const { items } = await this.financeMonthly(actor, query);
     const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";

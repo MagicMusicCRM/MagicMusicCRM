@@ -95,6 +95,23 @@ describe("AnalyticsService", () => {
     expect(result).toEqual({ next7: 10000, next14: 25000, next30: 60000 });
   });
 
+  it("churnRisk lists active students with no recent completed lesson, gated", async () => {
+    const { service, query, policy } = build([
+      { student_id: "stu1", name: "Иван Петров", last_completed_at: "2026-03-01T10:00:00Z", days_since_last: "40" },
+      { student_id: "stu2", name: "Без занятий", last_completed_at: null, days_since_last: null },
+    ]);
+    const result = await service.churnRisk(actor, { inactiveDays: 30 });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("app.lessons");
+    expect(sql).toContain("lesson_participation");
+    expect(result.inactiveDays).toBe(30);
+    expect(result.students).toEqual([
+      { studentId: "stu1", name: "Иван Петров", lastCompletedAt: "2026-03-01T10:00:00Z", daysSinceLast: 40 },
+      { studentId: "stu2", name: "Без занятий", lastCompletedAt: null, daysSinceLast: null },
+    ]);
+  });
+
   it("lossReasons groups terminal-transition reasons, gated to manager/admin", async () => {
     const query = jest.fn()
       .mockResolvedValueOnce({ rows: [
