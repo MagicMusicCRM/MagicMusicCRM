@@ -13,6 +13,7 @@ import 'staff_detail_dialog.dart';
 import 'group_detail_dialog.dart';
 import 'create_room_dialog.dart';
 import 'create_employee_dialog.dart';
+import 'branch_form_dialog.dart';
 
 final entitiesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((
@@ -34,6 +35,8 @@ final entitiesProvider =
         return crm.listRooms(limit: 100);
       } else if (table == 'employees') {
         return crm.listStaff(limit: 100);
+      } else if (table == 'branches') {
+        return crm.listBranches(limit: 100);
       }
 
       return const <Map<String, dynamic>>[];
@@ -91,7 +94,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   void setTab(int index) {
@@ -162,6 +165,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
                 Tab(text: 'Занятия'),
                 Tab(text: 'Аудитории'),
                 Tab(text: 'Сотрудники'),
+                Tab(text: 'Филиалы'),
               ],
             ),
           ],
@@ -176,6 +180,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
           const _LessonsList(),
           _RoomsList(searchQuery: _searchQuery),
           _EmployeesList(searchQuery: _searchQuery),
+          _BranchesList(searchQuery: _searchQuery),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -214,6 +219,9 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
       case 5:
         dialog = const CreateEmployeeDialog();
         break;
+      case 6:
+        dialog = const BranchFormDialog();
+        break;
     }
 
     if (dialog != null) {
@@ -237,6 +245,9 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
         if (_tabController.index == 5) {
           ref.invalidate(entitiesProvider('employees'));
           ref.invalidate(staffSearchProvider(_searchQuery.trim()));
+        }
+        if (_tabController.index == 6) {
+          ref.invalidate(entitiesProvider('branches'));
         }
       }
     }
@@ -1271,6 +1282,119 @@ class _EmployeesList extends ConsumerWidget {
                       ref.invalidate(staffSearchProvider(query));
                     }
                   },
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────
+// Branches List
+// ─────────────────────────────────────────────────
+class _BranchesList extends ConsumerWidget {
+  final String searchQuery;
+  const _BranchesList({required this.searchQuery});
+
+  String _offsetLabel(int minutes) {
+    final sign = minutes >= 0 ? '+' : '-';
+    final abs = minutes.abs();
+    final h = abs ~/ 60;
+    final m = abs % 60;
+    final timeStr = m == 0
+        ? 'UTC$sign$h'
+        : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
+    return switch (minutes) {
+      180 => 'МСК ($timeStr)',
+      120 => 'EET ($timeStr)',
+      60 => 'CET ($timeStr)',
+      0 => 'UTC',
+      _ => timeStr,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(entitiesProvider('branches'));
+    return async.when(
+      loading: () =>
+          const Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
+      error: (e, _) => Center(
+        child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger)),
+      ),
+      data: (items) {
+        var filtered = items;
+        if (searchQuery.isNotEmpty) {
+          filtered = items.where((item) {
+            final name = (item['name'] as String? ?? '').toLowerCase();
+            final address = (item['address'] as String? ?? '').toLowerCase();
+            final q = searchQuery.toLowerCase();
+            return name.contains(q) || address.contains(q);
+          }).toList();
+        }
+
+        if (filtered.isEmpty) {
+          return Center(
+            child: Text(
+              searchQuery.isEmpty ? 'Нет филиалов' : 'Ничего не найдено',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          color: AppTheme.primaryPurple,
+          onRefresh: () async => ref.invalidate(entitiesProvider('branches')),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: filtered.length,
+            itemBuilder: (ctx, i) {
+              final item = filtered[i];
+              final name = item['name'] as String? ?? 'Без названия';
+              final address = item['address'] as String? ?? '';
+              final offsetMinutes =
+                  (item['utc_offset_minutes'] as num?)?.toInt() ?? 180;
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  onTap: () async {
+                    final res = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => BranchFormDialog(branch: item),
+                    );
+                    if (res == true) {
+                      ref.invalidate(entitiesProvider('branches'));
+                    }
+                  },
+                  leading: CircleAvatar(
+                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
+                    child: Icon(
+                      Icons.location_city_rounded,
+                      color: AppTheme.primaryGold,
+                    ),
+                  ),
+                  title: Text(name),
+                  subtitle: Text(
+                    [
+                      if (address.isNotEmpty) address,
+                      _offsetLabel(offsetMinutes),
+                    ].join(' • '),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                  trailing: Icon(
+                    Icons.edit_rounded,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 18,
+                  ),
                 ),
               );
             },
