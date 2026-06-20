@@ -408,6 +408,46 @@ export class AnalyticsService {
     };
   }
 
+  async sourceAnalytics(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const { from, to } = this.rangeBounds(query);
+    const result = await this.database.query<{
+      source: string | null;
+      display_name: string | null;
+      leads: string;
+    }>(
+      `select l.source,
+              max(ls.display_name) as display_name,
+              count(*) as leads
+         from app.leads l
+         left join app.lead_sources ls
+           on ls.deleted_at is null
+          and (lower(ls.canonical_name) = lower(l.source) or lower(ls.display_name) = lower(l.source))
+        where l.deleted_at is null
+          and l.created_at >= $1::timestamptz
+          and l.created_at < $2::timestamptz
+          and ($3::uuid is null or l.branch_id = $3::uuid)
+        group by l.source
+        order by leads desc, l.source nulls last`,
+      [from, to, query.branchId ?? null],
+    );
+    const total = result.rows.reduce((n, r) => n + Number(r.leads), 0);
+    return {
+      from,
+      to,
+      total,
+      sources: result.rows.map((r) => {
+        const leads = Number(r.leads);
+        return {
+          source: r.source,
+          displayName: r.display_name ?? (r.source ?? "(не указан)"),
+          leads,
+          share: total === 0 ? 0 : Math.round((leads / total) * 100),
+        };
+      }),
+    };
+  }
+
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const { items } = await this.financeMonthly(actor, query);
     const header = "month_start,lessons,completed_lessons,revenue,expenses,new_students";

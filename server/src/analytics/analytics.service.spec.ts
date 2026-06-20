@@ -222,4 +222,25 @@ describe("AnalyticsService", () => {
     ]);
     expect(result.unspecifiedCount).toBe(5);
   });
+
+  it("sourceAnalytics groups new leads by source with display names + shares, gated", async () => {
+    const { service, query, policy } = build([
+      { source: "site", display_name: "Сайт", leads: "60" },
+      { source: "ads", display_name: "Реклама", leads: "30" },
+      { source: null, display_name: null, leads: "10" },
+    ]);
+    const result = await service.sourceAnalytics(actor, { from: "2026-01-01", to: "2026-04-01" });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("app.leads");
+    expect(sql).toContain("app.lead_sources");
+    expect(result.from).toBe("2026-01-01");
+    expect(result.to).toBe("2026-04-01");
+    expect(result.total).toBe(100);
+    expect(result.sources).toEqual([
+      { source: "site", displayName: "Сайт", leads: 60, share: 60 },
+      { source: "ads", displayName: "Реклама", leads: 30, share: 30 },
+      { source: null, displayName: "(не указан)", leads: 10, share: 10 },
+    ]);
+  });
 });
