@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 
 class CreateStudentDialog extends ConsumerStatefulWidget {
   const CreateStudentDialog({super.key});
@@ -13,14 +14,13 @@ class CreateStudentDialog extends ConsumerStatefulWidget {
 class _CreateStudentDialogState extends ConsumerState<CreateStudentDialog> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
-  final _phoneController = TextEditingController();
+  String _canonicalPhone = '';
   bool _saving = false;
 
   @override
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _phoneController.dispose();
     super.dispose();
   }
 
@@ -36,7 +36,7 @@ class _CreateStudentDialogState extends ConsumerState<CreateStudentDialog> {
           .createStudent(
             firstName: firstName,
             lastName: _lastNameController.text,
-            phone: _phoneController.text,
+            phone: _canonicalPhone.isEmpty ? null : _canonicalPhone,
           );
 
       if (mounted) Navigator.pop(context, true);
@@ -69,10 +69,8 @@ class _CreateStudentDialogState extends ConsumerState<CreateStudentDialog> {
             decoration: const InputDecoration(labelText: 'Фамилия'),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _phoneController,
-            decoration: const InputDecoration(labelText: 'Телефон'),
-            keyboardType: TextInputType.phone,
+          RuPhoneField(
+            onCanonicalChanged: (c) => _canonicalPhone = c,
           ),
         ],
       ),

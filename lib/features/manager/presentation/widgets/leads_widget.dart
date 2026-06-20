@@ -12,6 +12,7 @@ import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'manage_statuses_dialog.dart';
 
@@ -1887,13 +1888,12 @@ class _LeadDialog extends StatefulWidget {
 
 class _LeadDialogState extends State<_LeadDialog> {
   final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
+  String _canonicalPhone = '';
   final _sourceCtrl = TextEditingController();
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _phoneCtrl.dispose();
     _sourceCtrl.dispose();
     super.dispose();
   }
@@ -1911,10 +1911,8 @@ class _LeadDialogState extends State<_LeadDialog> {
             decoration: const InputDecoration(labelText: 'Имя'),
           ),
           const SizedBox(height: 10),
-          TextField(
-            controller: _phoneCtrl,
-            decoration: const InputDecoration(labelText: 'Телефон'),
-            keyboardType: TextInputType.phone,
+          RuPhoneField(
+            onCanonicalChanged: (c) => _canonicalPhone = c,
           ),
           const SizedBox(height: 10),
           TextField(
@@ -1935,7 +1933,7 @@ class _LeadDialogState extends State<_LeadDialog> {
             if (_nameCtrl.text.trim().isNotEmpty) {
               Navigator.pop(context, {
                 'name': _nameCtrl.text.trim(),
-                'phone': _phoneCtrl.text.trim(),
+                'phone': _canonicalPhone,
                 'source': _sourceCtrl.text.trim(),
               });
             }

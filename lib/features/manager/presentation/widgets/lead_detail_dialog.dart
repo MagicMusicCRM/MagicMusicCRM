@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 
@@ -403,10 +404,17 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                     _buildStatusPicker(curStatus),
                     _buildTextField('Имя', 'name'),
                     _buildTextField('Фамилия', 'last_name'),
-                    _buildTextField(
-                      'Телефон',
-                      'phone',
-                      keyboard: TextInputType.phone,
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: RuPhoneField(
+                        initialCanonical: _leadData['phone']?.toString(),
+                        onCanonicalChanged: (c) {
+                          setState(() {
+                            _leadData['phone'] = c.isEmpty ? null : c;
+                            _edited = true;
+                          });
+                        },
+                      ),
                     ),
                     _buildTextField(
                       'Электронная почта',
