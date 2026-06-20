@@ -637,10 +637,10 @@ class _ChatViewState extends ConsumerState<_ChatView> {
                   bottom: 12,
                   child: GestureDetector(
                     onTap: () {
-                      setState(() {
-                        _isAtBottom = true;
-                        _unreadCount = 0;
-                      });
+                      // Clear the badge on intent; let _onScroll flip
+                      // _isAtBottom once the animation actually reaches the
+                      // bottom, so an interrupted scroll can't leave it stuck.
+                      setState(() => _unreadCount = 0);
                       _scrollToBottom();
                     },
                     child: Stack(
