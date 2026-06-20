@@ -312,7 +312,7 @@ export class AnalyticsService {
       p90_minutes: string | null;
     }>(
       `with classified as (
-         select m.chat_id, m.created_at,
+         select m.id, m.chat_id, m.created_at,
                 case when u.role in ('admin', 'manager', 'system_admin') then 'staff' else 'client' end as cls
            from app.messages m
            join app.chats c on c.id = m.chat_id and c.type = 'administration' and c.deleted_at is null
@@ -324,7 +324,7 @@ export class AnalyticsService {
        ),
        seq as (
          select chat_id, created_at, cls,
-                lag(cls) over (partition by chat_id order by created_at) as prev_cls
+                lag(cls) over (partition by chat_id order by created_at, id) as prev_cls
            from classified
        ),
        inbound as (
