@@ -7,12 +7,15 @@ function str(v: unknown): string {
 
 export function parseRuDate(raw: unknown): string | null {
   const s = str(raw);
-  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
   if (!m) return null;
   const [, dd, mm, yyyy, hh, mi] = m;
   const iso = `${yyyy}-${mm}-${dd}T${hh ?? "00"}:${mi ?? "00"}:00.000Z`;
-  const t = Date.parse(iso);
-  return Number.isNaN(t) ? null : new Date(t).toISOString();
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  if (d.getUTCFullYear() !== Number(yyyy) || d.getUTCMonth() + 1 !== Number(mm) || d.getUTCDate() !== Number(dd)) return null;
+  if (hh !== undefined && (d.getUTCHours() !== Number(hh) || d.getUTCMinutes() !== Number(mi))) return null;
+  return d.toISOString();
 }
 
 export function taskTitle(description: string): string {
@@ -46,7 +49,7 @@ export function studentNoteFromRow(row: Record<string, unknown>) {
   if (!note) return null;
   return {
     phoneRaw: str(row["Моб. телефон"]) || str(row["Телефон"]),
-    name: [str(row["Фамилия"]), str(row["Имя"])].filter(Boolean).join(" ") || str(row["Имя"]),
+    name: [str(row["Фамилия"]), str(row["Имя"])].filter(Boolean).join(" "),
     note,
   };
 }

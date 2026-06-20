@@ -13,6 +13,13 @@ describe("parseRuDate", () => {
     expect(parseRuDate("нет")).toBeNull();
     expect(parseRuDate(null)).toBeNull();
   });
+  it("rejects trailing garbage", () => {
+    expect(parseRuDate("18.01.2027 (примечание)")).toBeNull();
+  });
+  it("rejects impossible calendar dates", () => {
+    expect(parseRuDate("32.13.2026")).toBeNull();
+    expect(parseRuDate("31.02.2026")).toBeNull();
+  });
 });
 
 describe("taskTitle", () => {
@@ -55,6 +62,9 @@ describe("studentNoteFromRow", () => {
   it("returns null when «Описание» empty", () => {
     expect(studentNoteFromRow({ "Моб. телефон": "8999", "Описание": "" })).toBeNull();
   });
+  it("includes «Фамилия» when present", () => {
+    expect(studentNoteFromRow({ "Фамилия": "Иванов", "Имя": "Петя", "Описание": "ок" })).toEqual({ phoneRaw: "", name: "Иванов Петя", note: "ок" });
+  });
 });
 
 describe("leadCommentFromRow", () => {
@@ -73,5 +83,8 @@ describe("cleanResponsible", () => {
     expect(cleanResponsible("[Для всех]")).toBeNull();
     expect(cleanResponsible("")).toBeNull();
     expect(cleanResponsible("Сусарина Анна Владимировна")).toBe("Сусарина Анна Владимировна");
+  });
+  it("trims surrounding whitespace", () => {
+    expect(cleanResponsible("  Иванов  ")).toBe("Иванов");
   });
 });
