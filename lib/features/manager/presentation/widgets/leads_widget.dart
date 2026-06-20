@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/convert_lead_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -313,6 +314,72 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
       });
       _showError('Не удалось удалить лид: $e');
     }
+  }
+
+  /// Public entry-point for the lead→student conversion.
+  ///
+  /// Opens [ConvertLeadDialog], then performs an optimistic hide of the lead
+  /// card from the Лиды funnel and shows an «Отменить» SnackBar (undo reverts
+  /// the visual move only — the created student is not deleted).
+  ///
+  /// **DragTarget contract:** The future Ученики board's DragTarget should call
+  /// `convertLeadToStudent(leadById(dragData))` from
+  /// `DragTarget<String>.onAcceptWithDetails`.
+  Future<void> convertLeadToStudent(Map<String, dynamic> lead) async {
+    final id = lead['id']?.toString() ?? '';
+    if (id.isEmpty || _pendingLeadIds.contains(id)) return;
+    if ((lead['linked_student_id']?.toString() ?? '').isNotEmpty) {
+      _showError('Лид уже связан с учеником');
+      return;
+    }
+
+    final student = await ConvertLeadDialog.show(context, lead: lead);
+    if (student == null || !mounted) return; // cancelled or failed in-dialog
+
+    // Optimistic move: hide the card from the Лиды board immediately.
+    setState(() {
+      _hiddenLeadIds.add(id);
+      _pendingLeadIds.add(id);
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Лид конвертирован в ученика'),
+        backgroundColor: AppTheme.success,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Отменить',
+          textColor: Colors.white,
+          onPressed: () {
+            // Undo only reverts the visual move — the student stays created.
+            if (!mounted) return;
+            setState(() => _hiddenLeadIds.remove(id));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Карточка лида возвращена. Ученик остаётся созданным — '
+                  'удалите его вручную при необходимости.',
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    // Reconcile with the server: the lead now carries linked_student_id, so a
+    // board refresh keeps it out of the funnel on its own.
+    _refreshBoard();
+    try {
+      await ref.read(leadBoardProvider(_filters).future);
+    } catch (_) {
+      // Refresh failure is non-fatal; the optimistic hide already moved it.
+    }
+    if (!mounted) return;
+    setState(() => _pendingLeadIds.remove(id));
   }
 
   void _openDetail(Map<String, dynamic> lead) async {
@@ -1553,99 +1620,24 @@ class _LeadCard extends ConsumerWidget {
   }
 
   Future<void> _convertToStudent(BuildContext context, WidgetRef ref) async {
-    final firstName = lead['name']?.toString().trim() ?? '';
-    final lastName = lead['last_name']?.toString().trim() ?? '';
-    final phone = lead['phone']?.toString().trim() ?? '';
-    final displayName = [
-      firstName,
-      lastName,
-    ].where((s) => s.isNotEmpty).join(' ');
-    final muted = TextStyle(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-      fontSize: 12,
-    );
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Сделать учеником'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Создать карточку ученика из лида'
-              '${displayName.isEmpty ? '' : ' «$displayName»'}?',
-            ),
-            if (phone.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text('Телефон: $phone', style: muted),
-            ],
-            const SizedBox(height: 8),
-            Text(
-              'Данные лида перенесутся в карточку ученика, лид останется '
-              'связанным с ним.',
-              style: muted,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.success),
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.school_rounded, size: 18),
-            label: const Text('Создать ученика'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      final customData = lead['custom_data'] as Map<String, dynamic>? ?? {};
-      final patch = <String, dynamic>{};
-      final discipline = customData['discipline']?.toString();
-      final level = customData['level']?.toString();
-      final branchId = lead['branch_id']?.toString();
-      if (discipline != null && discipline.isNotEmpty) {
-        patch['discipline'] = discipline;
-      }
-      if (level != null && level.isNotEmpty) patch['level'] = level;
-      if (branchId != null && branchId.isNotEmpty) patch['branchId'] = branchId;
-
-      await ref
-          .read(magicCrmServiceProvider)
-          .createStudent(
-            firstName: firstName.isEmpty ? 'Без имени' : firstName,
-            lastName: lastName.isEmpty ? null : lastName,
-            phone: phone.isEmpty ? null : phone,
-            leadId: lead['id'].toString(),
-            customDataPatch: patch.isEmpty ? null : patch,
-          );
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Лид конвертирован в ученика'),
-            backgroundColor: AppTheme.success,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      onRefresh();
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Не удалось конвертировать: $e'),
-            backgroundColor: AppTheme.danger,
-          ),
-        );
-      }
+    if ((lead['linked_student_id']?.toString() ?? '').isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Лид уже связан с учеником')),
+      );
+      return;
     }
+    final student = await ConvertLeadDialog.show(context, lead: lead);
+    if (student == null) return; // cancelled / failed in-dialog
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Лид конвертирован в ученика'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+    onRefresh();
   }
 
   Future<void> _scheduleTrial(BuildContext context, WidgetRef ref) async {
