@@ -621,7 +621,7 @@ class _KpiTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: Container(
           height: 86,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.white.withAlpha(10)),
@@ -642,6 +642,7 @@ class _KpiTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       value,
