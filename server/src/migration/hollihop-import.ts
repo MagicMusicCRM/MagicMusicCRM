@@ -1934,7 +1934,7 @@ function loadFromDirectory(dir: string): HolliHopData {
     leadStatusHistory: readArrayFile(
       dir,
       ["lead_status_history.json", "leadstatushistory.json"],
-      "HistoryModifyLeadStatus",
+      "Actions",
     ),
   };
 }
@@ -2040,7 +2040,9 @@ async function fetchFromApi(): Promise<HolliHopData> {
     fetchOptionalPaged("GetLeadLogs", "LeadLogs"),
     fetchOptionalPaged("GetSystemLogs", "SystemLogs"),
     fetchOptionalPaged("GetComments", "Comments"),
-    fetchOptionalPaged("GetHistoryModifyLeadStatus", "HistoryModifyLeadStatus"),
+    // HolliHop returns the rows under the "Actions" root key (verified against
+    // a live page), not the method-name convention.
+    fetchOptionalPaged("GetHistoryModifyLeadStatus", "Actions"),
   ]);
   return {
     locations,
