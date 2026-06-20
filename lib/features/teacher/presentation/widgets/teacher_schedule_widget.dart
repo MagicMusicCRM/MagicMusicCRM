@@ -55,7 +55,15 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
         if (lessonId != null) _lessonsById[lessonId] = lesson;
         final dbTime = DateTime.parse(lesson['scheduled_at']).toUtc();
         final start = dbTime.add(const Duration(hours: 3));
-        final duration = lesson['duration_minutes'] as int? ?? 60;
+        // Defensive: the backend may send duration as int, double, or string.
+        // A bare `as int?` cast throws on a double and crashes the schedule
+        // view, so parse leniently and fall back to a 60-minute slot (KVA-166).
+        final durationRaw = lesson['duration_minutes'];
+        final duration = durationRaw is int
+            ? durationRaw
+            : durationRaw is num
+            ? durationRaw.round()
+            : int.tryParse(durationRaw?.toString() ?? '') ?? 60;
         final end = start.add(Duration(minutes: duration));
 
         final status = lesson['status'] as String?;
