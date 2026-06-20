@@ -250,7 +250,7 @@ class _ConvertLeadDialogState extends ConsumerState<ConvertLeadDialog> {
         ),
         FilledButton.icon(
           style: FilledButton.styleFrom(backgroundColor: AppTheme.success),
-          onPressed: _saving || _loadingBranches ? null : _convert,
+          onPressed: _saving || _loadingBranches || _loadingDisciplines || (_disciplines.isNotEmpty && _discipline == null) ? null : _convert,
           icon: _saving
               ? const SizedBox(
                   width: 16,

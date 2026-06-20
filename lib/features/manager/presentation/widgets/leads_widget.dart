@@ -357,7 +357,10 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
           onPressed: () {
             // Undo only reverts the visual move — the student stays created.
             if (!mounted) return;
-            setState(() => _hiddenLeadIds.remove(id));
+            setState(() {
+              _hiddenLeadIds.remove(id);
+              _pendingLeadIds.remove(id);
+            });
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
