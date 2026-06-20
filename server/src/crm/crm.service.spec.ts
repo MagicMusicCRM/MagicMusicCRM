@@ -14,6 +14,7 @@ describe("CrmService", () => {
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const notifications = {
       sendEmail: jest.fn().mockResolvedValue({ queued: true }),
+      notifyUser: jest.fn().mockResolvedValue({ notificationId: "notif-test" }),
     };
     const policy = {
       assertCanReadOperationalData: jest.fn(),
@@ -55,6 +56,7 @@ describe("CrmService", () => {
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const notifications = {
       sendEmail: jest.fn().mockResolvedValue({ queued: true }),
+      notifyUser: jest.fn().mockResolvedValue({ notificationId: "notif-test" }),
     };
     const policy = {
       assertCanReadOperationalData: jest.fn(),
@@ -1715,6 +1717,70 @@ describe("CrmService", () => {
     ]);
   });
 
+  it("counts an overlapping pair once, not twice (KVA-166 dedup)", async () => {
+    // Two lessons share a room and overlap each other. Each row is flagged
+    // room_overlap (correct, both get red borders), and each row's
+    // room_overlap_ids points at the OTHER lesson. The aggregated conflicts
+    // list must contain ONE entry for the pair, not two.
+    const baseRow = {
+      student_id: null,
+      group_id: null,
+      lead_id: null,
+      teacher_id: "teacher-a",
+      branch_id: "branch-a",
+      room_id: "room-a",
+      duration_minutes: 60,
+      status: "scheduled",
+      is_trial: false,
+      notes: null,
+      student_user_id: null,
+      teacher_user_id: null,
+      student_name: null,
+      teacher_name: null,
+      branch_name: "Центр",
+      room_name: "101",
+      group_name: null,
+      group_price_per_lesson: null,
+      conflict_types: ["room_overlap"],
+    };
+    const { service } = createService([
+      {
+        ...baseRow,
+        id: "lesson-a",
+        scheduled_at: "2026-06-15T09:00:00.000Z",
+        room_overlap_ids: ["lesson-b"],
+        teacher_overlap_ids: [],
+      },
+      {
+        ...baseRow,
+        id: "lesson-b",
+        scheduled_at: "2026-06-15T09:30:00.000Z",
+        room_overlap_ids: ["lesson-a"],
+        teacher_overlap_ids: [],
+      },
+    ]);
+
+    const matrix = await service.getScheduleMatrix(actor, {
+      from: "2026-06-15T00:00:00.000Z",
+      to: "2026-06-16T00:00:00.000Z",
+      groupBy: "room",
+    });
+
+    // Both lessons still individually flagged for the UI.
+    expect(matrix.items.map((i: { id: string }) => i.id)).toEqual([
+      "lesson-a",
+      "lesson-b",
+    ]);
+    expect(matrix.items[0].conflictTypes).toEqual(["room_overlap"]);
+    expect(matrix.items[1].conflictTypes).toEqual(["room_overlap"]);
+    // But the overlapping pair is counted exactly once.
+    expect(matrix.conflicts).toHaveLength(1);
+    expect(matrix.conflicts[0]).toMatchObject({
+      type: "room_overlap",
+      lessonId: "lesson-a",
+    });
+  });
+
   it("restricts lead statuses to CRM writers", async () => {
     const { service, policy } = createService([
       {
@@ -2992,7 +3058,17 @@ describe("CrmService", () => {
 
   it("allows teachers to update only status and notes on their own lessons", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
-      { rows: [{ teacher_user_id: "teacher-user-a" }] },
+      { rows: [{ teacher_user_id: "teacher-user-a" }] }, // access check
+      {
+        rows: [
+          {
+            teacher_id: "teacher-a",
+            room_id: null,
+            scheduled_at: "2026-06-12T12:00:00.000Z",
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      }, // pre-update snapshot
       {
         rows: [
           {
@@ -3018,7 +3094,7 @@ describe("CrmService", () => {
             group_price_per_lesson: null,
           },
         ],
-      },
+      }, // UPDATE ... RETURNING
     ]);
 
     await expect(
@@ -3034,8 +3110,9 @@ describe("CrmService", () => {
     });
 
     expect(policy.assertCanWriteCrm).not.toHaveBeenCalled();
-    expect(query.mock.calls[0][1]).toEqual(["lesson-a"]);
-    expect(query.mock.calls[1][1]).toEqual([
+    expect(query.mock.calls[0][1]).toEqual(["lesson-a"]); // access check
+    expect(query.mock.calls[1][1]).toEqual(["lesson-a"]); // pre-update snapshot
+    expect(query.mock.calls[2][1]).toEqual([
       "lesson-a",
       null,
       null,
@@ -3153,8 +3230,20 @@ describe("CrmService", () => {
 
   it("clears reminder markers when a lesson is rescheduled", async () => {
     // Manager actor: assertCanUpdateLesson returns without a query, so the
-    // first DB call is the UPDATE, then the marker delete.
+    // first DB call is the pre-update snapshot, then the UPDATE, then the
+    // marker delete. The snapshot has no teacher_user_id so no teacher
+    // notification fires here (keeping this test focused on reminders).
     const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            teacher_id: "teacher-a",
+            room_id: null,
+            scheduled_at: "2026-06-20T15:00:00.000Z",
+            teacher_user_id: null,
+          },
+        ],
+      }, // pre-update snapshot
       {
         rows: [
           {
@@ -3192,6 +3281,117 @@ describe("CrmService", () => {
       expect.stringContaining("delete from app.lesson_reminders"),
       ["lesson-a"],
     );
+  });
+
+  it("notifies the assigned teacher when a lesson is rescheduled (KVA-158)", async () => {
+    // Pre-update snapshot has the OLD time + the teacher's user_id; the UPDATE
+    // returns the NEW time. The time delta must trigger a teacher push/in_app.
+    const { service, query, notifications } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            teacher_id: "teacher-a",
+            room_id: "room-a",
+            scheduled_at: "2026-06-20T15:00:00.000Z",
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      }, // pre-update snapshot
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            lead_id: null,
+            teacher_id: "teacher-a",
+            branch_id: null,
+            room_id: "room-a",
+            scheduled_at: "2026-06-21T18:30:00.000Z",
+            duration_minutes: 60,
+            status: "scheduled",
+            is_trial: false,
+            notes: null,
+            student_user_id: null,
+            teacher_user_id: null,
+            student_name: null,
+            teacher_name: null,
+            branch_name: null,
+            room_name: null,
+            group_name: null,
+            group_price_per_lesson: null,
+          },
+        ],
+      }, // UPDATE ... RETURNING
+      { rows: [] }, // delete from app.lesson_reminders
+    ]);
+
+    await service.updateLesson(actor, "lesson-a", {
+      scheduledAt: "2026-06-21T18:30:00.000Z",
+    });
+
+    expect(notifications.notifyUser).toHaveBeenCalledTimes(1);
+    expect(notifications.notifyUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "teacher-user-a",
+        title: "Перенос занятия",
+        channels: ["push", "in_app"],
+        data: { type: "lesson_rescheduled", lessonId: "lesson-a" },
+      }),
+    );
+    const call = notifications.notifyUser.mock.calls[0][0];
+    expect(call.body).toContain("время");
+    expect(call.body).toContain("21.06");
+    // The snapshot query must run before the UPDATE.
+    expect(query.mock.calls[0][0]).toContain("from app.lessons l");
+  });
+
+  it("does not notify the teacher on a non-reschedule save (KVA-158)", async () => {
+    // Only notes change; time / room / teacher are identical -> no notification.
+    const { service, notifications } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            teacher_id: "teacher-a",
+            room_id: "room-a",
+            scheduled_at: "2026-06-20T15:00:00.000Z",
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      }, // pre-update snapshot
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            lead_id: null,
+            teacher_id: "teacher-a",
+            branch_id: null,
+            room_id: "room-a",
+            scheduled_at: "2026-06-20T15:00:00.000Z",
+            duration_minutes: 60,
+            status: "scheduled",
+            is_trial: false,
+            notes: "Новая заметка",
+            student_user_id: null,
+            teacher_user_id: null,
+            student_name: null,
+            teacher_name: null,
+            branch_name: null,
+            room_name: null,
+            group_name: null,
+            group_price_per_lesson: null,
+          },
+        ],
+      }, // UPDATE ... RETURNING
+    ]);
+
+    await service.updateLesson(actor, "lesson-a", {
+      notes: "Новая заметка",
+    });
+
+    expect(notifications.notifyUser).not.toHaveBeenCalled();
   });
 
   it("creates trial lessons linked to leads", async () => {

@@ -159,12 +159,25 @@ interface LessonRow {
 
 interface ScheduleLessonRow extends LessonRow {
   conflict_types: string[] | null;
+  // Partner lesson ids this lesson overlaps with, per conflict type. Used to
+  // deduplicate the aggregated conflicts list to one entry per pair (KVA-166).
+  room_overlap_ids?: string[] | null;
+  teacher_overlap_ids?: string[] | null;
 }
 
 interface LessonAccessRow {
   id: string;
   student_id: string | null;
   group_id: string | null;
+  teacher_user_id: string | null;
+}
+
+// Pre-update snapshot used by updateLesson to detect a genuine reschedule
+// (time / room / teacher delta) and resolve the assigned teacher (KVA-158).
+interface RescheduleSnapshotRow {
+  teacher_id: string | null;
+  room_id: string | null;
+  scheduled_at: Date | string | null;
   teacher_user_id: string | null;
 }
 
@@ -2927,7 +2940,37 @@ export class CrmService {
                 and other_teacher.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
                 and other_teacher.scheduled_at + other_teacher.duration_minutes * interval '1 minute' > scoped.scheduled_at
             ) then 'teacher_overlap' end
-          ], null) as conflict_types
+          ], null) as conflict_types,
+          -- The id of every OTHER lesson this lesson collides with, per type.
+          -- Used to deduplicate the aggregated conflicts list so each unordered
+          -- overlapping PAIR is counted once instead of once per participant
+          -- (KVA-166: prevents the "Конфликты: N" badge double-counting).
+          (
+            select coalesce(array_agg(other_room.id), '{}')
+            from app.lessons other_room
+            where scoped.room_id is not null
+              and other_room.deleted_at is null
+              and other_room.status <> 'cancelled'
+              and other_room.id <> scoped.id
+              and other_room.room_id = scoped.room_id
+              and (scoped.group_id is null or other_room.group_id is null
+                   or other_room.group_id <> scoped.group_id)
+              and other_room.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
+              and other_room.scheduled_at + other_room.duration_minutes * interval '1 minute' > scoped.scheduled_at
+          ) as room_overlap_ids,
+          (
+            select coalesce(array_agg(other_teacher.id), '{}')
+            from app.lessons other_teacher
+            where scoped.teacher_id is not null
+              and other_teacher.deleted_at is null
+              and other_teacher.status <> 'cancelled'
+              and other_teacher.id <> scoped.id
+              and other_teacher.teacher_id = scoped.teacher_id
+              and (scoped.group_id is null or other_teacher.group_id is null
+                   or other_teacher.group_id <> scoped.group_id)
+              and other_teacher.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
+              and other_teacher.scheduled_at + other_teacher.duration_minutes * interval '1 minute' > scoped.scheduled_at
+          ) as teacher_overlap_ids
         from scoped
         order by scoped.scheduled_at asc, scoped.id asc
       `,
@@ -2946,17 +2989,64 @@ export class CrmService {
       conflictTypes: row.conflict_types ?? [],
     }));
     const groups = this.groupScheduleItems(items, groupBy);
-    const conflicts = items.flatMap((item) => {
-      const conflictTypes = Array.isArray(item.conflictTypes)
-        ? item.conflictTypes
-        : [];
-      return conflictTypes.map((type) => ({
-        type,
-        lessonId: item.id,
-        scheduledAt: item.scheduledAt,
-        roomId: item.roomId,
-        teacherId: item.teacherId,
-      }));
+
+    // KVA-166: each overlapping PAIR previously produced TWO conflict entries
+    // (one keyed to lesson A because B overlaps it, one keyed to lesson B
+    // because A overlaps it), so the "Конфликты: N" badge double-counted —
+    // ~242 reported for ~199 real room overlaps. The per-lesson `conflictTypes`
+    // above stays per-lesson (the red borders/tooltips need every participant
+    // flagged); only the aggregated list is deduplicated to one entry per
+    // unordered pair. `*_overlap_ids` give the partner lesson ids, so we key
+    // each conflict by `type:minId:maxId` and emit it once, using the
+    // earlier-scheduled (first-seen) lesson as the representative for the
+    // existing scheduledAt/roomId/teacherId fields and per-day filtering.
+    const seenPairs = new Set<string>();
+    const conflicts: Array<{
+      type: string;
+      lessonId: string;
+      scheduledAt: Date | string;
+      roomId: string | null;
+      teacherId: string | null;
+    }> = [];
+    const partnerIdsByType = (
+      row: ScheduleLessonRow,
+      type: string,
+    ): string[] => {
+      if (type === "room_overlap") return row.room_overlap_ids ?? [];
+      if (type === "teacher_overlap") return row.teacher_overlap_ids ?? [];
+      return [];
+    };
+    result.rows.forEach((row, index) => {
+      const item = items[index];
+      const conflictTypes = row.conflict_types ?? [];
+      for (const type of conflictTypes) {
+        const partners = partnerIdsByType(row, type);
+        if (partners.length === 0) {
+          // No partner ids surfaced (e.g. branch_mismatch / missing_teacher are
+          // single-lesson issues): keep the per-lesson entry as before.
+          conflicts.push({
+            type,
+            lessonId: item.id,
+            scheduledAt: item.scheduledAt,
+            roomId: item.roomId,
+            teacherId: item.teacherId,
+          });
+          continue;
+        }
+        for (const partnerId of partners) {
+          const [a, b] = [item.id, partnerId].sort();
+          const key = `${type}:${a}:${b}`;
+          if (seenPairs.has(key)) continue;
+          seenPairs.add(key);
+          conflicts.push({
+            type,
+            lessonId: item.id,
+            scheduledAt: item.scheduledAt,
+            roomId: item.roomId,
+            teacherId: item.teacherId,
+          });
+        }
+      }
     });
 
     return {
@@ -3139,6 +3229,24 @@ export class CrmService {
     dto: UpsertLessonDto,
   ) {
     await this.assertCanUpdateLesson(actor, lessonId, dto);
+    // Snapshot the pre-update state so we can tell a genuine RESCHEDULE
+    // (time / room / teacher change) from an ordinary save (e.g. notes or
+    // status edit). The UPDATE ... RETURNING below cannot surface the OLD
+    // values, so we read them first. Also resolves the currently-assigned
+    // teacher's user_id for the reschedule notification (KVA-158).
+    const before = await this.database.query<RescheduleSnapshotRow>(
+      `
+        select l.teacher_id, l.room_id, l.scheduled_at,
+          tp.user_id as teacher_user_id
+        from app.lessons l
+        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        where l.id = $1 and l.deleted_at is null
+        limit 1
+      `,
+      [lessonId],
+    );
+    const previous = before.rows[0] ?? null;
     const result = await this.database.query<LessonRow>(
       `
         update app.lessons
@@ -3186,6 +3294,7 @@ export class CrmService {
         [lesson.id],
       );
     }
+    await this.notifyTeacherOfReschedule(lessonId, previous, lesson);
     await this.audit.record({
       actor,
       action: "crm.lesson_updated",
@@ -3193,6 +3302,91 @@ export class CrmService {
       entityId: lesson.id,
     });
     return this.toLessonDto(lesson);
+  }
+
+  // KVA-158: when a lesson is actually rescheduled — its time, room or
+  // assigned teacher changes — push an in-app + FCM notification to the
+  // ASSIGNED teacher. We deliberately do NOT fire on every save (status,
+  // notes, etc.) so teachers are not spammed.
+  private async notifyTeacherOfReschedule(
+    lessonId: string,
+    previous: RescheduleSnapshotRow | null,
+    lesson: LessonRow,
+  ): Promise<void> {
+    if (!previous) return;
+    const sameInstant = (a: Date | string | null, b: Date | string | null) => {
+      if (a === null || b === null) return a === b;
+      return new Date(a).getTime() === new Date(b).getTime();
+    };
+    const timeChanged = !sameInstant(previous.scheduled_at, lesson.scheduled_at);
+    const roomChanged = previous.room_id !== lesson.room_id;
+    const teacherChanged = previous.teacher_id !== lesson.teacher_id;
+    if (!timeChanged && !roomChanged && !teacherChanged) return;
+
+    // Notify the teacher who now owns the slot. If the teacher was swapped we
+    // resolve the NEW teacher's user_id; otherwise reuse the snapshot value.
+    let teacherUserId = previous.teacher_user_id;
+    if (teacherChanged) {
+      teacherUserId = lesson.teacher_id
+        ? await this.resolveTeacherUserId(lesson.teacher_id)
+        : null;
+    }
+    if (!teacherUserId) return;
+
+    const whenLocal = this.formatLessonTimeMoscow(lesson.scheduled_at);
+    const reasons: string[] = [];
+    if (timeChanged) reasons.push("время");
+    if (roomChanged) reasons.push("аудитория");
+    if (teacherChanged) reasons.push("назначение");
+    const body =
+      `Изменено: ${reasons.join(", ")}. ` +
+      `Новое время — ${whenLocal} (по Москве).`;
+
+    try {
+      await this.notifications.notifyUser({
+        userId: teacherUserId,
+        title: "Перенос занятия",
+        body,
+        data: { type: "lesson_rescheduled", lessonId },
+        channels: ["push", "in_app"],
+      });
+    } catch {
+      // A notification failure must never block the reschedule itself.
+    }
+  }
+
+  private async resolveTeacherUserId(
+    teacherId: string,
+  ): Promise<string | null> {
+    const result = await this.database.query<{ user_id: string | null }>(
+      `
+        select tp.user_id
+        from app.teachers t
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        where t.id = $1 and t.deleted_at is null
+        limit 1
+      `,
+      [teacherId],
+    );
+    return result.rows[0]?.user_id ?? null;
+  }
+
+  private formatLessonTimeMoscow(value: Date | string | null): string {
+    if (value === null) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    // Mirror the reminder format ("DD.MM HH24:MI", Europe/Moscow).
+    const parts = new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Europe/Moscow",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+    const get = (type: string) =>
+      parts.find((part) => part.type === type)?.value ?? "";
+    return `${get("day")}.${get("month")} ${get("hour")}:${get("minute")}`;
   }
 
   async deleteLesson(actor: ActorContext, lessonId: string) {
