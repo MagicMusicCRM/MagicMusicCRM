@@ -71,8 +71,18 @@ class _MessageInputState extends State<MessageInput> {
       }
     });
 
+    // Tapping the text field while the emoji panel is open should close the
+    // panel, so the keyboard and emoji panel never both occupy space (KVA-172).
+    _focusNode.addListener(_handleFocusChange);
+
     if (widget.editingMessage != null) {
       _controller.text = widget.editingMessage!['content'] ?? '';
+    }
+  }
+
+  void _handleFocusChange() {
+    if (_focusNode.hasFocus && _showEmojiPicker && mounted) {
+      setState(() => _showEmojiPicker = false);
     }
   }
 
@@ -91,6 +101,7 @@ class _MessageInputState extends State<MessageInput> {
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.removeListener(_handleFocusChange);
     _focusNode.dispose();
     super.dispose();
   }

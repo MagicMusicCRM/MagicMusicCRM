@@ -96,7 +96,13 @@ class _SendFileDialogState extends State<SendFileDialog> {
         duration: const Duration(milliseconds: 200),
         padding: EdgeInsets.only(bottom: bottomPadding),
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 400),
+          constraints: BoxConstraints(
+            maxWidth: 400,
+            // Cap the dialog to the space above the keyboard so the caption
+            // field focusing never pushes content past the screen (KVA-171).
+            maxHeight:
+                MediaQuery.of(context).size.height - bottomPadding - 48,
+          ),
             decoration: BoxDecoration(
               color: isDark ? TelegramColors.darkSurface : Colors.white,
               borderRadius: BorderRadius.circular(24),
@@ -129,6 +135,14 @@ class _SendFileDialogState extends State<SendFileDialog> {
                 ),
               ),
               
+              // Scrollable middle so the keyboard can't push content off-screen;
+              // the send button below stays pinned (KVA-171).
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
               // File Preview / Info
               if (isImage && widget.fileBytes != null)
                 // Larger Image Preview
@@ -240,6 +254,10 @@ class _SendFileDialogState extends State<SendFileDialog> {
                         ),
                       ),
                       const SizedBox(width: 8),
+                    ],
+                  ),
+                ),
+              ),
                     ],
                   ),
                 ),
