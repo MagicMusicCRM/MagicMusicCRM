@@ -462,6 +462,50 @@ export class AnalyticsService {
     };
   }
 
+  async responsibleDistribution(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
+    this.policy.assertCanWriteCrm(actor);
+    const { from, to } = this.rangeBounds(query);
+    const result = await this.database.query<{
+      user_id: string;
+      name: string | null;
+      leads: string;
+    }>(
+      `select l.assigned_to as user_id,
+              u.full_name as name,
+              count(*) as leads
+         from app.leads l
+         join app.users u on u.id = l.assigned_to and u.deleted_at is null
+        where l.deleted_at is null
+          and l.assigned_to is not null
+          and l.created_at >= $1::timestamptz
+          and l.created_at < $2::timestamptz
+          and ($3::uuid is null or l.branch_id = $3::uuid)
+        group by l.assigned_to, u.full_name
+        order by leads desc, u.full_name`,
+      [from, to, query.branchId ?? null],
+    );
+    const unassignedResult = await this.database.query<{ unassigned: string }>(
+      `select count(*) as unassigned
+         from app.leads l
+        where l.deleted_at is null
+          and l.assigned_to is null
+          and l.created_at >= $1::timestamptz
+          and l.created_at < $2::timestamptz
+          and ($3::uuid is null or l.branch_id = $3::uuid)`,
+      [from, to, query.branchId ?? null],
+    );
+    return {
+      from,
+      to,
+      responsibles: result.rows.map((r) => ({
+        userId: r.user_id,
+        name: r.name ?? "—",
+        leads: Number(r.leads),
+      })),
+      unassignedLeads: Number(unassignedResult.rows[0]?.unassigned ?? 0),
+    };
+  }
+
   async sourceAnalytics(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
     this.policy.assertCanWriteCrm(actor);
     const { from, to } = this.rangeBounds(query);

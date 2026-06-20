@@ -245,6 +245,34 @@ describe("AnalyticsService", () => {
     });
   });
 
+  it("responsibleDistribution groups leads by assigned_to with unassigned count, gated", async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce({ rows: [
+        { user_id: "u1", name: "Анна Менеджер", leads: "45" },
+        { user_id: "u2", name: "Борис Менеджер", leads: "30" },
+      ] })
+      .mockResolvedValueOnce({ rows: [{ unassigned: "12" }] });
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
+    const crm = {} as unknown as CrmService;
+    const service = new AnalyticsService(
+      { query } as unknown as DatabaseService,
+      crm,
+      policy as unknown as CrmPolicy,
+    );
+    const result = await service.responsibleDistribution(actor, { from: "2026-01-01", to: "2026-04-01" });
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("app.leads");
+    expect(sql).toContain("assigned_to");
+    expect(result.from).toBe("2026-01-01");
+    expect(result.to).toBe("2026-04-01");
+    expect(result.responsibles).toEqual([
+      { userId: "u1", name: "Анна Менеджер", leads: 45 },
+      { userId: "u2", name: "Борис Менеджер", leads: 30 },
+    ]);
+    expect(result.unassignedLeads).toBe(12);
+  });
+
   it("sourceAnalytics groups new leads by source with display names + shares, gated", async () => {
     const { service, query, policy } = build([
       { source: "site", display_name: "Сайт", leads: "60" },
