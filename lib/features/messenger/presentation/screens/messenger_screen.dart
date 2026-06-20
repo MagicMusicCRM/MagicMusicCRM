@@ -32,7 +32,9 @@ import 'package:magic_music_crm/features/client/presentation/screens/client_port
 import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overview_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/tasks_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
@@ -295,7 +297,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         messenger.showSnackBar(
           const SnackBar(
             content: Text(
-              'Контакт связан с лидом — откройте его в разделе «Лиды».',
+              'Контакт связан с лидом — откройте его в разделе «Клиенты».',
             ),
           ),
         );
@@ -1797,7 +1799,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 ),
               ),
       2 => const ScheduleWidget(),
-      3 => const LeadsWidget(),
+      3 => const ClientsWidget(),
       4 => UserRolesWidget(
         currentRole: widget.role,
         initialSearch: _userRolesInitialSearch,
@@ -1839,7 +1841,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       ];
     }
 
-    return const [
+    return [
       NavigationRailDestination(
         icon: Icon(Icons.chat_bubble_outline_rounded),
         selectedIcon: Icon(
@@ -1865,12 +1867,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         label: Text('Расписание'),
       ),
       NavigationRailDestination(
-        icon: Icon(Icons.people_outline_rounded),
+        icon: _leadsBadge(const Icon(Icons.people_outline_rounded)),
         selectedIcon: Icon(
           Icons.people_rounded,
           color: TelegramColors.brandPurple,
         ),
-        label: Text('Лиды'),
+        label: Text('Клиенты'),
       ),
       NavigationRailDestination(
         icon: Icon(Icons.manage_accounts_outlined),
@@ -1907,6 +1909,16 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     ];
   }
 
+  Widget _leadsBadge(Widget child) {
+    final count = ref.watch(appLeadsCountProvider).asData?.value ?? 0;
+    if (count <= 0) return child;
+    return Badge(
+      label: Text('$count'),
+      backgroundColor: AppTheme.danger,
+      child: child,
+    );
+  }
+
   List<BottomNavigationBarItem> _mobileCrmItems() {
     if (widget.role == 'teacher') {
       return const [
@@ -1925,7 +1937,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       ];
     }
 
-    return const [
+    return [
       BottomNavigationBarItem(
         icon: Icon(Icons.chat_bubble_rounded),
         label: 'Чат',
@@ -1938,7 +1950,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         icon: Icon(Icons.calendar_month_rounded),
         label: 'Распис.',
       ),
-      BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Лиды'),
+      BottomNavigationBarItem(icon: _leadsBadge(const Icon(Icons.people_rounded)), label: 'Клиенты'),
       BottomNavigationBarItem(
         icon: Icon(Icons.manage_accounts_rounded),
         label: 'Пользов.',
