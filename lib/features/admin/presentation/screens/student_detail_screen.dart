@@ -26,6 +26,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   List<Map<String, dynamic>> _comments = [];
   List<Map<String, dynamic>> _groups = [];
   List<Map<String, dynamic>> _expectedPayments = [];
+  Map<String, dynamic>? _family;
   bool _loading = true;
 
   @override
@@ -51,6 +52,10 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           limit: 100,
         ),
         crm.listExpectedPayments(studentId: widget.studentId, limit: 100),
+        crm.getFamilyForEntity(
+          entityType: 'student',
+          entityId: widget.studentId,
+        ),
       ]);
 
       final studentRes = results[0] as Map<String, dynamic>;
@@ -61,6 +66,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
       final balanceRows = results[5] as List<Map<String, dynamic>>;
       final commentsRes = results[6] as List<Map<String, dynamic>>;
       final expectedPaymentsRes = results[7] as List<Map<String, dynamic>>;
+      final familyRes = results[8] as Map<String, dynamic>;
 
       if (mounted) {
         setState(() {
@@ -72,6 +78,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           _comments = commentsRes;
           _groups = groupsRes;
           _expectedPayments = expectedPaymentsRes;
+          _family = familyRes;
           _tasks.sort(
             (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
           );
@@ -317,8 +324,52 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               );
             }),
         ]),
+        const SizedBox(height: 16),
+        _buildInfoCard('Семья', _buildFamilyRows()),
       ],
     );
+  }
+
+  List<Widget> _buildFamilyRows() {
+    final family = _family?['family'] as Map<String, dynamic>?;
+    final members = (_family?['members'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .toList() ??
+        const <Map<String, dynamic>>[];
+    if (family == null || members.isEmpty) {
+      return const [
+        _InfoRow(
+          icon: Icons.people_outline_rounded,
+          label: 'Семья',
+          value: 'Не указана',
+        ),
+      ];
+    }
+    final primaryId = family['primary_payer_member_id']?.toString();
+    return members.map((m) {
+      final role = switch (m['role']?.toString()) {
+        'parent' => 'Родитель',
+        'child' => 'Ребёнок',
+        'guardian' => 'Опекун',
+        'payer' => 'Плательщик',
+        'sibling' => 'Брат/сестра',
+        final v when v != null && v.isNotEmpty => v,
+        _ => 'Член семьи',
+      };
+      final isPayer = primaryId != null && m['id']?.toString() == primaryId;
+      final label = [
+        role,
+        if (m['is_primary_contact'] == true) 'осн. контакт',
+        if (isPayer) 'плательщик',
+      ].join(' · ');
+      return _InfoRow(
+        icon: Icons.people_alt_rounded,
+        label: label,
+        value: (m['name']?.toString().trim().isNotEmpty ?? false)
+            ? m['name'].toString()
+            : 'Без имени',
+      );
+    }).toList();
   }
 
   bool _isHiddenCustomDataRow(String key) {

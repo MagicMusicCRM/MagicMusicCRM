@@ -32,6 +32,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   List<Map<String, dynamic>> _duplicateCandidates = [];
   bool _loadingDuplicates = true;
   bool _dirty = false;
+  List<Map<String, dynamic>> _statusHistory = [];
+  bool _loadingHistory = true;
+  Map<String, dynamic>? _family;
+  bool _loadingFamily = true;
   // True once the user has edited a field but not saved — used to warn before
   // discarding unsaved changes on close.
   bool _edited = false;
@@ -82,6 +86,8 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     _fetchMetadata();
     _fetchCard();
     _fetchDuplicateCandidates();
+    _fetchStatusHistory();
+    _fetchFamily();
   }
 
   Future<void> _fetchCard() async {
@@ -121,6 +127,39 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
       });
     } catch (_) {
       if (mounted) setState(() => _loadingDuplicates = false);
+    }
+  }
+
+  Future<void> _fetchStatusHistory() async {
+    try {
+      final items = await ref
+          .read(magicCrmServiceProvider)
+          .getLeadStatusHistory(widget.lead['id'].toString());
+      if (!mounted) return;
+      setState(() {
+        _statusHistory = items;
+        _loadingHistory = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingHistory = false);
+    }
+  }
+
+  Future<void> _fetchFamily() async {
+    try {
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .getFamilyForEntity(
+            entityType: 'lead',
+            entityId: widget.lead['id'].toString(),
+          );
+      if (!mounted) return;
+      setState(() {
+        _family = result;
+        _loadingFamily = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingFamily = false);
     }
   }
 
@@ -411,6 +450,14 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                     const SizedBox(height: 16),
                     _sectionTitle('Связи и активность'),
                     _buildAggregateCard(),
+
+                    const SizedBox(height: 16),
+                    _sectionTitle('Семья'),
+                    _buildFamilySection(),
+
+                    const SizedBox(height: 16),
+                    _sectionTitle('История статусов'),
+                    _buildStatusHistorySection(),
 
                     const SizedBox(height: 16),
                     _sectionTitle('Комментарии'),
@@ -803,6 +850,151 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
           subtitleBuilder: (row) => _formatDate(row['occurred_at']),
         ),
       ],
+    );
+  }
+
+  String _familyRoleLabel(Object? role) {
+    return switch (role?.toString()) {
+      'parent' => 'Родитель',
+      'child' => 'Ребёнок',
+      'guardian' => 'Опекун',
+      'payer' => 'Плательщик',
+      'sibling' => 'Брат/сестра',
+      final value when value != null && value.isNotEmpty => value,
+      _ => 'Член семьи',
+    };
+  }
+
+  Widget _buildFamilySection() {
+    if (_loadingFamily) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(),
+      );
+    }
+    final family = _family?['family'] as Map<String, dynamic>?;
+    final members = _list(_family?['members']);
+    if (family == null) {
+      return Text(
+        'Семья не указана',
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      );
+    }
+    final primaryId = family['primary_payer_member_id']?.toString();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if ((family['name']?.toString().trim().isNotEmpty ?? false))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              family['name'].toString(),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        if (members.isEmpty)
+          Text(
+            'Участники не добавлены',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          )
+        else
+          ...members.map((m) {
+            final isPayer =
+                primaryId != null && m['id']?.toString() == primaryId;
+            final subtitle = [
+              _familyRoleLabel(m['role']),
+              if (m['is_primary_contact'] == true) 'Осн. контакт',
+              if (isPayer) 'Плательщик',
+            ].where((value) => value.isNotEmpty).join(' · ');
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: ListTile(
+                dense: true,
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                tileColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest.withAlpha(120),
+                leading: const Icon(
+                  Icons.people_alt_rounded,
+                  size: 18,
+                  color: AppTheme.primaryPurple,
+                ),
+                title: Text(
+                  (m['name']?.toString().trim().isNotEmpty ?? false)
+                      ? m['name'].toString()
+                      : 'Без имени',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: subtitle.isEmpty ? null : Text(subtitle),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildStatusHistorySection() {
+    if (_loadingHistory) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(),
+      );
+    }
+    if (_statusHistory.isEmpty) {
+      return Text(
+        'Изменений статуса пока нет',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 12,
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _statusHistory.take(12).map((h) {
+        final from = h['old_status']?.toString();
+        final to = h['new_status']?.toString();
+        final transition = [
+          if (from != null && from.isNotEmpty) from else '—',
+          '→',
+          if (to != null && to.isNotEmpty) to else '—',
+        ].join(' ');
+        final comment = h['comment']?.toString().trim() ?? '';
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            tileColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withAlpha(120),
+            leading: const Icon(
+              Icons.history_rounded,
+              size: 18,
+              color: AppTheme.primaryGold,
+            ),
+            title: Text(transition, maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text(
+              [
+                _formatDate(h['changed_at']),
+                if (comment.isNotEmpty) comment,
+              ].where((value) => value.isNotEmpty).join(' · '),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
