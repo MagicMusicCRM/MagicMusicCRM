@@ -55,7 +55,11 @@
 **Прогресс:**
 - ✅ **P0 (KVA-193) — инженерная часть готова** (ветка `kvazar2727/kva-193-p0-design-tokens`, чисто фронт): дизайн-токены v7 `lib/core/theme/design_tokens.dart` + выравнивание `app_theme.dart`; общая библиотека компонентов `lib/core/widgets/v7/` (`MagicToast`/`showMagicMenu`/`showMagicSheet`/`showMagicDrawer`/`SkeletonBox`); wire-to-service чек-лист `docs/migration/WIRE-TO-SERVICE-CHECKLIST.md`. Проверки: `flutter analyze` чисто, `flutter test` 153/153, `git diff server/` пусто. Осталось `P0-1` (пер-оконный апрув владельцем) + забандлить шрифт Inter (сейчас системный).
 
-**▶ Следующий шаг:** **P1 (KVA-194)** — перешить RBAC-навигацию (admin≠manager, A1/I9), nav-шелл (десктоп-rail / телефон bottom-bar + «Ещё», 5 ролей) и вход (login/signup→OTP/2FA/forgot/онбординг→legal-consent). Меняет рантайм-поведение → требует сетевого baseline (§5b) и теста RBAC-матрицы 5 ролей. Детальные подзадачи каждой фазы — в чек-листе её под-эпика в Linear (P0-1…P7-4).
+- 🔄 **P1 (KVA-194) — в работе** (ветка `kvazar2727/kva-194-p1-rbac-nav-auth`, от P0):
+  - ✅ **P1-2 (A1 RBAC)** коммит `fe164cfe`: Администратор ≠ Управляющий на фронте. Источник истины `lib/features/messenger/presentation/screens/crm_nav_rbac.dart`; реальная роль (admin vs system_admin) прокинута через `admin_dashboard_screen`; per-role visible-tab модель + guards в `messenger_screen`; смена ролей `user_roles_widget` → только manager/system_admin; тест RBAC-матрицы 5 ролей. Проверки: analyze чисто, test 159/159, `git diff server/` пусто, состязательное ревью 25 агентов — нет admin-escape/регрессий. ⚠️ Бэкенд-`@Roles` ужесточение — отдельная server-задача (P1 чисто-фронт).
+  - ⏳ Осталось в P1: **P1-1** v7 nav-шелл (десктоп-rail / bottom-bar + «Ещё»), **P1-3..P1-6** реколы экранов входа (login/signup→OTP/2FA/forgot/онбординг→legal-consent), **P1-7** сетевой baseline.
+
+**▶ Следующий шаг:** **P1-1 + P1-3..P1-6** — визуальные реколы (nav-шелл + экраны авторизации) на v7-токенах/компонентах из P0. Сервис-вызовы `MagicAuthService`/`MagicReleaseGateService` менять НЕЛЬЗЯ (см. `docs/migration/WIRE-TO-SERVICE-CHECKLIST.md` и зафиксированные сигнатуры). Требуют owner-визуального апрува. Детальные подзадачи фаз — в Linear (P0-1…P7-4).
 
 ---
 
