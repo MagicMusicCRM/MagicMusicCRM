@@ -39,17 +39,25 @@ Every frontend phase commit was verified against:
 - **P5-1 / P5-2 / P5-3 / P5-4** — reports, tasks, users, settings v7 restyles
   (`eb7b3810`, `bba643d2`).
 - **P4-7 / P4-1 (partial)** — notification center + chat-chrome v7 restyle (`bba643d2`).
-- **P5-7 (partial)** — phone-review + lead-merge data-quality panel (`4484d8ec` + panel).
+- **P3-3** — lead-board secondary filters → v7 slide-out drawer (`cd331473`).
+- **P5-7 — all backend-exists orphans now wired (no endpoint dropped):**
+  - «Качество данных» panel: phone-review queue + lead dedup/merge (`4484d8ec`, `6d67beec`).
+  - analytics cards: sources / data-quality / responsible / finance-monthly (`07ef1d3c`, `d2521224`).
+  - account-deletion-request admin queue (`a08bfc90`, `fb9f4b72`).
 - **P7-2 (test artifact)** — the 5-role RBAC matrix test exists and passes
   (built in P1-2). The remaining P7-2 work is the owner's live walkthrough.
 
-### Remaining — implementable (next headless passes)
-- **P5-7 (rest)** — CSV/XLSX finance export buttons (`/analytics/finance/monthly.csv|.xlsx`),
-  sources/data-quality/responsible analytics cards, account-deletion-request queue
-  (`legal` controller). Backends exist; needs service methods + UI.
-- **P3-3** slide-out filter drawer, **P3-5** dual-target column editor,
-  **P3-8** deep-link + state preservation — restructures, not reskins.
-- **P4-2** message ⋯ menu parity audit.
+### Remaining — implementable but needs design clarity / runtime / infra
+- **Finance CSV/XLSX byte-export buttons** (`/analytics/finance/monthly.csv|.xlsx`) —
+  the JSON summary is wired + carded; the binary download needs file-save infra on
+  desktop (the API client has no binary-download/save helper yet).
+- **P3-5** dual-target column editor — requires a student/client-board column model
+  that is not defined in the backend (the editor is currently single-target = lead
+  statuses); needs product decision before build.
+- **P3-8** deep-link (D4) + state preservation (D5) — go_router param wiring +
+  keep-alive; correctness only confirmable by running the app.
+- **P4-2** message ⋯ menu — the context-menu sheet already exists in the chat
+  chrome; this is a parity audit, not new code.
 
 ### Blocked — needs the owner's runtime/device (NOT headless-completable)
 These are not deferrable by writing more code; they require a real device, a live
