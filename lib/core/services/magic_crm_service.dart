@@ -1783,6 +1783,63 @@ class MagicCrmService {
     );
   }
 
+  // ── Analytics orphans wired (P5-7): sources / data-quality / responsible ──
+  Future<Map<String, dynamic>> getAnalyticsSources({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/sources',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsDataQuality({
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/data-quality',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsResponsible({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/responsible',
+      queryParameters: q,
+    );
+  }
+
+  Future<Map<String, dynamic>> getAnalyticsFinanceMonthly({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final q = <String, dynamic>{};
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    if (branchId != null) q['branchId'] = branchId;
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/finance/monthly',
+      queryParameters: q,
+    );
+  }
+
   Future<Map<String, dynamic>> getAnalyticsBranches({
     String? from,
     String? to,
