@@ -16,6 +16,7 @@ import 'group_detail_dialog.dart';
 import 'create_room_dialog.dart';
 import 'create_employee_dialog.dart';
 import 'branch_form_dialog.dart';
+import 'data_quality_widget.dart';
 
 final entitiesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((
@@ -98,7 +99,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    _tabController = TabController(length: 9, vsync: this);
   }
 
   void setTab(int index) {
@@ -171,6 +172,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
                 Tab(text: 'Сотрудники'),
                 Tab(text: 'Филиалы'),
                 Tab(text: 'Каталог абонементов'),
+                Tab(text: 'Качество данных'),
               ],
             ),
           ],
@@ -187,6 +189,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
           _EmployeesList(searchQuery: _searchQuery),
           _BranchesList(searchQuery: _searchQuery),
           _PackagesList(searchQuery: _searchQuery),
+          const DataQualityWidget(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
