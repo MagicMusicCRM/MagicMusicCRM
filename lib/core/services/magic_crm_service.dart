@@ -840,6 +840,44 @@ class MagicCrmService {
     };
   }
 
+  // ── Family writes (P3-9; backend already exists) ─────────────────────────
+  Future<Map<String, dynamic>> createFamily(Map<String, dynamic> data) async {
+    return _api.post<Map<String, dynamic>>('/crm/families', data: data);
+  }
+
+  Future<Map<String, dynamic>> addFamilyMember(
+    String familyId, {
+    required String entityType,
+    required String entityId,
+    required String role,
+    bool? isPrimaryContact,
+  }) async {
+    final data = <String, dynamic>{
+      'entityType': entityType,
+      'entityId': entityId,
+      'role': role,
+    };
+    if (isPrimaryContact != null) data['isPrimaryContact'] = isPrimaryContact;
+    return _api.post<Map<String, dynamic>>(
+      '/crm/families/$familyId/members',
+      data: data,
+    );
+  }
+
+  Future<void> removeFamilyMember(String memberId) async {
+    await _api.delete<Map<String, dynamic>>('/crm/family-members/$memberId');
+  }
+
+  Future<Map<String, dynamic>> setFamilyPrimaryPayer(
+    String familyId,
+    String memberId,
+  ) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/families/$familyId/primary-payer/$memberId',
+      data: const <String, dynamic>{},
+    );
+  }
+
   Future<Map<String, dynamic>> createLead({
     required String firstName,
     String? lastName,
