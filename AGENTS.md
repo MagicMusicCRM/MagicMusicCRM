@@ -57,9 +57,10 @@
 
 - 🔄 **P1 (KVA-194) — в работе** (ветка `kvazar2727/kva-194-p1-rbac-nav-auth`, от P0):
   - ✅ **P1-2 (A1 RBAC)** коммит `fe164cfe`: Администратор ≠ Управляющий на фронте. Источник истины `lib/features/messenger/presentation/screens/crm_nav_rbac.dart`; реальная роль (admin vs system_admin) прокинута через `admin_dashboard_screen`; per-role visible-tab модель + guards в `messenger_screen`; смена ролей `user_roles_widget` → только manager/system_admin; тест RBAC-матрицы 5 ролей. Проверки: analyze чисто, test 159/159, `git diff server/` пусто, состязательное ревью 25 агентов — нет admin-escape/регрессий. ⚠️ Бэкенд-`@Roles` ужесточение — отдельная server-задача (P1 чисто-фронт).
-  - ⏳ Осталось в P1: **P1-1** v7 nav-шелл (десктоп-rail / bottom-bar + «Ещё»), **P1-3..P1-6** реколы экранов входа (login/signup→OTP/2FA/forgot/онбординг→legal-consent), **P1-7** сетевой baseline.
+  - ✅ **P1-1** nav-шелл `d1b0cf66`; **P1-3** (вход/регистрация/OTP) + **P1-5** (онбординг-слайды/legal) + **P1-4(forgot)** `07ebcc97` — 6 экранов входа на v7 (параллельный workflow: спека → 6 агентов). Проверки: analyze чисто, test 163/163, `server/`+`lib/core/services/` чисты, locked-вызовы сверены.
+  - ⏳ Осталось в P1: **P1-4** `AuthMethodsScreen` (/auth-methods), **P1-6** splash/boot-скелетон, **P1-7** сетевой baseline. Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов.
 
-**▶ Следующий шаг:** **P1-1 + P1-3..P1-6** — визуальные реколы (nav-шелл + экраны авторизации) на v7-токенах/компонентах из P0. Сервис-вызовы `MagicAuthService`/`MagicReleaseGateService` менять НЕЛЬЗЯ (см. `docs/migration/WIRE-TO-SERVICE-CHECKLIST.md` и зафиксированные сигнатуры). Требуют owner-визуального апрува. Детальные подзадачи фаз — в Linear (P0-1…P7-4).
+**▶ Следующий шаг:** добить P1 (**P1-4** методы авторизации, **P1-6** splash, **P1-7** baseline), затем **P2 — Расписание** (KVA-195). Реколы требуют owner-визуального апрува; сервис-вызовы менять НЕЛЬЗЯ (`docs/migration/WIRE-TO-SERVICE-CHECKLIST.md`). Детальные подзадачи фаз — в Linear (P0-1…P7-4).
 
 ---
 
