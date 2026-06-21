@@ -55,12 +55,13 @@
 **Прогресс:**
 - ✅ **P0 (KVA-193) — инженерная часть готова** (ветка `kvazar2727/kva-193-p0-design-tokens`, чисто фронт): дизайн-токены v7 `lib/core/theme/design_tokens.dart` + выравнивание `app_theme.dart`; общая библиотека компонентов `lib/core/widgets/v7/` (`MagicToast`/`showMagicMenu`/`showMagicSheet`/`showMagicDrawer`/`SkeletonBox`); wire-to-service чек-лист `docs/migration/WIRE-TO-SERVICE-CHECKLIST.md`. Проверки: `flutter analyze` чисто, `flutter test` 153/153, `git diff server/` пусто. Осталось `P0-1` (пер-оконный апрув владельцем) + забандлить шрифт Inter (сейчас системный).
 
-- 🔄 **P1 (KVA-194) — в работе** (ветка `kvazar2727/kva-194-p1-rbac-nav-auth`, от P0):
-  - ✅ **P1-2 (A1 RBAC)** коммит `fe164cfe`: Администратор ≠ Управляющий на фронте. Источник истины `lib/features/messenger/presentation/screens/crm_nav_rbac.dart`; реальная роль (admin vs system_admin) прокинута через `admin_dashboard_screen`; per-role visible-tab модель + guards в `messenger_screen`; смена ролей `user_roles_widget` → только manager/system_admin; тест RBAC-матрицы 5 ролей. Проверки: analyze чисто, test 159/159, `git diff server/` пусто, состязательное ревью 25 агентов — нет admin-escape/регрессий. ⚠️ Бэкенд-`@Roles` ужесточение — отдельная server-задача (P1 чисто-фронт).
-  - ✅ **P1-1** nav-шелл `d1b0cf66`; **P1-3** (вход/регистрация/OTP) + **P1-5** (онбординг-слайды/legal) + **P1-4(forgot)** `07ebcc97` — 6 экранов входа на v7 (параллельный workflow: спека → 6 агентов). Проверки: analyze чисто, test 163/163, `server/`+`lib/core/services/` чисты, locked-вызовы сверены.
-  - ⏳ Осталось в P1: **P1-4** `AuthMethodsScreen` (/auth-methods), **P1-6** splash/boot-скелетон, **P1-7** сетевой baseline. Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов.
+- ✅ **P1 (KVA-194) — фронт завершён, In Review** (ветка `kvazar2727/kva-194-p1-rbac-nav-auth`, от P0). Коммиты: `fe164cfe` (P1-2 A1 RBAC), `d1b0cf66` (P1-1 nav-шелл), `07ebcc97` (P1-3/P1-5 + 6 экранов входа), `9cebce03` (P1-4 auth-methods + P1-6 splash/boot-скелетон).
+  - **P1-2 A1:** Администратор ≠ Управляющий (источник истины `crm_nav_rbac.dart`; реальная роль через `admin_dashboard_screen`; guards в `messenger_screen`; смена ролей `user_roles_widget` → только manager/system_admin; тест 5 ролей). ⚠️ Бэкенд-`@Roles` ужесточение — отдельная server-задача.
+  - **Реколы** (nav-шелл + 7 экранов авторизации) — чистая перешивка на v7-токенах/компонентах P0, сервис-вызовы/роуты byte-identical. Параллельные workflow + состязательные ревью.
+  - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
+  - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** добить P1 (**P1-4** методы авторизации, **P1-6** splash, **P1-7** baseline), затем **P2 — Расписание** (KVA-195). Реколы требуют owner-визуального апрува; сервис-вызовы менять НЕЛЬЗЯ (`docs/migration/WIRE-TO-SERVICE-CHECKLIST.md`). Детальные подзадачи фаз — в Linear (P0-1…P7-4).
+**▶ Следующий шаг:** **P2 — Расписание (KVA-195)** — v7 block-drag бронь, липкие шапки/тайм-кол (K10), Год/Месяц/День, конфликты (matrix), посещаемость (v7p2-3). Фронт + 1 фикс данных (зависит от P6-4). Сервис-вызовы менять НЕЛЬЗЯ (`docs/migration/WIRE-TO-SERVICE-CHECKLIST.md`). Детальные подзадачи фаз — в Linear (P0-1…P7-4).
 
 ---
 
