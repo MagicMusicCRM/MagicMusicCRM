@@ -1616,6 +1616,69 @@ class MagicCrmService {
     );
   }
 
+  // ── Homework (P5c) ───────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> listHomeworks({
+    String? studentId,
+    String? lessonId,
+    String? status,
+    int? limit,
+  }) async {
+    final q = <String, dynamic>{};
+    if (studentId != null) q['studentId'] = studentId;
+    if (lessonId != null) q['lessonId'] = lessonId;
+    if (status != null) q['status'] = status;
+    if (limit != null) q['limit'] = limit;
+    final res = await _api.get<Map<String, dynamic>>(
+      '/crm/homeworks',
+      queryParameters: q,
+    );
+    return (res['items'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .toList() ??
+        const [];
+  }
+
+  Future<Map<String, dynamic>> createHomework({
+    required String studentId,
+    required String title,
+    String? lessonId,
+    String? description,
+    String? dueAt,
+  }) async {
+    final data = <String, dynamic>{'studentId': studentId, 'title': title};
+    if (lessonId != null) data['lessonId'] = lessonId;
+    if (description != null && description.trim().isNotEmpty) {
+      data['description'] = description.trim();
+    }
+    if (dueAt != null) data['dueAt'] = dueAt;
+    return _api.post<Map<String, dynamic>>('/crm/homeworks', data: data);
+  }
+
+  Future<Map<String, dynamic>> updateHomework(
+    String id,
+    Map<String, dynamic> patch,
+  ) async {
+    return _api.patch<Map<String, dynamic>>('/crm/homeworks/$id', data: patch);
+  }
+
+  Future<Map<String, dynamic>> submitHomework(String id) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/homeworks/$id/submit',
+      data: const <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> addHomeworkAttachment(
+    String homeworkId, {
+    required String fileId,
+    String kind = 'assignment',
+  }) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/homeworks/$homeworkId/attachments',
+      data: {'fileId': fileId, 'kind': kind},
+    );
+  }
+
   Future<void> updateTaskStatus(String id, String status) async {
     await updateTask(id, status: status);
   }
