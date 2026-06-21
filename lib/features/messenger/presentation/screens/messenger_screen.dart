@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_messenger_shell.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_list_tile.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_header.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_search_bar.dart';
@@ -35,7 +36,6 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_wid
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/tasks_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
@@ -1671,7 +1671,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         defaultTargetPlatform == TargetPlatform.linux;
     final isDesktop =
         isDesktopPlatform || MediaQuery.of(context).size.width >= 768;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     ref.listen<CrmNavigationRequest?>(crmNavigationRequestProvider, (
       previous,
@@ -1707,48 +1706,22 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     if (isDesktop) {
       return Scaffold(
         body: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // NavigationRail doesn't scroll; with 8 always-labelled
-            // destinations it clips the bottom items (Tasks/Reports) on short
-            // windows or at 125-150% display scaling. Wrap it so it fills the
-            // height when there's room and scrolls when there isn't.
-            LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: constraints.maxHeight,
-                  ),
-                  child: IntrinsicHeight(
-                    child: NavigationRail(
-                      backgroundColor: isDark
-                          ? TelegramColors.darkSidebar
-                          : TelegramColors.lightSidebar,
-                      selectedIndex: visibleCrmTabs.indexOf(selectedCrmTab),
-                      useIndicator: true,
-                      labelType: NavigationRailLabelType.all,
-                      indicatorColor: TelegramColors.brandGold.withAlpha(51),
-                      onDestinationSelected: (pos) {
-                        final canonical = visibleCrmTabs[pos];
-                        setState(() {
-                          _selectedCrmTab = canonical;
-                          if (canonical == 7) _selectedReportsTab = 0;
-                        });
-                      },
-                      destinations: [
-                        for (final tab in visibleCrmTabs)
-                          _railDestinationForTab(tab),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            VerticalDivider(
-              thickness: 1,
-              width: 1,
-              color: isDark
-                  ? TelegramColors.darkDivider
-                  : TelegramColors.lightDivider,
+            V7NavShell(
+              isDesktop: true,
+              destinations: [
+                for (final tab in visibleCrmTabs) _v7DestinationForTab(tab),
+              ],
+              selectedIndex: visibleCrmTabs.indexOf(selectedCrmTab),
+              onSelected: (pos) {
+                if (!mounted) return; // «Ещё» menu resolves async
+                final canonical = visibleCrmTabs[pos];
+                setState(() {
+                  _selectedCrmTab = canonical;
+                  if (canonical == 7) _selectedReportsTab = 0;
+                });
+              },
             ),
             Expanded(child: bodyContent),
           ],
@@ -1765,24 +1738,16 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           body: SafeArea(child: bodyContent),
           bottomNavigationBar: selectedCrmTab == 0 && _selectedChatId != null
               ? null // Hide bar in chat view
-              : BottomNavigationBar(
-                  currentIndex: visibleCrmTabs.indexOf(selectedCrmTab),
-                  type: BottomNavigationBarType.fixed,
-                  selectedItemColor: TelegramColors.brandGold,
-                  unselectedItemColor: isDark
-                      ? TelegramColors.darkTextSecondary
-                      : TelegramColors.lightTextSecondary,
-                  backgroundColor: isDark
-                      ? TelegramColors.darkSidebar
-                      : TelegramColors.lightSidebar,
-                  onTap: (pos) {
-                    // Отчёты (tab 7) is desktop-only, so no Reports sub-tab
-                    // reset is needed here (unlike the rail).
+              : V7NavShell(
+                  isDesktop: false,
+                  destinations: [
+                    for (final tab in visibleCrmTabs) _v7DestinationForTab(tab),
+                  ],
+                  selectedIndex: visibleCrmTabs.indexOf(selectedCrmTab),
+                  onSelected: (pos) {
+                    if (!mounted) return; // «Ещё» menu resolves async
                     setState(() => _selectedCrmTab = visibleCrmTabs[pos]);
                   },
-                  items: [
-                    for (final tab in visibleCrmTabs) _barItemForTab(tab),
-                  ],
                 ),
         ),
       );
@@ -1872,158 +1837,73 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     };
   }
 
-  /// Builds the rail destination for a canonical CRM tab index (see
+  /// Builds the v7 nav destination for a canonical CRM tab index (see
   /// [_visibleCrmTabs]). Teacher reuses 1/2 for Расписание/Ученики.
-  NavigationRailDestination _railDestinationForTab(int tab) {
+  V7NavDestination _v7DestinationForTab(int tab) {
     if (widget.role == 'teacher') {
       switch (tab) {
         case 1:
-          return const NavigationRailDestination(
-            icon: Icon(Icons.calendar_today_outlined),
-            selectedIcon: Icon(
-              Icons.calendar_today_rounded,
-              color: TelegramColors.brandGold,
-            ),
-            label: Text('Расписание'),
+          return const V7NavDestination(
+            icon: Icons.calendar_today_outlined,
+            selectedIcon: Icons.calendar_today_rounded,
+            label: 'Расписание',
           );
         case 2:
-          return const NavigationRailDestination(
-            icon: Icon(Icons.school_outlined),
-            selectedIcon: Icon(
-              Icons.school_rounded,
-              color: TelegramColors.brandGold,
-            ),
-            label: Text('Ученики'),
-          );
-      }
-    }
-    switch (tab) {
-      case 1:
-        return const NavigationRailDestination(
-          icon: Icon(Icons.dashboard_outlined),
-          selectedIcon: Icon(
-            Icons.dashboard_rounded,
-            color: TelegramColors.brandGold,
-          ),
-          label: Text('Обзор'),
-        );
-      case 2:
-        return const NavigationRailDestination(
-          icon: Icon(Icons.calendar_today_outlined),
-          selectedIcon: Icon(
-            Icons.calendar_today_rounded,
-            color: TelegramColors.brandGold,
-          ),
-          label: Text('Расписание'),
-        );
-      case 3:
-        return NavigationRailDestination(
-          icon: _clientsBadge(const Icon(Icons.people_outline_rounded)),
-          selectedIcon: const Icon(
-            Icons.people_rounded,
-            color: TelegramColors.brandGold,
-          ),
-          label: const Text('Клиенты'),
-        );
-      case 4:
-        return const NavigationRailDestination(
-          icon: Icon(Icons.manage_accounts_outlined),
-          selectedIcon: Icon(
-            Icons.manage_accounts_rounded,
-            color: TelegramColors.brandGold,
-          ),
-          label: Text('Пользователи'),
-        );
-      case 5:
-        return const NavigationRailDestination(
-          icon: Icon(Icons.account_balance_wallet_outlined),
-          selectedIcon: Icon(
-            Icons.account_balance_wallet_rounded,
-            color: TelegramColors.brandGold,
-          ),
-          label: Text('Финансы'),
-        );
-      case 6:
-        return const NavigationRailDestination(
-          icon: Icon(Icons.task_alt_outlined),
-          selectedIcon: Icon(
-            Icons.task_alt_rounded,
-            color: TelegramColors.brandGold,
-          ),
-          label: Text('Задачи'),
-        );
-      case 7:
-        return const NavigationRailDestination(
-          icon: Icon(Icons.insert_chart_outlined_rounded),
-          selectedIcon: Icon(
-            Icons.insert_chart_rounded,
-            color: TelegramColors.brandGold,
-          ),
-          label: Text('Отчёты'),
-        );
-      default:
-        return const NavigationRailDestination(
-          icon: Icon(Icons.chat_bubble_outline_rounded),
-          selectedIcon: Icon(
-            Icons.chat_bubble_rounded,
-            color: TelegramColors.brandGold,
-          ),
-          label: Text('Чат'),
-        );
-    }
-  }
-
-  Widget _clientsBadge(Widget child) {
-    final count = ref.watch(appLeadsCountProvider).asData?.value ?? 0;
-    if (count <= 0) return child;
-    return Badge(
-      label: Text('$count'),
-      backgroundColor: AppTheme.danger,
-      child: child,
-    );
-  }
-
-  /// Builds the bottom-bar item for a canonical CRM tab index (see
-  /// [_visibleCrmTabs]). Teacher reuses 1/2 for Расписание/Ученики.
-  BottomNavigationBarItem _barItemForTab(int tab) {
-    if (widget.role == 'teacher') {
-      switch (tab) {
-        case 1:
-          return const BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month_rounded),
-            label: 'Распис.',
-          );
-        case 2:
-          return const BottomNavigationBarItem(
-            icon: Icon(Icons.school_rounded),
+          return const V7NavDestination(
+            icon: Icons.school_outlined,
+            selectedIcon: Icons.school_rounded,
             label: 'Ученики',
           );
       }
     }
     switch (tab) {
       case 1:
-        return const BottomNavigationBarItem(
-          icon: Icon(Icons.dashboard_rounded),
+        return const V7NavDestination(
+          icon: Icons.dashboard_outlined,
+          selectedIcon: Icons.dashboard_rounded,
           label: 'Обзор',
         );
       case 2:
-        return const BottomNavigationBarItem(
-          icon: Icon(Icons.calendar_month_rounded),
-          label: 'Распис.',
+        return const V7NavDestination(
+          icon: Icons.calendar_today_outlined,
+          selectedIcon: Icons.calendar_today_rounded,
+          label: 'Расписание',
         );
       case 3:
-        return BottomNavigationBarItem(
-          icon: _clientsBadge(const Icon(Icons.people_rounded)),
+        return V7NavDestination(
+          icon: Icons.people_outline_rounded,
+          selectedIcon: Icons.people_rounded,
           label: 'Клиенты',
+          badgeCount: ref.watch(appLeadsCountProvider).asData?.value ?? 0,
         );
       case 4:
-        return const BottomNavigationBarItem(
-          icon: Icon(Icons.manage_accounts_rounded),
-          label: 'Пользов.',
+        return const V7NavDestination(
+          icon: Icons.manage_accounts_outlined,
+          selectedIcon: Icons.manage_accounts_rounded,
+          label: 'Пользователи',
+        );
+      case 5:
+        return const V7NavDestination(
+          icon: Icons.account_balance_wallet_outlined,
+          selectedIcon: Icons.account_balance_wallet_rounded,
+          label: 'Финансы',
+        );
+      case 6:
+        return const V7NavDestination(
+          icon: Icons.task_alt_outlined,
+          selectedIcon: Icons.task_alt_rounded,
+          label: 'Задачи',
+        );
+      case 7:
+        return const V7NavDestination(
+          icon: Icons.insert_chart_outlined_rounded,
+          selectedIcon: Icons.insert_chart_rounded,
+          label: 'Отчёты',
         );
       default:
-        return const BottomNavigationBarItem(
-          icon: Icon(Icons.chat_bubble_rounded),
+        return const V7NavDestination(
+          icon: Icons.chat_bubble_outline_rounded,
+          selectedIcon: Icons.chat_bubble_rounded,
           label: 'Чат',
         );
     }
