@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_messenger_shell.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_list_tile.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_header.dart';
@@ -110,6 +111,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       widget.role == 'admin' || widget.role == 'system_admin';
 
   bool get _isManagerOrAdminRole => _isAdminRole || widget.role == 'manager';
+
+  /// A1: manager-tier access for the manager-only CRM destinations and role
+  /// editing. Администратор (`admin`) is EXCLUDED (Управляющий > Администратор);
+  /// superuser `system_admin` is included. See [crmHasManagerAccess].
+  bool get _hasManagerAccess => crmHasManagerAccess(widget.role);
 
   bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';
   String _currentUserDisplayName = 'Пользователь';
@@ -1672,8 +1678,13 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       next,
     ) {
       if (next == null || !mounted) return;
+      final requested = next.tabIndex.toInt();
       setState(() {
-        _selectedCrmTab = next.tabIndex.clamp(0, _maxCrmTab(isDesktop)).toInt();
+        // A1: only honour deep-links to a destination this role can see, so a
+        // notification can't drop Администратор onto a manager-only tab.
+        if (_visibleCrmTabs(isDesktop).contains(requested)) {
+          _selectedCrmTab = requested;
+        }
         _userRolesInitialSearch = next.userSearch;
       });
       Future.microtask(() {
@@ -1681,9 +1692,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       });
     });
 
-    final selectedCrmTab = _selectedCrmTab > _maxCrmTab(isDesktop)
-        ? 0
-        : _selectedCrmTab;
+    final visibleCrmTabs = _visibleCrmTabs(isDesktop);
+    // Normalise to a tab the current role can actually see, so a stale or
+    // hidden index never renders a manager-only body for Администратор (A1).
+    final selectedCrmTab = visibleCrmTabs.contains(_selectedCrmTab)
+        ? _selectedCrmTab
+        : visibleCrmTabs.first;
     final bodyContent = _buildCrmBody(
       context,
       isDesktop: isDesktop,
@@ -1709,17 +1723,21 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       backgroundColor: isDark
                           ? TelegramColors.darkSidebar
                           : TelegramColors.lightSidebar,
-                      selectedIndex: selectedCrmTab,
+                      selectedIndex: visibleCrmTabs.indexOf(selectedCrmTab),
                       useIndicator: true,
                       labelType: NavigationRailLabelType.all,
                       indicatorColor: TelegramColors.brandGold.withAlpha(51),
-                      onDestinationSelected: (idx) {
+                      onDestinationSelected: (pos) {
+                        final canonical = visibleCrmTabs[pos];
                         setState(() {
-                          _selectedCrmTab = idx;
-                          if (idx == 7) _selectedReportsTab = 0;
+                          _selectedCrmTab = canonical;
+                          if (canonical == 7) _selectedReportsTab = 0;
                         });
                       },
-                      destinations: _desktopCrmDestinations(),
+                      destinations: [
+                        for (final tab in visibleCrmTabs)
+                          _railDestinationForTab(tab),
+                      ],
                     ),
                   ),
                 ),
@@ -1748,7 +1766,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           bottomNavigationBar: selectedCrmTab == 0 && _selectedChatId != null
               ? null // Hide bar in chat view
               : BottomNavigationBar(
-                  currentIndex: selectedCrmTab,
+                  currentIndex: visibleCrmTabs.indexOf(selectedCrmTab),
                   type: BottomNavigationBarType.fixed,
                   selectedItemColor: TelegramColors.brandGold,
                   unselectedItemColor: isDark
@@ -1757,20 +1775,26 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                   backgroundColor: isDark
                       ? TelegramColors.darkSidebar
                       : TelegramColors.lightSidebar,
-                  onTap: (idx) {
-                    setState(() => _selectedCrmTab = idx);
+                  onTap: (pos) {
+                    // Отчёты (tab 7) is desktop-only, so no Reports sub-tab
+                    // reset is needed here (unlike the rail).
+                    setState(() => _selectedCrmTab = visibleCrmTabs[pos]);
                   },
-                  items: _mobileCrmItems(),
+                  items: [
+                    for (final tab in visibleCrmTabs) _barItemForTab(tab),
+                  ],
                 ),
         ),
       );
     }
   }
 
-  int _maxCrmTab(bool isDesktop) {
-    if (widget.role == 'teacher') return 2;
-    return isDesktop ? 7 : 4;
-  }
+  /// Canonical CRM tab indices visible to the current role (see
+  /// [crmVisibleTabs] for the index legend + A1 hierarchy rules).
+  List<int> _visibleCrmTabs(bool isDesktop) =>
+      crmVisibleTabs(widget.role, isDesktop: isDesktop);
+
+  int _maxCrmTab(bool isDesktop) => _visibleCrmTabs(isDesktop).last;
 
   void _handleOverviewTabChange(
     int index,
@@ -1813,8 +1837,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       };
     }
 
+    // A1: every manager-only destination is gated on `_hasManagerAccess`, so
+    // Администратор can only ever render Чат/Расписание/Клиенты even if a stale
+    // index slips through.
     return switch (selectedTab) {
-      1 =>
+      1 when _hasManagerAccess =>
         _isAdminRole
             ? AdminOverviewWidget(
                 onTabChange: (index, subIndex) => _handleOverviewTabChange(
@@ -1832,113 +1859,118 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               ),
       2 => const ScheduleWidget(),
       3 => const ClientsWidget(),
-      4 => UserRolesWidget(
+      4 when _hasManagerAccess => UserRolesWidget(
         currentRole: widget.role,
         initialSearch: _userRolesInitialSearch,
       ),
-      5 when isDesktop => const FinanceWidget(),
-      6 when isDesktop => const TasksWidget(),
-      7 when isDesktop => ReportsWidget(initialTab: _selectedReportsTab),
+      5 when isDesktop && _hasManagerAccess => const FinanceWidget(),
+      6 when isDesktop && _hasManagerAccess => const TasksWidget(),
+      7 when isDesktop && _hasManagerAccess => ReportsWidget(
+        initialTab: _selectedReportsTab,
+      ),
       _ => _buildMessengerShell(context),
     };
   }
 
-  List<NavigationRailDestination> _desktopCrmDestinations() {
+  /// Builds the rail destination for a canonical CRM tab index (see
+  /// [_visibleCrmTabs]). Teacher reuses 1/2 for Расписание/Ученики.
+  NavigationRailDestination _railDestinationForTab(int tab) {
     if (widget.role == 'teacher') {
-      return const [
-        NavigationRailDestination(
-          icon: Icon(Icons.chat_bubble_outline_rounded),
+      switch (tab) {
+        case 1:
+          return const NavigationRailDestination(
+            icon: Icon(Icons.calendar_today_outlined),
+            selectedIcon: Icon(
+              Icons.calendar_today_rounded,
+              color: TelegramColors.brandGold,
+            ),
+            label: Text('Расписание'),
+          );
+        case 2:
+          return const NavigationRailDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(
+              Icons.school_rounded,
+              color: TelegramColors.brandGold,
+            ),
+            label: Text('Ученики'),
+          );
+      }
+    }
+    switch (tab) {
+      case 1:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.dashboard_outlined),
           selectedIcon: Icon(
-            Icons.chat_bubble_rounded,
+            Icons.dashboard_rounded,
             color: TelegramColors.brandGold,
           ),
-          label: Text('Чат'),
-        ),
-        NavigationRailDestination(
+          label: Text('Обзор'),
+        );
+      case 2:
+        return const NavigationRailDestination(
           icon: Icon(Icons.calendar_today_outlined),
           selectedIcon: Icon(
             Icons.calendar_today_rounded,
             color: TelegramColors.brandGold,
           ),
           label: Text('Расписание'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.school_outlined),
-          selectedIcon: Icon(
-            Icons.school_rounded,
+        );
+      case 3:
+        return NavigationRailDestination(
+          icon: _clientsBadge(const Icon(Icons.people_outline_rounded)),
+          selectedIcon: const Icon(
+            Icons.people_rounded,
             color: TelegramColors.brandGold,
           ),
-          label: Text('Ученики'),
-        ),
-      ];
+          label: const Text('Клиенты'),
+        );
+      case 4:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.manage_accounts_outlined),
+          selectedIcon: Icon(
+            Icons.manage_accounts_rounded,
+            color: TelegramColors.brandGold,
+          ),
+          label: Text('Пользователи'),
+        );
+      case 5:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.account_balance_wallet_outlined),
+          selectedIcon: Icon(
+            Icons.account_balance_wallet_rounded,
+            color: TelegramColors.brandGold,
+          ),
+          label: Text('Финансы'),
+        );
+      case 6:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.task_alt_outlined),
+          selectedIcon: Icon(
+            Icons.task_alt_rounded,
+            color: TelegramColors.brandGold,
+          ),
+          label: Text('Задачи'),
+        );
+      case 7:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.insert_chart_outlined_rounded),
+          selectedIcon: Icon(
+            Icons.insert_chart_rounded,
+            color: TelegramColors.brandGold,
+          ),
+          label: Text('Отчёты'),
+        );
+      default:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.chat_bubble_outline_rounded),
+          selectedIcon: Icon(
+            Icons.chat_bubble_rounded,
+            color: TelegramColors.brandGold,
+          ),
+          label: Text('Чат'),
+        );
     }
-
-    return [
-      NavigationRailDestination(
-        icon: Icon(Icons.chat_bubble_outline_rounded),
-        selectedIcon: Icon(
-          Icons.chat_bubble_rounded,
-          color: TelegramColors.brandGold,
-        ),
-        label: Text('Чат'),
-      ),
-      NavigationRailDestination(
-        icon: Icon(Icons.dashboard_outlined),
-        selectedIcon: Icon(
-          Icons.dashboard_rounded,
-          color: TelegramColors.brandGold,
-        ),
-        label: Text('Обзор'),
-      ),
-      NavigationRailDestination(
-        icon: Icon(Icons.calendar_today_outlined),
-        selectedIcon: Icon(
-          Icons.calendar_today_rounded,
-          color: TelegramColors.brandGold,
-        ),
-        label: Text('Расписание'),
-      ),
-      NavigationRailDestination(
-        icon: _clientsBadge(const Icon(Icons.people_outline_rounded)),
-        selectedIcon: Icon(
-          Icons.people_rounded,
-          color: TelegramColors.brandGold,
-        ),
-        label: Text('Клиенты'),
-      ),
-      NavigationRailDestination(
-        icon: Icon(Icons.manage_accounts_outlined),
-        selectedIcon: Icon(
-          Icons.manage_accounts_rounded,
-          color: TelegramColors.brandGold,
-        ),
-        label: Text('Пользователи'),
-      ),
-      NavigationRailDestination(
-        icon: Icon(Icons.account_balance_wallet_outlined),
-        selectedIcon: Icon(
-          Icons.account_balance_wallet_rounded,
-          color: TelegramColors.brandGold,
-        ),
-        label: Text('Финансы'),
-      ),
-      NavigationRailDestination(
-        icon: Icon(Icons.task_alt_outlined),
-        selectedIcon: Icon(
-          Icons.task_alt_rounded,
-          color: TelegramColors.brandGold,
-        ),
-        label: Text('Задачи'),
-      ),
-      NavigationRailDestination(
-        icon: Icon(Icons.insert_chart_outlined_rounded),
-        selectedIcon: Icon(
-          Icons.insert_chart_rounded,
-          color: TelegramColors.brandGold,
-        ),
-        label: Text('Отчёты'),
-      ),
-    ];
   }
 
   Widget _clientsBadge(Widget child) {
@@ -1951,43 +1983,50 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     );
   }
 
-  List<BottomNavigationBarItem> _mobileCrmItems() {
+  /// Builds the bottom-bar item for a canonical CRM tab index (see
+  /// [_visibleCrmTabs]). Teacher reuses 1/2 for Расписание/Ученики.
+  BottomNavigationBarItem _barItemForTab(int tab) {
     if (widget.role == 'teacher') {
-      return const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.chat_bubble_rounded),
-          label: 'Чат',
-        ),
-        BottomNavigationBarItem(
+      switch (tab) {
+        case 1:
+          return const BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month_rounded),
+            label: 'Распис.',
+          );
+        case 2:
+          return const BottomNavigationBarItem(
+            icon: Icon(Icons.school_rounded),
+            label: 'Ученики',
+          );
+      }
+    }
+    switch (tab) {
+      case 1:
+        return const BottomNavigationBarItem(
+          icon: Icon(Icons.dashboard_rounded),
+          label: 'Обзор',
+        );
+      case 2:
+        return const BottomNavigationBarItem(
           icon: Icon(Icons.calendar_month_rounded),
           label: 'Распис.',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.school_rounded),
-          label: 'Ученики',
-        ),
-      ];
+        );
+      case 3:
+        return BottomNavigationBarItem(
+          icon: _clientsBadge(const Icon(Icons.people_rounded)),
+          label: 'Клиенты',
+        );
+      case 4:
+        return const BottomNavigationBarItem(
+          icon: Icon(Icons.manage_accounts_rounded),
+          label: 'Пользов.',
+        );
+      default:
+        return const BottomNavigationBarItem(
+          icon: Icon(Icons.chat_bubble_rounded),
+          label: 'Чат',
+        );
     }
-
-    return [
-      BottomNavigationBarItem(
-        icon: Icon(Icons.chat_bubble_rounded),
-        label: 'Чат',
-      ),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.dashboard_rounded),
-        label: 'Обзор',
-      ),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.calendar_month_rounded),
-        label: 'Распис.',
-      ),
-      BottomNavigationBarItem(icon: _clientsBadge(const Icon(Icons.people_rounded)), label: 'Клиенты'),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.manage_accounts_rounded),
-        label: 'Пользов.',
-      ),
-    ];
   }
 
   // ── Chat List Panel ────────────────────────────────────────────────────────

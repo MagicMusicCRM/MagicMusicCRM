@@ -402,8 +402,9 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredProfiles;
+    // A1: role editing is Управляющий + Администратор системы only.
+    // Администратор (`admin`) is intentionally excluded (manager > admin).
     final canUpdateRoles =
-        widget.currentRole == 'admin' ||
         widget.currentRole == 'manager' ||
         widget.currentRole == 'system_admin';
     return Scaffold(
@@ -785,10 +786,10 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
   }
 
   List<String> _rolesForCurrentActor(String currentUserRole) {
-    // Управляющий, Администратор и Администратор системы получают полный набор
-    // ролей: могут назначить любую роль системы и сменить её в любой момент.
+    // A1: Управляющий и Администратор системы получают полный набор ролей и
+    // могут сменить роль в любой момент. Администратор (`admin`) — НЕ может
+    // менять роли (бизнес-иерархия: Управляющий > Администратор).
     if (widget.currentRole == 'manager' ||
-        widget.currentRole == 'admin' ||
         widget.currentRole == 'system_admin') {
       return _availableRoles;
     }
