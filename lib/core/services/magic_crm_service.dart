@@ -1498,6 +1498,124 @@ class MagicCrmService {
     return _legacyPayment(response);
   }
 
+  // ── Expenses (P5-5) ─────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> listExpenses({
+    String? branchId,
+    String? category,
+    String? from,
+    String? to,
+    int? limit,
+  }) async {
+    final q = <String, dynamic>{};
+    if (branchId != null) q['branchId'] = branchId;
+    if (category != null) q['category'] = category;
+    if (from != null) q['from'] = from;
+    if (to != null) q['to'] = to;
+    if (limit != null) q['limit'] = limit;
+    return _api.get<Map<String, dynamic>>('/crm/expenses', queryParameters: q);
+  }
+
+  Future<Map<String, dynamic>> createExpense({
+    required num amount,
+    required String category,
+    String? description,
+    String? branchId,
+  }) async {
+    final data = <String, dynamic>{'amount': amount, 'category': category};
+    if (description != null && description.trim().isNotEmpty) {
+      data['description'] = description.trim();
+    }
+    if (branchId != null && branchId.isNotEmpty) data['branchId'] = branchId;
+    return _api.post<Map<String, dynamic>>('/crm/expenses', data: data);
+  }
+
+  Future<Map<String, dynamic>> updateExpense(
+    String id, {
+    num? amount,
+    String? category,
+    String? description,
+    String? branchId,
+  }) async {
+    final data = <String, dynamic>{};
+    if (amount != null) data['amount'] = amount;
+    if (category != null) data['category'] = category;
+    if (description != null) data['description'] = description;
+    if (branchId != null) data['branchId'] = branchId;
+    return _api.patch<Map<String, dynamic>>('/crm/expenses/$id', data: data);
+  }
+
+  Future<void> deleteExpense(String id) async {
+    await _api.delete<Map<String, dynamic>>('/crm/expenses/$id');
+  }
+
+  // ── Subscription packages (P5b) ─────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> listSubscriptionPackages({
+    String? q,
+    int? limit,
+  }) async {
+    final query = <String, dynamic>{};
+    if (q != null && q.isNotEmpty) query['q'] = q;
+    if (limit != null) query['limit'] = limit;
+    final res = await _api.get<Map<String, dynamic>>(
+      '/crm/subscription-packages',
+      queryParameters: query,
+    );
+    return (res['items'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .toList() ??
+        const [];
+  }
+
+  Future<Map<String, dynamic>> createSubscriptionPackage({
+    required String name,
+    required int lessonsTotal,
+    required num price,
+    String? disciplineId,
+    String? branchId,
+    int? validityDays,
+    bool? isActive,
+    int? sortOrder,
+  }) async {
+    final data = <String, dynamic>{
+      'name': name,
+      'lessonsTotal': lessonsTotal,
+      'price': price,
+    };
+    if (disciplineId != null) data['disciplineId'] = disciplineId;
+    if (branchId != null) data['branchId'] = branchId;
+    if (validityDays != null) data['validityDays'] = validityDays;
+    if (isActive != null) data['isActive'] = isActive;
+    if (sortOrder != null) data['sortOrder'] = sortOrder;
+    return _api.post<Map<String, dynamic>>(
+      '/crm/subscription-packages',
+      data: data,
+    );
+  }
+
+  Future<Map<String, dynamic>> updateSubscriptionPackage(
+    String id,
+    Map<String, dynamic> patch,
+  ) async {
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/subscription-packages/$id',
+      data: patch,
+    );
+  }
+
+  Future<void> deleteSubscriptionPackage(String id) async {
+    await _api.delete<Map<String, dynamic>>('/crm/subscription-packages/$id');
+  }
+
+  Future<Map<String, dynamic>> issueSubscription(
+    String studentId,
+    String packageId,
+  ) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/students/$studentId/subscriptions/issue',
+      data: {'packageId': packageId},
+    );
+  }
+
   Future<void> updateTaskStatus(String id, String status) async {
     await updateTask(id, status: status);
   }
