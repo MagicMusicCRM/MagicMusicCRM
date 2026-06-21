@@ -46,6 +46,38 @@ class MagicProfileAdminService {
     return _legacyProfile(response);
   }
 
+  // ── Account deletion requests (P5-7 orphan) ──────────────────────────────
+  Future<List<Map<String, dynamic>>> listDeletionRequests({
+    String? status,
+    int? limit,
+  }) async {
+    final queryParameters = <String, dynamic>{};
+    if (status != null && status.isNotEmpty) queryParameters['status'] = status;
+    if (limit != null) queryParameters['limit'] = limit;
+    final response = await _api.get<Map<String, dynamic>>(
+      '/admin/deletion-requests',
+      queryParameters: queryParameters,
+    );
+    final items = response['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<Map<String, dynamic>> updateDeletionRequest(
+    String id, {
+    required String status,
+    String? resolutionNote,
+  }) async {
+    final data = <String, dynamic>{'status': status};
+    if (resolutionNote != null && resolutionNote.trim().isNotEmpty) {
+      data['resolutionNote'] = resolutionNote.trim();
+    }
+    return _api.patch<Map<String, dynamic>>(
+      '/admin/deletion-requests/$id',
+      data: data,
+    );
+  }
+
   Future<Map<String, dynamic>> listLinkCandidates(String profileId) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/admin/profiles/$profileId/link-candidates',
