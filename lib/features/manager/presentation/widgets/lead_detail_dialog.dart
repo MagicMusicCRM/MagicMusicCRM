@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/utils/ru_phone.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
@@ -44,6 +45,9 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
   bool _loadingHistory = true;
   Map<String, dynamic>? _family;
   bool _loadingFamily = true;
+  // True while a family add/remove write is in flight — disables the family
+  // action controls so a double-tap can't fire two mutations.
+  bool _familyBusy = false;
   // True once the user has edited a field but not saved — used to warn before
   // discarding unsaved changes on close.
   bool _edited = false;
@@ -830,10 +834,37 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle('Семья'),
+          Row(
+            children: [
+              Expanded(child: _sectionTitle('Семья')),
+              _buildFamilyAddButton(cs),
+            ],
+          ),
           _buildFamilySection(cs),
         ],
       ),
+    );
+  }
+
+  Widget _buildFamilyAddButton(ColorScheme cs) {
+    return TextButton.icon(
+      onPressed: _familyBusy ? null : _openAddFamilyMemberSheet,
+      style: TextButton.styleFrom(
+        foregroundColor: AppColor.gold,
+        backgroundColor: AppColor.goldSoft,
+        disabledForegroundColor: AppColor.gold.withValues(alpha: 0.5),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md,
+          vertical: AppSpace.xs,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.chip),
+          side: const BorderSide(color: AppColor.goldLine),
+        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+      ),
+      icon: const Icon(Icons.add_rounded, size: 16),
+      label: const Text('Добавить'),
     );
   }
 
@@ -1365,11 +1396,275 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
                   overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                trailing: IconButton(
+                  tooltip: 'Удалить участника',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _familyBusy
+                      ? null
+                      : () => _removeFamilyMember(m),
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: AppTheme.danger,
+                  ),
+                ),
               ),
             );
           }),
       ],
     );
+  }
+
+  // Role keys understood by the family API, paired with Russian labels for the
+  // add-member sheet picker.
+  static const List<(String, String)> _familyRoleOptions = [
+    ('parent', 'Родитель'),
+    ('child', 'Ребёнок'),
+    ('partner', 'Партнёр'),
+    ('sibling', 'Брат/сестра'),
+    ('guardian', 'Опекун'),
+    ('payer', 'Плательщик'),
+  ];
+
+  // Reads the family id out of either the existing `_family` payload or the
+  // raw `createFamily` response (which nests the record under `family`).
+  String? _familyIdFrom(Map<String, dynamic>? source) {
+    if (source == null) return null;
+    final direct = source['id']?.toString();
+    if (direct != null && direct.isNotEmpty) return direct;
+    final nested = source['family'];
+    if (nested is Map) {
+      final id = nested['id']?.toString();
+      if (id != null && id.isNotEmpty) return id;
+    }
+    return null;
+  }
+
+  Future<void> _openAddFamilyMemberSheet() async {
+    final cs = Theme.of(context).colorScheme;
+    final leadId = _leadData['id']?.toString() ?? widget.lead['id']?.toString();
+    var role = _familyRoleOptions.first.$1;
+    var entityType = 'lead';
+    final entityIdCtrl = TextEditingController(text: leadId ?? '');
+    var isPrimaryContact = false;
+
+    final confirmed = await showMagicSheet<bool>(
+      context,
+      title: 'Добавить участника',
+      subtitle: 'Свяжите запись с семьёй лида',
+      icon: Icons.person_add_alt_1_rounded,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Роль',
+                  style: TextStyle(
+                    color: cs.onSurfaceVariant,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                DropdownButtonFormField<String>(
+                  initialValue: role,
+                  isExpanded: true,
+                  decoration: _inputDecoration(cs, isDense: true),
+                  items: _familyRoleOptions
+                      .map(
+                        (option) => DropdownMenuItem(
+                          value: option.$1,
+                          child: Text(option.$2),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setSheetState(() => role = value);
+                  },
+                ),
+                const SizedBox(height: AppSpace.md),
+                Text(
+                  'Тип записи',
+                  style: TextStyle(
+                    color: cs.onSurfaceVariant,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                DropdownButtonFormField<String>(
+                  initialValue: entityType,
+                  isExpanded: true,
+                  decoration: _inputDecoration(cs, isDense: true),
+                  items: const [
+                    DropdownMenuItem(value: 'lead', child: Text('Лид')),
+                    DropdownMenuItem(value: 'student', child: Text('Ученик')),
+                    DropdownMenuItem(value: 'profile', child: Text('Профиль')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setSheetState(() => entityType = value);
+                  },
+                ),
+                const SizedBox(height: AppSpace.md),
+                TextField(
+                  controller: entityIdCtrl,
+                  decoration: _inputDecoration(
+                    cs,
+                    label: 'ID записи',
+                    hint: 'Идентификатор лида/ученика/профиля',
+                    helperText: leadId == null
+                        ? null
+                        : 'По умолчанию — текущий лид',
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.xs),
+                CheckboxListTile(
+                  value: isPrimaryContact,
+                  activeColor: AppColor.gold,
+                  onChanged: (value) =>
+                      setSheetState(() => isPrimaryContact = value ?? false),
+                  title: const Text('Основной контакт'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ],
+            );
+          },
+        );
+      },
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColor.gold,
+            foregroundColor: AppColor.onGold,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            ),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          child: const Text('Добавить'),
+        ),
+      ],
+    );
+
+    final entityId = entityIdCtrl.text.trim();
+    entityIdCtrl.dispose();
+    if (confirmed != true) return;
+    if (entityId.isEmpty) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Укажите ID записи',
+          type: MagicToastType.danger,
+        );
+      }
+      return;
+    }
+
+    setState(() => _familyBusy = true);
+    try {
+      final crm = ref.read(magicCrmServiceProvider);
+      var familyId = _familyIdFrom(_family?['family'] as Map<String, dynamic>?);
+      if (familyId == null) {
+        final branchId = _leadData['branch_id']?.toString();
+        final created = await crm.createFamily({
+          if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+        });
+        familyId = _familyIdFrom(created);
+        if (familyId == null) {
+          throw StateError('Не удалось получить идентификатор семьи');
+        }
+      }
+      await crm.addFamilyMember(
+        familyId,
+        entityType: entityType,
+        entityId: entityId,
+        role: role,
+        isPrimaryContact: isPrimaryContact ? true : null,
+      );
+      await _fetchFamily();
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Участник добавлен',
+          type: MagicToastType.success,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Ошибка добавления',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _familyBusy = false);
+    }
+  }
+
+  Future<void> _removeFamilyMember(Map<String, dynamic> member) async {
+    final memberId = member['id']?.toString();
+    if (memberId == null || memberId.isEmpty) return;
+    final name = (member['name']?.toString().trim().isNotEmpty ?? false)
+        ? member['name'].toString()
+        : 'участника';
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить участника?'),
+        content: Text('Связь "$name" с семьёй будет удалена.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _familyBusy = true);
+    try {
+      await ref.read(magicCrmServiceProvider).removeFamilyMember(memberId);
+      await _fetchFamily();
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Участник удалён',
+          type: MagicToastType.success,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Ошибка удаления',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _familyBusy = false);
+    }
   }
 
   Widget _buildStatusHistorySection(ColorScheme cs) {
