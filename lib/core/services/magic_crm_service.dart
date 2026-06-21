@@ -878,6 +878,51 @@ class MagicCrmService {
     );
   }
 
+  // ── Data quality: phone review + lead merge (P5-7) ───────────────────────
+  Future<int> countPhoneReviewQueue() async {
+    final res = await _api.get<Map<String, dynamic>>(
+      '/crm/phone-review-queue/count',
+    );
+    return (res['count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> listPhoneReviewQueue({int? limit}) async {
+    final q = <String, dynamic>{};
+    if (limit != null) q['limit'] = limit;
+    final res = await _api.get<Map<String, dynamic>>(
+      '/crm/phone-review-queue',
+      queryParameters: q,
+    );
+    return _items(res).whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listMergeCandidates({int? limit}) async {
+    final q = <String, dynamic>{};
+    if (limit != null) q['limit'] = limit;
+    final res = await _api.get<Map<String, dynamic>>(
+      '/crm/merge-candidates',
+      queryParameters: q,
+    );
+    return _items(res).whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<Map<String, dynamic>> mergeLeads({
+    required String winnerId,
+    required String loserId,
+  }) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/leads/$winnerId/merge/$loserId',
+      data: const <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> undoMerge(String mergeLogId) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/merges/$mergeLogId/undo',
+      data: const <String, dynamic>{},
+    );
+  }
+
   Future<Map<String, dynamic>> createLead({
     required String firstName,
     String? lastName,
