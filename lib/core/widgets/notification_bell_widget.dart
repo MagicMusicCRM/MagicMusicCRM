@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 class NotificationBellWidget extends ConsumerStatefulWidget {
   const NotificationBellWidget({super.key});
@@ -17,6 +18,10 @@ class _NotificationBellWidgetState
   List<Map<String, dynamic>> _notifications = [];
   bool _isLoading = false;
 
+  /// Lets the open sheet rebuild its body when the underlying list changes,
+  /// since the data/state lives on this parent widget, not in the sheet.
+  VoidCallback? _sheetRefresh;
+
   MagicNotificationsService get _service =>
       ref.read(magicNotificationsServiceProvider);
 
@@ -26,17 +31,23 @@ class _NotificationBellWidgetState
     _loadNotifications();
   }
 
+  void _applyState(VoidCallback fn) {
+    if (!mounted) return;
+    setState(fn);
+    _sheetRefresh?.call();
+  }
+
   Future<void> _loadNotifications() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    _applyState(() => _isLoading = true);
     try {
       final notifications = await _service.list(limit: 50);
       if (!mounted) return;
-      setState(() => _notifications = notifications);
+      _applyState(() => _notifications = notifications);
     } catch (e) {
       debugPrint('Notifications load error: $e');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) _applyState(() => _isLoading = false);
     }
   }
 
@@ -44,7 +55,7 @@ class _NotificationBellWidgetState
     try {
       await _service.markAllRead();
       if (!mounted) return;
-      setState(() {
+      _applyState(() {
         _notifications = _notifications
             .map((item) => {...item, 'is_read': true})
             .toList();
@@ -58,7 +69,7 @@ class _NotificationBellWidgetState
     try {
       final updated = await _service.markRead(id);
       if (!mounted) return;
-      setState(() {
+      _applyState(() {
         _notifications = _notifications
             .map((item) => item['id'] == id ? {...item, ...updated} : item)
             .toList();
@@ -125,7 +136,7 @@ class _NotificationBellWidgetState
               child: Container(
                 padding: const EdgeInsets.all(3),
                 decoration: const BoxDecoration(
-                  color: AppTheme.danger,
+                  color: AppColor.danger,
                   shape: BoxShape.circle,
                 ),
                 constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
@@ -150,198 +161,290 @@ class _NotificationBellWidgetState
   }
 
   void _showNotificationsPanel(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.65,
-        maxChildSize: 0.92,
-        minChildSize: 0.4,
-        builder: (_, scrollController) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF1E1A29),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 4),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(60),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+    showMagicSheet<void>(
+      context,
+      title: 'Уведомления',
+      subtitle: _unreadCount > 0 ? 'Непрочитанных: $_unreadCount' : null,
+      icon: Icons.notifications_outlined,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (innerContext, setSheetState) {
+            // Bind the open sheet to parent-state changes so service results
+            // re-render here. Cleared when the body is torn down/rebuilt.
+            _sheetRefresh = () {
+              if (innerContext.mounted) setSheetState(() {});
+            };
+            return _NotificationsBody(
+              isLoading: _isLoading,
+              notifications: _notifications,
+              unreadCount: _unreadCount,
+              iconForType: _iconForType,
+              titleFor: _notificationTitle,
+              bodyFor: _notificationBody,
+              formatDate: _formatDate,
+              onTapItem: (id) => _markRead(id),
+              onMarkAll: () async {
+                await _markAllRead();
+                if (!sheetContext.mounted) return;
+                MagicToast.show(
+                  sheetContext,
+                  'Все уведомления прочитаны',
+                  type: MagicToastType.success,
+                );
+              },
+            );
+          },
+        );
+      },
+    ).whenComplete(() => _sheetRefresh = null);
+  }
+}
+
+/// v7 body for the notifications sheet: a card list with a gold unread dot,
+/// theme-aware surfaces, and a flat gold «Прочитать все» action.
+class _NotificationsBody extends StatelessWidget {
+  const _NotificationsBody({
+    required this.isLoading,
+    required this.notifications,
+    required this.unreadCount,
+    required this.iconForType,
+    required this.titleFor,
+    required this.bodyFor,
+    required this.formatDate,
+    required this.onTapItem,
+    required this.onMarkAll,
+  });
+
+  final bool isLoading;
+  final List<Map<String, dynamic>> notifications;
+  final int unreadCount;
+  final IconData Function(String? type) iconForType;
+  final String Function(Map<String, dynamic> item) titleFor;
+  final String Function(Map<String, dynamic> item) bodyFor;
+  final String Function(String? value) formatDate;
+  final ValueChanged<String> onTapItem;
+  final Future<void> Function() onMarkAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    if (isLoading && notifications.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 48),
+        child: Center(
+          child: CircularProgressIndicator(color: AppColor.gold),
+        ),
+      );
+    }
+
+    if (notifications.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColor.goldSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.icon),
+                  border: Border.all(color: AppColor.goldLine),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Уведомления',
+                child: const Icon(
+                  Icons.notifications_none_rounded,
+                  color: AppColor.gold,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(height: AppSpace.md),
+              Text(
+                'Нет уведомлений',
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (unreadCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.md),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _MarkAllButton(onPressed: onMarkAll),
+            ),
+          ),
+        for (var i = 0; i < notifications.length; i++) ...[
+          if (i > 0) const SizedBox(height: AppSpace.sm),
+          _NotificationCard(
+            item: notifications[i],
+            scheme: scheme,
+            iconForType: iconForType,
+            titleFor: titleFor,
+            bodyFor: bodyFor,
+            formatDate: formatDate,
+            onTap: onTapItem,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Flat gold «Прочитать все» pill — no shadow (per v7 button rules).
+class _MarkAllButton extends StatelessWidget {
+  const _MarkAllButton({required this.onPressed});
+
+  final Future<void> Function() onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.done_all_rounded, size: 18),
+      label: const Text('Прочитать все'),
+      style: TextButton.styleFrom(
+        backgroundColor: AppColor.gold,
+        foregroundColor: AppColor.onGold,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.lg,
+          vertical: 10,
+        ),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+      ),
+    );
+  }
+}
+
+/// A single notification rendered as a v7 card. Unread cards carry a gold-soft
+/// fill + gold hairline and a trailing gold dot; read cards sit on the theme
+/// surface.
+class _NotificationCard extends StatelessWidget {
+  const _NotificationCard({
+    required this.item,
+    required this.scheme,
+    required this.iconForType,
+    required this.titleFor,
+    required this.bodyFor,
+    required this.formatDate,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> item;
+  final ColorScheme scheme;
+  final IconData Function(String? type) iconForType;
+  final String Function(Map<String, dynamic> item) titleFor;
+  final String Function(Map<String, dynamic> item) bodyFor;
+  final String Function(String? value) formatDate;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isUnread = item['is_read'] == false;
+    final body = bodyFor(item);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        onTap: isUnread ? () => onTap(item['id'].toString()) : null,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpace.lg),
+          decoration: BoxDecoration(
+            color: isUnread
+                ? AppColor.goldSoft
+                : scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: isUnread ? AppColor.goldLine : scheme.outlineVariant,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColor.goldSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.icon),
+                  border: Border.all(color: AppColor.goldLine),
+                ),
+                child: Icon(
+                  iconForType(item['type']?.toString()),
+                  color: AppColor.gold,
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titleFor(item),
+                      style: TextStyle(
+                        color: scheme.onSurface,
+                        fontWeight: isUnread
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (body.isNotEmpty) ...[
+                      const SizedBox(height: AppSpace.xs),
+                      Text(
+                        body,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 12.5,
+                          height: 1.35,
                         ),
                       ),
-                      if (_unreadCount > 0)
-                        TextButton(
-                          onPressed: () async {
-                            final navigator = Navigator.of(context);
-                            await _markAllRead();
-                            navigator.pop();
-                          },
-                          child: const Text(
-                            'Прочитать все',
-                            style: TextStyle(color: AppTheme.primaryGold),
-                          ),
-                        ),
                     ],
+                    const SizedBox(height: AppSpace.xs),
+                    Text(
+                      formatDate(item['created_at']?.toString()),
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isUnread)
+                Container(
+                  margin: const EdgeInsets.only(left: AppSpace.sm, top: 4),
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColor.gold,
+                    shape: BoxShape.circle,
                   ),
                 ),
-                const Divider(color: Colors.white12),
-                Expanded(
-                  child: _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            color: AppTheme.primaryGold,
-                          ),
-                        )
-                      : _notifications.isEmpty
-                      ? Center(
-                          child: Text(
-                            'Нет уведомлений',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                              fontSize: 15,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          controller: scrollController,
-                          itemCount: _notifications.length,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          itemBuilder: (_, index) {
-                            final item = _notifications[index];
-                            final isUnread = item['is_read'] == false;
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: isUnread
-                                  ? () => _markRead(item['id'].toString())
-                                  : null,
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: isUnread
-                                      ? AppTheme.primaryGold.withAlpha(28)
-                                      : Theme.of(
-                                          context,
-                                        ).colorScheme.surface.withAlpha(150),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: isUnread
-                                        ? AppTheme.primaryGold.withAlpha(90)
-                                        : Colors.transparent,
-                                  ),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: 38,
-                                      height: 38,
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.primaryGold.withAlpha(
-                                          45,
-                                        ),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        _iconForType(item['type']?.toString()),
-                                        color: AppTheme.primaryGold,
-                                        size: 18,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _notificationTitle(item),
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: isUnread
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w400,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                          if (_notificationBody(
-                                            item,
-                                          ).isNotEmpty) ...[
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              _notificationBody(item),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.onSurfaceVariant,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            _formatDate(
-                                              item['created_at']?.toString(),
-                                            ),
-                                            style: TextStyle(
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.onSurfaceVariant,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (isUnread)
-                                      Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: const BoxDecoration(
-                                          color: AppTheme.primaryGold,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       ),
     );
   }

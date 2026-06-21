@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 class CustomFieldConfigWidget extends ConsumerStatefulWidget {
   const CustomFieldConfigWidget({super.key});
@@ -176,11 +176,20 @@ class _CustomFieldConfigWidgetState
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(_error!, textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            FilledButton.icon(
+            const SizedBox(height: AppSpace.md),
+            ElevatedButton.icon(
               onPressed: _loadFields,
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Повторить'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColor.gold,
+                foregroundColor: AppColor.onGold,
+                elevation: 0,
+                shadowColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+              ),
             ),
           ],
         ),
@@ -213,14 +222,16 @@ class _CustomFieldConfigWidgetState
   }
 
   Widget _buildEditor(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final isEditing = _editingIndex != null;
     return DecoratedBox(
       decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.circular(8),
+        color: cs.surface,
+        border: Border.all(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpace.lg),
         child: Form(
           key: _formKey,
           child: Column(
@@ -230,7 +241,7 @@ class _CustomFieldConfigWidgetState
                 children: [
                   const Icon(
                     Icons.schema_rounded,
-                    color: AppTheme.secondaryGold,
+                    color: AppColor.gold2,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -354,12 +365,25 @@ class _CustomFieldConfigWidgetState
                 spacing: 12,
                 runSpacing: 8,
                 children: [
-                  FilledButton.icon(
+                  ElevatedButton.icon(
                     onPressed: _submitField,
                     icon: Icon(
                       isEditing ? Icons.check_rounded : Icons.add_rounded,
                     ),
                     label: Text(isEditing ? 'Обновить поле' : 'Добавить поле'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColor.gold,
+                      foregroundColor: AppColor.onGold,
+                      disabledBackgroundColor: AppColor.gold.withValues(
+                        alpha: 0.5,
+                      ),
+                      disabledForegroundColor: AppColor.onGold,
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.control),
+                      ),
+                    ),
                   ),
                   OutlinedButton.icon(
                     onPressed: _fields.isEmpty || _saving ? null : _saveFields,
@@ -371,6 +395,13 @@ class _CustomFieldConfigWidgetState
                           )
                         : const Icon(Icons.save_rounded),
                     label: const Text('Сохранить шаблоны'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: cs.onSurface,
+                      side: BorderSide(color: cs.outlineVariant),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.control),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -382,14 +413,16 @@ class _CustomFieldConfigWidgetState
   }
 
   Widget _buildFieldList(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     if (_fields.isEmpty) {
       return DecoratedBox(
         decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).dividerColor),
-          borderRadius: BorderRadius.circular(8),
+          color: cs.surface,
+          border: Border.all(color: cs.outlineVariant),
+          borderRadius: BorderRadius.circular(AppRadius.card),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpace.lg),
           child: Text(
             'Шаблоны пока не настроены. Добавьте поля и сохраните схему.',
             style: TextStyle(
@@ -444,13 +477,14 @@ class _CustomFieldConfigWidgetState
     final options = field.options.isEmpty
         ? ''
         : ' · ${field.options.join(', ')}';
+    final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: AppSpace.sm),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border.all(color: Theme.of(context).dividerColor),
-          borderRadius: BorderRadius.circular(8),
+          color: cs.surface,
+          border: Border.all(color: cs.outlineVariant),
+          borderRadius: BorderRadius.circular(AppRadius.card),
         ),
         child: ListTile(
           title: Text(field.label),

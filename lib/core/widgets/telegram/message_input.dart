@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io' show File, Platform;
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/voice_recorder_widget.dart';
@@ -142,7 +143,7 @@ class _MessageInputState extends State<MessageInput> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Файл слишком большой (макс. 25 МБ)'),
-              backgroundColor: TelegramColors.danger,
+              backgroundColor: AppColor.danger,
             ),
           );
         }
@@ -157,7 +158,7 @@ class _MessageInputState extends State<MessageInput> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка: $e'),
-            backgroundColor: TelegramColors.danger,
+            backgroundColor: AppColor.danger,
           ),
         );
       }
@@ -173,7 +174,7 @@ class _MessageInputState extends State<MessageInput> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Не удалось прочитать файл'),
-            backgroundColor: TelegramColors.danger,
+            backgroundColor: AppColor.danger,
           ),
         );
       }
@@ -213,10 +214,10 @@ class _MessageInputState extends State<MessageInput> {
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? TelegramColors.darkSurface : TelegramColors.lightBg,
+        color: isDark ? AppColor.surface : TelegramColors.lightBg,
         border: Border(
           top: BorderSide(
-            color: isDark ? TelegramColors.darkDivider : TelegramColors.lightDivider,
+            color: isDark ? AppColor.divider : TelegramColors.lightDivider,
             width: 0.5,
           ),
         ),
@@ -234,7 +235,7 @@ class _MessageInputState extends State<MessageInput> {
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      color: isDark ? TelegramColors.darkDivider : TelegramColors.lightDivider,
+                      color: isDark ? AppColor.divider : TelegramColors.lightDivider,
                       width: 0.5,
                     ),
                   ),
@@ -244,7 +245,7 @@ class _MessageInputState extends State<MessageInput> {
                     Icon(
                       widget.replyingTo != null ? Icons.reply_rounded : Icons.edit_rounded,
                       size: 20,
-                      color: TelegramColors.primaryGold,
+                      color: AppColor.gold,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -254,7 +255,7 @@ class _MessageInputState extends State<MessageInput> {
                           Text(
                             widget.replyingTo != null ? 'Ответ пользователю' : 'Редактирование',
                             style: const TextStyle(
-                              color: TelegramColors.primaryGold,
+                              color: AppColor.gold,
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
                             ),
@@ -264,7 +265,7 @@ class _MessageInputState extends State<MessageInput> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary,
+                              color: isDark ? AppColor.text2 : TelegramColors.lightTextSecondary,
                               fontSize: 13,
                             ),
                           ),
@@ -292,9 +293,9 @@ class _MessageInputState extends State<MessageInput> {
                           ? Icons.keyboard_rounded
                           : Icons.emoji_emotions_outlined,
                       color: _showEmojiPicker
-                          ? TelegramColors.accentBlue
+                          ? AppColor.gold
                           : isDark
-                              ? TelegramColors.darkTextSecondary
+                              ? AppColor.text2
                               : TelegramColors.lightTextSecondary,
                     ),
                     onPressed: widget.enabled ? _toggleEmojiPicker : null,
@@ -311,14 +312,14 @@ class _MessageInputState extends State<MessageInput> {
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: isDark
-                                    ? TelegramColors.darkTextSecondary
+                                    ? AppColor.text2
                                     : TelegramColors.lightTextSecondary,
                               ),
                             )
                           : Icon(
                               Icons.attach_file_rounded,
                               color: isDark
-                                  ? TelegramColors.darkTextSecondary
+                                  ? AppColor.text2
                                   : TelegramColors.lightTextSecondary,
                             ),
                       onPressed: _isSendingFile || !widget.enabled ? null : _pickAndSendFile,
@@ -341,7 +342,7 @@ class _MessageInputState extends State<MessageInput> {
                           hintText: 'Сообщение...',
                           filled: true,
                           fillColor: isDark
-                              ? TelegramColors.darkInputBg
+                              ? AppColor.input
                               : TelegramColors.lightInputBg,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(22),
@@ -366,7 +367,7 @@ class _MessageInputState extends State<MessageInput> {
                         ? IconButton(
                             key: const ValueKey('send'),
                             icon: Icon(widget.editingMessage != null ? Icons.check_rounded : Icons.send_rounded),
-                            color: TelegramColors.accentBlue,
+                            color: AppColor.gold,
                             onPressed: widget.enabled ? _sendMessage : null,
                             splashRadius: 20,
                             tooltip: 'Отправить',
@@ -376,7 +377,7 @@ class _MessageInputState extends State<MessageInput> {
                                 key: const ValueKey('mic'),
                                 icon: const Icon(Icons.mic_rounded),
                                 color: isDark
-                                    ? TelegramColors.darkTextSecondary
+                                    ? AppColor.text2
                                     : TelegramColors.lightTextSecondary,
                                 onPressed: widget.enabled
                                     ? () => setState(() => _isRecording = true)
@@ -388,7 +389,7 @@ class _MessageInputState extends State<MessageInput> {
                                 key: const ValueKey('send_disabled'),
                                 icon: const Icon(Icons.send_rounded),
                                 color: isDark
-                                    ? TelegramColors.darkTextSecondary
+                                    ? AppColor.text2
                                     : TelegramColors.lightTextSecondary,
                                 onPressed: null,
                                 splashRadius: 20,
@@ -533,9 +534,9 @@ class _EmojiGridState extends State<_EmojiGrid> {
                         cat.icon,
                         size: 20,
                         color: selected
-                            ? TelegramColors.accentBlue
+                            ? AppColor.gold
                             : widget.isDark
-                                ? TelegramColors.darkTextSecondary
+                                ? AppColor.text2
                                 : TelegramColors.lightTextSecondary,
                       ),
                       if (selected)
@@ -544,7 +545,7 @@ class _EmojiGridState extends State<_EmojiGrid> {
                           height: 2,
                           width: 20,
                           decoration: BoxDecoration(
-                            color: TelegramColors.accentBlue,
+                            color: AppColor.gold,
                             borderRadius: BorderRadius.circular(1),
                           ),
                         ),

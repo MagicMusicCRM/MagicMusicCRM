@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'avatar_widget.dart';
 
@@ -49,7 +50,7 @@ class ChatListTile extends StatelessWidget {
         ? TelegramColors.darkChatListHover
         : TelegramColors.lightChatListHover;
     final textSecondary = isDark
-        ? TelegramColors.darkTextSecondary
+        ? AppColor.text2
         : TelegramColors.lightTextSecondary;
 
     return Material(
@@ -87,7 +88,7 @@ class ChatListTile extends StatelessWidget {
                             child: Icon(
                               Icons.campaign_rounded,
                               size: 16,
-                              color: TelegramColors.accentBlue,
+                              color: AppColor.gold,
                             ),
                           ),
                         Expanded(
@@ -116,9 +117,7 @@ class ChatListTile extends StatelessWidget {
                           Text(
                             time!,
                             style: TextStyle(
-                              color: unreadCount > 0
-                                  ? TelegramColors.accentBlue
-                                  : textSecondary,
+                              color: unreadCount > 0 ? AppColor.gold : textSecondary,
                               fontSize: 12,
                               fontWeight: unreadCount > 0
                                   ? FontWeight.w600
@@ -163,15 +162,16 @@ class ChatListTile extends StatelessWidget {
                                   ? (isDark
                                       ? TelegramColors.darkMutedBadge
                                       : TelegramColors.lightMutedBadge)
-                                  : TelegramColors.accentBlue,
-                              borderRadius: BorderRadius.circular(12),
+                                  : AppColor.gold,
+                              borderRadius: BorderRadius.circular(AppRadius.icon),
                             ),
                             constraints: const BoxConstraints(minWidth: 22),
                             child: Text(
                               unreadCount > 99 ? '99+' : '$unreadCount',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                // Flat gold badge: dark on-gold ink; muted badge keeps white.
+                                color: isMuted ? Colors.white : AppColor.onGold,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                               ),

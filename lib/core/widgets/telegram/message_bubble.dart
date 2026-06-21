@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
 import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
@@ -76,15 +77,14 @@ class MessageBubble extends StatelessWidget {
           mimeType: attachmentMimeType,
         );
 
-    final outgoingColor = isDark
-        ? TelegramColors.darkOutgoingBubble
-        : TelegramColors.lightOutgoingBubble;
+    // Outgoing bubbles stay brand gold; incoming use the neutral surface.
+    final outgoingColor = AppColor.gold;
     final incomingColor = isDark
         ? TelegramColors.darkIncomingBubble
         : TelegramColors.lightIncomingBubble;
 
-    // Highlight color (Sophisticated Gold with low alpha)
-    final highlightColor = const Color(0xFFC5A059).withAlpha(isDark ? 80 : 100);
+    // Highlight color (brand gold with low alpha)
+    final highlightColor = AppColor.gold.withAlpha(isDark ? 80 : 100);
 
     final outgoingTextColor = isDark
         ? Colors.white
@@ -127,15 +127,15 @@ class MessageBubble extends StatelessWidget {
                   ? highlightColor
                   : (isMe ? outgoingColor : incomingColor),
               borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(isMe ? 16 : 4),
-                bottomRight: Radius.circular(isMe ? 4 : 16),
+                topLeft: const Radius.circular(AppRadius.card),
+                topRight: const Radius.circular(AppRadius.card),
+                bottomLeft: Radius.circular(isMe ? AppRadius.card : 4),
+                bottomRight: Radius.circular(isMe ? 4 : AppRadius.card),
               ),
               boxShadow: isHighlighted
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFC5A059).withValues(alpha: 0.3),
+                        color: AppColor.gold.withValues(alpha: 0.3),
                         blurRadius: 8,
                         spreadRadius: 2,
                       ),
@@ -153,7 +153,7 @@ class MessageBubble extends StatelessWidget {
                       child: Text(
                         senderName!,
                         style: TextStyle(
-                          color: senderColor ?? TelegramColors.accentBlue,
+                          color: senderColor ?? AppColor.gold,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
@@ -205,13 +205,11 @@ class MessageBubble extends StatelessWidget {
                             color: Colors.black.withAlpha(isDark ? 30 : 10),
                             border: Border(
                               left: BorderSide(
-                                color: isMe
-                                    ? TelegramColors.primaryGold
-                                    : TelegramColors.accentBlue,
+                                color: isMe ? AppColor.onGold : AppColor.gold,
                                 width: 2,
                               ),
                             ),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,9 +217,7 @@ class MessageBubble extends StatelessWidget {
                               Text(
                                 'Ответ',
                                 style: TextStyle(
-                                  color: isMe
-                                      ? TelegramColors.primaryGold
-                                      : TelegramColors.accentBlue,
+                                  color: isMe ? AppColor.onGold : AppColor.gold,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
                                 ),
@@ -395,7 +391,7 @@ class MessageBubble extends StatelessWidget {
             color: isDark
                 ? Colors.white.withAlpha(20)
                 : Colors.black.withAlpha(10),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppRadius.chip),
             border: Border.all(
               color: isDark
                   ? Colors.white.withAlpha(20)
@@ -430,7 +426,9 @@ class MessageBubble extends StatelessWidget {
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppRadius.sheet),
+          ),
         ),
         child: SafeArea(
           child: Column(
@@ -523,11 +521,11 @@ class MessageBubble extends StatelessWidget {
                 ListTile(
                   leading: const Icon(
                     Icons.delete_outline_rounded,
-                    color: TelegramColors.danger,
+                    color: AppColor.danger,
                   ),
                   title: const Text(
                     'Удалить',
-                    style: TextStyle(color: TelegramColors.danger),
+                    style: TextStyle(color: AppColor.danger),
                   ),
                   onTap: () {
                     Navigator.pop(context);
