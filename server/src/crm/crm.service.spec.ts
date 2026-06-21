@@ -4418,4 +4418,104 @@ describe("CrmService", () => {
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("'Через приложение'");
   });
+
+  it("creates expenses through CRM write policy and audit (P5-5)", async () => {
+    const { service, query, audit, policy } = createService([
+      {
+        id: "exp-a",
+        amount: "1500.00",
+        category: "rent",
+        description: "Аренда",
+        branch_id: "branch-a",
+        branch_name: null,
+        created_at: "2026-06-22T00:00:00.000Z",
+      },
+    ]);
+
+    await expect(
+      service.createExpense(actor, {
+        amount: 1500,
+        category: " rent ",
+        description: " Аренда ",
+        branchId: "branch-a",
+      }),
+    ).resolves.toEqual({
+      id: "exp-a",
+      amount: 1500,
+      category: "rent",
+      description: "Аренда",
+      branchId: "branch-a",
+      branchName: null,
+      createdAt: "2026-06-22T00:00:00.000Z",
+    });
+
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][1]).toEqual([1500, "rent", "Аренда", "branch-a"]);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.expense_created",
+        entityType: "expense",
+        entityId: "exp-a",
+      }),
+    );
+  });
+
+  it("lists expenses with branch/category filters and a total (P5-5)", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "exp-a",
+            amount: "1500.00",
+            category: "rent",
+            description: null,
+            branch_id: "branch-a",
+            branch_name: "Центр",
+            created_at: "2026-06-22T00:00:00.000Z",
+          },
+        ],
+      },
+      { rows: [{ total: "1500.00" }] },
+    ]);
+
+    const result = await service.listExpenses(actor, {
+      branchId: "branch-a",
+      category: "rent",
+      limit: 50,
+    });
+
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(result.total).toBe(1500);
+    expect(result.items).toEqual([
+      {
+        id: "exp-a",
+        amount: 1500,
+        category: "rent",
+        description: null,
+        branchId: "branch-a",
+        branchName: "Центр",
+        createdAt: "2026-06-22T00:00:00.000Z",
+      },
+    ]);
+    // items query: branch + category filters then the limit param last.
+    expect(query.mock.calls[0][1]).toEqual(["branch-a", "rent", 50]);
+    // total query reuses the filter params WITHOUT the limit.
+    expect(query.mock.calls[1][1]).toEqual(["branch-a", "rent"]);
+  });
+
+  it("soft-deletes expenses and 404s when missing (P5-5)", async () => {
+    const { service, query, audit } = createService([{ id: "exp-a" }]);
+    await expect(service.deleteExpense(actor, "exp-a")).resolves.toEqual({
+      success: true,
+    });
+    expect(query.mock.calls[0][0]).toContain("set deleted_at = now()");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "crm.expense_deleted" }),
+    );
+
+    const missing = createService([]);
+    await expect(
+      missing.service.deleteExpense(actor, "exp-x"),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
 });

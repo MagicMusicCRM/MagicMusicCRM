@@ -18,6 +18,9 @@ import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateCommentDto } from "./dto/create-comment.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
+import { ExpenseQuery } from "./dto/expense.query";
+import { UpsertExpenseDto } from "./dto/upsert-expense.dto";
+import { UpdateExpenseDto } from "./dto/update-expense.dto";
 import { CreateStaffDto } from "./dto/create-staff.dto";
 import { CreateStudentDto } from "./dto/create-student.dto";
 import { CreateTeacherDto } from "./dto/create-teacher.dto";
@@ -592,6 +595,39 @@ export class CrmController {
     @Body() dto: CreatePaymentDto,
   ) {
     return this.crm.createPayment(actor, dto);
+  }
+
+  @Get("expenses")
+  listExpenses(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: ExpenseQuery,
+  ) {
+    return this.crm.listExpenses(actor, query);
+  }
+
+  @Post("expenses")
+  createExpense(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: UpsertExpenseDto,
+  ) {
+    return this.crm.createExpense(actor, dto);
+  }
+
+  @Patch("expenses/:id")
+  updateExpense(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateExpenseDto,
+  ) {
+    return this.crm.updateExpense(actor, id, dto);
+  }
+
+  @Delete("expenses/:id")
+  deleteExpense(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.deleteExpense(actor, id);
   }
 
   @Get("leads")
