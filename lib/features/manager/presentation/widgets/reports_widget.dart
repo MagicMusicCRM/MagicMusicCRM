@@ -30,6 +30,18 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   // How many months back the analytics cover (inclusive of the current month).
   int _monthsBack = 6;
 
+  // ── Extra analytics cards (KVA-198): four previously-orphaned endpoints ─────
+  // Each loads with the same period (_monthsBack) as the rest of the overview
+  // tab and tracks its own state so one failing card never breaks the view.
+  Map<String, dynamic>? _sources;
+  bool _sourcesError = false;
+  Map<String, dynamic>? _dataQuality;
+  bool _dataQualityError = false;
+  Map<String, dynamic>? _responsible;
+  bool _responsibleError = false;
+  Map<String, dynamic>? _financeMonthly;
+  bool _financeMonthlyError = false;
+
   @override
   void initState() {
     super.initState();
@@ -60,16 +72,27 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     setState(() {
       _loading = true;
       _loadError = null;
+      // Reset the extra analytics cards to their loading state.
+      _sources = null;
+      _sourcesError = false;
+      _dataQuality = null;
+      _dataQualityError = false;
+      _responsible = null;
+      _responsibleError = false;
+      _financeMonthly = null;
+      _financeMonthlyError = false;
     });
     try {
       final now = DateTime.now();
       final periodStart = DateTime(now.year, now.month - (_monthsBack - 1), 1);
+      final fromIso = periodStart.toUtc().toIso8601String();
+      final toIso = now.add(const Duration(days: 1)).toUtc().toIso8601String();
       final report = await ref
           .read(magicCrmServiceProvider)
-          .getFinanceReport(
-            from: periodStart.toUtc().toIso8601String(),
-            to: now.add(const Duration(days: 1)).toUtc().toIso8601String(),
-          );
+          .getFinanceReport(from: fromIso, to: toIso);
+      // Kick off the four extra analytics cards with the SAME period/branch
+      // filter; they update independently and never abort the main load.
+      unawaited(_loadExtraAnalytics(from: fromIso, to: toIso));
       final monthList = (report['monthly'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(_MonthData.fromReport)
@@ -96,6 +119,61 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
         _loading = false;
       });
     }
+  }
+
+  /// Loads the four supplementary analytics cards (KVA-198). Each call is
+  /// guarded on its own so a single failing endpoint degrades to a graceful
+  /// empty card instead of crashing the whole reports view. Honours the same
+  /// period (from/to) as the rest of the overview tab; branchId is unset here,
+  /// matching the other getAnalytics* calls in this widget.
+  Future<void> _loadExtraAnalytics({
+    required String from,
+    required String to,
+  }) async {
+    final service = ref.read(magicCrmServiceProvider);
+
+    Future<void> run(
+      Future<Map<String, dynamic>> Function() fetch,
+      void Function(Map<String, dynamic>? data, bool error) apply,
+    ) async {
+      try {
+        final data = await fetch();
+        if (mounted) setState(() => apply(data, false));
+      } catch (_) {
+        if (mounted) setState(() => apply(null, true));
+      }
+    }
+
+    await Future.wait([
+      run(
+        () => service.getAnalyticsSources(from: from, to: to),
+        (data, error) {
+          _sources = data;
+          _sourcesError = error;
+        },
+      ),
+      run(
+        () => service.getAnalyticsDataQuality(),
+        (data, error) {
+          _dataQuality = data;
+          _dataQualityError = error;
+        },
+      ),
+      run(
+        () => service.getAnalyticsResponsible(from: from, to: to),
+        (data, error) {
+          _responsible = data;
+          _responsibleError = error;
+        },
+      ),
+      run(
+        () => service.getAnalyticsFinanceMonthly(from: from, to: to),
+        (data, error) {
+          _financeMonthly = data;
+          _financeMonthlyError = error;
+        },
+      ),
+    ]);
   }
 
   @override
@@ -474,9 +552,324 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                 ),
               ),
             ),
+
+            // ── KVA-198: four previously-orphaned analytics endpoints ─────────
+            const SizedBox(height: 24),
+            _buildSourcesCard(),
+            const SizedBox(height: 24),
+            _buildDataQualityCard(),
+            const SizedBox(height: 24),
+            _buildResponsibleCard(),
+            const SizedBox(height: 24),
+            _buildFinanceMonthlyCard(),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // ── KVA-198 card builders ───────────────────────────────────────────────────
+
+  /// «Источники» — lead-source breakdown with an optional share bar.
+  Widget _buildSourcesCard() {
+    return _AnalyticsCard(
+      title: 'Источники',
+      icon: Icons.call_split_rounded,
+      isLoading: _sources == null && !_sourcesError,
+      isError: _sourcesError,
+      isEmpty: _readList(_sources, const ['sources', 'items']).isEmpty,
+      child: Builder(
+        builder: (context) {
+          final rows = _readList(_sources, const ['sources', 'items']);
+          final colors = Theme.of(context).colorScheme;
+          final fmt = NumberFormat('#,##0', 'ru');
+          final maxCount = rows.fold<num>(0, (m, r) {
+            final c = _asDouble(_pick(r, const ['leads', 'count', 'total']));
+            return c > m ? c : m;
+          });
+          return Column(
+            children: [
+              for (final r in rows)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _pick(r, const [
+                                    'displayName',
+                                    'display_name',
+                                    'source',
+                                    'name',
+                                  ])?.toString() ??
+                                  '(не указан)',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            fmt.format(
+                              _asDouble(
+                                _pick(r, const ['leads', 'count', 'total']),
+                              ),
+                            ),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColor.gold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                        child: LinearProgressIndicator(
+                          value: maxCount <= 0
+                              ? 0
+                              : (_asDouble(
+                                      _pick(r, const [
+                                        'leads',
+                                        'count',
+                                        'total',
+                                      ]),
+                                    ) /
+                                    maxCount)
+                                    .clamp(0.0, 1.0),
+                          minHeight: 6,
+                          backgroundColor: colors.surfaceContainerHighest
+                              .withAlpha(60),
+                          valueColor: const AlwaysStoppedAnimation(
+                            AppTheme.secondaryGold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// «Качество данных» — missing-field / quality metrics as labelled stat rows.
+  Widget _buildDataQualityCard() {
+    return _AnalyticsCard(
+      title: 'Качество данных',
+      icon: Icons.verified_outlined,
+      isLoading: _dataQuality == null && !_dataQualityError,
+      isError: _dataQualityError,
+      isEmpty: _dataQuality == null || _dataQuality!.isEmpty,
+      child: Builder(
+        builder: (context) {
+          final data = _dataQuality ?? const <String, dynamic>{};
+          final leads = data['leads'] is Map
+              ? Map<String, dynamic>.from(data['leads'] as Map)
+              : const <String, dynamic>{};
+          final students = data['students'] is Map
+              ? Map<String, dynamic>.from(data['students'] as Map)
+              : const <String, dynamic>{};
+          final metrics = <(String, Object?)>[
+            ('Лиды всего', _pick(leads, const ['total'])),
+            (
+              'Лиды без телефона',
+              _pick(leads, const ['missingPhone', 'missing_phone']),
+            ),
+            (
+              'Лиды без филиала',
+              _pick(leads, const ['missingBranch', 'missing_branch']),
+            ),
+            ('Ученики всего', _pick(students, const ['total'])),
+            (
+              'Ученики без филиала',
+              _pick(students, const ['missingBranch', 'missing_branch']),
+            ),
+            (
+              'Ученики без направления',
+              _pick(students, const ['missingDiscipline', 'missing_discipline']),
+            ),
+          ].where((m) => m.$2 != null).toList();
+
+          // Fallback: if the response shape is flatter than expected, render
+          // whatever numeric top-level keys it does contain.
+          final rows = metrics.isNotEmpty
+              ? metrics
+              : data.entries
+                    .where((e) => e.value is num)
+                    .map((e) => (e.key, e.value as Object?))
+                    .toList();
+
+          return Column(
+            children: [
+              for (final m in rows)
+                _StatRow(
+                  label: m.$1,
+                  value: NumberFormat(
+                    '#,##0',
+                    'ru',
+                  ).format(_asDouble(m.$2)),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// «Ответственные» — per-manager lead distribution.
+  Widget _buildResponsibleCard() {
+    final rows = _readList(_responsible, const ['responsibles', 'items']);
+    final hasUnassigned =
+        _responsible != null &&
+        _pick(_responsible, const ['unassignedLeads', 'unassigned_leads']) !=
+            null;
+    return _AnalyticsCard(
+      title: 'Ответственные',
+      icon: Icons.people_alt_outlined,
+      isLoading: _responsible == null && !_responsibleError,
+      isError: _responsibleError,
+      isEmpty: rows.isEmpty && !hasUnassigned,
+      child: Builder(
+        builder: (context) {
+          final fmt = NumberFormat('#,##0', 'ru');
+          final unassigned = _asDouble(
+            _pick(_responsible, const ['unassignedLeads', 'unassigned_leads']),
+          );
+          return Column(
+            children: [
+              for (final r in rows)
+                _StatRow(
+                  label:
+                      _pick(r, const ['name', 'fullName', 'full_name'])
+                          ?.toString() ??
+                      '—',
+                  value: fmt.format(
+                    _asDouble(_pick(r, const ['leads', 'count', 'total'])),
+                  ),
+                  valueColor: AppColor.gold,
+                ),
+              if (hasUnassigned)
+                _StatRow(
+                  label: 'Без ответственного',
+                  value: fmt.format(unassigned),
+                  valueColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// «Финансы по месяцам» — compact monthly income / expense / net table.
+  Widget _buildFinanceMonthlyCard() {
+    final rows = _readList(_financeMonthly, const ['items', 'monthly']);
+    return _AnalyticsCard(
+      title: 'Финансы по месяцам',
+      icon: Icons.account_balance_wallet_outlined,
+      isLoading: _financeMonthly == null && !_financeMonthlyError,
+      isError: _financeMonthlyError,
+      isEmpty: rows.isEmpty,
+      child: Builder(
+        builder: (context) {
+          final colors = Theme.of(context).colorScheme;
+          final fmt = NumberFormat('#,##0', 'ru');
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    const Expanded(flex: 3, child: SizedBox.shrink()),
+                    _financeHeaderCell('Доход', colors),
+                    _financeHeaderCell('Расход', colors),
+                    _financeHeaderCell('Итог', colors),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              for (final r in rows)
+                _buildFinanceRow(r, fmt, colors),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFinanceRow(
+    Map<String, dynamic> r,
+    NumberFormat fmt,
+    ColorScheme colors,
+  ) {
+    final revenue = _asDouble(
+      _pick(r, const ['revenue', 'income', 'incomeTotal']),
+    );
+    final expenses = _asDouble(
+      _pick(r, const ['expenses', 'expense', 'expensesTotal']),
+    );
+    // Use server-provided net if present, otherwise derive it defensively.
+    final netRaw = _pick(r, const ['net', 'profit', 'balance']);
+    final net = netRaw != null ? _asDouble(netRaw) : revenue - expenses;
+    final monthLabel = _financeMonthLabel(
+      _pick(r, const ['monthStart', 'month_start', 'month']),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              monthLabel,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          _financeValueCell(fmt.format(revenue), AppColor.success),
+          _financeValueCell(fmt.format(expenses), AppColor.danger),
+          _financeValueCell(
+            fmt.format(net),
+            net >= 0 ? AppTheme.secondaryGold : AppColor.danger,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _financeHeaderCell(String label, ColorScheme colors) {
+    return Expanded(
+      flex: 2,
+      child: Text(
+        label,
+        textAlign: TextAlign.right,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: colors.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  Widget _financeValueCell(String value, Color color) {
+    return Expanded(
+      flex: 2,
+      child: Text(
+        value,
+        textAlign: TextAlign.right,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: color,
         ),
       ),
     );
@@ -599,6 +992,43 @@ double _asDouble(Object? value) {
   return double.tryParse(value?.toString() ?? '') ?? 0;
 }
 
+/// Returns the first non-null value found under any of [keys] in [map].
+/// Used to read analytics responses defensively across camelCase / snake_case.
+Object? _pick(Map<String, dynamic>? map, List<String> keys) {
+  if (map == null) return null;
+  for (final k in keys) {
+    final v = map[k];
+    if (v != null) return v;
+  }
+  return null;
+}
+
+/// Reads a list of maps from [source] under the first matching key in [keys].
+/// Tolerates the response itself being a bare list. Returns [] when missing.
+List<Map<String, dynamic>> _readList(
+  Map<String, dynamic>? source,
+  List<String> keys,
+) {
+  if (source == null) return const [];
+  for (final k in keys) {
+    final v = source[k];
+    if (v is List) {
+      return v.whereType<Map<String, dynamic>>().toList();
+    }
+  }
+  return const [];
+}
+
+/// Formats a month label from an ISO date / month string, defensively.
+String _financeMonthLabel(Object? raw) {
+  final text = raw?.toString() ?? '';
+  final parsed = DateTime.tryParse(text);
+  if (parsed != null) {
+    return DateFormat('LLL yyyy', 'ru').format(parsed);
+  }
+  return text.isEmpty ? '—' : text;
+}
+
 class _MonthData {
   final String month;
   int lessons = 0;
@@ -683,6 +1113,164 @@ class _KpiCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Shared chrome for the KVA-198 analytics cards. Renders a titled v7 surface
+/// (matching the card styling used elsewhere in this file) and resolves the
+/// loading / error / empty / content states so each builder only supplies its
+/// populated body.
+class _AnalyticsCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final bool isLoading;
+  final bool isError;
+  final bool isEmpty;
+  final Widget child;
+
+  const _AnalyticsCard({
+    required this.title,
+    required this.icon,
+    required this.isLoading,
+    required this.isError,
+    required this.isEmpty,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    Widget body;
+    if (isLoading) {
+      body = const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppSpace.xl),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              color: AppColor.gold,
+            ),
+          ),
+        ),
+      );
+    } else if (isError) {
+      body = _AnalyticsCardHint(
+        icon: Icons.cloud_off_rounded,
+        text: 'Не удалось загрузить',
+        color: colors.onSurfaceVariant,
+      );
+    } else if (isEmpty) {
+      body = _AnalyticsCardHint(
+        icon: Icons.inbox_outlined,
+        text: 'Нет данных за период',
+        color: colors.onSurfaceVariant,
+      );
+    } else {
+      body = child;
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: colors.outlineVariant.withAlpha(90)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: AppColor.gold),
+                const SizedBox(width: AppSpace.sm),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+            body,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsCardHint extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  const _AnalyticsCardHint({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.lg),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 26, color: color),
+            const SizedBox(height: AppSpace.sm),
+            Text(text, style: TextStyle(color: color, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A labelled stat row (label on the left, value on the right) used by the
+/// data-quality and responsible cards.
+class _StatRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _StatRow({required this.label, required this.value, this.valueColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: valueColor ?? colors.onSurface,
+            ),
+          ),
+        ],
       ),
     );
   }
