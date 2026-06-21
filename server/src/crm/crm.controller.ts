@@ -21,6 +21,9 @@ import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { ExpenseQuery } from "./dto/expense.query";
 import { UpsertExpenseDto } from "./dto/upsert-expense.dto";
 import { UpdateExpenseDto } from "./dto/update-expense.dto";
+import { UpsertSubscriptionPackageDto } from "./dto/upsert-subscription-package.dto";
+import { UpdateSubscriptionPackageDto } from "./dto/update-subscription-package.dto";
+import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { CreateStaffDto } from "./dto/create-staff.dto";
 import { CreateStudentDto } from "./dto/create-student.dto";
 import { CreateTeacherDto } from "./dto/create-teacher.dto";
@@ -628,6 +631,48 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
   ) {
     return this.crm.deleteExpense(actor, id);
+  }
+
+  @Get("subscription-packages")
+  listSubscriptionPackages(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: CrmListQuery,
+  ) {
+    return this.crm.listSubscriptionPackages(actor, query);
+  }
+
+  @Post("subscription-packages")
+  createSubscriptionPackage(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: UpsertSubscriptionPackageDto,
+  ) {
+    return this.crm.createSubscriptionPackage(actor, dto);
+  }
+
+  @Patch("subscription-packages/:id")
+  updateSubscriptionPackage(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSubscriptionPackageDto,
+  ) {
+    return this.crm.updateSubscriptionPackage(actor, id, dto);
+  }
+
+  @Delete("subscription-packages/:id")
+  deleteSubscriptionPackage(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.deleteSubscriptionPackage(actor, id);
+  }
+
+  @Post("students/:id/subscriptions/issue")
+  issueSubscription(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: IssueSubscriptionDto,
+  ) {
+    return this.crm.issueSubscription(actor, id, dto);
   }
 
   @Get("leads")

@@ -2342,6 +2342,8 @@ describe("CrmService", () => {
       },
       { rows: [] },
       { rows: [] },
+      // P5b-4: subscription lessons_used reconciliation query (no-op here).
+      { rows: [] },
       {
         rows: [
           {
@@ -4517,5 +4519,156 @@ describe("CrmService", () => {
     await expect(
       missing.service.deleteExpense(actor, "exp-x"),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("creates subscription packages through CRM write policy and audit (P5b)", async () => {
+    const { service, query, audit, policy } = createService([
+      {
+        id: "pkg-a",
+        name: "8 уроков",
+        discipline_id: null,
+        branch_id: "branch-a",
+        lessons_total: 8,
+        price: "8000.00",
+        validity_days: 60,
+        is_active: true,
+        sort_order: 0,
+        created_at: "2026-06-22T00:00:00.000Z",
+      },
+    ]);
+
+    await expect(
+      service.createSubscriptionPackage(actor, {
+        name: " 8 уроков ",
+        branchId: "branch-a",
+        lessonsTotal: 8,
+        price: 8000,
+        validityDays: 60,
+      }),
+    ).resolves.toEqual({
+      id: "pkg-a",
+      name: "8 уроков",
+      disciplineId: null,
+      branchId: "branch-a",
+      lessonsTotal: 8,
+      price: 8000,
+      validityDays: 60,
+      isActive: true,
+      sortOrder: 0,
+      createdAt: "2026-06-22T00:00:00.000Z",
+    });
+
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][1]).toEqual([
+      "8 уроков",
+      null,
+      "branch-a",
+      8,
+      8000,
+      60,
+      null,
+      null,
+    ]);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.subscription_package_created",
+        entityType: "subscription_package",
+        entityId: "pkg-a",
+      }),
+    );
+  });
+
+  it("issues a subscription from a package atomically with audit (P5b)", async () => {
+    const { service, query, audit, policy } = createService([
+      {
+        id: "sub-a",
+        lessons_total: 8,
+        lessons_used: 0,
+        starts_at: "2026-06-22",
+        expires_at: "2026-08-21",
+        status: "active",
+        package_id: "pkg-a",
+        payment_id: "pay-a",
+      },
+    ]);
+
+    await expect(
+      service.issueSubscription(actor, "student-a", { packageId: "pkg-a" }),
+    ).resolves.toEqual({
+      id: "sub-a",
+      studentId: "student-a",
+      lessonsTotal: 8,
+      lessonsUsed: 0,
+      startsAt: "2026-06-22",
+      expiresAt: "2026-08-21",
+      status: "active",
+      packageId: "pkg-a",
+      paymentId: "pay-a",
+    });
+
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("insert into app.payments");
+    expect(sql).toContain("insert into app.subscriptions");
+    expect(query.mock.calls[0][1]).toEqual(["student-a", "pkg-a", "manager-a"]);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.subscription_issued",
+        entityType: "student",
+        entityId: "student-a",
+      }),
+    );
+  });
+
+  it("counts a subscription lesson when a student is marked present (P5b-4)", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      },
+      {
+        rows: [
+          { student_id: "student-a", first_name: "Анна", last_name: "Иванова" },
+        ],
+      },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      },
+      {
+        rows: [
+          { student_id: "student-a", first_name: "Анна", last_name: "Иванова" },
+        ],
+      },
+      {
+        rows: [
+          { student_id: "student-a", status: "present", pass_reason: null },
+        ],
+      },
+    ]);
+
+    await service.upsertLessonAttendance(actor, "lesson-a", {
+      items: [{ studentId: "student-a", status: "present" }],
+    });
+
+    // The reconciliation query (call index 3) decrements an active subscription.
+    const reconcileSql = String(query.mock.calls[3][0]);
+    expect(reconcileSql).toContain("lessons_used = lessons_used + 1");
+    expect(query.mock.calls[3][1]).toEqual(["lesson-a", "student-a"]);
   });
 });

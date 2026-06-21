@@ -25,6 +25,9 @@ import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { ExpenseQuery } from "./dto/expense.query";
 import { UpsertExpenseDto } from "./dto/upsert-expense.dto";
 import { UpdateExpenseDto } from "./dto/update-expense.dto";
+import { UpsertSubscriptionPackageDto } from "./dto/upsert-subscription-package.dto";
+import { UpdateSubscriptionPackageDto } from "./dto/update-subscription-package.dto";
+import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { CreateStaffDto } from "./dto/create-staff.dto";
 import { CreateStudentDto } from "./dto/create-student.dto";
 import { CreateTeacherDto } from "./dto/create-teacher.dto";
@@ -267,6 +270,30 @@ interface ExpenseRow {
   branch_id: string | null;
   branch_name: string | null;
   created_at: Date | string;
+}
+
+interface SubscriptionPackageRow {
+  id: string;
+  name: string;
+  discipline_id: string | null;
+  branch_id: string | null;
+  lessons_total: number;
+  price: string | number;
+  validity_days: number | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: Date | string;
+}
+
+interface IssuedSubscriptionRow {
+  id: string;
+  lessons_total: number;
+  lessons_used: number;
+  starts_at: Date | string | null;
+  expires_at: Date | string | null;
+  status: string;
+  package_id: string | null;
+  payment_id: string | null;
 }
 
 interface ExpectedPaymentRow {
@@ -3529,6 +3556,17 @@ export class CrmService {
       );
     }
 
+    // P5b-4: keep each student's subscription lessons_used in sync with their
+    // attendance — count one lesson on the first «present» mark, refund it if
+    // they are switched back to «absent». Idempotent per participation row.
+    for (const item of items) {
+      await this.reconcileSubscriptionUsage(
+        lessonId,
+        item.studentId,
+        item.status,
+      );
+    }
+
     await this.database.query(
       `
         update app.lessons
@@ -3544,6 +3582,70 @@ export class CrmService {
       entityId: lessonId,
     });
     return this.getLessonAttendance(actor, lessonId);
+  }
+
+  /**
+   * P5b-4: idempotent subscription lessons_used reconciliation for one
+   * participation. On «present» (and not yet counted) it decrements an active
+   * subscription's balance once; on «absent» (if previously counted) it
+   * refunds that subscription. Re-applying the same status is a no-op.
+   */
+  private async reconcileSubscriptionUsage(
+    lessonId: string,
+    studentId: string,
+    status: string,
+  ) {
+    if (status === "present") {
+      await this.database.query(
+        `
+          with part as (
+            select subscription_id from app.lesson_participation
+            where lesson_id = $1 and student_id = $2
+          ),
+          pick as (
+            select s.id
+            from app.subscriptions s, part
+            where part.subscription_id is null
+              and s.student_id = $2 and s.status = 'active'
+              and s.lessons_used < s.lessons_total
+            order by s.expires_at asc nulls last, s.created_at asc
+            limit 1
+          ),
+          dec as (
+            update app.subscriptions s
+            set lessons_used = lessons_used + 1, updated_at = now()
+            from pick where s.id = pick.id
+            returning s.id
+          )
+          update app.lesson_participation lp
+          set subscription_id = (select id from dec)
+          where lp.lesson_id = $1 and lp.student_id = $2
+            and exists (select 1 from dec)
+        `,
+        [lessonId, studentId],
+      );
+      return;
+    }
+    await this.database.query(
+      `
+        with part as (
+          select subscription_id from app.lesson_participation
+          where lesson_id = $1 and student_id = $2
+        ),
+        inc as (
+          update app.subscriptions s
+          set lessons_used = greatest(lessons_used - 1, 0), updated_at = now()
+          from part
+          where part.subscription_id is not null and s.id = part.subscription_id
+          returning s.id
+        )
+        update app.lesson_participation lp
+        set subscription_id = null
+        where lp.lesson_id = $1 and lp.student_id = $2
+          and exists (select 1 from inc)
+      `,
+      [lessonId, studentId],
+    );
   }
 
   async listTasks(actor: ActorContext, query: TaskBoardQuery) {
@@ -4303,6 +4405,217 @@ export class CrmService {
       entityId: expense.id,
     });
     return { success: true };
+  }
+
+  // ── Subscription packages (P5b) ───────────────────────────────────────────
+  private toSubscriptionPackageDto(row: SubscriptionPackageRow) {
+    return {
+      id: row.id,
+      name: row.name,
+      disciplineId: row.discipline_id,
+      branchId: row.branch_id,
+      lessonsTotal: row.lessons_total,
+      price: Number(row.price),
+      validityDays: row.validity_days,
+      isActive: row.is_active,
+      sortOrder: row.sort_order,
+      createdAt: row.created_at,
+    };
+  }
+
+  async listSubscriptionPackages(actor: ActorContext, query: CrmListQuery) {
+    this.policy.assertCanReadOperationalData(actor);
+    const conditions: string[] = ["deleted_at is null"];
+    const params: unknown[] = [];
+    const q = query.q?.trim();
+    if (q) {
+      params.push(`%${q}%`);
+      conditions.push(`name ilike $${params.length}`);
+    }
+    const limit = Math.min(query.limit ?? 100, 200);
+    params.push(limit);
+    const result = await this.database.query<SubscriptionPackageRow>(
+      `
+        select id, name, discipline_id, branch_id, lessons_total, price,
+          validity_days, is_active, sort_order, created_at
+        from app.subscription_packages
+        where ${conditions.join(" and ")}
+        order by sort_order asc, name asc
+        limit $${params.length}
+      `,
+      params,
+    );
+    return {
+      items: result.rows.map((row) => this.toSubscriptionPackageDto(row)),
+    };
+  }
+
+  async createSubscriptionPackage(
+    actor: ActorContext,
+    dto: UpsertSubscriptionPackageDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<SubscriptionPackageRow>(
+      `
+        insert into app.subscription_packages
+          (name, discipline_id, branch_id, lessons_total, price,
+           validity_days, is_active, sort_order)
+        values ($1, $2, $3, $4, $5, $6, coalesce($7, true), coalesce($8, 0))
+        returning id, name, discipline_id, branch_id, lessons_total, price,
+          validity_days, is_active, sort_order, created_at
+      `,
+      [
+        dto.name.trim(),
+        dto.disciplineId ?? null,
+        dto.branchId ?? null,
+        dto.lessonsTotal,
+        dto.price,
+        dto.validityDays ?? null,
+        dto.isActive ?? null,
+        dto.sortOrder ?? null,
+      ],
+    );
+    const pkg = result.rows[0];
+    await this.audit.record({
+      actor,
+      action: "crm.subscription_package_created",
+      entityType: "subscription_package",
+      entityId: pkg.id,
+    });
+    return this.toSubscriptionPackageDto(pkg);
+  }
+
+  async updateSubscriptionPackage(
+    actor: ActorContext,
+    packageId: string,
+    dto: UpdateSubscriptionPackageDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<SubscriptionPackageRow>(
+      `
+        update app.subscription_packages
+        set name = coalesce($2, name),
+            discipline_id = coalesce($3, discipline_id),
+            branch_id = coalesce($4, branch_id),
+            lessons_total = coalesce($5, lessons_total),
+            price = coalesce($6, price),
+            validity_days = coalesce($7, validity_days),
+            is_active = coalesce($8, is_active),
+            sort_order = coalesce($9, sort_order),
+            updated_at = now()
+        where id = $1 and deleted_at is null
+        returning id, name, discipline_id, branch_id, lessons_total, price,
+          validity_days, is_active, sort_order, created_at
+      `,
+      [
+        packageId,
+        dto.name?.trim() ?? null,
+        dto.disciplineId ?? null,
+        dto.branchId ?? null,
+        dto.lessonsTotal ?? null,
+        dto.price ?? null,
+        dto.validityDays ?? null,
+        dto.isActive ?? null,
+        dto.sortOrder ?? null,
+      ],
+    );
+    const pkg = result.rows[0];
+    if (!pkg) throw new NotFoundException("Абонемент не найден.");
+    await this.audit.record({
+      actor,
+      action: "crm.subscription_package_updated",
+      entityType: "subscription_package",
+      entityId: pkg.id,
+    });
+    return this.toSubscriptionPackageDto(pkg);
+  }
+
+  async deleteSubscriptionPackage(actor: ActorContext, packageId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{ id: string }>(
+      `
+        update app.subscription_packages
+        set deleted_at = now(), updated_at = now()
+        where id = $1 and deleted_at is null
+        returning id
+      `,
+      [packageId],
+    );
+    const pkg = result.rows[0];
+    if (!pkg) throw new NotFoundException("Абонемент не найден.");
+    await this.audit.record({
+      actor,
+      action: "crm.subscription_package_deleted",
+      entityType: "subscription_package",
+      entityId: pkg.id,
+    });
+    return { success: true };
+  }
+
+  /** Issue a subscription from a package: payment + subscription, atomically. */
+  async issueSubscription(
+    actor: ActorContext,
+    studentId: string,
+    dto: IssueSubscriptionDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<IssuedSubscriptionRow>(
+      `
+        with pkg as (
+          select id, branch_id, lessons_total, price, validity_days
+          from app.subscription_packages
+          where id = $2 and deleted_at is null and is_active = true
+        ),
+        pay as (
+          insert into app.payments
+            (student_id, amount, currency, payment_date, branch_id, notes, created_by)
+          select $1, pkg.price, 'RUB', now(), pkg.branch_id, 'Покупка абонемента', $3
+          from pkg
+          returning id
+        ),
+        sub as (
+          insert into app.subscriptions
+            (student_id, lessons_total, lessons_used, starts_at, expires_at,
+             status, package_id, payment_id)
+          select $1, pkg.lessons_total, 0, current_date,
+            case when pkg.validity_days is not null
+              then (current_date + (pkg.validity_days || ' days')::interval)::date
+              else null end,
+            'active', pkg.id, pay.id
+          from pkg, pay
+          returning id, lessons_total, lessons_used, starts_at, expires_at,
+            status, package_id, payment_id
+        )
+        select id, lessons_total, lessons_used, starts_at, expires_at,
+          status, package_id, payment_id
+        from sub
+      `,
+      [studentId, dto.packageId, actor.userId],
+    );
+    const sub = result.rows[0];
+    if (!sub) throw new NotFoundException("Абонемент не найден или неактивен.");
+    await this.audit.record({
+      actor,
+      action: "crm.subscription_issued",
+      entityType: "student",
+      entityId: studentId,
+      metadata: {
+        subscriptionId: sub.id,
+        packageId: sub.package_id,
+        paymentId: sub.payment_id,
+      },
+    });
+    return {
+      id: sub.id,
+      studentId,
+      lessonsTotal: sub.lessons_total,
+      lessonsUsed: sub.lessons_used,
+      startsAt: sub.starts_at,
+      expiresAt: sub.expires_at,
+      status: sub.status,
+      packageId: sub.package_id,
+      paymentId: sub.payment_id,
+    };
   }
 
   async listLeadBoard(actor: ActorContext, query: LeadBoardQuery) {
