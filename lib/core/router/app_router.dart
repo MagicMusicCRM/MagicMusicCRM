@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_shimmer.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/login_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/registration_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/onboarding_screen.dart';
@@ -273,90 +275,177 @@ class _AppGateLoadingScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     final gateState = ref.watch(_routeGateStateProvider);
     final isGateError =
         gateState.phase == _RouteGatePhase.gateError &&
         !_isUnauthorizedRouteError(gateState.error);
 
     return Scaffold(
-      backgroundColor: colors.surface,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 450),
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: colors.primary,
+      backgroundColor: AppColor.bg,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0.0, -1.0),
+            radius: 1.1,
+            colors: [Color(0x1AC5A059), AppColor.bg],
+            stops: [0.0, 0.6],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.xxl,
+                  vertical: 30,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Brand block (v7 — copied 1:1 from the login screen)
+                    Column(
+                      children: [
+                        Container(
+                          width: 62,
+                          height: 62,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF2A2418), Color(0xFF1D1A12)],
+                            ),
+                            border: Border.all(color: AppColor.goldLine),
+                          ),
+                          child: const Icon(
+                            Icons.music_note_rounded,
+                            color: AppColor.gold,
+                            size: 30,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpace.md),
+                        RichText(
+                          textAlign: TextAlign.center,
+                          text: const TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Magic',
+                                style: TextStyle(
+                                  color: AppColor.text,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 21,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'Music',
+                                style: TextStyle(
+                                  color: AppColor.gold,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 21,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: AppSpace.xs),
+                        Text(
+                          isGateError
+                              ? 'Не удалось проверить доступ'
+                              : 'Проверяем сессию и доступ',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: AppColor.text2,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ],
                     ),
-                    child: Icon(
-                      Icons.music_note_rounded,
-                      color: colors.onPrimary,
-                      size: 42,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  Text(
-                    'Magic Music CRM',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    isGateError
-                        ? 'Не удалось проверить доступ'
-                        : 'Проверяем сессию и доступ',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  if (isGateError) ...[
-                    Text(
-                      gateState.error?.toString() ??
-                          'Проверьте подключение и попробуйте снова.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                    const SizedBox(height: AppSpace.xxl),
+
+                    if (isGateError) ...[
+                      Text(
+                        gateState.error?.toString() ??
+                            'Проверьте подключение и попробуйте снова.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColor.text2,
+                          fontSize: 12.5,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
+                      const SizedBox(height: AppSpace.xxl),
+                      // Flat gold retry button (no shadow, radius AppRadius.control)
+                      SizedBox(
+                        height: 52,
+                        width: double.infinity,
+                        child: Material(
+                          color: AppColor.gold,
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.control,
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.control,
+                            ),
+                            onTap: () =>
+                                ref.invalidate(releaseGateStatusProvider),
+                            child: const Center(
+                              child: Text(
+                                'Повторить',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColor.onGold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpace.md),
+                      // 'Выйти' as a gold text link
+                      TextButton(
                         onPressed: () =>
-                            ref.invalidate(releaseGateStatusProvider),
-                        child: const Text('Повторить'),
+                            ref.read(magicAuthServiceProvider).signOut(),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColor.gold,
+                          textStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          padding: const EdgeInsets.all(AppSpace.sm),
+                          minimumSize: const Size(0, 0),
+                        ),
+                        child: const Text('Выйти'),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () =>
-                          ref.read(magicAuthServiceProvider).signOut(),
-                      child: const Text('Выйти'),
-                    ),
-                  ] else
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        minHeight: 4,
-                        backgroundColor: colors.primary.withValues(alpha: 0.16),
-                        color: colors.primary,
+                    ] else ...[
+                      // Boot affordance — v7 skeleton shimmer lines.
+                      const SkeletonBox(
+                        height: 12,
+                        radius: AppRadius.sm,
                       ),
-                    ),
-                ],
+                      const SizedBox(height: AppSpace.md),
+                      const SkeletonBox(
+                        height: 12,
+                        radius: AppRadius.sm,
+                      ),
+                      const SizedBox(height: AppSpace.md),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: 160,
+                          child: SkeletonBox(
+                            height: 12,
+                            radius: AppRadius.sm,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),

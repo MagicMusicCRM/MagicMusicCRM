@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/features/auth/data/services/magic_auth_service.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
@@ -124,6 +125,44 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
     );
   }
 
+  /// v7 input decoration: control radius (10), gold focus ring (2), theme-aware
+  /// fill from the active [InputDecorationTheme] (falls back to the surface).
+  InputDecoration _v7FieldDecoration(
+    BuildContext context, {
+    required String labelText,
+    Widget? prefixIcon,
+    Widget? suffixIcon,
+  }) {
+    final theme = Theme.of(context);
+    final fill =
+        theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      borderSide: BorderSide(color: theme.dividerColor),
+    );
+    return InputDecoration(
+      labelText: labelText,
+      prefixIcon: prefixIcon,
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: fill,
+      border: border,
+      enabledBorder: border,
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.gold, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.danger),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.danger, width: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -139,16 +178,17 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
             final emailOtpMfaEnabled = data?.emailOtpMfaEnabled ?? false;
 
             return ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(AppSpace.xl),
               children: [
                 Text(
                   userEmail.isEmpty ? 'Аккаунт' : userEmail,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpace.lg),
                 _Section(
                   child: SwitchListTile(
                     contentPadding: EdgeInsets.zero,
+                    activeThumbColor: AppColor.gold,
                     secondary: const Icon(Icons.verified_user_outlined),
                     title: const Text('Код из письма для входа'),
                     subtitle: Text(
@@ -162,7 +202,7 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                         : null,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpace.lg),
                 _Section(
                   child: Column(
                     children: [
@@ -177,7 +217,7 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: AppSpace.xxl),
                 _Section(
                   child: Form(
                     key: _formKey,
@@ -188,11 +228,12 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                           hasEmail ? 'Обновить пароль' : 'Установить пароль',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: AppSpace.lg),
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
-                          decoration: InputDecoration(
+                          decoration: _v7FieldDecoration(
+                            context,
                             labelText: 'Новый пароль',
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
@@ -211,34 +252,28 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                               ? 'Минимум 10 символов'
                               : null,
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: AppSpace.md),
                         TextFormField(
                           controller: _confirmPasswordController,
                           obscureText: _obscurePassword,
-                          decoration: const InputDecoration(
+                          decoration: _v7FieldDecoration(
+                            context,
                             labelText: 'Повторите пароль',
-                            prefixIcon: Icon(Icons.lock_reset_outlined),
+                            prefixIcon: const Icon(Icons.lock_reset_outlined),
                           ),
                           validator: (value) =>
                               value != _passwordController.text
                               ? 'Пароли не совпадают'
                               : null,
                         ),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
+                        const SizedBox(height: AppSpace.lg),
+                        _GoldButton(
+                          loading: _isSavingPassword,
                           onPressed: _isSavingPassword ? null : _setPassword,
-                          icon: _isSavingPassword
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.password_outlined),
-                          label: Text(
-                            hasEmail ? 'Сохранить пароль' : 'Установить пароль',
-                          ),
+                          icon: Icons.password_outlined,
+                          label: hasEmail
+                              ? 'Сохранить пароль'
+                              : 'Установить пароль',
                         ),
                       ],
                     ),
@@ -275,10 +310,13 @@ class _Section extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      child: Padding(padding: const EdgeInsets.all(16), child: child),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.lg),
+        child: child,
+      ),
     );
   }
 }
@@ -300,12 +338,76 @@ class _IdentityRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: enabled ? AppTheme.primaryGold : null),
+      leading: Icon(icon, color: enabled ? AppColor.gold : null),
       title: Text(title),
       subtitle: Text(subtitle),
       trailing: Icon(
         enabled ? Icons.check_circle_outline : Icons.radio_button_unchecked,
-        color: enabled ? AppTheme.primaryGold : null,
+        color: enabled ? AppColor.gold : null,
+      ),
+    );
+  }
+}
+
+/// Flat gold primary button — same look as login's primary button
+/// (gold fill, [AppColor.onGold] text/spinner, no shadow, control radius).
+class _GoldButton extends StatelessWidget {
+  const _GoldButton({
+    required this.label,
+    required this.onPressed,
+    this.loading = false,
+    this.icon,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool loading;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null && !loading;
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.42,
+      child: SizedBox(
+        height: 52,
+        width: double.infinity,
+        child: Material(
+          color: AppColor.gold, // flat gold, NO shadow/elevation
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            onTap: enabled ? onPressed : null,
+            child: Center(
+              child: loading
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColor.onGold,
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (icon != null) ...[
+                          Icon(icon, size: 17, color: AppColor.onGold),
+                          const SizedBox(width: AppSpace.sm),
+                        ],
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColor.onGold,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
       ),
     );
   }
