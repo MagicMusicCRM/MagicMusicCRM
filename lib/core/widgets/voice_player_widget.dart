@@ -89,16 +89,23 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
       if (_isPlaying) {
         await _player.pause();
       } else {
-        // If not loaded yet, set the URL first
+        // If not loaded yet, resolve the short-lived download URL (via the
+        // /files/:id/download-token flow inside the service) and load it first.
         if (_player.processingState == ProcessingState.idle) {
-          setState(() => _isLoading = true);
-          _resolvedAudioUrl ??= await ref
-              .read(chatAttachmentServiceProvider)
-              .resolveUrl(widget.audioUrl);
-          if (_resolvedAudioUrl == null) {
-            throw StateError('Аудиофайл недоступен');
+          if (mounted) setState(() => _isLoading = true);
+          try {
+            _resolvedAudioUrl ??= await ref
+                .read(chatAttachmentServiceProvider)
+                .resolveUrl(widget.audioUrl);
+            if (_resolvedAudioUrl == null) {
+              throw StateError('Аудиофайл недоступен');
+            }
+            await _player.setUrl(_resolvedAudioUrl!);
+          } finally {
+            // Clear the manual loading flag on the success path too — from here
+            // on the player's processingState stream owns the buffering state.
+            if (mounted) setState(() => _isLoading = false);
           }
-          await _player.setUrl(_resolvedAudioUrl!);
         }
         await _player.play();
       }

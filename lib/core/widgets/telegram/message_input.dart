@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/voice_recorder_widget.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:file_picker/file_picker.dart';
 
 /// Telegram-style message input bar with text field, attachment, and voice recording.
@@ -128,11 +129,46 @@ class _MessageInputState extends State<MessageInput> {
 
   // ... (pickAndSendFile and handleKeyEvent remain similar but check widget.enabled)
 
-  Future<void> _pickAndSendFile() async {
+  /// Open a chooser so the user picks the image gallery or a generic file,
+  /// then route to the matching picker. Falls back to the file picker if the
+  /// sheet is dismissed without a choice.
+  Future<void> _openAttachMenu() async {
+    if (_isSendingFile || widget.onSendFile == null || !widget.enabled) return;
+    final choice = await showMagicSheet<_AttachSource>(
+      context,
+      title: 'Вложение',
+      subtitle: 'Выберите тип файла',
+      icon: Icons.attach_file_rounded,
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _AttachOption(
+            icon: Icons.image_rounded,
+            label: 'Фото из галереи',
+            onTap: () =>
+                Navigator.of(sheetContext).pop(_AttachSource.image),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          _AttachOption(
+            icon: Icons.insert_drive_file_rounded,
+            label: 'Файл',
+            onTap: () =>
+                Navigator.of(sheetContext).pop(_AttachSource.file),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return;
+    await _pickAndSendFile(
+      choice == _AttachSource.image ? FileType.image : FileType.any,
+    );
+  }
+
+  Future<void> _pickAndSendFile(FileType pickerType) async {
     if (_isSendingFile || widget.onSendFile == null) return;
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
+        type: pickerType,
         withData: false,
         allowMultiple: false,
       );
@@ -322,7 +358,7 @@ class _MessageInputState extends State<MessageInput> {
                                   ? AppColor.text2
                                   : TelegramColors.lightTextSecondary,
                             ),
-                      onPressed: _isSendingFile || !widget.enabled ? null : _pickAndSendFile,
+                      onPressed: _isSendingFile || !widget.enabled ? null : _openAttachMenu,
                       splashRadius: 20,
                       tooltip: 'Прикрепить файл',
                     ),
@@ -440,6 +476,71 @@ class _MessageInputState extends State<MessageInput> {
         child: _EmojiGrid(
           onEmojiSelected: _insertEmoji,
           isDark: isDark,
+        ),
+      ),
+    );
+  }
+}
+
+/// Attachment source picked from the v7 attach chooser sheet.
+enum _AttachSource { image, file }
+
+/// A single tappable row inside the attach chooser sheet (theme-aware,
+/// gold-accented icon badge on a flat surface — no shadow).
+class _AttachOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _AttachOption({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.md,
+            vertical: AppSpace.md,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColor.goldSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.icon),
+                  border: Border.all(color: AppColor.goldLine),
+                ),
+                child: Icon(icon, size: 20, color: AppColor.gold),
+              ),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: scheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );

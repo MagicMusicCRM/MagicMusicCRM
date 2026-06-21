@@ -2,10 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
 import 'package:intl/intl.dart';
 
+/// Teacher schedule (P2-7 / KVA-195). v7 restyle + parity with the admin
+/// schedule: shows the signed-in teacher's lessons from the same
+/// `listLessons` payload the manager view consumes (student / room / branch
+/// names, status, plan notes). Read-only chrome is fine for the teacher — the
+/// service calls (`listTeachers` / `listLessons` / `updateLesson` and the
+/// attendance dialog) are unchanged; only the surfaces/accents are migrated to
+/// the v7 tokens (AppColor / AppRadius / AppSpace) and the P0 components
+/// (showMagicSheet / MagicToast / SkeletonBox). Surfaces follow the app theme
+/// (light + dark) via [Theme.of]; accents use the v7 gold/success/danger.
 class TeacherScheduleWidget extends ConsumerStatefulWidget {
   const TeacherScheduleWidget({super.key});
 
@@ -77,9 +87,12 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
             ? '$roomName ($branchName)'
             : roomName;
 
-        Color bgColor = AppTheme.primaryGold;
-        if (status == 'completed') bgColor = AppTheme.success;
-        if (status == 'cancelled') bgColor = AppTheme.danger;
+        // v7 accents: gold for scheduled, success for completed, danger for
+        // cancelled. Surfaces stay theme-driven; only the per-card accent uses
+        // the locked tokens.
+        Color bgColor = AppColor.gold;
+        if (status == 'completed') bgColor = AppColor.success;
+        if (status == 'cancelled') bgColor = AppColor.danger;
 
         appointments.add(
           Appointment(
@@ -109,37 +122,69 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
       await ref
           .read(magicCrmServiceProvider)
           .updateLesson(lessonId, status: 'completed');
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Занятие завершено',
+          type: MagicToastType.success,
+        );
+      }
       _fetchScheduleData();
     } catch (e) {
       debugPrint('Error completing lesson: $e');
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Не удалось завершить занятие',
+          type: MagicToastType.danger,
+        );
+      }
     }
   }
 
   Future<void> _editLessonPlan(String lessonId, String currentPlan) async {
     final controller = TextEditingController(text: currentPlan);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('План занятия'),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            hintText: 'Что планируете делать на уроке?',
+    final cs = Theme.of(context).colorScheme;
+    final result = await showMagicSheet<String>(
+      context,
+      title: 'План занятия',
+      subtitle: 'Что планируете делать на уроке?',
+      icon: Icons.edit_note_rounded,
+      builder: (ctx) => TextField(
+        controller: controller,
+        maxLines: 5,
+        autofocus: true,
+        style: TextStyle(color: cs.onSurface),
+        decoration: InputDecoration(
+          hintText: 'Опишите план урока…',
+          filled: true,
+          fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            borderSide: BorderSide(color: AppColor.divider),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            borderSide: BorderSide(color: AppColor.divider),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            borderSide: const BorderSide(color: AppColor.gold),
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
       ),
+      actions: [
+        _SheetButton.secondary(
+          label: 'Отмена',
+          onPressed: () => Navigator.pop(context),
+        ),
+        _SheetButton.gold(
+          label: 'Сохранить',
+          onPressed: () => Navigator.pop(context, controller.text),
+        ),
+      ],
     );
+    controller.dispose();
 
     if (result != null) {
       await ref
@@ -160,119 +205,163 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
   void _showLessonDetails(Appointment appointment) {
     if (appointment.id == null) return;
     final lessonId = appointment.id.toString();
+    final cs = Theme.of(context).colorScheme;
+    final accent = appointment.color;
+    final hasPlan = appointment.notes?.isNotEmpty == true;
 
-    showDialog(
-      context: context,
+    showMagicSheet<void>(
+      context,
+      title: appointment.subject,
+      subtitle:
+          '${DateFormat('dd.MM.yyyy HH:mm').format(appointment.startTime)} – ${DateFormat('HH:mm').format(appointment.endTime)}',
+      icon: Icons.event_rounded,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          title: Text(appointment.subject),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${DateFormat('dd.MM.yyyy HH:mm').format(appointment.startTime)} - ${DateFormat('HH:mm').format(appointment.endTime)}',
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _DetailRow(
+              icon: Icons.place_outlined,
+              text: appointment.location ?? 'Не указано',
+            ),
+            const SizedBox(height: AppSpace.lg),
+            Text(
+              'План занятия',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColor.gold,
+                fontSize: 13,
               ),
-              const SizedBox(height: 8),
-              Text('Где: ${appointment.location ?? "Не указано"}'),
-              const SizedBox(height: 16),
-              if (appointment.notes?.isNotEmpty == true) ...[
-                const Text(
-                  'План занятия:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryGold,
-                  ),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpace.md),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: Border.all(color: AppColor.divider),
+              ),
+              child: Text(
+                hasPlan ? appointment.notes! : 'План не заполнен',
+                style: TextStyle(
+                  color: hasPlan ? cs.onSurface : cs.onSurfaceVariant,
+                  fontStyle: hasPlan ? FontStyle.normal : FontStyle.italic,
+                  fontSize: 14,
                 ),
-                const SizedBox(height: 4),
-                Text(appointment.notes!),
-              ] else
-                Text(
-                  'План не заполнен',
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
+              ),
+            ),
+            const SizedBox(height: AppSpace.lg),
+            // Read-only-friendly action stack: editing the plan, marking
+            // attendance and completing the lesson keep their existing service
+            // calls; only the chrome is v7.
+            _ActionTile(
+              icon: Icons.edit_note_rounded,
+              label: 'Изменить план',
+              accent: AppColor.gold,
+              onTap: () {
                 Navigator.pop(ctx);
                 _editLessonPlan(lessonId, appointment.notes ?? '');
               },
-              child: const Text('Изменить план'),
             ),
-            TextButton.icon(
-              onPressed: () {
+            _ActionTile(
+              icon: Icons.how_to_reg_rounded,
+              label: 'Посещаемость',
+              accent: AppColor.gold,
+              onTap: () {
                 Navigator.pop(ctx);
                 _openAttendance(lessonId);
               },
-              icon: const Icon(Icons.how_to_reg_rounded, size: 18),
-              label: const Text('Посещаемость'),
             ),
-            if (appointment.color == AppTheme.primaryGold)
-              TextButton(
-                onPressed: () {
+            if (accent == AppColor.gold)
+              _ActionTile(
+                icon: Icons.check_circle_outline_rounded,
+                label: 'Завершить занятие',
+                accent: AppColor.success,
+                onTap: () {
                   Navigator.pop(ctx);
                   _markCompleted(lessonId);
                 },
-                child: const Text(
-                  'Завершить занятие',
-                  style: TextStyle(color: AppTheme.success),
-                ),
               ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Закрыть'),
-            ),
           ],
         );
       },
+      actions: [
+        _SheetButton.gold(
+          label: 'Закрыть',
+          onPressed: () => Navigator.pop(context),
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       children: [
         // Header controls
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.lg,
+            vertical: AppSpace.sm,
+          ),
           child: Row(
             children: [
-              DropdownButton<CalendarView>(
-                value: _calendarController.view,
-                dropdownColor: Theme.of(context).colorScheme.surface,
-                items: const [
-                  DropdownMenuItem(
-                    value: CalendarView.day,
-                    child: Text('День'),
+              Container(
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  border: Border.all(color: AppColor.divider),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<CalendarView>(
+                    value: _calendarController.view,
+                    dropdownColor: cs.surface,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    icon: Icon(
+                      Icons.expand_more_rounded,
+                      color: cs.onSurfaceVariant,
+                      size: 20,
+                    ),
+                    style: TextStyle(
+                      color: cs.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: CalendarView.day,
+                        child: Text('День'),
+                      ),
+                      DropdownMenuItem(
+                        value: CalendarView.week,
+                        child: Text('Неделя'),
+                      ),
+                      DropdownMenuItem(
+                        value: CalendarView.month,
+                        child: Text('Месяц'),
+                      ),
+                      DropdownMenuItem(
+                        value: CalendarView.schedule,
+                        child: Text('Расписание'),
+                      ),
+                    ],
+                    onChanged: (view) {
+                      if (view != null) {
+                        setState(() => _calendarController.view = view);
+                      }
+                    },
                   ),
-                  DropdownMenuItem(
-                    value: CalendarView.week,
-                    child: Text('Неделя'),
-                  ),
-                  DropdownMenuItem(
-                    value: CalendarView.month,
-                    child: Text('Месяц'),
-                  ),
-                  DropdownMenuItem(
-                    value: CalendarView.schedule,
-                    child: Text('Расписание'),
-                  ),
-                ],
-                onChanged: (view) {
-                  if (view != null) {
-                    setState(() => _calendarController.view = view);
-                  }
-                },
+                ),
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.refresh_rounded),
+                icon: Icon(
+                  Icons.refresh_rounded,
+                  color: cs.onSurfaceVariant,
+                ),
+                tooltip: 'Обновить',
                 onPressed: _fetchScheduleData,
               ),
             ],
@@ -282,15 +371,14 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
         // Calendar Body
         Expanded(
           child: _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: AppTheme.primaryGold,
-                  ),
-                )
+              ? const _ScheduleLoading()
               : SfCalendar(
                   controller: _calendarController,
                   view: CalendarView.day,
                   firstDayOfWeek: 1, // Monday
+                  todayHighlightColor: AppColor.gold,
+                  cellBorderColor: AppColor.divider,
+                  backgroundColor: Colors.transparent,
                   timeSlotViewSettings: const TimeSlotViewSettings(
                     startHour: 6,
                     endHour: 23,
@@ -313,12 +401,13 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
                         final Appointment app = details.appointments.first;
                         return Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
+                            horizontal: AppSpace.xs,
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: app.color.withAlpha(50),
-                            borderRadius: BorderRadius.circular(4),
+                            color: app.color.withValues(alpha: 0.18),
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.chip),
                             border: Border.all(color: app.color, width: 1),
                           ),
                           child: Column(
@@ -340,7 +429,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
                                   ),
                                   // Per-card attendance shortcut (KVA-152). Opens
                                   // the same dialog reachable from the details
-                                  // popup so a teacher can mark posещаемость in
+                                  // popup so a teacher can mark посещаемость in
                                   // one tap.
                                   if (app.id != null)
                                     GestureDetector(
@@ -371,6 +460,186 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+/// v7 loading state — token-driven skeleton rows in place of a bare spinner.
+class _ScheduleLoading extends StatelessWidget {
+  const _ScheduleLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.all(AppSpace.lg),
+      itemCount: 6,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
+      itemBuilder: (_, _) => const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SkeletonBox(width: 44, height: 14, radius: AppRadius.sm),
+          SizedBox(width: AppSpace.md),
+          Expanded(
+            child: SkeletonBox(
+              height: 54,
+              radius: AppRadius.chip,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Icon + label detail row inside the lesson sheet.
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: cs.onSurfaceVariant),
+        const SizedBox(width: AppSpace.sm),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(color: cs.onSurface, fontSize: 14),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Tappable action row inside the lesson detail sheet (gold-soft fill + tinted
+/// icon badge), mirroring the v7 pop-menu item.
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.icon,
+    required this.label,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.sm),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.md,
+              vertical: AppSpace.md,
+            ),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              border: Border.all(color: accent.withValues(alpha: 0.30)),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: accent),
+                const SizedBox(width: AppSpace.md),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: cs.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: cs.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Footer button for the v7 sheets. Flat gold (no shadow) for the primary
+/// action; outlined secondary for dismiss/cancel.
+class _SheetButton extends StatelessWidget {
+  const _SheetButton._({
+    required this.label,
+    required this.onPressed,
+    required this.gold,
+  });
+
+  factory _SheetButton.gold({
+    required String label,
+    required VoidCallback onPressed,
+  }) => _SheetButton._(label: label, onPressed: onPressed, gold: true);
+
+  factory _SheetButton.secondary({
+    required String label,
+    required VoidCallback onPressed,
+  }) => _SheetButton._(label: label, onPressed: onPressed, gold: false);
+
+  final String label;
+  final VoidCallback onPressed;
+  final bool gold;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final style = ButtonStyle(
+      elevation: const WidgetStatePropertyAll(0),
+      shadowColor: const WidgetStatePropertyAll(Colors.transparent),
+      minimumSize: const WidgetStatePropertyAll(Size.fromHeight(46)),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+      ),
+      textStyle: const WidgetStatePropertyAll(
+        TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+    );
+
+    if (gold) {
+      return FilledButton(
+        onPressed: onPressed,
+        style: style.copyWith(
+          backgroundColor: const WidgetStatePropertyAll(AppColor.gold),
+          foregroundColor: const WidgetStatePropertyAll(AppColor.onGold),
+        ),
+        child: Text(label),
+      );
+    }
+
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: style.copyWith(
+        foregroundColor: WidgetStatePropertyAll(cs.onSurface),
+        side: const WidgetStatePropertyAll(
+          BorderSide(color: AppColor.divider),
+        ),
+      ),
+      child: Text(label),
     );
   }
 }

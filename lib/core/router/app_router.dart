@@ -19,6 +19,11 @@ import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashbo
 import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/student_detail_screen.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
+import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
+import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_status_screen.dart';
@@ -254,6 +259,27 @@ final routerProvider = Provider<GoRouter>((ref) {
           return StudentDetailScreen(studentId: id);
         },
       ),
+      // ── Deep links (KVA-196) ────────────────────────────────────────────────
+      // Open a lead/student/lesson directly by id. Students reuse the existing
+      // rich detail screen; leads/lessons present their existing dialogs (the
+      // KVA-175 pattern) over the active role dashboard via a thin host screen.
+      GoRoute(
+        path: '/students/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return StudentDetailScreen(studentId: id);
+        },
+      ),
+      GoRoute(
+        path: '/leads/:id',
+        builder: (context, state) =>
+            _LeadDeepLinkScreen(leadId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/lessons/:id',
+        builder: (context, state) =>
+            _LessonDeepLinkScreen(lessonId: state.pathParameters['id']!),
+      ),
       GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
@@ -446,6 +472,152 @@ class _AppGateLoadingScreen extends ConsumerWidget {
                     ],
                   ],
                 ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Destination to return to once a deep-linked dialog closes — the active
+/// role dashboard, derived from the (already-loaded) release-gate status so the
+/// back stack lands on a real screen instead of the boot loader.
+String _deepLinkHomeRoute(WidgetRef ref) {
+  final gate = ref.read(_routeGateStateProvider).gateStatus;
+  final role = (gate == null || gate.role.isEmpty) ? 'client' : gate.role;
+  return _roleToRoute(role);
+}
+
+/// Lightweight host that presents the existing [LeadDetailDialog] for a lead
+/// opened by id (deep link). The dialog self-fetches its full data from the
+/// minimal `{'id': …}` stub (the KVA-175 pattern); we only pre-resolve the
+/// status list so the status chips render immediately.
+class _LeadDeepLinkScreen extends ConsumerStatefulWidget {
+  const _LeadDeepLinkScreen({required this.leadId});
+
+  final String leadId;
+
+  @override
+  ConsumerState<_LeadDeepLinkScreen> createState() =>
+      _LeadDeepLinkScreenState();
+}
+
+class _LeadDeepLinkScreenState extends ConsumerState<_LeadDeepLinkScreen> {
+  bool _opened = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+  }
+
+  Future<void> _open() async {
+    if (_opened || !mounted) return;
+    _opened = true;
+
+    final statuses = <StatusRecord>[];
+    try {
+      final raw = await ref.read(leadStatusesProvider.future);
+      for (final r in raw) {
+        statuses.add((
+          r['key'].toString(),
+          r['label'].toString(),
+          statusColorFromValue(r['color']),
+        ));
+      }
+    } catch (_) {
+      // Dialog still opens; it fetches its own data.
+    }
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) => LeadDetailDialog(
+        lead: <String, dynamic>{'id': widget.leadId},
+        allStatuses: statuses,
+      ),
+    );
+
+    if (!mounted) return;
+    context.go(_deepLinkHomeRoute(ref));
+  }
+
+  @override
+  Widget build(BuildContext context) => const _DeepLinkScaffold();
+}
+
+/// Lightweight host that presents the existing [LessonAttendanceDialog] for a
+/// lesson opened by id (deep link). The sheet self-fetches attendance from the
+/// minimal `{'id': …}` stub.
+class _LessonDeepLinkScreen extends ConsumerStatefulWidget {
+  const _LessonDeepLinkScreen({required this.lessonId});
+
+  final String lessonId;
+
+  @override
+  ConsumerState<_LessonDeepLinkScreen> createState() =>
+      _LessonDeepLinkScreenState();
+}
+
+class _LessonDeepLinkScreenState extends ConsumerState<_LessonDeepLinkScreen> {
+  bool _opened = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+  }
+
+  Future<void> _open() async {
+    if (_opened || !mounted) return;
+    _opened = true;
+
+    await LessonAttendanceDialog.show(context, <String, dynamic>{
+      'id': widget.lessonId,
+    });
+
+    if (!mounted) return;
+    context.go(_deepLinkHomeRoute(ref));
+  }
+
+  @override
+  Widget build(BuildContext context) => const _DeepLinkScaffold();
+}
+
+/// Theme-aware placeholder shown behind a deep-linked dialog while it resolves.
+/// Surfaces follow the app theme; the boot affordance is a v7 skeleton row.
+class _DeepLinkScaffold extends StatelessWidget {
+  const _DeepLinkScaffold();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.xxl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: const [
+                  SkeletonBox(height: 12, radius: AppRadius.sm),
+                  SizedBox(height: AppSpace.md),
+                  SkeletonBox(height: 12, radius: AppRadius.sm),
+                  SizedBox(height: AppSpace.md),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: 160,
+                      child: SkeletonBox(height: 12, radius: AppRadius.sm),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
