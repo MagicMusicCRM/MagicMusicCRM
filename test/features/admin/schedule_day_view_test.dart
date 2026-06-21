@@ -22,10 +22,13 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_wid
 const _branchId = '11111111-1111-1111-1111-111111111111';
 const _roomId = '22222222-2222-2222-2222-222222222222';
 
-/// Today at 10:00 UTC. The fake branch uses a 0-minute UTC offset so the lesson
-/// renders on today's date with no timezone math to reason about.
+/// Today at 10:00, seeded on the LOCAL calendar date. The widget highlights and
+/// navigates to the local "today" cell, so the lesson must be on the local date
+/// (not the UTC date) — otherwise a timezone/date-boundary divergence drops the
+/// lesson from the tapped day (regression: flaked across the UTC midnight).
+/// The fake branch uses a 0-minute UTC offset, so 10:00Z renders as 10:00.
 DateTime _today() {
-  final now = DateTime.now().toUtc();
+  final now = DateTime.now();
   return DateTime.utc(now.year, now.month, now.day, 10);
 }
 
