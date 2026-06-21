@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'design_tokens.dart';
 import 'telegram_colors.dart';
 
 class AppTheme {
@@ -26,13 +27,15 @@ class AppTheme {
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: TelegramColors.darkTextPrimary,
-        error: TelegramColors.danger,
+        error: AppColor.danger,
       ),
       scaffoldBackgroundColor: TelegramColors.darkBg,
       cardTheme: CardThemeData(
         color: TelegramColors.darkSurface,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: TelegramColors.darkSurface,
@@ -169,13 +172,15 @@ class AppTheme {
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: TelegramColors.lightTextPrimary,
-        error: TelegramColors.danger,
+        error: AppColor.danger,
       ),
       scaffoldBackgroundColor: TelegramColors.lightBg,
       cardTheme: CardThemeData(
         color: TelegramColors.lightBg,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: TelegramColors.lightBg,
