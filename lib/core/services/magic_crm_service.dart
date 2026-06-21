@@ -966,6 +966,9 @@ class MagicCrmService {
     bool clearStatus = false,
     String? notes,
     Map<String, dynamic>? customDataPatch,
+    // P3-7: when moving to a requires_reason (terminal) status, capture why.
+    String? reasonId,
+    String? statusComment,
   }) async {
     final data = <String, dynamic>{};
     if (firstName != null) data['firstName'] = firstName.trim();
@@ -979,12 +982,22 @@ class MagicCrmService {
     if (clearStatus) data['clearStatus'] = true;
     if (notes != null) data['notes'] = notes.trim();
     if (customDataPatch != null) data['customDataPatch'] = customDataPatch;
+    if (reasonId != null) data['reasonId'] = reasonId;
+    if (statusComment != null && statusComment.trim().isNotEmpty) {
+      data['statusComment'] = statusComment.trim();
+    }
 
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/leads/$id',
       data: data,
     );
     return _legacyLead(response);
+  }
+
+  /// P3-7: lead loss/pause reasons dictionary (for the terminal-status picker).
+  Future<List<Map<String, dynamic>>> listLossReasons() async {
+    final response = await _api.get<Map<String, dynamic>>('/crm/loss-reasons');
+    return _items(response).whereType<Map<String, dynamic>>().toList();
   }
 
   Future<void> deleteLead(String id) async {
