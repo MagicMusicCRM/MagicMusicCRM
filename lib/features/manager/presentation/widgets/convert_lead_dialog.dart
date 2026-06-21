@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
-/// Modal that converts a lead into a student, letting the user pick the
+/// v7 sheet that converts a lead into a student, letting the user pick the
 /// target branch + discipline. Returns the created student map, or null if
-/// cancelled / failed.
+/// cancelled / failed. Theme-aware (in-app screen, light+dark).
+///
+/// Contract LOCKED: the `createStudent` call + its `customDataPatch`
+/// (`branchId`/`discipline`(name)/`sourceLeadId`) and the branch→discipline
+/// cascade are unchanged — only the presentation is reskinned to v7.
 class ConvertLeadDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> lead;
   const ConvertLeadDialog({super.key, required this.lead});
@@ -14,8 +18,11 @@ class ConvertLeadDialog extends ConsumerStatefulWidget {
     BuildContext context, {
     required Map<String, dynamic> lead,
   }) {
-    return showDialog<Map<String, dynamic>>(
+    return showModalBottomSheet<Map<String, dynamic>>(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColor.scrim,
       builder: (_) => ConvertLeadDialog(lead: lead),
     );
   }
@@ -136,131 +143,295 @@ class _ConvertLeadDialogState extends ConsumerState<ConvertLeadDialog> {
     }
   }
 
+  InputDecoration _decoration(
+    ColorScheme cs, {
+    required String label,
+    Widget? suffixIcon,
+    String? helperText,
+  }) {
+    final r = BorderRadius.circular(AppRadius.control);
+    return InputDecoration(
+      labelText: label,
+      suffixIcon: suffixIcon,
+      helperText: helperText,
+      isDense: true,
+      enabledBorder: OutlineInputBorder(
+        borderRadius: r,
+        borderSide: BorderSide(color: cs.outlineVariant),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: r,
+        borderSide: const BorderSide(color: AppColor.gold, width: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final media = MediaQuery.of(context);
     final name = [
       widget.lead['name'],
       widget.lead['last_name'],
     ].where((v) => v != null && '$v'.trim().isNotEmpty).join(' ');
+    final canConvert = !_saving &&
+        !_loadingBranches &&
+        !_loadingDisciplines &&
+        !(_disciplines.isNotEmpty && _discipline == null);
 
-    return AlertDialog(
-      title: const Text('Сделать учеником'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (name.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Лид «$name» будет конвертирован в ученика.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 13,
+    return Padding(
+      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 480,
+            maxHeight: media.size.height * 0.85,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppRadius.sheet),
+              ),
+              border:
+                  Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 10, bottom: 2),
+                  decoration: BoxDecoration(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
                   ),
                 ),
-              ),
-            if (_loadingBranches)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else ...[
-              DropdownButtonFormField<String>(
-                initialValue: _branchId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Филиал'),
-                items: _branches
-                    .map(
-                      (b) => DropdownMenuItem(
-                        value: b['id'].toString(),
-                        child: Text(
-                          b['name']?.toString() ?? '',
-                          overflow: TextOverflow.ellipsis,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColor.goldSoft,
+                          borderRadius: BorderRadius.circular(AppRadius.icon),
+                          border: Border.all(color: AppColor.goldLine),
+                        ),
+                        child: const Icon(
+                          Icons.school_rounded,
+                          size: 20,
+                          color: AppColor.gold,
                         ),
                       ),
-                    )
-                    .toList(),
-                onChanged: _saving
-                    ? null
-                    : (v) {
-                        setState(() => _branchId = v);
-                        if (v != null) _loadDisciplines(v);
-                      },
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                key: ValueKey('disc:$_branchId'),
-                initialValue: _discipline,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Направление',
-                  suffixIcon: _loadingDisciplines
-                      ? const Padding(
-                          padding: EdgeInsets.all(10),
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Сделать учеником',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            if (name.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  'Лид «$name»',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        iconSize: 20,
+                        color: cs.onSurfaceVariant,
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                    child: _loadingBranches
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: AppColor.gold,
+                              ),
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              DropdownButtonFormField<String>(
+                                initialValue: _branchId,
+                                isExpanded: true,
+                                decoration:
+                                    _decoration(cs, label: 'Филиал'),
+                                items: _branches
+                                    .map(
+                                      (b) => DropdownMenuItem(
+                                        value: b['id'].toString(),
+                                        child: Text(
+                                          b['name']?.toString() ?? '',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: _saving
+                                    ? null
+                                    : (v) {
+                                        setState(() => _branchId = v);
+                                        if (v != null) _loadDisciplines(v);
+                                      },
+                              ),
+                              const SizedBox(height: 14),
+                              DropdownButtonFormField<String>(
+                                key: ValueKey('disc:$_branchId'),
+                                initialValue: _discipline,
+                                isExpanded: true,
+                                decoration: _decoration(
+                                  cs,
+                                  label: 'Направление',
+                                  suffixIcon: _loadingDisciplines
+                                      ? const Padding(
+                                          padding: EdgeInsets.all(10),
+                                          child: SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                        )
+                                      : null,
+                                  helperText: _branchId == null
+                                      ? 'Сначала выберите филиал'
+                                      : (_disciplines.isEmpty &&
+                                              !_loadingDisciplines
+                                          ? 'У филиала нет направлений'
+                                          : null),
+                                ),
+                                items: _disciplines
+                                    .map(
+                                      (d) => DropdownMenuItem(
+                                        value: d['name']?.toString(),
+                                        child: Text(
+                                          d['name']?.toString() ?? '',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: _saving || _branchId == null
+                                    ? null
+                                    : (v) => setState(() => _discipline = v),
+                              ),
+                              if (_error != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 14),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColor.dangerSoft,
+                                      borderRadius: BorderRadius.circular(
+                                        AppRadius.control,
+                                      ),
+                                      border: Border.all(
+                                        color: const Color(0x52E53935),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _error!,
+                                      style: const TextStyle(
+                                        color: AppColor.danger,
+                                        fontSize: 12.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                        )
-                      : null,
-                  helperText: _branchId == null
-                      ? 'Сначала выберите филиал'
-                      : (_disciplines.isEmpty && !_loadingDisciplines
-                          ? 'У филиала нет направлений'
-                          : null),
-                ),
-                items: _disciplines
-                    .map(
-                      (d) => DropdownMenuItem(
-                        value: d['name']?.toString(),
-                        child: Text(
-                          d['name']?.toString() ?? '',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _saving || _branchId == null
-                    ? null
-                    : (v) => setState(() => _discipline = v),
-              ),
-            ],
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(
-                    color: AppTheme.danger,
-                    fontSize: 12,
                   ),
                 ),
-              ),
-          ],
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.pop(context),
+                          child: const Text('Отмена'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColor.gold,
+                            foregroundColor: AppColor.onGold,
+                            disabledBackgroundColor:
+                                AppColor.gold.withValues(alpha: 0.42),
+                            disabledForegroundColor:
+                                AppColor.onGold.withValues(alpha: 0.7),
+                            elevation: 0,
+                            minimumSize: const Size.fromHeight(46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.control),
+                            ),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                          onPressed: canConvert ? _convert : null,
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColor.onGold,
+                                  ),
+                                )
+                              : const Text('Создать ученика'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
-        FilledButton.icon(
-          style: FilledButton.styleFrom(backgroundColor: AppTheme.success),
-          onPressed: _saving || _loadingBranches || _loadingDisciplines || (_disciplines.isNotEmpty && _discipline == null) ? null : _convert,
-          icon: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.school_rounded, size: 18),
-          label: const Text('Создать ученика'),
-        ),
-      ],
     );
   }
 }
