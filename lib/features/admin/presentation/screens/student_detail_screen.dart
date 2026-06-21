@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -157,6 +159,22 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             ],
           ),
           actions: [
+            IconButton(
+              icon: const Icon(
+                Icons.card_membership_rounded,
+                color: AppTheme.primaryGold,
+              ),
+              tooltip: 'Выдать абонемент',
+              onPressed: _showIssueSubscriptionSheet,
+            ),
+            IconButton(
+              icon: const Icon(
+                Icons.assignment_rounded,
+                color: AppTheme.primaryGold,
+              ),
+              tooltip: 'Задать ДЗ',
+              onPressed: _showAssignHomeworkSheet,
+            ),
             if (_student != null &&
                 (_student!['profile_user_id']?.toString().isNotEmpty == true ||
                     (_student!['profiles'] as Map<String, dynamic>?)?['user_id']
@@ -626,6 +644,302 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
         }
       }
+    }
+  }
+
+  // ── v7 helpers (P5b/P5c) ───────────────────────────────────────────────────
+  /// Flat gold button — `AppColor.gold` fill, `AppColor.onGold` label, no
+  /// shadow (per the Magic Music rule: shadows/glow forbidden on primary
+  /// buttons).
+  Widget _goldButton(String label, VoidCallback? onPressed) {
+    return FilledButton(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColor.gold,
+        foregroundColor: AppColor.onGold,
+        disabledBackgroundColor: AppColor.goldSoft,
+        disabledForegroundColor: AppColor.text2,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+      child: Text(label),
+    );
+  }
+
+  /// Ghost (outline) button used for «Отмена» in v7 sheets.
+  Widget _ghostButton(String label, VoidCallback? onPressed) {
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColor.text,
+        side: const BorderSide(color: AppColor.divider),
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      child: Text(label),
+    );
+  }
+
+  // ── (1) «Выдать абонемент» ─────────────────────────────────────────────────
+  Future<void> _showIssueSubscriptionSheet() async {
+    final crm = ref.read(magicCrmServiceProvider);
+    List<Map<String, dynamic>> packages;
+    try {
+      packages = await crm.listSubscriptionPackages(limit: 100);
+    } catch (e) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось загрузить абонементы',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    if (packages.isEmpty) {
+      MagicToast.show(
+        context,
+        'Нет доступных абонементов',
+        type: MagicToastType.info,
+      );
+      return;
+    }
+
+    final selected = await showMagicSheet<Map<String, dynamic>>(
+      context,
+      title: 'Выдать абонемент',
+      subtitle: 'Выберите пакет занятий',
+      icon: Icons.card_membership_rounded,
+      builder: (sheetContext) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final pkg in packages) ...[
+              _SubscriptionPackageTile(
+                package: pkg,
+                onTap: () => Navigator.pop(sheetContext, pkg),
+              ),
+              const SizedBox(height: AppSpace.sm),
+            ],
+          ],
+        );
+      },
+    );
+
+    if (selected == null || !mounted) return;
+
+    final packageId = selected['id']?.toString();
+    if (packageId == null || packageId.isEmpty) return;
+
+    try {
+      await crm.issueSubscription(widget.studentId, packageId);
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Абонемент выдан',
+        detail: selected['name']?.toString(),
+        type: MagicToastType.success,
+      );
+      _loadAllData();
+    } catch (e) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось выдать абонемент',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
+    }
+  }
+
+  // ── (2) «Задать ДЗ» ────────────────────────────────────────────────────────
+  Future<void> _showAssignHomeworkSheet() async {
+    final crm = ref.read(magicCrmServiceProvider);
+
+    List<Map<String, dynamic>> homeworks = const [];
+    try {
+      homeworks = await crm.listHomeworks(studentId: widget.studentId, limit: 5);
+    } catch (_) {
+      // Listing is best-effort; the assign form still works without it.
+    }
+    if (!mounted) return;
+
+    final titleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    DateTime? dueAt;
+
+    final created = await showMagicSheet<bool>(
+      context,
+      title: 'Задать ДЗ',
+      subtitle: 'Новое домашнее задание',
+      icon: Icons.assignment_rounded,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final dueLabel = dueAt == null
+                ? 'Срок не задан'
+                : DateFormat('d MMM yyyy, HH:mm', 'ru').format(dueAt!);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                  autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Заголовок *',
+                    hintText: 'Что нужно выучить?',
+                  ),
+                ),
+                const SizedBox(height: AppSpace.md),
+                TextField(
+                  controller: descCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Описание',
+                    hintText: 'Подробности (необязательно)',
+                  ),
+                ),
+                const SizedBox(height: AppSpace.md),
+                InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  onTap: () async {
+                    final now = DateTime.now();
+                    final date = await showDatePicker(
+                      context: sheetContext,
+                      initialDate: dueAt ?? now,
+                      firstDate: now.subtract(const Duration(days: 1)),
+                      lastDate: now.add(const Duration(days: 365)),
+                    );
+                    if (date == null || !sheetContext.mounted) return;
+                    final time = await showTimePicker(
+                      context: sheetContext,
+                      initialTime: TimeOfDay.fromDateTime(dueAt ?? now),
+                    );
+                    setSheetState(() {
+                      dueAt = DateTime(
+                        date.year,
+                        date.month,
+                        date.day,
+                        time?.hour ?? 0,
+                        time?.minute ?? 0,
+                      );
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpace.md,
+                      vertical: AppSpace.md,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColor.input,
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                      border: Border.all(color: AppColor.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.event_rounded,
+                          size: 18,
+                          color: AppColor.gold,
+                        ),
+                        const SizedBox(width: AppSpace.md),
+                        Expanded(
+                          child: Text(
+                            dueLabel,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: dueAt == null
+                                  ? AppColor.text2
+                                  : AppColor.text,
+                            ),
+                          ),
+                        ),
+                        if (dueAt != null)
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            color: AppColor.text2,
+                            tooltip: 'Сбросить срок',
+                            onPressed: () => setSheetState(() => dueAt = null),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (homeworks.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.lg),
+                  const Divider(height: 1, color: AppColor.divider),
+                  const SizedBox(height: AppSpace.md),
+                  const Text(
+                    'Последние ДЗ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColor.gold,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpace.sm),
+                  for (final hw in homeworks)
+                    _HomeworkTile(homework: hw),
+                ],
+              ],
+            );
+          },
+        );
+      },
+      actions: [
+        _ghostButton('Отмена', () => Navigator.pop(context, false)),
+        _goldButton('Создать', () {
+          if (titleCtrl.text.trim().isEmpty) {
+            MagicToast.show(
+              context,
+              'Введите заголовок',
+              type: MagicToastType.danger,
+            );
+            return;
+          }
+          Navigator.pop(context, true);
+        }),
+      ],
+    );
+
+    if (created != true || !mounted) return;
+
+    final title = titleCtrl.text.trim();
+    if (title.isEmpty) return;
+
+    try {
+      await crm.createHomework(
+        studentId: widget.studentId,
+        title: title,
+        description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+        dueAt: dueAt?.toIso8601String(),
+      );
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'ДЗ создано',
+        detail: title,
+        type: MagicToastType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось создать ДЗ',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
     }
   }
 
@@ -1176,5 +1490,167 @@ class _InfoRow extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Selectable subscription-package row inside the «Выдать абонемент» v7 sheet.
+class _SubscriptionPackageTile extends StatelessWidget {
+  final Map<String, dynamic> package;
+  final VoidCallback onTap;
+  const _SubscriptionPackageTile({required this.package, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = package['name']?.toString() ?? 'Абонемент';
+    final lessons = package['lessons_total'] ?? package['lessonsTotal'];
+    final price = package['price'];
+    final validity = package['validity_days'] ?? package['validityDays'];
+    final meta = [
+      if (lessons != null) '$lessons зан.',
+      if (price != null) '$price ₽',
+      if (validity != null) '$validity дн.',
+    ].join(' · ');
+
+    return Material(
+      color: AppColor.input,
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.md,
+            vertical: AppSpace.md,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            border: Border.all(color: AppColor.divider),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColor.goldSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.chip),
+                  border: Border.all(color: AppColor.goldLine),
+                ),
+                child: const Icon(
+                  Icons.card_membership_rounded,
+                  size: 18,
+                  color: AppColor.gold,
+                ),
+              ),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColor.text,
+                      ),
+                    ),
+                    if (meta.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          meta,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColor.text2,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColor.text2,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact read-only homework row for the «Последние ДЗ» section in the
+/// «Задать ДЗ» v7 sheet.
+class _HomeworkTile extends StatelessWidget {
+  final Map<String, dynamic> homework;
+  const _HomeworkTile({required this.homework});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = homework['title']?.toString() ?? '—';
+    final status = homework['status']?.toString();
+    final dueRaw = homework['due_at'] ?? homework['dueAt'];
+    final due = DateTime.tryParse(dueRaw?.toString() ?? '');
+    final subtitle = [
+      if (status != null && status.isNotEmpty) _statusLabel(status),
+      if (due != null) DateFormat('d MMM yyyy', 'ru').format(due.toLocal()),
+    ].join(' · ');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.assignment_outlined,
+              size: 16,
+              color: AppColor.text2,
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, color: AppColor.text),
+                ),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColor.text2,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'assigned':
+        return 'Назначено';
+      case 'submitted':
+        return 'Сдано';
+      case 'done':
+      case 'completed':
+        return 'Завершено';
+      default:
+        return status;
+    }
   }
 }

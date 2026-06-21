@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 
 class TasksWidget extends ConsumerStatefulWidget {
@@ -156,7 +156,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
         messenger.showSnackBar(
           SnackBar(
             content: Text('Не удалось подготовить форму задачи: $e'),
-            backgroundColor: AppTheme.danger,
+            backgroundColor: AppColor.danger,
             action: SnackBarAction(
               label: 'Повторить',
               textColor: Colors.white,
@@ -204,7 +204,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
         messenger.showSnackBar(
           SnackBar(
             content: Text('Не удалось создать задачу: $e'),
-            backgroundColor: AppTheme.danger,
+            backgroundColor: AppColor.danger,
           ),
         );
       }
@@ -235,7 +235,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Не удалось обновить задачу: $e'),
-          backgroundColor: AppTheme.danger,
+          backgroundColor: AppColor.danger,
         ),
       );
     } finally {
@@ -304,7 +304,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Не удалось назначить ответственного: $e'),
-          backgroundColor: AppTheme.danger,
+          backgroundColor: AppColor.danger,
         ),
       );
     } finally {
@@ -408,7 +408,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                     ),
                   )
                 : RefreshIndicator(
-                    color: AppTheme.primaryGold,
+                    color: AppColor.gold,
                     onRefresh: _loadTasks,
                     child: ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -473,7 +473,7 @@ class _TasksError extends StatelessWidget {
           children: [
             const Icon(
               Icons.error_outline_rounded,
-              color: AppTheme.danger,
+              color: AppColor.danger,
               size: 42,
             ),
             const SizedBox(height: 10),
@@ -762,15 +762,21 @@ class _FilterChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: selected
-              ? AppTheme.primaryGold
+              ? AppColor.gold
               : Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.chip),
+          border: Border.all(
+            color: selected
+                ? AppColor.gold
+                : Theme.of(context).colorScheme.outlineVariant,
+            width: 1,
+          ),
         ),
         child: Text(
           label,
           style: TextStyle(
             color: selected
-                ? Colors.white
+                ? AppColor.onGold
                 : Theme.of(context).colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w600,
             fontSize: 13,
@@ -842,6 +848,15 @@ class _TaskCard extends StatelessWidget {
       opacity: isPending ? 0.65 : 1,
       child: Card(
         margin: const EdgeInsets.only(bottom: 10),
+        elevation: 0,
+        color: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          side: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+            width: 1,
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -903,7 +918,7 @@ class _TaskCard extends StatelessWidget {
                               ),
                               FilledButton(
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: AppTheme.danger,
+                                  backgroundColor: AppColor.danger,
                                 ),
                                 onPressed: () => Navigator.pop(ctx, true),
                                 child: const Text('Отменить задачу'),
@@ -942,7 +957,7 @@ class _TaskCard extends StatelessWidget {
                           value: 'cancelled',
                           child: Text(
                             'Отменить',
-                            style: TextStyle(color: AppTheme.danger),
+                            style: TextStyle(color: AppColor.danger),
                           ),
                         ),
                       ],
@@ -968,28 +983,28 @@ class _TaskCard extends StatelessWidget {
                 children: [
                   _Tag(
                     label: _statusLabel(status),
-                    color: AppTheme.primaryGold,
+                    color: AppColor.gold,
                   ),
                   if (dueDate != null)
                     _Tag(
                       label: 'До: $dueDate',
                       color: isOverdue
-                          ? AppTheme.danger
+                          ? AppColor.danger
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   if (assigneeText != null && assigneeText.trim().isNotEmpty)
-                    _Tag(label: assigneeText, color: AppTheme.secondaryGold),
+                    _Tag(label: assigneeText, color: AppColor.gold2),
                   if (creatorText != null && creatorText.trim().isNotEmpty)
                     _Tag(
                       label: 'Создал: $creatorText',
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   if (branchText != null && branchText.trim().isNotEmpty)
-                    _Tag(label: branchText, color: AppTheme.success),
+                    _Tag(label: branchText, color: AppColor.success),
                   if (entityText != null)
                     _Tag(
                       label: entityText,
-                      color: AppTheme.primaryGold,
+                      color: AppColor.gold,
                       onTap: onEntityTap,
                     ),
                 ],
@@ -1102,7 +1117,7 @@ class _TaskTimelineSheetState extends ConsumerState<_TaskTimelineSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Не удалось добавить запись: $e'),
-          backgroundColor: AppTheme.danger,
+          backgroundColor: AppColor.danger,
         ),
       );
     }
@@ -1130,7 +1145,7 @@ class _TaskTimelineSheetState extends ConsumerState<_TaskTimelineSheet> {
                     color: Theme.of(
                       context,
                     ).colorScheme.onSurfaceVariant.withAlpha(70),
-                    borderRadius: BorderRadius.circular(99),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
                   ),
                 ),
               ),
@@ -1245,11 +1260,11 @@ class _TimelineTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
         radius: 18,
-        backgroundColor: AppTheme.primaryGold.withAlpha(30),
+        backgroundColor: AppColor.gold.withAlpha(30),
         child: Icon(
           _timelineIcon(item['type']?.toString()),
           size: 18,
-          color: AppTheme.primaryGold,
+          color: AppColor.gold,
         ),
       ),
       title: Text(
@@ -1269,7 +1284,7 @@ class _TimelineTile extends StatelessWidget {
                     amount,
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
-                      color: AppTheme.success,
+                      color: AppColor.success,
                     ),
                   ),
                 if (status != null && status.isNotEmpty)
@@ -1372,7 +1387,7 @@ class _Tag extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: color.withAlpha(25),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.chip),
           border: onTap != null ? Border.all(color: color.withAlpha(50)) : null,
         ),
         child: Row(

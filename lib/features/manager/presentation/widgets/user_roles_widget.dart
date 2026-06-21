@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 
 class UserRolesWidget extends ConsumerStatefulWidget {
@@ -114,7 +114,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка загрузки: $e'),
-            backgroundColor: AppTheme.danger,
+            backgroundColor: AppColor.danger,
           ),
         );
       }
@@ -146,7 +146,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка связи: $e'),
-            backgroundColor: AppTheme.danger,
+            backgroundColor: AppColor.danger,
           ),
         );
       }
@@ -185,7 +185,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка связи: $e'),
-            backgroundColor: AppTheme.danger,
+            backgroundColor: AppColor.danger,
           ),
         );
       }
@@ -236,7 +236,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppRadius.control),
             ),
           ),
         );
@@ -250,7 +250,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Не удалось изменить роль: $e'),
-            backgroundColor: AppTheme.danger,
+            backgroundColor: AppColor.danger,
           ),
         );
       }
@@ -300,7 +300,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка загрузки связей: $e'),
-            backgroundColor: AppTheme.danger,
+            backgroundColor: AppColor.danger,
           ),
         );
       }
@@ -318,7 +318,9 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
         title: Text(
           'Связь по телефону',
           style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
@@ -384,8 +386,8 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
           ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryGold,
-              foregroundColor: Colors.black,
+              backgroundColor: AppColor.gold,
+              foregroundColor: AppColor.onGold,
             ),
             onPressed: () {
               Navigator.pop(context);
@@ -444,7 +446,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                       filled: true,
                       fillColor: Theme.of(context).colorScheme.surface,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(AppRadius.control),
                         borderSide: BorderSide.none,
                       ),
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -636,7 +638,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                               icon: Icons.link_outlined,
                               text:
                                   '${_intValue(p['candidate_students']) + _intValue(p['candidate_leads']) + _intValue(p['candidate_teachers']) + _intValue(p['candidate_staff'])} канд.',
-                              accent: AppTheme.primaryGold,
+                              accent: AppColor.gold,
                             ),
                         ],
                       );
@@ -655,7 +657,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                                 ),
                               )
                             : const Icon(Icons.link),
-                        color: AppTheme.primaryGold,
+                        color: AppColor.gold,
                       );
                       final roleDropdown = Container(
                         padding: const EdgeInsets.symmetric(
@@ -719,7 +721,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.surface,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(AppRadius.card),
                           border: Border.all(
                             color: Theme.of(context).colorScheme.outlineVariant,
                           ),
@@ -806,7 +808,9 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
         title: Text(
           'Изменить роль',
           style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
@@ -824,8 +828,8 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryGold,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColor.gold,
+              foregroundColor: AppColor.onGold,
             ),
             onPressed: () {
               Navigator.pop(context);
@@ -933,7 +937,7 @@ class _LinkSection extends StatelessWidget {
               ),
               trailing: IconButton(
                 tooltip: 'Связать',
-                icon: const Icon(Icons.link, color: AppTheme.primaryGold),
+                icon: const Icon(Icons.link, color: AppColor.gold),
                 onPressed: () => onTap(item['id'].toString()),
               ),
             );

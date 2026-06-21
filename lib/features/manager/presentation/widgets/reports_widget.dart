@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
@@ -101,7 +102,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryGold),
+        child: CircularProgressIndicator(color: AppColor.gold),
       );
     }
     if (_loadError != null) {
@@ -112,9 +113,9 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       children: [
         TabBar(
           controller: _tabController,
-          labelColor: AppTheme.primaryGold,
+          labelColor: AppColor.gold,
           unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
-          indicatorColor: AppTheme.primaryGold,
+          indicatorColor: AppColor.gold,
           tabs: const [
             Tab(text: 'Аналитика'),
             Tab(text: 'Финансы'),
@@ -147,7 +148,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
         : _monthlyData.map((m) => m.lessons).reduce((a, b) => a > b ? a : b);
 
     return RefreshIndicator(
-      color: AppTheme.primaryGold,
+      color: AppColor.gold,
       onRefresh: _loadReports,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -199,12 +200,12 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                         visualDensity: VisualDensity.compact,
                         backgroundColor: WidgetStateProperty.resolveWith(
                           (states) => states.contains(WidgetState.selected)
-                              ? AppTheme.primaryGold.withAlpha(30)
+                              ? AppColor.goldSoft
                               : Colors.transparent,
                         ),
                         foregroundColor: WidgetStateProperty.resolveWith(
                           (states) => states.contains(WidgetState.selected)
-                              ? AppTheme.primaryGold
+                              ? AppColor.gold
                               : Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
@@ -222,7 +223,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                     value:
                         '${_asDouble(_summary['attendance']).toStringAsFixed(1)}%',
                     icon: Icons.trending_up_rounded,
-                    color: AppTheme.success,
+                    color: AppColor.success,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -240,7 +241,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                     label: 'Занятий',
                     value: '${_summary['total_lessons'] ?? 0}',
                     icon: Icons.calendar_month_rounded,
-                    color: AppTheme.primaryGold,
+                    color: AppColor.gold,
                   ),
                 ),
               ],
@@ -428,8 +429,17 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             ),
             const SizedBox(height: 8),
             ..._monthlyData.reversed.map(
-              (m) => Card(
+              (m) => Container(
                 margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outlineVariant.withAlpha(90),
+                  ),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -445,13 +455,13 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                       _SmallStat(
                         label: 'занятий',
                         value: '${m.lessons}',
-                        color: AppTheme.primaryGold,
+                        color: AppColor.gold,
                       ),
                       const SizedBox(width: 16),
                       _SmallStat(
                         label: 'новых',
                         value: '${m.newStudents}',
-                        color: AppTheme.success,
+                        color: AppColor.success,
                       ),
                       const SizedBox(width: 16),
                       _SmallStat(
@@ -492,7 +502,15 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 12),
-        Card(
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant.withAlpha(90),
+            ),
+          ),
           child: ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -504,12 +522,12 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               final revenue = double.tryParse('${e['revenue']}') ?? 0;
               return ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: AppTheme.primaryGold.withAlpha(30),
+                  backgroundColor: AppColor.goldSoft,
                   radius: 16,
                   child: const Icon(
                     Icons.person_outline_rounded,
                     size: 16,
-                    color: AppTheme.primaryGold,
+                    color: AppColor.gold,
                   ),
                 ),
                 title: Text(
@@ -523,7 +541,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                   '${fmt.format(revenue)} ₽',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.success,
+                    color: AppColor.success,
                   ),
                 ),
               );
@@ -551,7 +569,7 @@ class _ReportsError extends StatelessWidget {
           children: [
             const Icon(
               Icons.error_outline_rounded,
-              color: AppTheme.danger,
+              color: AppColor.danger,
               size: 42,
             ),
             const SizedBox(height: 10),
@@ -632,7 +650,13 @@ class _KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: colors.outlineVariant.withAlpha(90)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -839,7 +863,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
           child: _loading
               ? const Center(
                   child: CircularProgressIndicator(
-                    color: AppTheme.primaryGold,
+                    color: AppColor.gold,
                   ),
                 )
               : _loadError != null
@@ -854,7 +878,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
                   ),
                 )
               : RefreshIndicator(
-                  color: AppTheme.primaryGold,
+                  color: AppColor.gold,
                   onRefresh: _loadActivity,
                   child: ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -890,12 +914,14 @@ class _ActivityLogTile extends StatelessWidget {
 
     return Material(
       color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withAlpha(10)),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant.withAlpha(90),
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -959,12 +985,12 @@ class _ActivityLogTile extends StatelessWidget {
                       if (entityType != null && entityType.isNotEmpty)
                         _ReportTag(
                           label: _activityEntityLabel(entityType),
-                          color: AppTheme.primaryGold,
+                          color: AppColor.gold,
                         ),
                       if (historyType != null && historyType.isNotEmpty)
                         _ReportTag(
                           label: _activityHistoryLabel(historyType),
-                          color: AppTheme.success,
+                          color: AppColor.success,
                         ),
                     ],
                   ),
