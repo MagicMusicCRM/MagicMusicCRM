@@ -1,12 +1,18 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:go_router/go_router.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// v7 «Расход» category options — Russian label ↔ backend key.
 ///
@@ -51,6 +57,11 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   bool _expensesLoading = true;
   double _expensesTotal = 0;
   bool _savingExpense = false;
+
+  // ── Finance export (P5-7, KVA-198) ─────────────────────────────────────────
+  /// Guards the «Экспорт» buttons so a slow download cannot be re-triggered
+  /// (and so the UI can show a spinner) — the download runs off the UI thread.
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -210,6 +221,105 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     }
   }
 
+  /// Downloads the authenticated monthly finance export for the current period
+  /// and opens it. [ext] is `csv` or `xlsx`; the endpoint is
+  /// `GET /analytics/finance/monthly.<ext>` with the same `from`/`to` window the
+  /// widget's other analytics calls use.
+  ///
+  /// Unlike chat attachments (pre-signed URLs), these endpoints require the
+  /// `Authorization` header, so we read the Bearer token straight off the shared
+  /// [MagicApiClient] (token store + base URL) and attach it to the `Dio`
+  /// download. Guarded by [_exporting] + `mounted` so it never blocks the UI.
+  Future<void> _exportFinance(String ext) async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final api = ref.read(magicApiClientProvider);
+      final tokens = await api.readTokens();
+      final accessToken = tokens?.accessToken;
+      if (accessToken == null || accessToken.isEmpty) {
+        if (mounted) {
+          MagicToast.show(
+            context,
+            'Не удалось экспортировать',
+            detail: 'Нет авторизации — войдите снова',
+            type: MagicToastType.danger,
+          );
+        }
+        return;
+      }
+      final tokenType = tokens?.tokenType.isNotEmpty == true
+          ? tokens!.tokenType
+          : 'Bearer';
+
+      // Base URL is normalised to a trailing slash by MagicApiClient; the path
+      // is normalised to no leading slash to match its request pipeline.
+      final baseUrl = api.rawDio.options.baseUrl;
+      final url = '$baseUrl' 'analytics/finance/monthly.$ext';
+
+      final from = _periodStart().toIso8601String();
+      final to = DateTime.now().toIso8601String();
+
+      final dir = await _exportDirectory();
+      final stamp = DateFormat('yyyyMM').format(_periodStart());
+      final fileName = 'finance-$stamp.$ext';
+      final savePath = '${dir.path}${Platform.pathSeparator}$fileName';
+
+      await Dio().download(
+        url,
+        savePath,
+        queryParameters: {'from': from, 'to': to},
+        options: Options(
+          headers: {'Authorization': '$tokenType $accessToken'},
+          responseType: ResponseType.bytes,
+        ),
+      );
+
+      await OpenFilex.open(savePath);
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Файл сохранён',
+          detail: fileName,
+          type: MagicToastType.success,
+        );
+      }
+    } catch (e) {
+      debugPrint('Finance export error: $e');
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Ошибка экспорта',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  /// Prefers the platform Downloads folder; falls back to Android external
+  /// storage and finally the temp dir — mirrors [FileAttachmentWidget].
+  Future<Directory> _exportDirectory() async {
+    final downloads = await getDownloadsDirectory();
+    if (downloads != null) {
+      await downloads.create(recursive: true);
+      return downloads;
+    }
+    if (Platform.isAndroid) {
+      final external = await getExternalStorageDirectory();
+      if (external != null) {
+        final fallback = Directory('${external.path}/Download');
+        await fallback.create(recursive: true);
+        return fallback;
+      }
+    }
+    final temp = await getTemporaryDirectory();
+    await temp.create(recursive: true);
+    return temp;
+  }
+
   String _typeLabel(String? t) {
     switch (t) {
       case 'extra_lesson':
@@ -313,6 +423,11 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                 ),
               ],
             ),
+          ),
+          _ExportBar(
+            exporting: _exporting,
+            onExportCsv: () => _exportFinance('csv'),
+            onExportXlsx: () => _exportFinance('xlsx'),
           ),
           _ExpensesPanel(
             loading: _expensesLoading,
@@ -601,6 +716,104 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
           child: Text('Добавить'),
         ),
       ],
+    );
+  }
+}
+
+/// v7 finance export bar (P5-7, KVA-198) — two flat-gold buttons that download
+/// the authenticated `GET /analytics/finance/monthly.{csv,xlsx}` exports for the
+/// period currently selected in [FinanceWidget] and open the saved file.
+///
+/// Both buttons share the single [exporting] flag (one download at a time) and
+/// show an inline spinner on the button that triggered the download — the actual
+/// fetch runs off the UI thread in [_FinanceWidgetState._exportFinance].
+class _ExportBar extends StatelessWidget {
+  const _ExportBar({
+    required this.exporting,
+    required this.onExportCsv,
+    required this.onExportXlsx,
+  });
+
+  final bool exporting;
+  final VoidCallback onExportCsv;
+  final VoidCallback onExportXlsx;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ExportButton(
+              icon: Icons.description_rounded,
+              label: 'Экспорт CSV',
+              busy: exporting,
+              onPressed: onExportCsv,
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: _ExportButton(
+              icon: Icons.table_chart_rounded,
+              label: 'Экспорт XLSX',
+              busy: exporting,
+              onPressed: onExportXlsx,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Flat-gold export button (no shadow — Magic Music primary-button rule). When
+/// [busy] it disables and swaps the leading icon for a small spinner.
+class _ExportButton extends StatelessWidget {
+  const _ExportButton({
+    required this.icon,
+    required this.label,
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: busy ? null : onPressed,
+      icon: busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColor.onGold,
+              ),
+            )
+          : Icon(icon, size: 18),
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColor.gold,
+        foregroundColor: AppColor.onGold,
+        disabledBackgroundColor: AppColor.gold.withAlpha(120),
+        disabledForegroundColor: AppColor.onGold.withAlpha(160),
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+      ),
     );
   }
 }
