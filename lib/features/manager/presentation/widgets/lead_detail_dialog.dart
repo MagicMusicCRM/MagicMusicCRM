@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/utils/ru_phone.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 
 class LeadDetailDialog extends ConsumerStatefulWidget {
@@ -22,7 +23,8 @@ class LeadDetailDialog extends ConsumerStatefulWidget {
   ConsumerState<LeadDetailDialog> createState() => _LeadDetailDialogState();
 }
 
-class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
+class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
+    with SingleTickerProviderStateMixin {
   late Map<String, dynamic> _leadData;
   late TextEditingController _notesCtrl;
   late TextEditingController _commentCtrl;
@@ -46,6 +48,16 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   // discarding unsaved changes on close.
   bool _edited = false;
   String? _duplicateDecisionId;
+
+  // v7 segmented tab bar: Инфо / Задачи / Комментарии / Семья / История.
+  int _tabIndex = 0;
+  static const List<(IconData, String)> _tabs = [
+    (Icons.info_outline_rounded, 'Инфо'),
+    (Icons.task_alt_rounded, 'Задачи'),
+    (Icons.forum_outlined, 'Комментарии'),
+    (Icons.people_alt_outlined, 'Семья'),
+    (Icons.history_rounded, 'История'),
+  ];
 
   Future<void> _handleClose() async {
     if (!_edited) {
@@ -350,6 +362,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final fallbackStatus = widget.allStatuses.isNotEmpty
         ? widget.allStatuses.first
         : ('new', 'Новый', AppTheme.primaryGold);
@@ -365,218 +378,559 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
         await _handleClose();
       },
       child: Dialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      child: Container(
-        // Cap the width on wide desktop monitors instead of stretching the
-        // form edge-to-edge.
-        width: (MediaQuery.of(context).size.width * 0.9)
-            .clamp(0.0, 900.0)
-            .toDouble(),
-        height: MediaQuery.of(context).size.height * 0.85,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${_leadData['name'] ?? ''} ${_leadData['last_name'] ?? ''}'
-                            .trim(),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Лид (ID: ${_leadData['hollihop_id'] ?? '—'})',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: _handleClose,
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const Divider(),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        backgroundColor: cs.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        child: Container(
+          // Cap the width on wide desktop monitors instead of stretching the
+          // form edge-to-edge.
+          width: (MediaQuery.of(context).size.width * 0.9)
+              .clamp(0.0, 900.0)
+              .toDouble(),
+          height: MediaQuery.of(context).size.height * 0.85,
+          color: cs.surface,
+          child: Column(
+            children: [
+              _buildHeader(cs, curStatus),
+              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+              _buildTabBar(cs),
+              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+              Expanded(
+                child: IndexedStack(
+                  index: _tabIndex,
                   children: [
-                    _sectionTitle('Общая информация'),
-                    _buildStatusPicker(curStatus),
-                    _buildTextField('Имя', 'name'),
-                    _buildTextField('Фамилия', 'last_name'),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: RuPhoneField(
-                        key: ValueKey('phone:$_isInternational'),
-                        international: _isInternational,
-                        initialCanonical: _leadData['phone']?.toString(),
-                        onCanonicalChanged: (c) {
-                          setState(() {
-                            _leadData['phone'] = c.isEmpty ? null : c;
-                            _edited = true;
-                          });
-                        },
-                      ),
-                    ),
-                    CheckboxListTile(
-                      value: _isInternational,
-                      onChanged: (v) => setState(() {
-                        // Keep the current number across a mode toggle — the field's
-                        // ValueKey rebuild reseeds it from _leadData['phone'], so an
-                        // accidental toggle can't wipe an existing phone.
-                        _isInternational = v ?? false;
-                        _edited = true;
-                      }),
-                      title: const Text('Международный номер'),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTextField(
-                      'Электронная почта',
-                      'email',
-                      keyboard: TextInputType.emailAddress,
-                    ),
-
-                    const SizedBox(height: 16),
-                    _sectionTitle('Дополнительные поля CRM'),
-                    if (_loadingMetadata)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                    else ...[
-                      ..._buildCustomFieldControls(
-                        'leads',
-                        excludedKeys: const {
-                          'branchId',
-                          'hollihopId',
-                          'hollihop_id',
-                          'sourceLeadId',
-                        },
-                      ),
-                      _buildBranchDropdown('Основной филиал'),
-                    ],
-
-                    const SizedBox(height: 16),
-                    _sectionTitle('Заметки'),
-                    TextField(
-                      controller: _notesCtrl,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        hintText: 'Общие примечания по лиду...',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-                    _sectionTitle('Связи и активность'),
-                    _buildAggregateCard(),
-
-                    const SizedBox(height: 16),
-                    _sectionTitle('Семья'),
-                    _buildFamilySection(),
-
-                    const SizedBox(height: 16),
-                    _sectionTitle('История статусов'),
-                    _buildStatusHistorySection(),
-
-                    const SizedBox(height: 16),
-                    _sectionTitle('Комментарии'),
-                    _CommentsList(
-                      leadId: _leadData['id'].toString(),
-                      refreshKey: _commentsRefreshKey,
-                    ),
-                    const SizedBox(height: 8),
-                    _buildCommentInput(),
+                    _buildInfoTab(cs, curStatus),
+                    _buildTasksTab(cs),
+                    _buildCommentsTab(cs),
+                    _buildFamilyTab(cs),
+                    _buildHistoryTab(cs),
                   ],
                 ),
               ),
+              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+              _buildActionBar(cs),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(ColorScheme cs, StatusRecord curStatus) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.lg,
+        AppSpace.md,
+        AppSpace.md,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColor.goldSoft,
+              borderRadius: BorderRadius.circular(AppRadius.icon),
+              border: Border.all(color: AppColor.goldLine),
             ),
-            const Divider(),
-            // Wrap so the action buttons reflow onto a second line on narrow
-            // (mobile) dialog widths instead of overflowing on the right.
-            Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed:
-                        _saving || _converting ? null : _convertToStudent,
-                    icon: _converting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.person_add_alt_1_rounded),
-                    label: const Text('Создать ученика'),
+            child: const Icon(
+              Icons.person_outline_rounded,
+              size: 22,
+              color: AppColor.gold,
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_leadData['name'] ?? ''} ${_leadData['last_name'] ?? ''}'
+                      .trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
                   ),
-                  TextButton(
-                    onPressed: _saving || _converting ? null : _handleClose,
-                    child: const Text('Отмена'),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: curStatus.$3,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Лид · ${curStatus.$2} · ID ${_leadData['hollihop_id'] ?? '—'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  ElevatedButton(
-                    onPressed: _saving || _converting ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryGold,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Сохранить'),
-                  ),
-                ],
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: _handleClose,
+            icon: const Icon(Icons.close_rounded),
+            iconSize: 20,
+            color: cs.onSurfaceVariant,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar(ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.lg,
+        vertical: AppSpace.sm,
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var i = 0; i < _tabs.length; i++) ...[
+              if (i > 0) const SizedBox(width: AppSpace.sm),
+              _buildTabChip(cs, i),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabChip(ColorScheme cs, int index) {
+    final selected = _tabIndex == index;
+    final (icon, label) = _tabs[index];
+    return Material(
+      color: selected ? AppColor.goldSoft : Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.chip),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+        onTap: () => setState(() => _tabIndex = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.md,
+            vertical: AppSpace.sm,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.chip),
+            border: Border.all(
+              color: selected ? AppColor.goldLine : cs.outlineVariant,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? AppColor.gold : cs.onSurfaceVariant,
               ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? AppColor.gold : cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionBar(ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.md,
+        AppSpace.xl,
+        AppSpace.lg,
+      ),
+      // Wrap so the action buttons reflow onto a second line on narrow
+      // (mobile) dialog widths instead of overflowing on the right.
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Wrap(
+          alignment: WrapAlignment.end,
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _saving || _converting ? null : _convertToStudent,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: cs.onSurface,
+                side: BorderSide(color: cs.outlineVariant),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+              ),
+              icon: _converting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.person_add_alt_1_rounded, size: 18),
+              label: const Text('Создать ученика'),
+            ),
+            TextButton(
+              onPressed: _saving || _converting ? null : _handleClose,
+              style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: _saving || _converting ? null : _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColor.gold,
+                foregroundColor: AppColor.onGold,
+                disabledBackgroundColor: AppColor.gold.withValues(alpha: 0.42),
+                disabledForegroundColor: AppColor.onGold.withValues(alpha: 0.7),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColor.onGold,
+                      ),
+                    )
+                  : const Text('Сохранить'),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  // ── Tab: Инфо ──────────────────────────────────────────────────────────────
+  Widget _buildInfoTab(ColorScheme cs, StatusRecord curStatus) {
+    final duplicateCandidates = _duplicateCandidates
+        .where(_isCurrentLeadDuplicateCandidate)
+        .toList();
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.lg,
+        AppSpace.xl,
+        AppSpace.xl,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('Общая информация'),
+          _buildStatusPicker(cs, curStatus),
+          _buildTextField(cs, 'Имя', 'name'),
+          _buildTextField(cs, 'Фамилия', 'last_name'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: RuPhoneField(
+              key: ValueKey('phone:$_isInternational'),
+              international: _isInternational,
+              initialCanonical: _leadData['phone']?.toString(),
+              onCanonicalChanged: (c) {
+                setState(() {
+                  _leadData['phone'] = c.isEmpty ? null : c;
+                  _edited = true;
+                });
+              },
+            ),
+          ),
+          CheckboxListTile(
+            value: _isInternational,
+            activeColor: AppColor.gold,
+            onChanged: (v) => setState(() {
+              // Keep the current number across a mode toggle — the field's
+              // ValueKey rebuild reseeds it from _leadData['phone'], so an
+              // accidental toggle can't wipe an existing phone.
+              _isInternational = v ?? false;
+              _edited = true;
+            }),
+            title: const Text('Международный номер'),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+          ),
+          const SizedBox(height: AppSpace.sm),
+          _buildTextField(
+            cs,
+            'Электронная почта',
+            'email',
+            keyboard: TextInputType.emailAddress,
+          ),
+
+          const SizedBox(height: AppSpace.lg),
+          _sectionTitle('Дополнительные поля CRM'),
+          if (_loadingMetadata)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(8.0),
+                child: CircularProgressIndicator(color: AppColor.gold),
+              ),
+            )
+          else ...[
+            ..._buildCustomFieldControls(
+              cs,
+              'leads',
+              excludedKeys: const {
+                'branchId',
+                'hollihopId',
+                'hollihop_id',
+                'sourceLeadId',
+              },
+            ),
+            _buildBranchDropdown(cs, 'Основной филиал'),
+          ],
+
+          const SizedBox(height: AppSpace.lg),
+          _sectionTitle('Заметки'),
+          TextField(
+            controller: _notesCtrl,
+            maxLines: 3,
+            decoration: _inputDecoration(
+              cs,
+              hint: 'Общие примечания по лиду...',
+            ),
+          ),
+
+          const SizedBox(height: AppSpace.lg),
+          _sectionTitle('Связи и активность'),
+          _buildAggregateCard(cs, includeTasks: false),
+
+          if (_loadingDuplicates || duplicateCandidates.isNotEmpty) ...[
+            const SizedBox(height: AppSpace.md),
+            _sectionTitle('Кандидаты на связь'),
+            _duplicateCandidatesSection(cs, duplicateCandidates),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── Tab: Задачи ──────────────────────────────────────────────────────────
+  Widget _buildTasksTab(ColorScheme cs) {
+    if (_loadingCard) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppSpace.lg),
+        child: Center(child: CircularProgressIndicator(color: AppColor.gold)),
+      );
+    }
+    final card = _leadCard;
+    final tasks = card == null ? const <Map<String, dynamic>>[] : _list(card['tasks']);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.lg,
+        AppSpace.xl,
+        AppSpace.xl,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('Задачи'),
+          if (card == null)
+            _emptyHint(cs, 'Карточка активности временно недоступна')
+          else if (tasks.isEmpty)
+            _emptyHint(cs, 'Открытых задач нет')
+          else
+            ...tasks.map(
+              (row) => _entityTile(
+                cs,
+                title: row['title']?.toString() ?? 'Задача',
+                subtitle: _formatStatus(row['status']),
+                leading: Icons.task_alt_rounded,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Tab: Комментарии ─────────────────────────────────────────────────────
+  Widget _buildCommentsTab(ColorScheme cs) {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.xl,
+              AppSpace.lg,
+              AppSpace.xl,
+              AppSpace.md,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sectionTitle('Комментарии'),
+                _CommentsList(
+                  leadId: _leadData['id'].toString(),
+                  refreshKey: _commentsRefreshKey,
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.xl,
+            AppSpace.sm,
+            AppSpace.xl,
+            AppSpace.lg,
+          ),
+          child: _buildCommentInput(cs),
+        ),
+      ],
+    );
+  }
+
+  // ── Tab: Семья ───────────────────────────────────────────────────────────
+  Widget _buildFamilyTab(ColorScheme cs) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.lg,
+        AppSpace.xl,
+        AppSpace.xl,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('Семья'),
+          _buildFamilySection(cs),
+        ],
+      ),
+    );
+  }
+
+  // ── Tab: История ─────────────────────────────────────────────────────────
+  Widget _buildHistoryTab(ColorScheme cs) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.lg,
+        AppSpace.xl,
+        AppSpace.xl,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('История статусов'),
+          _buildStatusHistorySection(cs),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyHint(ColorScheme cs, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+      child: Text(
+        text,
+        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(
+    ColorScheme cs, {
+    String? label,
+    String? hint,
+    String? helperText,
+    bool isDense = false,
+    Widget? suffixIcon,
+  }) {
+    final r = BorderRadius.circular(AppRadius.control);
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      helperText: helperText,
+      isDense: isDense,
+      suffixIcon: suffixIcon,
+      enabledBorder: OutlineInputBorder(
+        borderRadius: r,
+        borderSide: BorderSide(color: cs.outlineVariant),
+      ),
+      border: OutlineInputBorder(
+        borderRadius: r,
+        borderSide: BorderSide(color: cs.outlineVariant),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: r,
+        borderSide: const BorderSide(color: AppColor.gold, width: 2),
       ),
     );
   }
 
   Widget _sectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: AppTheme.primaryGold,
-          fontWeight: FontWeight.bold,
-        ),
+      padding: const EdgeInsets.only(bottom: AppSpace.md, top: AppSpace.xs),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 14,
+            decoration: BoxDecoration(
+              color: AppColor.gold,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppColor.gold,
+              fontWeight: FontWeight.w700,
+              fontSize: 13.5,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildStatusPicker(StatusRecord current) {
+  Widget _buildStatusPicker(ColorScheme cs, StatusRecord current) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: DropdownButtonFormField<String>(
         initialValue: _leadData['status'],
-        decoration: const InputDecoration(labelText: 'Статус'),
+        isExpanded: true,
+        decoration: _inputDecoration(cs, label: 'Статус', isDense: true),
         items: widget.allStatuses.map((s) {
           return DropdownMenuItem(
             value: s.$1,
@@ -609,6 +963,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   }
 
   Widget _buildTextField(
+    ColorScheme cs,
     String label,
     String key, {
     TextInputType? keyboard,
@@ -622,10 +977,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: TextFormField(
         initialValue: initialVal ?? '',
-        decoration: InputDecoration(labelText: label),
+        decoration: _inputDecoration(cs, label: label, isDense: true),
         keyboardType: keyboard,
         onChanged: (v) {
           if (isCustom) {
@@ -642,6 +997,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
   }
 
   List<Widget> _buildCustomFieldControls(
+    ColorScheme cs,
     String entity, {
     Set<String> excludedKeys = const {},
   }) {
@@ -656,16 +1012,16 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
         Text(
           'Дополнительные поля не настроены',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: cs.onSurfaceVariant,
             fontSize: 13,
           ),
         ),
       ];
     }
-    return fields.map(_buildCustomFieldControl).toList();
+    return fields.map((field) => _buildCustomFieldControl(cs, field)).toList();
   }
 
-  Widget _buildCustomFieldControl(CrmCustomFieldDefinition field) {
+  Widget _buildCustomFieldControl(ColorScheme cs, CrmCustomFieldDefinition field) {
     final customData = _leadData['custom_data'] as Map? ?? {};
     final rawValue = customData[field.key];
     final label = field.required ? '${field.label} *' : field.label;
@@ -674,10 +1030,16 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
       final current = rawValue?.toString() ?? '';
       final initialValue = field.options.contains(current) ? current : '';
       return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.only(bottom: AppSpace.md),
         child: DropdownButtonFormField<String>(
           initialValue: initialValue,
-          decoration: InputDecoration(labelText: label, helperText: field.hint),
+          isExpanded: true,
+          decoration: _inputDecoration(
+            cs,
+            label: label,
+            helperText: field.hint,
+            isDense: true,
+          ),
           items: [
             const DropdownMenuItem(value: '', child: Text('Не выбрано')),
             ...field.options.map(
@@ -695,6 +1057,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     if (field.type == 'boolean') {
       return SwitchListTile(
         value: rawValue == true || rawValue?.toString() == 'true',
+        activeThumbColor: AppColor.gold,
         onChanged: (value) => _updateCustomData(field.key, value),
         title: Text(label),
         subtitle: field.hint == null ? null : Text(field.hint!),
@@ -703,10 +1066,11 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     }
 
     if (field.type == 'date') {
-      return _buildDateCustomField(field, rawValue?.toString());
+      return _buildDateCustomField(cs, field, rawValue?.toString());
     }
 
     return _buildTextField(
+      cs,
       label,
       field.key,
       keyboard: _keyboardForCustomField(field.type),
@@ -714,15 +1078,20 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     );
   }
 
-  Widget _buildDateCustomField(CrmCustomFieldDefinition field, String? value) {
+  Widget _buildDateCustomField(
+    ColorScheme cs,
+    CrmCustomFieldDefinition field,
+    String? value,
+  ) {
     final dt = value == null ? null : DateTime.tryParse(value);
     final display = dt != null
         ? DateFormat('dd.MM.yyyy').format(dt)
         : 'Не выбрано';
     final label = field.required ? '${field.label} *' : field.label;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.control),
         onTap: () async {
           final picked = await showDatePicker(
             context: context,
@@ -735,12 +1104,21 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
           }
         },
         child: InputDecorator(
-          decoration: InputDecoration(labelText: label, helperText: field.hint),
+          decoration: _inputDecoration(
+            cs,
+            label: label,
+            helperText: field.hint,
+            isDense: true,
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(display),
-              const Icon(Icons.calendar_today_rounded, size: 16),
+              const Icon(
+                Icons.calendar_today_rounded,
+                size: 16,
+                color: AppColor.gold,
+              ),
             ],
           ),
         ),
@@ -758,16 +1136,13 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     };
   }
 
-  Widget _buildBranchDropdown(String label) {
+  Widget _buildBranchDropdown(ColorScheme cs, String label) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: DropdownButtonFormField<String>(
         initialValue: _leadData['branch_id'],
-        decoration: InputDecoration(
-          labelText: label,
-          filled: true,
-          fillColor: Theme.of(context).colorScheme.surface.withAlpha(127),
-        ),
+        isExpanded: true,
+        decoration: _inputDecoration(cs, label: label, isDense: true),
         items: _branches
             .map(
               (b) => DropdownMenuItem(
@@ -784,38 +1159,52 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     );
   }
 
-  Widget _buildCommentInput() {
+  Widget _buildCommentInput(ColorScheme cs) {
     return Row(
       children: [
         Expanded(
           child: TextField(
             controller: _commentCtrl,
-            decoration: const InputDecoration(
-              hintText: 'Написать комментарий...',
+            decoration: _inputDecoration(
+              cs,
+              hint: 'Написать комментарий...',
               isDense: true,
             ),
           ),
         ),
-        IconButton(
-          onPressed: _addComment,
-          icon: const Icon(Icons.send_rounded, color: AppTheme.primaryGold),
+        const SizedBox(width: AppSpace.sm),
+        Material(
+          color: AppColor.gold,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            onTap: _addComment,
+            child: const Padding(
+              padding: EdgeInsets.all(AppSpace.md),
+              child: Icon(
+                Icons.send_rounded,
+                color: AppColor.onGold,
+                size: 18,
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildAggregateCard() {
+  Widget _buildAggregateCard(ColorScheme cs, {bool includeTasks = true}) {
     if (_loadingCard) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: LinearProgressIndicator(),
+        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+        child: LinearProgressIndicator(color: AppColor.gold),
       );
     }
     final card = _leadCard;
     if (card == null) {
       return Text(
         'Карточка активности временно недоступна',
-        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        style: TextStyle(color: cs.onSurfaceVariant),
       );
     }
 
@@ -832,8 +1221,8 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
           children: [
             _summaryChip(
               Icons.school_outlined,
@@ -855,12 +1244,9 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
               ),
           ],
         ),
-        const SizedBox(height: 12),
-        if (_loadingDuplicates || duplicateCandidates.isNotEmpty) ...[
-          _duplicateCandidatesSection(duplicateCandidates),
-          const SizedBox(height: 8),
-        ],
+        const SizedBox(height: AppSpace.md),
         _miniSection(
+          cs,
           title: 'Связанные ученики',
           empty: 'Связанных учеников нет',
           rows: linkedStudents,
@@ -868,14 +1254,17 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
               '${row['first_name'] ?? ''} ${row['last_name'] ?? ''}'.trim(),
           subtitleBuilder: (row) => row['phone']?.toString(),
         ),
+        if (includeTasks)
+          _miniSection(
+            cs,
+            title: 'Задачи',
+            empty: 'Открытых задач нет',
+            rows: tasks,
+            titleBuilder: (row) => row['title']?.toString() ?? 'Задача',
+            subtitleBuilder: (row) => _formatStatus(row['status']),
+          ),
         _miniSection(
-          title: 'Задачи',
-          empty: 'Открытых задач нет',
-          rows: tasks,
-          titleBuilder: (row) => row['title']?.toString() ?? 'Задача',
-          subtitleBuilder: (row) => _formatStatus(row['status']),
-        ),
-        _miniSection(
+          cs,
           title: 'Пробные занятия',
           empty: 'Пробные занятия не назначены',
           rows: trials,
@@ -886,6 +1275,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
           ].where((value) => value != null && '$value'.isNotEmpty).join(' · '),
         ),
         _miniSection(
+          cs,
           title: 'Лента',
           empty: 'История пока пустая',
           rows: timeline.take(8).toList(),
@@ -908,11 +1298,11 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     };
   }
 
-  Widget _buildFamilySection() {
+  Widget _buildFamilySection(ColorScheme cs) {
     if (_loadingFamily) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: LinearProgressIndicator(),
+        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+        child: LinearProgressIndicator(color: AppColor.gold),
       );
     }
     final family = _family?['family'] as Map<String, dynamic>?;
@@ -920,7 +1310,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     if (family == null) {
       return Text(
         'Семья не указана',
-        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        style: TextStyle(color: cs.onSurfaceVariant),
       );
     }
     final primaryId = family['primary_payer_member_id']?.toString();
@@ -939,7 +1329,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
           Text(
             'Участники не добавлены',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: cs.onSurfaceVariant,
               fontSize: 12,
             ),
           )
@@ -958,15 +1348,14 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                 dense: true,
                 visualDensity: VisualDensity.compact,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
                 ),
-                tileColor: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withAlpha(120),
+                tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
                 leading: const Icon(
                   Icons.people_alt_rounded,
                   size: 18,
-                  color: AppTheme.primaryGold,
+                  color: AppColor.gold,
                 ),
                 title: Text(
                   (m['name']?.toString().trim().isNotEmpty ?? false)
@@ -983,18 +1372,18 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     );
   }
 
-  Widget _buildStatusHistorySection() {
+  Widget _buildStatusHistorySection(ColorScheme cs) {
     if (_loadingHistory) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: LinearProgressIndicator(),
+        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+        child: LinearProgressIndicator(color: AppColor.gold),
       );
     }
     if (_statusHistory.isEmpty) {
       return Text(
         'Изменений статуса пока нет',
         style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          color: cs.onSurfaceVariant,
           fontSize: 12,
         ),
       );
@@ -1016,15 +1405,14 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
             dense: true,
             visualDensity: VisualDensity.compact,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
             ),
-            tileColor: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerHighest.withAlpha(120),
+            tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
             leading: const Icon(
               Icons.history_rounded,
               size: 18,
-              color: AppTheme.primaryGold,
+              color: AppColor.gold,
             ),
             title: Text(transition, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text(
@@ -1050,18 +1438,19 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.primaryGold.withAlpha(28),
-        borderRadius: BorderRadius.circular(8),
+        color: AppColor.goldSoft,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+        border: Border.all(color: AppColor.goldLine),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: AppTheme.primaryGold),
+          Icon(icon, size: 16, color: AppColor.gold),
           const SizedBox(width: 6),
           Text(
             '$label: $value',
             style: const TextStyle(
-              color: AppTheme.primaryGold,
+              color: AppColor.gold,
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -1071,15 +1460,18 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     );
   }
 
-  Widget _duplicateCandidatesSection(List<Map<String, dynamic>> candidates) {
+  Widget _duplicateCandidatesSection(
+    ColorScheme cs,
+    List<Map<String, dynamic>> candidates,
+  ) {
     if (_loadingDuplicates) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: LinearProgressIndicator(),
+        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+        child: LinearProgressIndicator(color: AppColor.gold),
       );
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1108,11 +1500,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                 dense: true,
                 visualDensity: VisualDensity.compact,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
                 ),
-                tileColor: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withAlpha(120),
+                tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
                 title: Text(
                   title == null || title.isEmpty
                       ? 'Существующий ученик'
@@ -1128,6 +1519,14 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                         overflow: TextOverflow.ellipsis,
                       ),
                 trailing: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColor.goldSoft,
+                    foregroundColor: AppColor.gold,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                    ),
+                  ),
                   onPressed: pending
                       ? null
                       : () => _attachDuplicateCandidate(candidate),
@@ -1191,7 +1590,37 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     return num.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-  Widget _miniSection({
+  Widget _entityTile(
+    ColorScheme cs, {
+    required String title,
+    String? subtitle,
+    required IconData leading,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: ListTile(
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+        leading: Icon(leading, size: 18, color: AppColor.gold),
+        title: Text(
+          title.isEmpty ? 'Без названия' : title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: subtitle == null || subtitle.isEmpty
+            ? null
+            : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+    );
+  }
+
+  Widget _miniSection(
+    ColorScheme cs, {
     required String title,
     required String empty,
     required List<Map<String, dynamic>> rows,
@@ -1199,7 +1628,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
     required String? Function(Map<String, dynamic>) subtitleBuilder,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: AppSpace.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1212,7 +1641,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
             Text(
               empty,
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: cs.onSurfaceVariant,
                 fontSize: 12,
               ),
             )
@@ -1226,11 +1655,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog> {
                   dense: true,
                   visualDensity: VisualDensity.compact,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
                   ),
-                  tileColor: Theme.of(
-                    context,
-                  ).colorScheme.surfaceContainerHighest.withAlpha(120),
+                  tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
                   title: Text(
                     titleText.isEmpty ? 'Без названия' : titleText,
                     maxLines: 1,
@@ -1302,6 +1730,7 @@ class _CommentsList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
     return FutureBuilder<List<Map<String, dynamic>>>(
       key: ValueKey(refreshKey),
       future: ref
@@ -1314,7 +1743,7 @@ class _CommentsList extends ConsumerWidget {
           return Text(
             'Нет комментариев',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: cs.onSurfaceVariant,
               fontSize: 12,
             ),
           );
@@ -1328,11 +1757,14 @@ class _CommentsList extends ConsumerWidget {
                 : '';
             return Container(
               width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: AppSpace.sm),
+              padding: const EdgeInsets.all(AppSpace.md),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: Border.all(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1346,7 +1778,7 @@ class _CommentsList extends ConsumerWidget {
                             ? c['author_name'].toString()
                             : 'Сотрудник',
                         style: const TextStyle(
-                          color: AppTheme.primaryGold,
+                          color: AppColor.gold,
                           fontWeight: FontWeight.bold,
                           fontSize: 11,
                         ),
@@ -1354,7 +1786,7 @@ class _CommentsList extends ConsumerWidget {
                       Text(
                         dateStr,
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          color: cs.onSurfaceVariant,
                           fontSize: 10,
                         ),
                       ),

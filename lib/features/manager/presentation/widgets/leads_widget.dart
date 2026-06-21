@@ -6,6 +6,7 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/convert_le
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/core/models/types.dart';
@@ -348,7 +349,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
     messenger.showSnackBar(
       SnackBar(
         content: const Text('Лид конвертирован в ученика'),
-        backgroundColor: AppTheme.success,
+        backgroundColor: AppColor.success,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 4),
         action: SnackBarAction(
@@ -399,7 +400,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
 
   void _showError(String text) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), backgroundColor: AppTheme.danger),
+      SnackBar(content: Text(text), backgroundColor: AppColor.danger),
     );
   }
 
@@ -503,7 +504,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            style: FilledButton.styleFrom(backgroundColor: AppColor.danger),
             child: const Text('Удалить'),
           ),
         ],
@@ -687,7 +688,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
                               child: Text(
                                 'Удалить: ${_presets[index].name}',
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: AppTheme.danger),
+                                style: const TextStyle(color: AppColor.danger),
                               ),
                             ),
                           ),
@@ -781,7 +782,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
             children: [
               const Icon(
                 Icons.error_outline_rounded,
-                color: AppTheme.danger,
+                color: AppColor.danger,
                 size: 42,
               ),
               const SizedBox(height: 10),
@@ -967,10 +968,12 @@ class _KanbanColumnState extends State<_KanbanColumn> {
             color: hovering
                 ? widget.status.$3.withAlpha(30)
                 : Theme.of(context).colorScheme.surface.withAlpha(127),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.card),
             border: Border.all(
-              color: hovering ? widget.status.$3 : Colors.transparent,
-              width: 1.5,
+              color: hovering
+                  ? widget.status.$3
+                  : Theme.of(context).colorScheme.outlineVariant,
+              width: hovering ? 1.5 : 1,
             ),
           ),
           child: Column(
@@ -1004,7 +1007,11 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                       ),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(AppRadius.chip),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                          width: 1,
+                        ),
                       ),
                       child: Text(
                         '${widget.totalCount}',
@@ -1029,7 +1036,7 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                             color: widget.status.$3,
                             style: BorderStyle.solid,
                           ),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(AppRadius.control),
                           color: widget.status.$3.withAlpha(25),
                         ),
                         child: Center(
@@ -1179,7 +1186,7 @@ class _LeadCard extends ConsumerWidget {
                 padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.control),
               border: Border.all(color: statusColor, width: 2),
               boxShadow: [
                 BoxShadow(
@@ -1241,7 +1248,7 @@ class _LeadCard extends ConsumerWidget {
         child: Card(
           margin: const EdgeInsets.only(bottom: 10),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.control),
             side: BorderSide(
               color: statusColor.withAlpha(120),
               style: BorderStyle.solid,
@@ -1258,8 +1265,13 @@ class _LeadCard extends ConsumerWidget {
             onTap: onTap,
             child: Card(
               margin: const EdgeInsets.only(bottom: 10),
+              color: Theme.of(context).colorScheme.surface,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                side: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  width: 1,
+                ),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -1289,7 +1301,7 @@ class _LeadCard extends ConsumerWidget {
                           icon: const Icon(
                             Icons.chat_bubble_outline_rounded,
                             size: 18,
-                            color: AppTheme.primaryGold,
+                            color: AppColor.gold,
                           ),
                           onPressed: () => _openChat(context, ref),
                         ),
@@ -1343,7 +1355,7 @@ class _LeadCard extends ConsumerWidget {
                                     const Icon(
                                       Icons.check_rounded,
                                       size: 16,
-                                      color: AppTheme.success,
+                                      color: AppColor.success,
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
@@ -1383,13 +1395,13 @@ class _LeadCard extends ConsumerWidget {
                                       Icon(
                                         Icons.school_rounded,
                                         size: 18,
-                                        color: AppTheme.success,
+                                        color: AppColor.success,
                                       ),
                                       SizedBox(width: 8),
                                       Text(
                                         'Сделать учеником',
                                         style: TextStyle(
-                                          color: AppTheme.success,
+                                          color: AppColor.success,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -1402,7 +1414,7 @@ class _LeadCard extends ConsumerWidget {
                                 value: 'delete',
                                 child: Text(
                                   'Удалить',
-                                  style: TextStyle(color: AppTheme.danger),
+                                  style: TextStyle(color: AppColor.danger),
                                 ),
                               ),
                             ];
@@ -1429,8 +1441,8 @@ class _LeadCard extends ConsumerWidget {
                         if (discipline.isNotEmpty)
                           _InfoBadge(
                             text: discipline,
-                            color: AppTheme.primaryGold.withAlpha(51),
-                            textColor: AppTheme.primaryGold,
+                            color: AppColor.gold.withAlpha(51),
+                            textColor: AppColor.gold,
                           ),
                         if (level.isNotEmpty)
                           Padding(
@@ -1636,7 +1648,7 @@ class _LeadCard extends ConsumerWidget {
       messenger.showSnackBar(
         SnackBar(
           content: Text('Не удалось открыть чат: $e'),
-          backgroundColor: AppTheme.danger,
+          backgroundColor: AppColor.danger,
         ),
       );
     }
@@ -1655,7 +1667,7 @@ class _LeadCard extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Лид конвертирован в ученика'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: AppColor.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1879,18 +1891,18 @@ class _MetricBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: AppTheme.primaryGold.withAlpha(36),
-        borderRadius: BorderRadius.circular(4),
+        color: AppColor.gold.withAlpha(36),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: AppTheme.primaryGold),
+          Icon(icon, size: 12, color: AppColor.gold),
           const SizedBox(width: 4),
           Text(
             text,
             style: const TextStyle(
-              color: AppTheme.primaryGold,
+              color: AppColor.gold,
               fontSize: 10,
               fontWeight: FontWeight.w700,
             ),
