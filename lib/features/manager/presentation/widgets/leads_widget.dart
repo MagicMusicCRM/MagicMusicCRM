@@ -32,6 +32,8 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
   final _searchCtrl = TextEditingController();
   final _boardScrollController = ScrollController();
   List<StatusRecord> _activeStatuses = [];
+  // P3-7: status id → whether moving a lead here needs a loss/pause reason.
+  final Map<String, bool> _statusRequiresReason = {};
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _disciplines = [];
   List<Map<String, dynamic>> _levels = [];
@@ -250,6 +252,15 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
 
   Future<void> _moveStatus(String id, String newStatus) async {
     if (id.isEmpty || _pendingLeadIds.contains(id)) return;
+    // P3-7: a move into a terminal/requires-reason column must capture why.
+    String? reasonId;
+    String? statusComment;
+    if (_statusRequiresReason[newStatus] == true) {
+      final picked = await _pickLossReason();
+      if (picked == null) return; // cancelled → leave the lead in place
+      reasonId = picked.$1;
+      statusComment = picked.$2;
+    }
     final previous = _optimisticLeadStatuses[id];
     setState(() {
       _optimisticLeadStatuses[id] = newStatus;
@@ -267,6 +278,8 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
             id,
             statusId: isUuid ? newStatus : null,
             clearStatus: !isUuid,
+            reasonId: reasonId,
+            statusComment: statusComment,
           );
       _refreshBoard();
       await ref.read(leadBoardProvider(_filters).future);
@@ -287,6 +300,114 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
       });
       _showError('Не удалось изменить статус лида: $e');
     }
+  }
+
+  /// P3-7: ask for a loss/pause reason (+ optional comment) before a terminal
+  /// move. Returns `(reasonId, comment)` or `null` when the user cancels.
+  Future<(String?, String?)?> _pickLossReason() async {
+    List<Map<String, dynamic>> reasons = const [];
+    try {
+      reasons = await ref.read(magicCrmServiceProvider).listLossReasons();
+    } catch (_) {
+      // Reasons failed to load — still allow confirming with a free comment.
+    }
+    if (!mounted) return null;
+    String? selectedId;
+    final commentController = TextEditingController();
+    final confirmed = await showMagicSheet<bool>(
+      context,
+      title: 'Причина',
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final cs = Theme.of(ctx).colorScheme;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final r in reasons)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpace.xs),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    onTap: () =>
+                        setSheet(() => selectedId = r['id']?.toString()),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpace.md,
+                        vertical: AppSpace.sm,
+                      ),
+                      decoration: BoxDecoration(
+                        color: r['id']?.toString() == selectedId
+                            ? AppColor.goldSoft
+                            : cs.surface,
+                        borderRadius: BorderRadius.circular(AppRadius.control),
+                        border: Border.all(
+                          color: r['id']?.toString() == selectedId
+                              ? AppColor.gold
+                              : cs.outlineVariant,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            r['id']?.toString() == selectedId
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_off,
+                            size: 18,
+                            color: r['id']?.toString() == selectedId
+                                ? AppColor.gold
+                                : cs.outline,
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                          Expanded(child: Text(r['name']?.toString() ?? '—')),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: AppSpace.sm),
+              TextField(
+                controller: commentController,
+                minLines: 1,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Комментарий (необязательно)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: AppSpace.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(false),
+                      child: const Text('Отмена'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColor.gold,
+                        foregroundColor: AppColor.onGold,
+                        elevation: 0,
+                        shadowColor: Colors.transparent,
+                      ),
+                      onPressed: () => Navigator.of(sheetContext).pop(true),
+                      child: const Text('Подтвердить'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    final comment = commentController.text.trim();
+    commentController.dispose();
+    if (confirmed != true) return null;
+    return (selectedId, comment.isEmpty ? null : comment);
   }
 
   Future<void> _deleteLead(String id) async {
@@ -701,6 +822,11 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
 
   StatusRecord _statusFromColumn(Map<String, dynamic> column) {
     final color = statusColorFromValue(column['color']);
+    final columnId = column['id']?.toString();
+    if (columnId != null && columnId.isNotEmpty) {
+      _statusRequiresReason[columnId] =
+          column['requiresReason'] == true || column['requires_reason'] == true;
+    }
     return (
       column['key']?.toString() ?? column['id']?.toString() ?? 'new',
       column['label']?.toString() ??
