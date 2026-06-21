@@ -24,6 +24,10 @@ import { UpdateExpenseDto } from "./dto/update-expense.dto";
 import { UpsertSubscriptionPackageDto } from "./dto/upsert-subscription-package.dto";
 import { UpdateSubscriptionPackageDto } from "./dto/update-subscription-package.dto";
 import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
+import { CreateHomeworkDto } from "./dto/create-homework.dto";
+import { UpdateHomeworkDto } from "./dto/update-homework.dto";
+import { HomeworkQuery } from "./dto/homework.query";
+import { AddHomeworkAttachmentDto } from "./dto/add-homework-attachment.dto";
 import { CreateStaffDto } from "./dto/create-staff.dto";
 import { CreateStudentDto } from "./dto/create-student.dto";
 import { CreateTeacherDto } from "./dto/create-teacher.dto";
@@ -673,6 +677,48 @@ export class CrmController {
     @Body() dto: IssueSubscriptionDto,
   ) {
     return this.crm.issueSubscription(actor, id, dto);
+  }
+
+  @Get("homeworks")
+  listHomeworks(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: HomeworkQuery,
+  ) {
+    return this.crm.listHomeworks(actor, query);
+  }
+
+  @Post("homeworks")
+  createHomework(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: CreateHomeworkDto,
+  ) {
+    return this.crm.createHomework(actor, dto);
+  }
+
+  @Patch("homeworks/:id")
+  updateHomework(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateHomeworkDto,
+  ) {
+    return this.crm.updateHomework(actor, id, dto);
+  }
+
+  @Post("homeworks/:id/submit")
+  submitHomework(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.submitHomework(actor, id);
+  }
+
+  @Post("homeworks/:id/attachments")
+  addHomeworkAttachment(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: AddHomeworkAttachmentDto,
+  ) {
+    return this.crm.addHomeworkAttachment(actor, id, dto);
   }
 
   @Get("leads")

@@ -36,4 +36,27 @@ describe('FileValidator', () => {
     expect(result.originalName).toBe('secret.php.jpg');
     expect(result.extension).toBe('jpg');
   });
+
+  it('accepts a homework attachment at the 25MB limit (P5c)', () => {
+    const result = validator.validate(
+      file({
+        originalname: 'homework.pdf',
+        mimetype: 'application/pdf',
+        size: 25 * 1024 * 1024
+      }),
+      'homework_attachment'
+    );
+
+    expect(result.mimeType).toBe('application/pdf');
+    expect(result.extension).toBe('pdf');
+  });
+
+  it('rejects an oversized homework attachment (P5c)', () => {
+    expect(() =>
+      validator.validate(
+        file({ mimetype: 'application/pdf', size: 25 * 1024 * 1024 + 1 }),
+        'homework_attachment'
+      )
+    ).toThrow(BadRequestException);
+  });
 });

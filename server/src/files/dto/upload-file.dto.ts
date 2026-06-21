@@ -5,14 +5,15 @@ export type FilePurpose =
   | 'chat_attachment'
   | 'chat_voice'
   | 'legal_document'
-  | 'crm_document';
+  | 'crm_document'
+  | 'homework_attachment';
 
 export class UploadFileDto {
-  @IsIn(['profile_avatar', 'chat_attachment', 'chat_voice', 'legal_document', 'crm_document'])
+  @IsIn(['profile_avatar', 'chat_attachment', 'chat_voice', 'legal_document', 'crm_document', 'homework_attachment'])
   purpose: FilePurpose;
 
   @IsOptional()
-  @IsIn(['profile', 'chat', 'student', 'teacher', 'lead', 'lesson', 'legal'])
+  @IsIn(['profile', 'chat', 'student', 'teacher', 'lead', 'lesson', 'legal', 'homework'])
   ownerType?: string;
 
   @IsOptional()

@@ -66,6 +66,14 @@ export class FilesPolicy {
       throw new ForbiddenException("Недостаточно прав для загрузки документа.");
     }
 
+    if (purpose === "homework_attachment") {
+      if (ownerType !== "homework" || !ownerId) {
+        throw new ForbiddenException("Для вложения требуется задание.");
+      }
+      // The homework endpoint enforces homework ownership when linking.
+      return actor.userId;
+    }
+
     return actor.userId;
   }
 
@@ -89,6 +97,33 @@ export class FilesPolicy {
       if (chat) {
         this.messengerPolicy.assertCanReadChat(actor, chat);
         return;
+      }
+    }
+    if (
+      file.purpose === "homework_attachment" &&
+      file.owner_type === "homework" &&
+      file.owner_id
+    ) {
+      // Manager/admin already returned above. Allow the assigning teacher or
+      // the owning client; everyone else falls through to NotFound.
+      const access = await this.database.query<{
+        assigned_by: string | null;
+        student_user_id: string | null;
+      }>(
+        `
+          select lh.assigned_by, p.user_id as student_user_id
+          from app.lesson_homeworks lh
+          join app.students s on s.id = lh.student_id
+          left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+          where lh.id = $1 and lh.deleted_at is null
+          limit 1
+        `,
+        [file.owner_id],
+      );
+      const homework = access.rows[0];
+      if (homework) {
+        if (homework.assigned_by === actor.userId) return;
+        if (homework.student_user_id === actor.userId) return;
       }
     }
     throw new NotFoundException("Файл не найден.");

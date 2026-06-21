@@ -65,6 +65,10 @@ const RULES: Record<FilePurpose, PurposeRule> = {
   crm_document: {
     maxBytes: 25 * MB,
     mimeToExtension: COMMON_ATTACHMENT_MIME
+  },
+  homework_attachment: {
+    maxBytes: 25 * MB,
+    mimeToExtension: COMMON_ATTACHMENT_MIME
   }
 };
 
