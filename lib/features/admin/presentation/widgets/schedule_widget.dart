@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 
 import 'create_lesson_dialog.dart';
@@ -695,7 +696,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     : DateTime.now(),
                 null,
               ),
-              backgroundColor: AppTheme.primaryGold,
+              backgroundColor: AppColor.gold,
               child: Icon(Icons.add_rounded, color: Colors.white),
             ),
     );
@@ -795,7 +796,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                   b['name'].toString(),
                   style: TextStyle(
                     color: isSelected
-                        ? AppTheme.primaryGold
+                        ? AppColor.gold
                         : Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                     fontSize: 14,
@@ -807,12 +808,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                   _fetchAll();
                 },
                 backgroundColor: Theme.of(context).colorScheme.surface,
-                selectedColor: AppTheme.primaryGold.withAlpha(25),
+                selectedColor: AppColor.gold.withAlpha(25),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
                     color: isSelected
-                        ? AppTheme.primaryGold
+                        ? AppColor.gold
                         : Theme.of(
                             context,
                           ).colorScheme.onSurfaceVariant.withAlpha(60),
@@ -919,7 +920,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       messenger.showSnackBar(
         SnackBar(
           content: Text('Часовой пояс обновлён: ${_offsetLabel(saved)}'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: AppColor.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -929,7 +930,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       messenger.showSnackBar(
         SnackBar(
           content: Text('Не удалось обновить пояс: $e'),
-          backgroundColor: AppTheme.danger,
+          backgroundColor: AppColor.danger,
         ),
       );
     }
@@ -1120,7 +1121,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               label: _availabilityLoading
                   ? 'Проверяем аудитории'
                   : 'Свободно: $availableCount',
-              color: AppTheme.success,
+              color: AppColor.success,
             ),
             _ScheduleBadge(
               icon: Icons.event_busy_rounded,
@@ -1134,7 +1135,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               label: 'Конфликты: ${conflicts.length}',
               color: conflicts.isEmpty
                   ? Theme.of(context).colorScheme.onSurfaceVariant
-                  : AppTheme.danger,
+                  : AppColor.danger,
             ),
             if (availability.isEmpty && !_availabilityLoading)
               Text(
@@ -1378,7 +1379,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: isToday
-                ? Border.all(color: AppTheme.primaryGold, width: 1.5)
+                ? Border.all(color: AppColor.gold, width: 1.5)
                 : null,
           ),
           child: Column(
@@ -1391,7 +1392,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 alignment: Alignment.center,
                 decoration: isToday
                     ? BoxDecoration(
-                        color: AppTheme.primaryGold,
+                        color: AppColor.gold,
                         borderRadius: BorderRadius.circular(8),
                       )
                     : null,
@@ -1571,7 +1572,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                       border: Border.all(
                         color: roomConflicts.isEmpty
                             ? color.withAlpha(50)
-                            : AppTheme.danger,
+                            : AppColor.danger,
                       ),
                     ),
                     child: Column(
@@ -1590,7 +1591,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                                   child: const Icon(
                                     Icons.warning_amber_rounded,
                                     size: 13,
-                                    color: AppTheme.danger,
+                                    color: AppColor.danger,
                                   ),
                                 ),
                               ),
@@ -1845,16 +1846,16 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           decoration: BoxDecoration(
             color: conflicts.isEmpty
                 ? roomColor.withAlpha(40)
-                : AppTheme.danger.withAlpha(32),
+                : AppColor.danger.withAlpha(32),
             borderRadius: BorderRadius.circular(6),
             border: Border(
               left: BorderSide(
-                color: conflicts.isEmpty ? roomColor : AppTheme.danger,
+                color: conflicts.isEmpty ? roomColor : AppColor.danger,
                 width: 3,
               ),
               right: conflicts.isEmpty
                   ? BorderSide.none
-                  : const BorderSide(color: AppTheme.danger, width: 1),
+                  : const BorderSide(color: AppColor.danger, width: 1),
             ),
           ),
           child: Column(
@@ -1866,7 +1867,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     child: Text(
                       timeStr,
                       style: TextStyle(
-                        color: conflicts.isEmpty ? roomColor : AppTheme.danger,
+                        color: conflicts.isEmpty ? roomColor : AppColor.danger,
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1876,7 +1877,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                   if (conflicts.isNotEmpty)
                     const Icon(
                       Icons.warning_amber_rounded,
-                      color: AppTheme.danger,
+                      color: AppColor.danger,
                       size: 12,
                     ),
                 ],
@@ -1979,12 +1980,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? AppTheme.primaryGold.withAlpha(30)
+                          ? AppColor.gold.withAlpha(30)
                           : Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isSelected
-                            ? AppTheme.primaryGold
+                            ? AppColor.gold
                             : Colors.transparent,
                         width: 1.5,
                       ),
@@ -1996,13 +1997,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                           height: 40,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: AppTheme.primaryGold.withAlpha(50),
+                            color: AppColor.gold.withAlpha(50),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             initials,
                             style: const TextStyle(
-                              color: AppTheme.primaryGold,
+                              color: AppColor.gold,
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
                             ),
@@ -2103,11 +2104,11 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         decoration: BoxDecoration(
           color: conflicts.isEmpty
               ? Theme.of(context).colorScheme.surface
-              : AppTheme.danger.withAlpha(24),
+              : AppColor.danger.withAlpha(24),
           borderRadius: BorderRadius.circular(12),
           border: Border(
             left: BorderSide(
-              color: conflicts.isEmpty ? roomColor : AppTheme.danger,
+              color: conflicts.isEmpty ? roomColor : AppColor.danger,
               width: 4,
             ),
           ),
@@ -2158,7 +2159,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             if (conflicts.isNotEmpty)
               const Icon(
                 Icons.warning_amber_rounded,
-                color: AppTheme.danger,
+                color: AppColor.danger,
                 size: 18,
               )
             else
@@ -2179,11 +2180,11 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Color _statusColor(dynamic status) {
     switch (status?.toString()) {
       case 'completed':
-        return AppTheme.success;
+        return AppColor.success;
       case 'cancelled':
-        return AppTheme.danger;
+        return AppColor.danger;
       default:
-        return AppTheme.primaryGold;
+        return AppColor.gold;
     }
   }
 
@@ -2261,7 +2262,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               icon: const Icon(
                 Icons.delete_outline_rounded,
                 size: 20,
-                color: AppTheme.danger,
+                color: AppColor.danger,
               ),
               onPressed: () async {
                 final confirmed = await showDialog<bool>(
@@ -2278,7 +2279,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                       ),
                       FilledButton(
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppTheme.danger,
+                          backgroundColor: AppColor.danger,
                         ),
                         onPressed: () => Navigator.pop(c, true),
                         child: const Text('Удалить'),
@@ -2309,7 +2310,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                       ),
                       FilledButton(
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppTheme.danger,
+                          backgroundColor: AppColor.danger,
                         ),
                         onPressed: () => Navigator.pop(c, true),
                         child: const Text('Отменить занятие'),
@@ -2328,7 +2329,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               },
               child: const Text(
                 'Отменить',
-                style: TextStyle(color: AppTheme.danger),
+                style: TextStyle(color: AppColor.danger),
               ),
             ),
           if (lessonId != null &&
@@ -2382,7 +2383,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Занятие удалено'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: AppColor.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -2392,7 +2393,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       messenger.showSnackBar(
         SnackBar(
           content: Text('Не удалось удалить занятие: $e'),
-          backgroundColor: AppTheme.danger,
+          backgroundColor: AppColor.danger,
         ),
       );
     }
@@ -2412,7 +2413,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(successMsg),
-          backgroundColor: AppTheme.success,
+          backgroundColor: AppColor.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -2422,7 +2423,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       messenger.showSnackBar(
         SnackBar(
           content: Text('Не удалось обновить занятие: $e'),
-          backgroundColor: AppTheme.danger,
+          backgroundColor: AppColor.danger,
         ),
       );
     }
@@ -2431,7 +2432,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Widget _detailRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppTheme.primaryGold),
+        Icon(icon, size: 18, color: AppColor.gold),
         SizedBox(width: 8),
         Text(
           '$label: ',
@@ -2483,7 +2484,7 @@ class _ScheduleError extends StatelessWidget {
           children: [
             const Icon(
               Icons.error_outline_rounded,
-              color: AppTheme.danger,
+              color: AppColor.danger,
               size: 42,
             ),
             const SizedBox(height: 10),

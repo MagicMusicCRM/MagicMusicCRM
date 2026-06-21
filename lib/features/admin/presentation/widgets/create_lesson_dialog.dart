@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:intl/intl.dart';
 
@@ -280,13 +281,59 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     if (!busy && conflictTypes.isEmpty) return true;
 
     if (!mounted) return true;
-    final detail = _conflictDetail(conflictTypes);
+    final labels = _conflictLabels(conflictTypes);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
+        icon: const Icon(Icons.warning_amber_rounded, color: AppColor.danger),
         title: const Text('Возможен конфликт'),
-        content: Text(
-          'В это время возможен конфликт$detail. Создать всё равно?',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('В выбранное время возможны конфликты:'),
+            const SizedBox(height: 12),
+            for (final label in labels)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColor.dangerSoft,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    border: Border.all(color: const Color(0x52E53935)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        size: 16,
+                        color: AppColor.danger,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 4),
+            const Text('Создать занятие всё равно?'),
+          ],
         ),
         actions: [
           TextButton(
@@ -294,6 +341,10 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
             child: const Text('Отмена'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColor.gold,
+              foregroundColor: AppColor.onGold,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Создать всё равно'),
           ),
@@ -303,20 +354,28 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     return confirmed ?? false;
   }
 
-  String _conflictDetail(List<String> conflictTypes) {
+  /// All four matrix conflict types surfaced at booking time (P2-4). Mirrors the
+  /// schedule's `_conflictLabel` mapping; falls back to a generic label.
+  List<String> _conflictLabels(List<String> conflictTypes) {
     final labels = <String>[];
     for (final type in conflictTypes) {
       switch (type) {
         case 'room_overlap':
-          labels.add('аудитория занята');
+          labels.add('Аудитория занята в это время');
           break;
         case 'teacher_overlap':
-          labels.add('преподаватель занят');
+          labels.add('Преподаватель занят в это время');
+          break;
+        case 'missing_teacher':
+          labels.add('Не назначен преподаватель');
+          break;
+        case 'branch_mismatch':
+          labels.add('Филиал комнаты не совпадает');
           break;
       }
     }
-    if (labels.isEmpty) return ' (аудитория занята)';
-    return ' (${labels.join(', ')})';
+    if (labels.isEmpty) labels.add('Аудитория занята в это время');
+    return labels;
   }
 
   @override
