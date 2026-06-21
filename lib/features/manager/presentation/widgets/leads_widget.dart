@@ -15,6 +15,7 @@ import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'manage_statuses_dialog.dart';
 
 class LeadsWidget extends ConsumerStatefulWidget {
@@ -488,6 +489,191 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
     }
   }
 
+  /// Number of *secondary* filters currently active (everything the drawer
+  /// holds). The inline quick-search [LeadBoardFilters.q] is intentionally
+  /// excluded — it lives in the persistent toolbar field, not the drawer.
+  int get _activeFilterCount {
+    var count = 0;
+    if (_filters.quick != 'all') count++;
+    if (_filters.openTasks) count++;
+    if (_filters.branchId.isNotEmpty) count++;
+    if (_filters.statusId.isNotEmpty) count++;
+    if (_filters.discipline.isNotEmpty) count++;
+    if (_filters.level.isNotEmpty) count++;
+    if (_filters.category.isNotEmpty) count++;
+    return count;
+  }
+
+  /// Opens the secondary filters in a v7 right-side slide-out drawer.
+  ///
+  /// The drawer edits a local *draft* copy of [_filters]; nothing touches the
+  /// board until «Применить», which routes through the exact same
+  /// [_setFilters] path the inline controls used — so the fetched/shown leads
+  /// for a given combination are byte-for-byte identical to before. «Сбросить»
+  /// returns the draft to defaults while preserving the active quick-search.
+  Future<void> _openFiltersDrawer() async {
+    // Seed the draft from the live filters, keeping the current search text so
+    // applying the drawer never clobbers the inline quick search.
+    var draft = _filters.copyWith(q: _searchCtrl.text.trim());
+
+    final applied = await showMagicDrawer<bool>(
+      context,
+      title: 'Фильтры',
+      builder: (drawerContext) {
+        return StatefulBuilder(
+          builder: (drawerContext, setDrawerState) {
+            void update(LeadBoardFilters next) =>
+                setDrawerState(() => draft = next);
+
+            Widget section(String label, Widget child) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColor.text2,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                child,
+                const SizedBox(height: AppSpace.lg),
+              ],
+            );
+
+            Widget quickChip(String value, String chipLabel) => ChoiceChip(
+              label: Text(chipLabel),
+              selected: draft.quick == value,
+              onSelected: (_) => update(draft.copyWith(quick: value)),
+            );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                section(
+                  'Быстрый фильтр',
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      quickChip('all', 'Все'),
+                      quickChip('active', 'В работе'),
+                      quickChip('deferred', 'Отложенные'),
+                      quickChip('processed', 'Обработанные'),
+                    ],
+                  ),
+                ),
+                section(
+                  'Задачи',
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilterChip(
+                      label: const Text('Есть задачи'),
+                      selected: draft.openTasks,
+                      onSelected: (selected) =>
+                          update(draft.copyWith(openTasks: selected)),
+                    ),
+                  ),
+                ),
+                section(
+                  'Филиал',
+                  _filterDropdown(
+                    width: double.infinity,
+                    label: 'Филиал',
+                    value: draft.branchId,
+                    options: _branches,
+                    onChanged: (value) =>
+                        update(draft.copyWith(branchId: value ?? '')),
+                  ),
+                ),
+                section(
+                  'Статус',
+                  _filterDropdown(
+                    width: double.infinity,
+                    label: 'Статус',
+                    value: draft.statusId,
+                    options: _activeStatuses
+                        .map((s) => {'id': s.$1, 'name': s.$2})
+                        .toList(),
+                    onChanged: (value) =>
+                        update(draft.copyWith(statusId: value ?? '')),
+                  ),
+                ),
+                section(
+                  'Направление',
+                  _filterDropdown(
+                    width: double.infinity,
+                    label: 'Направление',
+                    value: draft.discipline,
+                    options: _disciplines,
+                    valueField: 'name',
+                    onChanged: (value) =>
+                        update(draft.copyWith(discipline: value ?? '')),
+                  ),
+                ),
+                section(
+                  'Уровень',
+                  _filterDropdown(
+                    width: double.infinity,
+                    label: 'Уровень',
+                    value: draft.level,
+                    options: _levels,
+                    valueField: 'name',
+                    onChanged: (value) =>
+                        update(draft.copyWith(level: value ?? '')),
+                  ),
+                ),
+                section(
+                  'Категория',
+                  _filterDropdown(
+                    width: double.infinity,
+                    label: 'Категория',
+                    value: draft.category,
+                    options: _categories,
+                    valueField: 'name',
+                    onChanged: (value) =>
+                        update(draft.copyWith(category: value ?? '')),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+      actions: [
+        OutlinedButton(
+          onPressed: () {
+            // Reset the secondary filters to defaults, but keep the active
+            // quick-search text the toolbar field still shows.
+            draft = LeadBoardFilters(q: _searchCtrl.text.trim());
+            _setFilters(draft);
+            Navigator.of(context).maybePop(false);
+          },
+          child: const Text('Сбросить'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).maybePop(true),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColor.gold,
+            foregroundColor: AppColor.onGold,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            ),
+          ),
+          child: const Text('Применить'),
+        ),
+      ],
+    );
+
+    // Commit the draft only on «Применить»; «Сбросить» already applied above.
+    if (applied == true) {
+      _setFilters(draft);
+    }
+  }
+
   Future<bool> _confirmDelete({
     required String title,
     required String body,
@@ -588,63 +774,11 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                _quickFilter('all', 'Все'),
-                _quickFilter('active', 'В работе'),
-                _quickFilter('deferred', 'Отложенные'),
-                _quickFilter('processed', 'Обработанные'),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('Есть задачи'),
-                  selected: _filters.openTasks,
-                  onSelected: (selected) =>
-                      _setFilters(_filters.copyWith(openTasks: selected)),
+                _FiltersButton(
+                  activeCount: _activeFilterCount,
+                  onPressed: _openFiltersDrawer,
                 ),
                 const SizedBox(width: 8),
-                _filterDropdown(
-                  width: 190,
-                  label: 'Филиал',
-                  value: _filters.branchId,
-                  options: _branches,
-                  onChanged: (value) =>
-                      _setFilters(_filters.copyWith(branchId: value ?? '')),
-                ),
-                _filterDropdown(
-                  width: 180,
-                  label: 'Статус',
-                  value: _filters.statusId,
-                  options: _activeStatuses
-                      .map((s) => {'id': s.$1, 'name': s.$2})
-                      .toList(),
-                  onChanged: (value) =>
-                      _setFilters(_filters.copyWith(statusId: value ?? '')),
-                ),
-                _filterDropdown(
-                  width: 170,
-                  label: 'Направление',
-                  value: _filters.discipline,
-                  options: _disciplines,
-                  valueField: 'name',
-                  onChanged: (value) =>
-                      _setFilters(_filters.copyWith(discipline: value ?? '')),
-                ),
-                _filterDropdown(
-                  width: 150,
-                  label: 'Уровень',
-                  value: _filters.level,
-                  options: _levels,
-                  valueField: 'name',
-                  onChanged: (value) =>
-                      _setFilters(_filters.copyWith(level: value ?? '')),
-                ),
-                _filterDropdown(
-                  width: 160,
-                  label: 'Категория',
-                  value: _filters.category,
-                  options: _categories,
-                  valueField: 'name',
-                  onChanged: (value) =>
-                      _setFilters(_filters.copyWith(category: value ?? '')),
-                ),
                 OutlinedButton.icon(
                   onPressed: _saveCurrentPreset,
                   icon: const Icon(Icons.bookmark_add_outlined, size: 18),
@@ -700,17 +834,6 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _quickFilter(String value, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: _filters.quick == value,
-        onSelected: (_) => _setFilters(_filters.copyWith(quick: value)),
       ),
     );
   }
@@ -1806,6 +1929,57 @@ class _LeadCard extends ConsumerWidget {
       }
       onRefresh();
     }
+  }
+}
+
+/// Toolbar trigger that opens the secondary-filter drawer, with a gold count
+/// badge when one or more drawer filters are active.
+class _FiltersButton extends StatelessWidget {
+  final int activeCount;
+  final VoidCallback onPressed;
+
+  const _FiltersButton({required this.activeCount, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasActive = activeCount > 0;
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      style: hasActive
+          ? OutlinedButton.styleFrom(
+              foregroundColor: AppColor.gold,
+              side: const BorderSide(color: AppColor.goldLine),
+            )
+          : null,
+      icon: const Icon(Icons.tune_rounded, size: 18),
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Фильтры'),
+          if (hasActive) ...[
+            const SizedBox(width: 6),
+            Container(
+              constraints: const BoxConstraints(minWidth: 18),
+              height: 18,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              decoration: BoxDecoration(
+                color: AppColor.gold,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+              child: Text(
+                '$activeCount',
+                style: const TextStyle(
+                  color: AppColor.onGold,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
