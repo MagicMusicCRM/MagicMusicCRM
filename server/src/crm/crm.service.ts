@@ -457,6 +457,8 @@ interface LeadStatusRow {
   color: string | null;
   sort_order: number;
   created_at: Date | string;
+  requires_reason?: boolean;
+  is_terminal?: boolean;
 }
 
 interface OverviewRow {
@@ -2674,7 +2676,7 @@ export class CrmService {
     const limit = Math.min(query.limit ?? 100, 100);
     const result = await this.database.query<LeadStatusRow>(
       `
-        select id, name, color, sort_order, created_at
+        select id, name, color, sort_order, created_at, requires_reason, is_terminal
         from app.lead_statuses
         order by sort_order asc, name asc, id asc
         limit $1
@@ -4862,7 +4864,7 @@ export class CrmService {
     });
     const statusResult = await this.database.query<LeadStatusRow>(
       `
-        select id, name, color, sort_order, created_at
+        select id, name, color, sort_order, created_at, requires_reason, is_terminal
         from app.lead_statuses
         order by sort_order asc, name asc, id asc
       `,
@@ -4958,6 +4960,8 @@ export class CrmService {
           color: row.status_color ?? null,
           sortOrder: row.status_sort_order ?? 9999,
           createdAt: row.created_at,
+          requiresReason: false,
+          isTerminal: false,
           totalCount: counts.get(statusKey) ?? 0,
           items: [] as ReturnType<typeof this.toLeadBoardItemDto>[],
         };
@@ -6862,6 +6866,8 @@ export class CrmService {
       color: row.color,
       sortOrder: row.sort_order,
       createdAt: row.created_at,
+      requiresReason: row.requires_reason ?? false,
+      isTerminal: row.is_terminal ?? false,
     };
   }
 

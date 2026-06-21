@@ -1804,11 +1804,33 @@ describe("CrmService", () => {
           name: "Новый",
           sortOrder: 1,
           createdAt: "2026-06-12T00:00:00.000Z",
+          requiresReason: false,
+          isTerminal: false,
         },
       ],
     });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+  });
+
+  it("exposes requiresReason/isTerminal on lead statuses (P3-7)", async () => {
+    const { service } = createService([
+      {
+        id: "status-lost",
+        name: "Потерян",
+        sort_order: 9,
+        created_at: "2026-06-12T00:00:00.000Z",
+        color: "#E53935",
+        requires_reason: true,
+        is_terminal: true,
+      },
+    ]);
+    const result = await service.listLeadStatuses(actor, { limit: 10 });
+    expect(result.items[0]).toMatchObject({
+      id: "status-lost",
+      requiresReason: true,
+      isTerminal: true,
+    });
   });
 
   it("lists active loss reasons ordered by sort_order", async () => {
