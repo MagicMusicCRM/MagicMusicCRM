@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 const int emailOtpCodeLength = 6;
@@ -29,12 +30,64 @@ class EmailOtpScreen extends ConsumerStatefulWidget {
 
 class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
   final _codeController = TextEditingController();
+  // v7: 6 separate OTP boxes are a view layer that writes the joined digits
+  // back into [_codeController] — the locked verify path still reads it.
+  final List<TextEditingController> _boxControllers = List.generate(
+    emailOtpCodeLength,
+    (_) => TextEditingController(),
+  );
+  final List<FocusNode> _boxFocusNodes = List.generate(
+    emailOtpCodeLength,
+    (_) => FocusNode(),
+  );
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
     _codeController.dispose();
+    for (final controller in _boxControllers) {
+      controller.dispose();
+    }
+    for (final node in _boxFocusNodes) {
+      node.dispose();
+    }
     super.dispose();
+  }
+
+  /// Recompute [_codeController] from the 6 boxes after any edit.
+  void _syncCode() {
+    _codeController.text = _boxControllers.map((c) => c.text).join();
+  }
+
+  void _onBoxChanged(int index, String value) {
+    if (value.isNotEmpty && index < emailOtpCodeLength - 1) {
+      FocusScope.of(context).requestFocus(_boxFocusNodes[index + 1]);
+    }
+    _syncCode();
+    if (_errorMessage != null) {
+      setState(() => _errorMessage = null);
+    } else {
+      setState(() {});
+    }
+    final joined = _codeController.text.trim();
+    if (joined.length == emailOtpCodeLength && !_isLoading) {
+      _verifyCode();
+    }
+  }
+
+  KeyEventResult _onBoxKey(int index, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.backspace &&
+        _boxControllers[index].text.isEmpty &&
+        index > 0) {
+      _boxControllers[index - 1].clear();
+      FocusScope.of(context).requestFocus(_boxFocusNodes[index - 1]);
+      _syncCode();
+      setState(() {});
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   Future<void> _verifyCode() async {
@@ -81,8 +134,10 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
         );
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Новый код отправлен на почту')),
+        MagicToast.show(
+          context,
+          'Новый код отправлен на почту',
+          type: MagicToastType.success,
         );
       }
     } on MagicApiException catch (error) {
@@ -108,21 +163,12 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppTheme.danger,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    setState(() => _errorMessage = message);
   }
 
   @override
   Widget build(BuildContext context) {
-    final title = switch (widget.data.purpose) {
-      EmailOtpPurpose.signup => 'Подтвердите почту',
-      EmailOtpPurpose.passwordMfa => 'Введите код двухфакторной защиты',
-    };
+    final subtitle = 'Подтверждение кода';
     final description = switch (widget.data.purpose) {
       EmailOtpPurpose.signup =>
         'Мы отправили код подтверждения регистрации на\n${widget.data.email}',
@@ -131,105 +177,314 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
     };
 
     return Scaffold(
-      backgroundColor: AppTheme.bgDark,
-      body: ResponsiveConstraint(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.primaryGold,
-                ),
-                child: const Icon(
-                  Icons.mark_email_read_outlined,
-                  color: Colors.white,
-                  size: 46,
-                ),
-              ),
-              const SizedBox(height: 32),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withAlpha(160),
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 36),
-              TextField(
-                controller: _codeController,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(emailOtpCodeLength),
-                ],
-                decoration: InputDecoration(
-                  hintText: '000000',
-                  hintStyle: TextStyle(color: Colors.white.withAlpha(80)),
-                  filled: true,
-                  fillColor: AppTheme.cardDark,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
+      backgroundColor: AppColor.bg,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0.0, -1.0),
+            radius: 1.1,
+            colors: [Color(0x1AC5A059), AppColor.bg],
+            stops: [0.0, 0.6],
+          ),
+        ),
+        child: SafeArea(
+          child: ResponsiveConstraint(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.xxl,
+                    vertical: 30,
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(
-                      color: AppTheme.primaryGold,
-                      width: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildBrand(subtitle),
+                      const SizedBox(height: AppSpace.xxl),
+                      _buildDescription(description),
+                      const SizedBox(height: AppSpace.lg),
+                      _buildOtpBoxes(),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: AppSpace.lg),
+                        _buildErrorPill(_errorMessage!),
+                      ],
+                      const SizedBox(height: AppSpace.lg),
+                      _V7PrimaryButton(
+                        label: 'Подтвердить',
+                        loading: _isLoading,
+                        onPressed: _isLoading ? null : _verifyCode,
+                      ),
+                      const SizedBox(height: AppSpace.lg),
+                      _buildResendRow(),
+                      TextButton(
+                        onPressed: () => context.go('/login'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColor.gold,
+                          textStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          padding: const EdgeInsets.all(AppSpace.sm),
+                          minimumSize: const Size(0, 0),
+                        ),
+                        child: const Text('Назад ко входу'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBrand(String subtitle) {
+    return Column(
+      children: [
+        Container(
+          width: 62,
+          height: 62,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2A2418), Color(0xFF1D1A12)],
+            ),
+            border: Border.all(color: AppColor.goldLine),
+          ),
+          child: const Icon(
+            Icons.music_note_rounded,
+            color: AppColor.gold,
+            size: 30,
+          ),
+        ),
+        const SizedBox(height: AppSpace.md),
+        RichText(
+          text: const TextSpan(
+            children: [
+              TextSpan(
+                text: 'Magic',
+                style: TextStyle(
+                  color: AppColor.text,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 21,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              TextSpan(
+                text: 'Music',
+                style: TextStyle(
+                  color: AppColor.gold,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 21,
+                  letterSpacing: -0.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.xs),
+        Text(
+          subtitle,
+          style: const TextStyle(color: AppColor.text2, fontSize: 12.5),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDescription(String description) {
+    // The description is "lead\nemail"; bold the email substring per .auth-note.
+    final parts = description.split('\n');
+    final lead = parts.first;
+    final email = parts.length > 1 ? parts.sublist(1).join('\n') : '';
+
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: email.isEmpty ? lead : '$lead\n'),
+          if (email.isNotEmpty)
+            TextSpan(
+              text: email,
+              style: const TextStyle(
+                color: AppColor.menuItemText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        color: AppColor.text2,
+        fontSize: 12.5,
+        height: 1.5,
+      ),
+    );
+  }
+
+  Widget _buildOtpBoxes() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (int i = 0; i < emailOtpCodeLength; i++) ...[
+          if (i > 0) const SizedBox(width: AppSpace.sm),
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 50),
+              child: SizedBox(
+                height: 54,
+                child: Focus(
+                  onKeyEvent: (node, event) => _onBoxKey(i, event),
+                  child: TextField(
+                    controller: _boxControllers[i],
+                    focusNode: _boxFocusNodes[i],
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(
+                      color: AppColor.text,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(1),
+                    ],
+                    onChanged: (value) => _onBoxChanged(i, value),
+                    decoration: InputDecoration(
+                      counterText: '',
+                      filled: true,
+                      fillColor: AppColor.input,
+                      contentPadding: EdgeInsets.zero,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.control),
+                        borderSide: const BorderSide(color: AppColor.divider),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.control),
+                        borderSide: const BorderSide(
+                          color: AppColor.goldLine,
+                          width: 2,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-                onSubmitted: (_) => _isLoading ? null : _verifyCode(),
               ),
-              const SizedBox(height: 28),
-              SizedBox(
-                height: 56,
-                child: FilledButton(
-                  onPressed: _isLoading ? null : _verifyCode,
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Подтвердить код'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: _isLoading ? null : _resendCode,
-                child: const Text('Отправить код повторно'),
-              ),
-              TextButton(
-                onPressed: () => context.go('/login'),
-                child: const Text('Вернуться ко входу'),
-              ),
-            ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildErrorPill(String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 11,
+        vertical: AppSpace.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColor.dangerSoft,
+        border: Border.all(color: const Color(0x52E53935)),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(color: Color(0xFFF4A3A1), fontSize: 12),
+      ),
+    );
+  }
+
+  Widget _buildResendRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text(
+          'Не получили код?',
+          style: TextStyle(color: AppColor.text2, fontSize: 13),
+        ),
+        TextButton(
+          onPressed: _isLoading ? null : _resendCode,
+          style: TextButton.styleFrom(
+            foregroundColor: AppColor.gold,
+            textStyle: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            padding: const EdgeInsets.all(AppSpace.sm),
+            minimumSize: const Size(0, 0),
+          ),
+          child: const Text('Отправить снова'),
+        ),
+      ],
+    );
+  }
+}
+
+class _V7PrimaryButton extends StatelessWidget {
+  const _V7PrimaryButton({
+    required this.label,
+    required this.onPressed,
+    this.loading = false,
+    // ignore: unused_element_parameter
+    this.icon,
+    // ignore: unused_element_parameter
+    this.height = 52,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool loading;
+  final IconData? icon;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null && !loading;
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.42,
+      child: SizedBox(
+        height: height,
+        width: double.infinity,
+        child: Material(
+          color: AppColor.gold,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            onTap: enabled ? onPressed : null,
+            child: Center(
+              child: loading
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColor.onGold,
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (icon != null) ...[
+                          Icon(icon, size: 17, color: AppColor.onGold),
+                          const SizedBox(width: AppSpace.sm),
+                        ],
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColor.onGold,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ),
       ),

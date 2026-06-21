@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -18,6 +20,7 @@ class LegalConsentScreen extends ConsumerStatefulWidget {
 class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
   final Set<String> _acceptedIds = {};
   bool _isSaving = false;
+  bool _showIncompleteError = false;
 
   Future<void> _accept(List<LegalDocument> documents) async {
     if (_acceptedIds.length != documents.length) return;
@@ -78,69 +81,326 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
     final docsAsync = ref.watch(currentLegalDocumentsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Юридические документы')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: docsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Не удалось загрузить документы: $error'),
+      backgroundColor: AppColor.bg,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0.0, -1.0),
+            radius: 1.1,
+            colors: [Color(0x1AC5A059), AppColor.bg],
+            stops: [0.0, 0.6],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.xxl,
+                  vertical: 30,
+                ),
+                child: docsAsync.when(
+                  loading: _buildLoading,
+                  error: (error, _) => _buildError(error),
+                  data: _buildContent,
+                ),
+              ),
             ),
-            data: (documents) {
-              final canAccept =
-                  documents.isNotEmpty &&
-                  _acceptedIds.length == documents.length;
+          ),
+        ),
+      ),
+    );
+  }
 
-              return ListView(
-                padding: const EdgeInsets.all(24),
-                children: [
-                  Text(
-                    widget.requireAcceptance
-                        ? 'Перед использованием приложения необходимо принять актуальные документы.'
-                        : 'Актуальные документы MagicMusicCRM.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 20),
-                  for (final doc in documents) ...[
-                    _LegalDocumentTile(
-                      document: doc,
-                      accepted:
-                          !widget.requireAcceptance ||
-                          _acceptedIds.contains(doc.id),
-                      showCheckbox: widget.requireAcceptance,
-                      onOpen: () => _openDocument(doc),
-                      onChanged: (value) {
-                        setState(() {
-                          if (value) {
-                            _acceptedIds.add(doc.id);
-                          } else {
-                            _acceptedIds.remove(doc.id);
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  const SizedBox(height: 16),
-                  if (widget.requireAcceptance)
-                    FilledButton.icon(
-                      onPressed: canAccept && !_isSaving
-                          ? () => _accept(documents)
-                          : null,
-                      icon: _isSaving
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.verified_user_outlined),
-                      label: const Text('Принять и продолжить'),
-                    ),
-                ],
-              );
+  Widget _buildBrand() {
+    return Column(
+      children: [
+        Container(
+          width: 62,
+          height: 62,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2A2418), Color(0xFF1D1A12)],
+            ),
+            border: Border.all(color: AppColor.goldLine),
+          ),
+          child: const Icon(
+            Icons.music_note_rounded,
+            color: AppColor.gold,
+            size: 30,
+          ),
+        ),
+        const SizedBox(height: AppSpace.md),
+        RichText(
+          text: const TextSpan(
+            children: [
+              TextSpan(
+                text: 'Magic',
+                style: TextStyle(
+                  color: AppColor.text,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 21,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              TextSpan(
+                text: 'Music',
+                style: TextStyle(
+                  color: AppColor.gold,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 21,
+                  letterSpacing: -0.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.xs),
+        const Text(
+          'Согласие с документами',
+          style: TextStyle(color: AppColor.text2, fontSize: 12.5),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoading() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildBrand(),
+        const SizedBox(height: AppSpace.xxl),
+        for (var i = 0; i < 3; i++) ...[
+          SkeletonBox(height: 56, radius: AppRadius.control),
+          if (i < 2) const SizedBox(height: AppSpace.sm),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildError(Object error) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildBrand(),
+        const SizedBox(height: AppSpace.xxl),
+        Text(
+          'Не удалось загрузить документы: $error',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColor.text2,
+            fontSize: 12.5,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: AppSpace.lg),
+        TextButton(
+          onPressed: () => context.go('/login'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColor.gold,
+            textStyle: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            padding: const EdgeInsets.all(AppSpace.sm),
+            minimumSize: const Size(0, 0),
+          ),
+          child: const Text('Назад ко входу'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContent(List<LegalDocument> documents) {
+    final canAccept =
+        documents.isNotEmpty && _acceptedIds.length == documents.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildBrand(),
+        const SizedBox(height: AppSpace.xxl),
+        Text(
+          widget.requireAcceptance
+              ? 'Чтобы продолжить, подтвердите согласие с документами.'
+              : 'Актуальные документы MagicMusicCRM.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColor.text2,
+            fontSize: 12.5,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: AppSpace.lg),
+        for (final doc in documents) ...[
+          _ConsentRow(
+            title: doc.title,
+            accepted:
+                !widget.requireAcceptance || _acceptedIds.contains(doc.id),
+            showCheckbox: widget.requireAcceptance,
+            onOpen: () => _openDocument(doc),
+            onToggle: () {
+              setState(() {
+                if (_acceptedIds.contains(doc.id)) {
+                  _acceptedIds.remove(doc.id);
+                } else {
+                  _acceptedIds.add(doc.id);
+                }
+                if (_acceptedIds.length == documents.length) {
+                  _showIncompleteError = false;
+                }
+              });
             },
+          ),
+          const SizedBox(height: AppSpace.sm),
+        ],
+        if (widget.requireAcceptance) ...[
+          if (_showIncompleteError) ...[
+            const SizedBox(height: AppSpace.sm),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 11,
+                vertical: AppSpace.sm,
+              ),
+              decoration: BoxDecoration(
+                color: AppColor.dangerSoft,
+                border: Border.all(color: const Color(0x52E53935)),
+                borderRadius: BorderRadius.circular(AppRadius.chip),
+              ),
+              child: const Text(
+                'Отметьте все три документа, чтобы войти',
+                style: TextStyle(color: Color(0xFFF4A3A1), fontSize: 12),
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpace.lg),
+          _V7PrimaryButton(
+            label: 'Принять и войти',
+            loading: _isSaving,
+            onPressed: _isSaving
+                ? null
+                : () {
+                    if (!canAccept) {
+                      setState(() => _showIncompleteError = true);
+                      return;
+                    }
+                    _accept(documents);
+                  },
+          ),
+        ],
+        const SizedBox(height: AppSpace.sm),
+        TextButton(
+          onPressed: () => context.go('/login'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColor.gold,
+            textStyle: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            padding: const EdgeInsets.all(AppSpace.sm),
+            minimumSize: const Size(0, 0),
+          ),
+          child: const Text('Назад ко входу'),
+        ),
+      ],
+    );
+  }
+}
+
+/// v7 consent row (`.consent-row`): tappable row with a 22×22 check box, the
+/// document label, and a trailing external-link affordance.
+class _ConsentRow extends StatelessWidget {
+  const _ConsentRow({
+    required this.title,
+    required this.accepted,
+    required this.showCheckbox,
+    required this.onOpen,
+    required this.onToggle,
+  });
+
+  final String title;
+  final bool accepted;
+  final bool showCheckbox;
+  final VoidCallback onOpen;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: accepted ? const Color(0x0FC5A059) : AppColor.input,
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        onTap: showCheckbox ? onToggle : null,
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            border: Border.all(
+              color: accepted ? AppColor.goldLine : AppColor.divider,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (showCheckbox) ...[
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: accepted ? AppColor.gold : AppColor.surface,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(
+                      color: accepted ? Colors.transparent : AppColor.divider,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: accepted
+                      ? const Icon(
+                          Icons.check_rounded,
+                          size: 15,
+                          color: AppColor.onGold,
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 11),
+              ],
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: AppColor.menuItemText,
+                    ),
+                    children: [
+                      const TextSpan(text: 'Я принимаю '),
+                      TextSpan(
+                        text: title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColor.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              IconButton(
+                onPressed: onOpen,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                icon: const Icon(
+                  Icons.open_in_new_rounded,
+                  size: 18,
+                  color: AppColor.gold2,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -148,59 +408,52 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
   }
 }
 
-class _LegalDocumentTile extends StatelessWidget {
-  final LegalDocument document;
-  final bool accepted;
-  final bool showCheckbox;
-  final VoidCallback onOpen;
-  final ValueChanged<bool> onChanged;
-
-  const _LegalDocumentTile({
-    required this.document,
-    required this.accepted,
-    this.showCheckbox = true,
-    required this.onOpen,
-    required this.onChanged,
+class _V7PrimaryButton extends StatelessWidget {
+  const _V7PrimaryButton({
+    required this.label,
+    required this.onPressed,
+    this.loading = false,
   });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          ExpansionTile(
-            leading: const Icon(Icons.description_outlined),
-            title: Text(document.title),
-            subtitle: Text('Версия ${document.version}'),
-            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(document.content),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: onOpen,
-                  icon: const Icon(Icons.open_in_browser_outlined),
-                  label: const Text('Открыть опубликованную версию'),
-                ),
-              ),
-            ],
-          ),
-          if (showCheckbox)
-            CheckboxListTile(
-              value: accepted,
-              onChanged: (value) => onChanged(value ?? false),
-              controlAffinity: ListTileControlAffinity.leading,
-              title: const Text('Я принимаю документ'),
+    final enabled = onPressed != null && !loading;
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.42,
+      child: SizedBox(
+        height: 52,
+        width: double.infinity,
+        child: Material(
+          color: AppColor.gold,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            onTap: enabled ? onPressed : null,
+            child: Center(
+              child: loading
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColor.onGold,
+                      ),
+                    )
+                  : Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColor.onGold,
+                      ),
+                    ),
             ),
-        ],
+          ),
+        ),
       ),
     );
   }

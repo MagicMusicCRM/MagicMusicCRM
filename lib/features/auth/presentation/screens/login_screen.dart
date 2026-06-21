@@ -1,8 +1,13 @@
+// The shared v7 auth helpers (_V7Field / _V7PrimaryButton) are pasted
+// byte-for-byte identically across all 6 auth screens per the v7 spec, so a
+// few of their parameters are intentionally unused on this particular screen.
+// ignore_for_file: unused_element_parameter
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/email_otp_screen.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
@@ -107,209 +112,381 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _showError(String message) {
     setState(() => _errorMessage = message);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: AppTheme.danger,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.bgDark, // Solid Deep Charcoal
-      body: ResponsiveConstraint(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Logo / Icon (Solid Circle)
-                Center(
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppTheme.primaryGold, // Solid Gold
-                    ),
-                    child: const Icon(
-                      Icons.music_note_rounded,
-                      size: 50,
-                      color: Colors.white,
-                    ),
+      backgroundColor: AppColor.bg,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0.0, -1.0),
+            radius: 1.1,
+            colors: [Color(0x1AC5A059), AppColor.bg],
+            stops: [0.0, 0.6],
+          ),
+        ),
+        child: SafeArea(
+          child: ResponsiveConstraint(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.xxl,
+                    vertical: 30,
                   ),
-                ),
-                const SizedBox(height: 32),
-                const Text(
-                  'MagicMusic CRM',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Войдите в систему',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white.withAlpha(160),
-                  ),
-                ),
-                const SizedBox(height: 48),
-                // Email field
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Электронная почта',
-                    hintText: 'user@example.com',
-                    prefixIcon: Icon(
-                      Icons.email_outlined,
-                      color: Colors.white.withAlpha(160),
-                    ),
-                    filled: true,
-                    fillColor: AppTheme.cardDark,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(
-                        color: AppTheme.primaryGold,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  validator: (value) => _isValidEmail(value?.trim() ?? '')
-                      ? null
-                      : 'Введите корректную почту',
-                ),
-                const SizedBox(height: 20),
-
-                // Password field
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.done,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Пароль',
-                    prefixIcon: Icon(
-                      Icons.lock_outlined,
-                      color: Colors.white.withAlpha(160),
-                    ),
-                    filled: true,
-                    fillColor: AppTheme.cardDark,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(
-                        color: AppTheme.primaryGold,
-                        width: 2,
-                      ),
-                    ),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                        color: Colors.white.withAlpha(160),
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                  ),
-                  validator: (value) => (value == null || value.isEmpty)
-                      ? 'Введите пароль'
-                      : null,
-                ),
-                const SizedBox(height: 20),
-
-                // Sign In button (Solid Gold)
-                if (_errorMessage != null) ...[
-                  Text(
-                    _errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: AppTheme.danger,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                Container(
-                  height: 56,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    color: AppTheme.primaryGold, // Solid Gold
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: _isLoading ? null : _signIn,
-                      child: Center(
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Brand block
+                        Column(
+                          children: [
+                            Container(
+                              width: 62,
+                              height: 62,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(18),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0xFF2A2418), Color(0xFF1D1A12)],
                                 ),
-                              )
-                            : const Text(
-                                'Войти',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
+                                border: Border.all(color: AppColor.goldLine),
                               ),
-                      ),
+                              child: const Icon(
+                                Icons.music_note_rounded,
+                                color: AppColor.gold,
+                                size: 30,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpace.md),
+                            RichText(
+                              text: const TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: 'Magic',
+                                    style: TextStyle(
+                                      color: AppColor.text,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 21,
+                                      letterSpacing: -0.4,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: 'Music',
+                                    style: TextStyle(
+                                      color: AppColor.gold,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 21,
+                                      letterSpacing: -0.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: AppSpace.xs),
+                            const Text(
+                              'Вход в систему',
+                              style: TextStyle(
+                                color: AppColor.text2,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpace.xxl),
+
+                        // Email field
+                        _V7Field(
+                          controller: _emailController,
+                          label: 'Телефон или email',
+                          hint: 'user@example.com',
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          autocorrect: false,
+                          autofillHints: const [AutofillHints.username],
+                          validator: (value) =>
+                              _isValidEmail(value?.trim() ?? '')
+                              ? null
+                              : 'Введите корректную почту',
+                        ),
+                        const SizedBox(height: AppSpace.lg),
+
+                        // Password field
+                        _V7Field(
+                          controller: _passwordController,
+                          label: 'Пароль',
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          autocorrect: false,
+                          autofillHints: const [AutofillHints.password],
+                          onSubmitted: (_) => _isLoading ? null : _signIn(),
+                          suffix: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              color: AppColor.text2,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                          ),
+                          validator: (value) =>
+                              (value == null || value.isEmpty)
+                              ? 'Введите пароль'
+                              : null,
+                        ),
+                        const SizedBox(height: AppSpace.sm),
+
+                        // Forgot password link (right-aligned)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _isLoading
+                                ? null
+                                : () => context.push('/password-reset'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColor.gold,
+                              textStyle: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              padding: const EdgeInsets.all(AppSpace.sm),
+                              minimumSize: const Size(0, 0),
+                            ),
+                            child: const Text('Забыли пароль?'),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpace.sm),
+
+                        // Inline error pill
+                        if (_errorMessage != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: AppSpace.sm,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColor.dangerSoft,
+                              border: Border.all(color: const Color(0x52E53935)),
+                              borderRadius: BorderRadius.circular(AppRadius.chip),
+                            ),
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                color: Color(0xFFF4A3A1),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpace.lg),
+                        ],
+
+                        // Sign In button
+                        _V7PrimaryButton(
+                          label: 'Войти',
+                          loading: _isLoading,
+                          onPressed: _isLoading ? null : _signIn,
+                        ),
+                        const SizedBox(height: AppSpace.lg),
+
+                        // Create account link
+                        TextButton(
+                          onPressed: () => context.push('/register'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColor.gold,
+                            textStyle: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            padding: const EdgeInsets.all(AppSpace.sm),
+                            minimumSize: const Size(0, 0),
+                          ),
+                          child: const Text('Создать аккаунт'),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () => context.push('/password-reset'),
-                  child: const Text(
-                    'Забыли пароль?',
-                    style: TextStyle(color: Colors.white70, fontSize: 15),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                TextButton(
-                  onPressed: () => context.push('/register'),
-                  child: const Text(
-                    'Нет аккаунта? Зарегистрироваться',
-                    style: TextStyle(color: AppTheme.primaryGold, fontSize: 16),
-                  ),
-                ),
-              ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _V7Field extends StatelessWidget {
+  const _V7Field({
+    required this.controller,
+    required this.label,
+    this.hint,
+    this.obscureText = false,
+    this.keyboardType,
+    this.textInputAction,
+    this.enabled = true,
+    this.autocorrect = true,
+    this.suffix,
+    this.validator,
+    this.inputFormatters,
+    this.onSubmitted,
+    this.autofillHints,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final String? hint;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final bool enabled;
+  final bool autocorrect;
+  final Widget? suffix;
+  final String? Function(String?)? validator;
+  final List<TextInputFormatter>? inputFormatters;
+  final ValueChanged<String>? onSubmitted;
+  final Iterable<String>? autofillHints;
+
+  @override
+  Widget build(BuildContext context) {
+    final decoration = InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColor.text2),
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: AppColor.input,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.divider),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.goldLine, width: 2),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.divider),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.danger),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.danger, width: 2),
+      ),
+    );
+
+    final field = (validator != null)
+        ? TextFormField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            enabled: enabled,
+            autocorrect: autocorrect,
+            autofillHints: autofillHints,
+            inputFormatters: inputFormatters,
+            onFieldSubmitted: onSubmitted,
+            style: const TextStyle(color: AppColor.text),
+            decoration: decoration,
+            validator: validator,
+          )
+        : TextField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            enabled: enabled,
+            autocorrect: autocorrect,
+            autofillHints: autofillHints,
+            inputFormatters: inputFormatters,
+            onSubmitted: onSubmitted,
+            style: const TextStyle(color: AppColor.text),
+            decoration: decoration,
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColor.text2,
+          ),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        field,
+      ],
+    );
+  }
+}
+
+class _V7PrimaryButton extends StatelessWidget {
+  const _V7PrimaryButton({
+    required this.label,
+    required this.onPressed,
+    this.loading = false,
+    this.icon,
+    this.height = 52,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool loading;
+  final IconData? icon;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null && !loading;
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.42, // .btn[disabled]{opacity:.42}
+      child: SizedBox(
+        height: height,
+        width: double.infinity,
+        child: Material(
+          color: AppColor.gold, // flat gold, NO shadow/elevation
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            onTap: enabled ? onPressed : null,
+            child: Center(
+              child: loading
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColor.onGold,
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (icon != null) ...[
+                          Icon(icon, size: 17, color: AppColor.onGold),
+                          const SizedBox(width: AppSpace.sm),
+                        ],
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColor.onGold, // #1A1408 on gold
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ),
