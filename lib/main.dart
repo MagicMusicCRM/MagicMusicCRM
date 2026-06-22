@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -52,7 +53,28 @@ Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   Intl.defaultLocale = 'ru';
 
+  // Warm the API connection during launch. The first TCP/TLS handshake to the
+  // server can be slow on a cold network path; firing a throwaway /health hit
+  // now (fire-and-forget) means that cost overlaps app startup instead of
+  // stalling the first data screen the user opens (e.g. Расписание).
+  unawaited(_warmApiConnection());
+
   runApp(const ProviderScope(child: MagicMusicApp()));
+}
+
+Future<void> _warmApiConnection() async {
+  try {
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 20),
+      ),
+    );
+    await dio.get<dynamic>('${Env.magicApiBaseUrl}/health');
+    dio.close(force: true);
+  } catch (_) {
+    // Best-effort warm-up only; never affect launch.
+  }
 }
 
 Future<void> _initializeFirebase() async {
