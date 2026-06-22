@@ -247,6 +247,7 @@ interface CommentRow {
   author_first_name: string | null;
   author_last_name: string | null;
   body: string;
+  kind: string;
   created_at: Date | string;
 }
 
@@ -3818,6 +3819,7 @@ export class CrmService {
           where c.deleted_at is null
             and c.entity_type::text = $1
             and c.entity_id = $2::uuid
+            and c.kind = any($7::text[])
 
           union all
 
@@ -3903,6 +3905,7 @@ export class CrmService {
         query.to ?? null,
         includeAudit,
         limit,
+        this.allowedCommentKinds(actor.role),
       ],
     );
     return { items: result.rows.map((row) => this.toTimelineDto(row)) };
@@ -3918,13 +3921,20 @@ export class CrmService {
       query.entityId,
     );
     const limit = Math.min(query.limit ?? 50, 100);
-    const progressOnly =
-      query.progressOnly === true ||
-      actor.role === "client" ||
-      actor.role === "teacher";
+    let allowedKinds = this.allowedCommentKinds(actor.role);
+    // Back-compat: progressOnly restricts to the client-visible progress stream.
+    if (query.progressOnly === true) {
+      allowedKinds = allowedKinds.filter((k) => k === "progress");
+    }
+    // Caller can request a single stream (e.g. the card's admin-comments vs
+    // teacher-notes section); still bounded by what the role may see.
+    if (query.kind) {
+      allowedKinds = allowedKinds.filter((k) => k === query.kind);
+    }
+    if (allowedKinds.length === 0) return { items: [] };
     const result = await this.database.query<CommentRow>(
       `
-        select c.id, c.entity_type, c.entity_id, c.author_id,
+        select c.id, c.entity_type, c.entity_id, c.author_id, c.kind,
           p.first_name as author_first_name, p.last_name as author_last_name,
           c.body, c.created_at
         from app.entity_comments c
@@ -3933,11 +3943,11 @@ export class CrmService {
         where c.deleted_at is null
           and c.entity_type = $1::app.crm_entity_type
           and c.entity_id = $2
-          and ($3::boolean = false or c.body like '[PROGRESS]%')
+          and c.kind = any($3::text[])
         order by c.created_at desc, c.id desc
         limit $4
       `,
-      [query.entityType, query.entityId, progressOnly, limit],
+      [query.entityType, query.entityId, allowedKinds, limit],
     );
     return { items: result.rows.map((row) => this.toCommentDto(row)) };
   }
@@ -3946,22 +3956,20 @@ export class CrmService {
     const body = dto.body.trim();
     if (!body)
       throw new BadRequestException("Комментарий не может быть пустым.");
-    await this.assertCanCreateEntityComment(actor, dto);
-    const storedBody =
-      dto.progress === true && !body.startsWith("[PROGRESS]")
-        ? `[PROGRESS] ${body}`
-        : body;
+    const kind =
+      dto.kind ?? (dto.progress === true ? "progress" : "admin_comment");
+    await this.assertCanCreateEntityComment(actor, dto, kind);
     const result = await this.database.query<CommentRow>(
       `
         insert into app.entity_comments (
-          entity_type, entity_id, author_id, body
+          entity_type, entity_id, author_id, body, kind
         )
-        values ($1::app.crm_entity_type, $2, $3, $4)
+        values ($1::app.crm_entity_type, $2, $3, $4, $5)
         returning id, entity_type, entity_id, author_id,
           null::text as author_first_name, null::text as author_last_name,
-          body, created_at
+          body, kind, created_at
       `,
-      [dto.entityType, dto.entityId, actor.userId, storedBody],
+      [dto.entityType, dto.entityId, actor.userId, body, kind],
     );
     const comment = result.rows[0];
     await this.audit.record({
@@ -6201,17 +6209,21 @@ export class CrmService {
   private async assertCanCreateEntityComment(
     actor: ActorContext,
     dto: CreateCommentDto,
+    kind: string,
   ) {
+    // Staff (manager/admin) may write any stream.
     if (isManagerOrAdminRole(actor.role)) {
       this.policy.assertCanWriteCrm(actor);
       await this.assertEntityExistsForComment(dto.entityType, dto.entityId);
       return;
     }
 
+    // Teachers may write their own «Заметки преподавателя» (teacher_note) and
+    // client-visible progress notes — but NEVER administrator comments.
     if (
       actor.role === "teacher" &&
       dto.entityType === "student" &&
-      dto.progress === true
+      (kind === "teacher_note" || kind === "progress")
     ) {
       await this.assertCanReadEntityComments(
         actor,
@@ -6627,8 +6639,22 @@ export class CrmService {
       authorId: row.author_id,
       authorName: authorName || null,
       body: row.body,
+      kind: row.kind,
+      // Back-compat flag for clients still keying off `progress`.
+      progress: row.kind === "progress",
       createdAt: row.created_at,
     };
+  }
+
+  // Comment kinds this role may read for an entity. admin_comment is staff-only
+  // (teachers/clients never see it); teacher_note is teacher + staff; progress is
+  // visible to everyone including the client.
+  private allowedCommentKinds(role: ActorContext["role"]): string[] {
+    if (isManagerOrAdminRole(role)) {
+      return ["admin_comment", "teacher_note", "progress"];
+    }
+    if (role === "teacher") return ["teacher_note", "progress"];
+    return ["progress"];
   }
 
   private toPaymentDto(row: PaymentRow) {

@@ -23,6 +23,12 @@ export class CommentQuery {
   @IsBoolean()
   progressOnly?: boolean;
 
+  // Request a single stream (e.g. the card's admin-comments vs teacher-notes
+  // section). Server still enforces what this role is allowed to see.
+  @IsOptional()
+  @IsIn(["admin_comment", "teacher_note", "progress"])
+  kind?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

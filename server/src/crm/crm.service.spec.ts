@@ -1592,6 +1592,7 @@ describe("CrmService", () => {
       "2026-07-01T00:00:00.000Z",
       true,
       40,
+      ["admin_comment", "teacher_note", "progress"],
     ]);
   });
 
@@ -2586,7 +2587,8 @@ describe("CrmService", () => {
             author_id: "teacher-a",
             author_first_name: "Иван",
             author_last_name: "Петров",
-            body: "[PROGRESS] Хорошая динамика",
+            body: "Хорошая динамика",
+            kind: "progress",
             created_at: "2026-06-12T00:00:00.000Z",
           },
         ],
@@ -2611,7 +2613,9 @@ describe("CrmService", () => {
           entityId: "student-a",
           authorId: "teacher-a",
           authorName: "Иван Петров",
-          body: "[PROGRESS] Хорошая динамика",
+          body: "Хорошая динамика",
+          kind: "progress",
+          progress: true,
           createdAt: "2026-06-12T00:00:00.000Z",
         },
       ],
@@ -2621,10 +2625,16 @@ describe("CrmService", () => {
       { userId: "client-a", role: "client" },
       { profileUserId: "client-a", teacherUserIds: [] },
     );
-    expect(query.mock.calls[1][1]).toEqual(["student", "student-a", true, 5]);
+    // A client may only ever see the progress stream.
+    expect(query.mock.calls[1][1]).toEqual([
+      "student",
+      "student-a",
+      ["progress"],
+      5,
+    ]);
   });
 
-  it("forces progress-only comments for teachers even when query omits filter", async () => {
+  it("limits teachers to teacher_note + progress (never admin comments)", async () => {
     const teacherActor = { userId: "teacher-a", role: "teacher" as const };
     const { service, query, policy } = createServiceWithQueryResults([
       {
@@ -2657,7 +2667,13 @@ describe("CrmService", () => {
       profileUserId: "client-a",
       teacherUserIds: ["teacher-a"],
     });
-    expect(query.mock.calls[1][1]).toEqual(["student", "student-a", true, 5]);
+    // Teacher sees their notes + progress, but NOT admin_comment.
+    expect(query.mock.calls[1][1]).toEqual([
+      "student",
+      "student-a",
+      ["teacher_note", "progress"],
+      5,
+    ]);
   });
 
   it("updates students through CRM write policy and audit", async () => {
@@ -2922,6 +2938,7 @@ describe("CrmService", () => {
             author_first_name: null,
             author_last_name: null,
             body: "Позвонить родителю",
+            kind: "admin_comment",
             created_at: "2026-06-12T00:00:00.000Z",
           },
         ],
@@ -2941,15 +2958,19 @@ describe("CrmService", () => {
       authorId: "manager-a",
       authorName: null,
       body: "Позвонить родителю",
+      kind: "admin_comment",
+      progress: false,
       createdAt: "2026-06-12T00:00:00.000Z",
     });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    // Default staff comment kind is admin_comment (no [PROGRESS] prefix).
     expect(query.mock.calls[1][1]).toEqual([
       "student",
       "student-a",
       "manager-a",
       "Позвонить родителю",
+      "admin_comment",
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2990,7 +3011,8 @@ describe("CrmService", () => {
             author_id: "teacher-a",
             author_first_name: null,
             author_last_name: null,
-            body: "[PROGRESS] Хорошая динамика",
+            body: "Хорошая динамика",
+            kind: "progress",
             created_at: "2026-06-12T00:00:00.000Z",
           },
         ],
@@ -3006,7 +3028,8 @@ describe("CrmService", () => {
       }),
     ).resolves.toMatchObject({
       id: "comment-a",
-      body: "[PROGRESS] Хорошая динамика",
+      body: "Хорошая динамика",
+      kind: "progress",
     });
 
     expect(policy.assertCanWriteCrm).not.toHaveBeenCalled();
@@ -3014,11 +3037,13 @@ describe("CrmService", () => {
       profileUserId: "client-a",
       teacherUserIds: ["teacher-a"],
     });
+    // progress=true resolves to kind='progress'; body stored verbatim.
     expect(query.mock.calls[1][1]).toEqual([
       "student",
       "student-a",
       "teacher-a",
-      "[PROGRESS] Хорошая динамика",
+      "Хорошая динамика",
+      "progress",
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
