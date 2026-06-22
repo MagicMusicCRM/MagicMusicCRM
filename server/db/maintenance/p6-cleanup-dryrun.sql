@@ -56,18 +56,25 @@ limit 500;
 -- -- verify the count matches DRY-RUN (a) sum(copies-1), then: commit;  (else rollback;)
 
 \echo '================= P6-2: synthetic .invalid emails ================='
--- DRY-RUN: placeholder emails (@*.invalid are never deliverable — synthetic from import).
-select 'profile' as kind, id, email from app.profiles
-  where deleted_at is null and (email ilike '%.invalid' or email ilike 'holli-hop-error@%')
+-- Live (2026-06-22 staging): app.users has 964 placeholder emails; app.leads has 0.
+-- Email columns live on app.users, app.user_identities and app.leads (NOT profiles).
+-- ⚠️ users.email / user_identities.email are AUTH identifiers. A placeholder @*.invalid
+-- is not a working login, so these are import-only accounts. DO NOT blindly null an auth
+-- email that a UNIQUE/NOT NULL constraint or login depends on — review each first; the
+-- right fix for a pure-import placeholder account may be deactivation, not email-null.
+-- DRY-RUN:
+select 'user' as src, count(*) from app.users
+  where email ilike '%.invalid' or email ilike 'holli-hop-error@%'
 union all
-select 'lead', id, email from app.leads
-  where deleted_at is null and (email ilike '%.invalid' or email ilike 'holli-hop-error@%')
-order by kind;
+select 'user_identity', count(*) from app.user_identities
+  where email ilike '%.invalid' or email ilike 'holli-hop-error@%'
+union all
+select 'lead', count(*) from app.leads
+  where deleted_at is null and (email ilike '%.invalid' or email ilike 'holli-hop-error@%');
 
--- APPLY P6-2 (null placeholder emails — they carry no real contact). Uncomment after review:
+-- APPLY P6-2 — leads only is unambiguously safe (lead email is contact-only, no auth).
+-- For users/user_identities, decide deactivate-vs-null per the caveat above before applying.
 -- begin;
--- update app.profiles set email = null, updated_at = now()
---   where deleted_at is null and (email ilike '%.invalid' or email ilike 'holli-hop-error@%');
 -- update app.leads set email = null, updated_at = now()
 --   where deleted_at is null and (email ilike '%.invalid' or email ilike 'holli-hop-error@%');
 -- commit;
