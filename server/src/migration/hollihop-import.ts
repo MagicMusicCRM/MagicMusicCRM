@@ -1889,7 +1889,19 @@ async function recordSource(
 
 async function flushSourceRecords(ctx: ImportContext) {
   if (ctx.sourceRecordBuffer.length === 0) return;
-  const rows = ctx.sourceRecordBuffer.splice(0, ctx.sourceRecordBuffer.length);
+  const buffered = ctx.sourceRecordBuffer.splice(
+    0,
+    ctx.sourceRecordBuffer.length,
+  );
+  // Dedupe by the ON CONFLICT key so this single multi-row upsert can never
+  // target the same row twice (Postgres: "ON CONFLICT DO UPDATE command cannot
+  // affect row a second time"). HolliHop can reuse a ScheduleItem Id across
+  // periods, so the same (source, external_id) may appear twice — last wins.
+  const byKey = new Map<string, SourceRecordRow>();
+  for (const r of buffered) {
+    byKey.set(`${r.import_batch_id}:${r.source}:${r.external_id}`, r);
+  }
+  const rows = [...byKey.values()];
   await ctx.client.query(
     `
       insert into app.import_source_records (
