@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 
 class CreateEmployeeDialog extends ConsumerStatefulWidget {
   const CreateEmployeeDialog({super.key});
@@ -15,8 +16,9 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
+  String _canonicalPhone = '';
+  bool _isInternational = false;
   String _selectedRole = 'admin';
   bool _saving = false;
 
@@ -29,7 +31,6 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _phoneController.dispose();
     _emailController.dispose();
     super.dispose();
   }
@@ -40,7 +41,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
 
     final firstName = _firstNameController.text.trim();
     final lastName = _lastNameController.text.trim();
-    final phone = _phoneController.text.trim();
+    final phone = _canonicalPhone;
     final email = _emailController.text.trim();
 
     try {
@@ -135,6 +136,28 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
     );
   }
 
+  InputDecoration _phoneDecoration() {
+    return InputDecoration(
+      labelText: 'Телефон',
+      prefixIcon: Icon(
+        Icons.phone_outlined,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        size: 20,
+      ),
+      filled: true,
+      fillColor: Theme.of(context).colorScheme.surface,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.primaryGold, width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -178,11 +201,28 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
                 icon: Icons.person_outline,
                 required: true,
               ),
-              _field(
-                controller: _phoneController,
-                label: 'Телефон',
-                icon: Icons.phone_outlined,
-                keyboardType: TextInputType.phone,
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: RuPhoneField(
+                  key: ValueKey('phone:$_isInternational'),
+                  international: _isInternational,
+                  decoration: _phoneDecoration(),
+                  onCanonicalChanged: (c) => _canonicalPhone = c,
+                ),
+              ),
+              CheckboxListTile(
+                value: _isInternational,
+                onChanged: (v) => setState(() {
+                  _isInternational = v ?? false;
+                  _canonicalPhone = '';
+                }),
+                title: const Text(
+                  'Международный номер',
+                  style: TextStyle(color: Colors.white),
+                ),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
               ),
               _field(
                 controller: _emailController,

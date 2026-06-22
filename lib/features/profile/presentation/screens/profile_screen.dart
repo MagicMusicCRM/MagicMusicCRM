@@ -9,6 +9,8 @@ import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/avatar_cropper_dialog.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/utils/ru_phone.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -24,8 +26,10 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _dobController = TextEditingController();
+
+  String _canonicalPhone = '';
+  bool _isInternational = false;
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -51,7 +55,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     _firstNameController.addListener(_checkForChanges);
     _lastNameController.addListener(_checkForChanges);
-    _phoneController.addListener(_checkForChanges);
     _dobController.addListener(_checkForChanges);
   }
 
@@ -59,7 +62,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _phoneController.dispose();
     _dobController.dispose();
     super.dispose();
   }
@@ -69,7 +71,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     final fnChanges = _firstNameController.text.trim() != _ogFirstName;
     final lnChanges = _lastNameController.text.trim() != _ogLastName;
-    final pChanges = _phoneController.text.trim() != _ogPhone;
+    final pChanges = _canonicalPhone.trim() != _ogPhone;
     final dChanges = _dobController.text.trim() != _ogDob;
     final avatarChanges = _newAvatarBytes != null;
 
@@ -96,7 +98,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
       _firstNameController.text = _ogFirstName;
       _lastNameController.text = _ogLastName;
-      _phoneController.text = _ogPhone;
+      _canonicalPhone = _ogPhone;
+      _isInternational = _ogPhone.isNotEmpty && !isCanonicalRu(_ogPhone);
       _dobController.text = _ogDob;
     } catch (e) {
       if (mounted) {
@@ -165,7 +168,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           .updateCurrentProfile(
             firstName: _firstNameController.text.trim(),
             lastName: _lastNameController.text.trim(),
-            phone: _phoneController.text.trim(),
+            phone: _canonicalPhone.trim(),
             dob: _dobController.text.trim().isEmpty
                 ? null
                 : _dobController.text.trim(),
@@ -175,7 +178,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       // 3. Update local OG vars
       _ogFirstName = _firstNameController.text.trim();
       _ogLastName = _lastNameController.text.trim();
-      _ogPhone = _phoneController.text.trim();
+      _ogPhone = _canonicalPhone.trim();
       _ogDob = _dobController.text.trim();
       _ogAvatarUrl = updatedAvatarUrl;
       _newAvatarBytes = null;
@@ -389,12 +392,50 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Column(
                 children: [
-                  _buildTelegramTextField(
-                    controller: _phoneController,
-                    label: 'Номер телефона',
-                    textColor: textColor,
-                    hintColor: secondaryTextColor,
-                    keyboardType: TextInputType.phone,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: RuPhoneField(
+                      key: ValueKey('phone:$_isInternational'),
+                      international: _isInternational,
+                      initialCanonical: _canonicalPhone,
+                      labelText: 'Номер телефона',
+                      decoration: InputDecoration(
+                        labelText: 'Номер телефона',
+                        labelStyle: TextStyle(
+                          color: secondaryTextColor,
+                          fontSize: 14,
+                        ),
+                        border: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        errorBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        filled: false,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onCanonicalChanged: (c) {
+                        _canonicalPhone = c;
+                        _checkForChanges();
+                      },
+                    ),
+                  ),
+                  CheckboxListTile(
+                    value: _isInternational,
+                    onChanged: (v) => setState(() {
+                      _isInternational = v ?? false;
+                      _canonicalPhone = '';
+                      _checkForChanges();
+                    }),
+                    title: Text(
+                      'Международный номер',
+                      style: TextStyle(color: secondaryTextColor, fontSize: 14),
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    dense: true,
                   ),
                   Divider(
                     height: 1,

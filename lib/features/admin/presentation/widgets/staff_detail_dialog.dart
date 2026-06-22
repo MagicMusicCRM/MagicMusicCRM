@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/utils/ru_phone.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 
 class StaffDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> staff;
@@ -25,10 +27,11 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   late Map<String, dynamic> _staff;
   late TextEditingController _firstNameController;
   late TextEditingController _lastNameController;
-  late TextEditingController _phoneController;
   late TextEditingController _emailController;
   late TextEditingController _positionController;
   late TextEditingController _birthdayController;
+  late String _canonicalPhone;
+  late bool _isInternational;
   late String _role;
   late String _status;
   bool _saving = false;
@@ -58,9 +61,11 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     _lastNameController = TextEditingController(
       text: _staff['last_name']?.toString() ?? profile['last_name'] ?? '',
     );
-    _phoneController = TextEditingController(
-      text: _staff['phone']?.toString() ?? profile['phone'] ?? '',
-    );
+    final existingPhone =
+        _staff['phone']?.toString() ?? profile['phone']?.toString() ?? '';
+    _canonicalPhone = existingPhone;
+    _isInternational =
+        existingPhone.isNotEmpty && !isCanonicalRu(existingPhone);
     _emailController = TextEditingController(
       text: _staff['email']?.toString() ?? '',
     );
@@ -78,7 +83,6 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _phoneController.dispose();
     _emailController.dispose();
     _positionController.dispose();
     _birthdayController.dispose();
@@ -96,7 +100,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   }
 
   String? _linkSearchValue() {
-    final phone = _phoneController.text.trim();
+    final phone = _canonicalPhone.trim();
     if (phone.isNotEmpty) return phone;
     final email = _emailController.text.trim().toLowerCase();
     if (email.isNotEmpty &&
@@ -134,7 +138,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
             id,
             firstName: _firstNameController.text,
             lastName: _lastNameController.text,
-            phone: _phoneController.text,
+            phone: _canonicalPhone,
             email: _emailController.text,
             role: _role,
             position: _positionController.text,
@@ -230,10 +234,23 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                   validator: _required,
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _phoneController,
-                  decoration: const InputDecoration(labelText: 'Телефон'),
-                  keyboardType: TextInputType.phone,
+                RuPhoneField(
+                  key: ValueKey('phone:$_isInternational'),
+                  international: _isInternational,
+                  initialCanonical: _canonicalPhone,
+                  onCanonicalChanged: (c) =>
+                      setState(() => _canonicalPhone = c),
+                ),
+                CheckboxListTile(
+                  value: _isInternational,
+                  onChanged: (v) => setState(() {
+                    _isInternational = v ?? false;
+                    _canonicalPhone = '';
+                  }),
+                  title: const Text('Международный номер'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(

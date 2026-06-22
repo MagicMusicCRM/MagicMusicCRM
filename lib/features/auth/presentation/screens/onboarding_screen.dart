@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/utils/ru_phone.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
 /// One v7 onboarding slide (presentation-only — no service binding).
@@ -51,7 +53,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
-  final _phoneController = TextEditingController();
+  String _canonicalPhone = '';
+  bool _isInternational = false;
+  String? _phoneError;
   bool _isSaving = false;
 
   /// Presentation-only carousel cursor. `0..._obSlides.length-1` show a slide;
@@ -62,12 +66,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _phoneController.dispose();
     super.dispose();
   }
 
+  /// Phone is valid when a canonical RU number is present, or — in
+  /// international mode — any non-empty value was entered.
+  bool get _phoneIsValid => _isInternational
+      ? _canonicalPhone.trim().isNotEmpty
+      : isCanonicalRu(_canonicalPhone);
+
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    final formValid = _formKey.currentState!.validate();
+    final phoneValid = _phoneIsValid;
+    setState(() => _phoneError = phoneValid ? null : 'Укажите номер телефона');
+    if (!formValid || !phoneValid) return;
 
     setState(() => _isSaving = true);
     try {
@@ -75,7 +87,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       await service.completeOnboarding(
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
-        phone: _phoneController.text.trim(),
+        phone: _canonicalPhone.trim(),
       );
       try {
         await service.ensureAdminChatThread();
@@ -97,6 +109,37 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  /// Mirrors the v7 `_V7Field` input decoration so the phone field matches the
+  /// surrounding name fields exactly.
+  InputDecoration _v7PhoneDecoration() {
+    return InputDecoration(
+      hintStyle: const TextStyle(color: AppColor.text2),
+      filled: true,
+      fillColor: AppColor.input,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.divider),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.goldLine, width: 2),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.divider),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.danger),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: const BorderSide(color: AppColor.danger, width: 2),
+      ),
+    );
   }
 
   void _nextSlide() {
@@ -303,16 +346,55 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 : null,
           ),
           const SizedBox(height: AppSpace.lg),
-          _V7Field(
-            controller: _phoneController,
-            label: 'Номер телефона',
-            keyboardType: TextInputType.phone,
-            textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.telephoneNumber],
-            validator: (value) => value == null || value.trim().length < 6
-                ? 'Укажите номер телефона'
-                : null,
-            onSubmitted: (_) => _submit(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Номер телефона',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColor.text2,
+                ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              RuPhoneField(
+                key: ValueKey('phone:$_isInternational'),
+                international: _isInternational,
+                decoration: _v7PhoneDecoration(),
+                onCanonicalChanged: (c) {
+                  _canonicalPhone = c;
+                  if (_phoneError != null && _phoneIsValid) {
+                    setState(() => _phoneError = null);
+                  }
+                },
+              ),
+              if (_phoneError != null) ...[
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  _phoneError!,
+                  style: const TextStyle(
+                    color: AppColor.danger,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              CheckboxListTile(
+                value: _isInternational,
+                onChanged: (v) => setState(() {
+                  _isInternational = v ?? false;
+                  _canonicalPhone = '';
+                }),
+                title: const Text(
+                  'Международный номер',
+                  style: TextStyle(color: AppColor.text2, fontSize: 13),
+                ),
+                activeColor: AppColor.gold,
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+              ),
+            ],
           ),
           const SizedBox(height: AppSpace.xxl),
           _V7PrimaryButton(

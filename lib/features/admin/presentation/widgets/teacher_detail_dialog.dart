@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/utils/ru_phone.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 
 class TeacherDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> teacher;
@@ -26,9 +28,10 @@ class TeacherDetailDialog extends ConsumerStatefulWidget {
 class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   late Map<String, dynamic> _localData;
   late TextEditingController _nameController;
-  late TextEditingController _phoneController;
   late TextEditingController _emailController;
   late TextEditingController _specializationController;
+  late String _canonicalPhone;
+  late bool _isInternational;
   bool _saving = false;
 
   @override
@@ -45,9 +48,11 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     _nameController = TextEditingController(
       text: name.isEmpty ? profileName : name,
     );
-    _phoneController = TextEditingController(
-      text: _localData['phone']?.toString() ?? prof?['phone']?.toString() ?? '',
-    );
+    final existingPhone =
+        _localData['phone']?.toString() ?? prof?['phone']?.toString() ?? '';
+    _canonicalPhone = existingPhone;
+    _isInternational =
+        existingPhone.isNotEmpty && !isCanonicalRu(existingPhone);
     _emailController = TextEditingController(
       text: _localData['email']?.toString() ?? '',
     );
@@ -59,7 +64,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
     _emailController.dispose();
     _specializationController.dispose();
     super.dispose();
@@ -78,7 +82,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             _localData['id'].toString(),
             firstName: fn,
             lastName: ln,
-            phone: _phoneController.text,
+            phone: _canonicalPhone,
             email: _emailController.text,
             specialization: _specializationController.text,
           );
@@ -116,10 +120,22 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
               decoration: const InputDecoration(labelText: 'Имя Фамилия'),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _phoneController,
-              decoration: const InputDecoration(labelText: 'Телефон'),
-              keyboardType: TextInputType.phone,
+            RuPhoneField(
+              key: ValueKey('phone:$_isInternational'),
+              international: _isInternational,
+              initialCanonical: _canonicalPhone,
+              onCanonicalChanged: (c) => _canonicalPhone = c,
+            ),
+            CheckboxListTile(
+              value: _isInternational,
+              onChanged: (v) => setState(() {
+                _isInternational = v ?? false;
+                _canonicalPhone = '';
+              }),
+              title: const Text('Международный номер'),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
             ),
             const SizedBox(height: 12),
             TextField(
