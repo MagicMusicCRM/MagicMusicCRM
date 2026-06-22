@@ -967,7 +967,16 @@ async function importAll(
     const groupId = groupById.get(text(unit.Id) ?? "");
     if (!groupId) continue;
     const branchId = branchByOffice.get(text(unit.OfficeOrCompanyId) ?? "");
-    for (const schedule of array(unit.ScheduleItems)) {
+    const members = groupMembers.get(groupId) ?? [];
+    // HolliHop EdUnits are overwhelmingly single-student (Individual/TrialLesson):
+    // such a unit's lessons belong to ONE student, not a "group". When exactly one
+    // student is a member, assign student_id directly on the lesson (and leave
+    // group_id null) so it shows in that client's card. Real groups (>1 member)
+    // stay group lessons with per-member participation.
+    const soloStudentId = members.length === 1 ? members[0] : null;
+    for (const schedule of mergeContiguousScheduleItems(
+      array(unit.ScheduleItems),
+    )) {
       const roomId = await upsertRoom(ctx, schedule, branchId, roomByKey);
       const generated = await upsertLessons(ctx, {
         unit,
@@ -976,7 +985,8 @@ async function importAll(
         branchId,
         roomId,
         teacherId: resolveTeacherId(teacherById, { unit, schedule }),
-        memberStudentIds: groupMembers.get(groupId) ?? [],
+        memberStudentIds: members,
+        soloStudentId,
       });
       if (generated === 0) skip(ctx, "lessons");
     }
@@ -1538,6 +1548,49 @@ async function upsertRoom(
   return id;
 }
 
+// HolliHop sometimes splits one class into back-to-back ScheduleItems (e.g. a
+// 2-hour lesson stored as 15:00-16:00 + 16:00-17:00 in the same room/weekday).
+// The importer would turn each into a separate 1-hour lesson. Merge contiguous
+// runs (one item's EndTime == the next's BeginTime, same room/weekday/date range/
+// teacher) into a single item spanning the full duration before generating.
+function mergeContiguousScheduleItems(items: JsonRow[]): JsonRow[] {
+  const groups = new Map<string, JsonRow[]>();
+  for (const it of items) {
+    const key = [
+      text(it.ClassroomId) ?? "",
+      String(it.Weekdays ?? 0),
+      text(it.BeginDate) ?? "",
+      text(it.EndDate) ?? "",
+      text(it.TeacherId) ?? "",
+    ].join("|");
+    const list = groups.get(key);
+    if (list) list.push(it);
+    else groups.set(key, [it]);
+  }
+  const out: JsonRow[] = [];
+  for (const group of groups.values()) {
+    const sorted = group
+      .slice()
+      .sort((a, b) =>
+        String(a.BeginTime ?? "").localeCompare(String(b.BeginTime ?? "")),
+      );
+    let cur: JsonRow | null = null;
+    for (const it of sorted) {
+      if (
+        cur &&
+        normalizeTime(text(cur.EndTime)) === normalizeTime(text(it.BeginTime))
+      ) {
+        cur.EndTime = it.EndTime; // extend the merged run to this item's end
+      } else {
+        if (cur) out.push(cur);
+        cur = { ...it } as JsonRow;
+      }
+    }
+    if (cur) out.push(cur);
+  }
+  return out;
+}
+
 async function upsertLessons(
   ctx: ImportContext,
   value: {
@@ -1548,6 +1601,8 @@ async function upsertLessons(
     roomId: string | null;
     teacherId: string | null;
     memberStudentIds: string[];
+    // The single student for an individual/trial unit; null for real groups.
+    soloStudentId?: string | null;
   },
 ) {
   const unitId = text(value.unit.Id);
@@ -1617,7 +1672,10 @@ async function upsertLessons(
       "app.lessons",
       {
         id: lessonId,
-        group_id: value.groupId,
+        // Individual/trial lesson → assign the student directly (group_id null).
+        // Real group → group_id, student_id null (members via participation).
+        group_id: value.soloStudentId ? null : value.groupId,
+        student_id: value.soloStudentId ?? null,
         teacher_id: value.teacherId,
         branch_id: value.branchId ?? null,
         room_id: value.roomId,
