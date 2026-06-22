@@ -30,6 +30,9 @@ const TAKE = Number(process.env.HOLLIHOP_IMPORT_TAKE ?? "500");
 // so past and future schedule (by classroom/teacher) is imported, not just ~2y.
 const LESSON_FROM = process.env.HOLLIHOP_LESSON_FROM ?? "2024-01-01";
 const LESSON_TO = process.env.HOLLIHOP_LESSON_TO ?? "2028-01-01";
+// Reference "today" for splitting past (attended/missed) vs future (scheduled)
+// lessons when materializing attendance from the HolliHop Days array.
+const TODAY_ISO = new Date().toISOString().slice(0, 10);
 const STORE_SOURCE_RECORDS =
   (process.env.HOLLIHOP_IMPORT_STORE_SOURCE_RECORDS ?? "true").toLowerCase() !==
   "false";
@@ -1003,6 +1006,13 @@ async function importAll(
       skip(ctx, "lessons");
       continue;
     }
+    // HolliHop's Days array carries actual occurrence attendance (Pass) and the
+    // administrator's per-lesson note (Description), keyed by date.
+    const daysByDate = new Map<string, JsonRow>();
+    for (const d of array(unit.Days)) {
+      const dt = text(d.Date)?.slice(0, 10);
+      if (dt) daysByDate.set(dt, d);
+    }
     for (const schedule of mergeContiguousScheduleItems(
       array(unit.ScheduleItems),
     )) {
@@ -1016,6 +1026,7 @@ async function importAll(
         teacherId: resolveTeacherId(teacherById, { unit, schedule }),
         memberStudentIds: members,
         soloStudentId,
+        daysByDate,
       });
       if (generated === 0) skip(ctx, "lessons");
     }
@@ -1632,6 +1643,8 @@ async function upsertLessons(
     memberStudentIds: string[];
     // The single student for an individual/trial unit; null for real groups.
     soloStudentId?: string | null;
+    // Per-date occurrence info (Pass attendance + Description note) from Days.
+    daysByDate?: Map<string, JsonRow>;
   },
 ) {
   const unitId = text(value.unit.Id);
@@ -1689,12 +1702,24 @@ async function upsertLessons(
     ) {
       continue;
     }
-    const scheduledAt = `${formatDate(day)}T${beginTime}:00${MOSCOW_OFFSET}`;
+    const dayKey = formatDate(day);
+    const scheduledAt = `${dayKey}T${beginTime}:00${MOSCOW_OFFSET}`;
     const duration = durationMinutes(beginTime, endTime) ?? 60;
     const lessonId = deterministicUuid(
       "hollihop-lesson",
-      `${unitId}:${scheduleId}:${formatDate(day)}`,
+      `${unitId}:${scheduleId}:${dayKey}`,
     );
+    // Attendance from the Days occurrence: Pass=true → attended; a past date
+    // with no pass → missed; future → still scheduled.
+    const dayInfo = value.daysByDate?.get(dayKey);
+    const attended = dayInfo?.Pass === true;
+    const isPast = dayKey < TODAY_ISO;
+    const lessonStatus = attended || isPast ? "completed" : "scheduled";
+    const participationStatus = attended
+      ? "present"
+      : isPast
+        ? "absent"
+        : "scheduled";
     await planUpsert(
       ctx,
       "lessons",
@@ -1710,7 +1735,7 @@ async function upsertLessons(
         room_id: value.roomId,
         scheduled_at: scheduledAt,
         duration_minutes: duration,
-        status: "scheduled",
+        status: lessonStatus,
         is_trial: isTrialUnit(value.unit),
         notes: [
           `HolliHop: ${text(value.unit.Name) ?? ""}`.trim(),
@@ -1732,9 +1757,32 @@ async function upsertLessons(
         {
           lesson_id: lessonId,
           student_id: studentId,
-          status: "scheduled",
+          status: participationStatus,
         },
         ["lesson_id", "student_id"],
+      );
+    }
+    // The administrator's per-lesson note → a chronological admin comment on the
+    // (individual) student's card, dated to the lesson day. Idempotent by id.
+    const note = text(dayInfo?.Description);
+    if (note && value.soloStudentId) {
+      await planUpsert(
+        ctx,
+        "comments",
+        "app.entity_comments",
+        {
+          id: deterministicUuid(
+            "hollihop-day-comment",
+            `${unitId}:${dayKey}:${value.soloStudentId}`,
+          ),
+          entity_type: "student",
+          entity_id: value.soloStudentId,
+          author_id: null,
+          body: note,
+          kind: "admin_comment",
+          created_at: `${dayKey}T12:00:00${MOSCOW_OFFSET}`,
+        },
+        ["id"],
       );
     }
     count += 1;
