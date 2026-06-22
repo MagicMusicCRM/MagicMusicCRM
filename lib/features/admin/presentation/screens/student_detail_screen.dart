@@ -26,6 +26,11 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   List<Map<String, dynamic>> _lessons = [];
   List<Map<String, dynamic>> _tasks = [];
   List<Map<String, dynamic>> _comments = [];
+  // Two distinct, kind-discriminated comment streams shown on the Info card:
+  // imported HolliHop admin comments and teacher-authored notes. The server
+  // enforces RBAC and returns [] for users who may not see a given kind.
+  List<Map<String, dynamic>> _adminComments = [];
+  List<Map<String, dynamic>> _teacherNotes = [];
   List<Map<String, dynamic>> _groups = [];
   List<Map<String, dynamic>> _expectedPayments = [];
   Map<String, dynamic>? _family;
@@ -58,6 +63,18 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           entityType: 'student',
           entityId: widget.studentId,
         ),
+        crm.listComments(
+          entityType: 'student',
+          entityId: widget.studentId,
+          kind: 'admin_comment',
+          limit: 200,
+        ),
+        crm.listComments(
+          entityType: 'student',
+          entityId: widget.studentId,
+          kind: 'teacher_note',
+          limit: 200,
+        ),
       ]);
 
       final studentRes = results[0] as Map<String, dynamic>;
@@ -69,6 +86,8 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
       final commentsRes = results[6] as List<Map<String, dynamic>>;
       final expectedPaymentsRes = results[7] as List<Map<String, dynamic>>;
       final familyRes = results[8] as Map<String, dynamic>;
+      final adminCommentsRes = results[9] as List<Map<String, dynamic>>;
+      final teacherNotesRes = results[10] as List<Map<String, dynamic>>;
 
       if (mounted) {
         setState(() {
@@ -78,6 +97,8 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
           _lessons = lessonsRes;
           _tasks = tasksRes;
           _comments = commentsRes;
+          _adminComments = adminCommentsRes;
+          _teacherNotes = teacherNotesRes;
           _groups = groupsRes;
           _expectedPayments = expectedPaymentsRes;
           _family = familyRes;
@@ -85,6 +106,13 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
           );
           _comments.sort(
+            (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+          );
+          // Newest-first, matching the existing _comments ordering.
+          _adminComments.sort(
+            (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+          );
+          _teacherNotes.sort(
             (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
           );
           _loading = false;
@@ -349,7 +377,116 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
         ]),
         const SizedBox(height: 16),
         _buildInfoCard('Семья', _buildFamilyRows()),
+        const SizedBox(height: 16),
+        _buildCommentsCard(
+          title: 'Комментарии администратора',
+          icon: Icons.admin_panel_settings_rounded,
+          accent: AppColor.gold,
+          comments: _adminComments,
+          emptyLabel: 'Комментариев нет',
+          addLabel: '+ Комментарий',
+          onAdd: () => _addComment(kind: 'admin_comment'),
+        ),
+        const SizedBox(height: 16),
+        _buildCommentsCard(
+          title: 'Заметки преподавателя',
+          icon: Icons.school_rounded,
+          accent: AppColor.gold,
+          comments: _teacherNotes,
+          emptyLabel: 'Заметок преподавателя ещё нет',
+          addLabel: '+ Заметка',
+          onAdd: () => _addComment(kind: 'teacher_note'),
+        ),
       ],
+    );
+  }
+
+  /// Renders one of the two kind-discriminated comment sections (admin comments
+  /// / teacher notes) using the file's existing card + section style. The list
+  /// is capped and scrollable so imported HolliHop notes (which can run to the
+  /// hundreds) never blow out the card height.
+  Widget _buildCommentsCard({
+    required String title,
+    required IconData icon,
+    required Color accent,
+    required List<Map<String, dynamic>> comments,
+    required String emptyLabel,
+    required String addLabel,
+    required VoidCallback onAdd,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: accent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: accent,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: onAdd,
+                  style: TextButton.styleFrom(
+                    foregroundColor: accent,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  child: Text(addLabel),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            if (comments.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  emptyLabel,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            else
+              ConstrainedBox(
+                // Cap the height so hundreds of imported notes stay scrollable
+                // inside the card instead of pushing the page down endlessly.
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: Scrollbar(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    primary: false,
+                    padding: EdgeInsets.zero,
+                    // Display at most 200 rows even if more were returned.
+                    itemCount:
+                        comments.length > 200 ? 200 : comments.length,
+                    separatorBuilder: (_, _) =>
+                        const Divider(height: 16),
+                    itemBuilder: (context, i) => _CommentRow(comment: comments[i]),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -471,12 +608,32 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
     }
   }
 
-  Future<void> _addComment({bool isProgress = false}) async {
+  /// Title shown in the add-comment dialog for the kind-discriminated sections.
+  String _commentDialogTitle(String? kind) {
+    switch (kind) {
+      case 'admin_comment':
+        return 'Новый комментарий администратора';
+      case 'teacher_note':
+        return 'Новая заметка преподавателя';
+      default:
+        return 'Новый комментарий';
+    }
+  }
+
+  /// Adds a comment. When [kind] is `admin_comment` or `teacher_note` the
+  /// comment is created via the kind discriminator and the matching section is
+  /// refreshed. When [isProgress] is set the legacy `[PROGRESS]` note flow runs
+  /// against `_comments`. Plain comments keep their original optimistic flow.
+  Future<void> _addComment({bool isProgress = false, String? kind}) async {
     final controller = TextEditingController();
     final content = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isProgress ? 'Заметка о прогрессе' : 'Новый комментарий'),
+        title: Text(
+          isProgress
+              ? 'Заметка о прогрессе'
+              : _commentDialogTitle(kind),
+        ),
         content: TextField(
           controller: controller,
           maxLines: 3,
@@ -499,7 +656,44 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
       ),
     );
 
-    if (content != null && content.trim().isNotEmpty) {
+    if (content == null || content.trim().isEmpty) return;
+
+    // Kind-discriminated sections (admin comments / teacher notes) use the
+    // server's `kind` field. Create, then refresh the matching list.
+    if (kind == 'admin_comment' || kind == 'teacher_note') {
+      try {
+        final saved = await ref
+            .read(magicCrmServiceProvider)
+            .createComment(
+              entityType: 'student',
+              entityId: widget.studentId,
+              body: content.trim(),
+              kind: kind,
+            );
+        if (!mounted) return;
+        setState(() {
+          final list = kind == 'admin_comment'
+              ? _adminComments
+              : _teacherNotes;
+          list.insert(0, saved);
+          list.sort(
+            (a, b) =>
+                (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+          );
+        });
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Не удалось добавить запись: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+      return;
+    }
+
+    {
       final body = isProgress ? '[PROGRESS] ${content.trim()}' : content.trim();
       final tempId = 'local-${DateTime.now().microsecondsSinceEpoch}';
       final optimistic = {
@@ -1489,6 +1683,51 @@ class _InfoRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One comment row for the «Комментарии администратора» / «Заметки
+/// преподавателя» sections: body, optional author, and date. Author/date sit on
+/// a single trailing line so hundreds of imported HolliHop notes stay compact.
+class _CommentRow extends StatelessWidget {
+  final Map<String, dynamic> comment;
+  const _CommentRow({required this.comment});
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final body = (comment['body'] ?? comment['content'] ?? '')
+        .toString()
+        .trim();
+    final author = (comment['author_name'] ?? '').toString().trim();
+    final dt = DateTime.tryParse(comment['created_at']?.toString() ?? '');
+    final dateStr = dt != null
+        ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal())
+        : '';
+    final meta = [
+      if (author.isNotEmpty) author,
+      if (dateStr.isNotEmpty) dateStr,
+    ].join(' • ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          body.isEmpty ? '—' : body,
+          style: const TextStyle(fontSize: 14, height: 1.35),
+        ),
+        if (meta.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            meta,
+            style: TextStyle(
+              fontSize: 11,
+              color: muted,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
