@@ -277,6 +277,10 @@ async function importAll(
   const groupById = new Map<string, string>();
   const groupMembers = new Map<string, string[]>();
   const roomByKey = new Map<string, string>();
+  // Clients/leads skipped because they have no usable RU phone — they can't be
+  // linked to an app user, so per the owner we don't import them (no clutter).
+  // Their dependent records (lessons/payments/memberships) are skipped too.
+  const skippedClientIds = new Set<string>();
   const duplicateSeeds: DuplicateSeed[] = [];
   const monthlyRevenue: Record<string, number> = {};
 
@@ -577,11 +581,21 @@ async function importAll(
       skip(ctx, "students");
       continue;
     }
+    // Canonical phone from Mobile (the linkage key); Phone is a rare secondary.
+    const mobile = text(student.Mobile);
+    const secondaryPhone = text(student.Phone);
+    const canonicalPhone = normalizePhoneRu(mobile ?? secondaryPhone).canonical;
+    if (!canonicalPhone) {
+      // No usable RU phone → can't link to an app user; skip (owner directive).
+      skippedClientIds.add(clientId);
+      skip(ctx, "students");
+      continue;
+    }
     const studentId = deterministicUuid("hollihop-student", externalId);
     const userId = deterministicUuid("hollihop-student-user", clientId);
     const profileId = deterministicUuid("hollihop-student-profile", clientId);
     studentByClientId.set(clientId, studentId);
-    const phone = text(student.Mobile) ?? text(student.Phone);
+    const phone = canonicalPhone;
     const studentProfile = await upsertUserProfile(ctx, {
       userId,
       profileId,
@@ -603,6 +617,7 @@ async function importAll(
         learningTypes: student.LearningTypes,
         officesAndCompanies: student.OfficesAndCompanies,
         contactPersons: student.Agents,
+        secondaryPhone: secondaryPhone ?? null,
         useMobileBySystem: student.UseMobileBySystem,
         useEmailBySystem: student.UseEMailBySystem,
       },
@@ -739,11 +754,19 @@ async function importAll(
       skip(ctx, "leads");
       continue;
     }
+    // No usable RU phone → can't link to an app user; skip (owner directive).
+    const canonicalLeadPhone = normalizePhoneRu(
+      text(lead.Mobile) ?? text(lead.Phone),
+    ).canonical;
+    if (!canonicalLeadPhone) {
+      skip(ctx, "leads");
+      continue;
+    }
     const leadId = deterministicUuid("hollihop-lead", externalId);
     leadById.set(externalId, leadId);
     const leadBranchId = primaryBranchId(branchIdsFromRow(lead, branchByOffice));
     if (leadBranchId) leadBranchById.set(externalId, leadBranchId);
-    const phone = text(lead.Mobile) ?? text(lead.Phone);
+    const phone = canonicalLeadPhone;
     await recordSource(ctx, {
       source: "leads",
       externalId,
@@ -974,6 +997,12 @@ async function importAll(
     // group_id null) so it shows in that client's card. Real groups (>1 member)
     // stay group lessons with per-member participation.
     const soloStudentId = members.length === 1 ? members[0] : null;
+    // An Individual unit with no resolvable student means its client was skipped
+    // (no usable phone) — don't generate student-less lesson clutter for it.
+    if (text(unit.Type) === "Individual" && !soloStudentId) {
+      skip(ctx, "lessons");
+      continue;
+    }
     for (const schedule of mergeContiguousScheduleItems(
       array(unit.ScheduleItems),
     )) {
