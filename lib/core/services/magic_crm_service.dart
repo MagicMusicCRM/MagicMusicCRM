@@ -1438,7 +1438,7 @@ class MagicCrmService {
         'entityType': entityType,
         'entityId': entityId,
         'progressOnly': progressOnly,
-        if (kind != null) 'kind': kind,
+        'kind': ?kind,
         'limit': limit,
       },
     );
@@ -1459,7 +1459,7 @@ class MagicCrmService {
         'entityId': entityId,
         'body': body.trim(),
         'progress': progress,
-        if (kind != null) 'kind': kind,
+        'kind': ?kind,
       },
     );
     return _legacyComment(response);
