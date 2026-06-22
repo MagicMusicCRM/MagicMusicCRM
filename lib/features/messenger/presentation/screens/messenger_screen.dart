@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_messenger_shell.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
@@ -303,7 +304,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      _showChatSnack('Не удалось сохранить: $e', bg: TelegramColors.danger);
+      _showChatSnack('Не удалось сохранить: $e', bg: AppColor.danger);
     }
   }
 
@@ -356,7 +357,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       if (!mounted) return;
       _showChatSnack(
         'Не удалось открыть карточку: $e',
-        bg: TelegramColors.danger,
+        bg: AppColor.danger,
       );
     }
   }
@@ -557,7 +558,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка загрузки сообщений: ${e.toString()}'),
-            backgroundColor: TelegramColors.danger,
+            backgroundColor: AppColor.danger,
           ),
         );
       }
@@ -1094,7 +1095,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             onPressed: () => Navigator.pop(context, true),
             child: const Text(
               'Удалить',
-              style: TextStyle(color: TelegramColors.danger),
+              style: TextStyle(color: AppColor.danger),
             ),
           ),
         ],
@@ -1610,11 +1611,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: TelegramColors.accentBlue,
+                backgroundColor: AppColor.gold,
+                foregroundColor: AppColor.onGold,
+                elevation: 0,
+                shadowColor: Colors.transparent,
               ),
               child: const Text(
                 'Переслать',
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: AppColor.onGold),
               ),
             ),
           ],
@@ -1913,6 +1917,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Widget _buildChatList(BuildContext context, bool isMobile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dividerColor = isDark ? AppColor.divider : TelegramColors.lightDivider;
+    final secondaryText = isDark
+        ? AppColor.text2
+        : TelegramColors.lightTextSecondary;
     final canCreateGroups = _isManagerOrAdminRole;
 
     final filteredItems = _searchQuery.isEmpty
@@ -1945,16 +1953,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         // Header
         Container(
           height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
           decoration: BoxDecoration(
-            color: isDark ? TelegramColors.darkSurface : TelegramColors.lightBg,
+            color: isDark ? AppColor.surface : TelegramColors.lightBg,
             border: Border(
-              bottom: BorderSide(
-                color: isDark
-                    ? TelegramColors.darkDivider
-                    : TelegramColors.lightDivider,
-                width: 0.5,
-              ),
+              bottom: BorderSide(color: dividerColor, width: 0.5),
             ),
           ),
           child: Row(
@@ -1992,11 +1995,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                     child: ListTile(
                       leading: Icon(
                         Icons.logout_rounded,
-                        color: TelegramColors.danger,
+                        color: AppColor.danger,
                       ),
                       title: Text(
                         'Выйти',
-                        style: TextStyle(color: TelegramColors.danger),
+                        style: TextStyle(color: AppColor.danger),
                       ),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
@@ -2062,24 +2065,18 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         Expanded(
           child: _loadingChats
               ? const Center(
-                  child: CircularProgressIndicator(
-                    color: TelegramColors.accentBlue,
-                  ),
+                  child: CircularProgressIndicator(color: AppColor.gold),
                 )
               : sortedItems.isEmpty
               ? Center(
                   child: Text(
                     _searchQuery.isNotEmpty ? 'Ничего не найдено' : 'Нет чатов',
-                    style: TextStyle(
-                      color: isDark
-                          ? TelegramColors.darkTextSecondary
-                          : TelegramColors.lightTextSecondary,
-                    ),
+                    style: TextStyle(color: secondaryText),
                   ),
                 )
               : RefreshIndicator(
                   onRefresh: _loadChatList,
-                  color: TelegramColors.accentBlue,
+                  color: AppColor.gold,
                   child: ListView.builder(
                     itemCount: sortedItems.length,
                     itemBuilder: (context, index) {
@@ -2133,6 +2130,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Widget _buildChatView(BuildContext context, bool isMobile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final secondaryText = isDark
+        ? AppColor.text2
+        : TelegramColors.lightTextSecondary;
     final isChannel = _selectedChatType == 'channel';
     final isGroup = _selectedChatType == 'group';
 
@@ -2144,7 +2144,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           messenger.showSnackBar(
             const SnackBar(
               content: Text('Вложения в каналах пока недоступны'),
-              backgroundColor: TelegramColors.danger,
+              backgroundColor: AppColor.danger,
             ),
           );
           return;
@@ -2156,7 +2156,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               messenger.showSnackBar(
                 const SnackBar(
                   content: Text('Файл слишком большой (макс. 25 МБ)'),
-                  backgroundColor: TelegramColors.danger,
+                  backgroundColor: AppColor.danger,
                 ),
               );
             }
@@ -2200,7 +2200,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                     icon: const Icon(
                       Icons.push_pin_rounded,
                       size: 20,
-                      color: TelegramColors.accentBlue,
+                      color: AppColor.gold,
                     ),
                     tooltip: 'Показать закрепленные',
                     onPressed: () => setState(
@@ -2216,7 +2216,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                     icon: const Icon(
                       Icons.person_add_alt_1_rounded,
                       size: 20,
-                      color: TelegramColors.accentBlue,
+                      color: AppColor.gold,
                     ),
                     tooltip: 'Сохранить в CRM',
                     onSelected: (value) {
@@ -2313,9 +2313,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             Expanded(
               child: _loadingMessages
                   ? const Center(
-                      child: CircularProgressIndicator(
-                        color: TelegramColors.accentBlue,
-                      ),
+                      child: CircularProgressIndicator(color: AppColor.gold),
                     )
                   : _messages.isEmpty
                   ? Center(
@@ -2327,22 +2325,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                                 ? Icons.campaign_outlined
                                 : Icons.chat_bubble_outline_rounded,
                             size: 64,
-                            color: isDark
-                                ? TelegramColors.darkTextSecondary.withAlpha(60)
-                                : TelegramColors.lightTextSecondary.withAlpha(
-                                    60,
-                                  ),
+                            color: secondaryText.withAlpha(60),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: AppSpace.md),
                           Text(
                             isChannel
                                 ? 'Пока нет публикаций'
                                 : 'Начните общение!',
-                            style: TextStyle(
-                              color: isDark
-                                  ? TelegramColors.darkTextSecondary
-                                  : TelegramColors.lightTextSecondary,
-                            ),
+                            style: TextStyle(color: secondaryText),
                           ),
                         ],
                       ),
@@ -2381,7 +2371,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 children: [
                   if (_typingText.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(left: 16, bottom: 4),
+                      padding: const EdgeInsets.only(
+                        left: AppSpace.lg,
+                        bottom: AppSpace.xs,
+                      ),
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
@@ -2389,9 +2382,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                           style: TextStyle(
                             fontSize: 12,
                             fontStyle: FontStyle.italic,
-                            color: isDark
-                                ? TelegramColors.darkTextSecondary
-                                : TelegramColors.lightTextSecondary,
+                            color: secondaryText,
                           ),
                         ),
                       ),
@@ -2474,7 +2465,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             ListTile(
               leading: const Icon(
                 Icons.person_rounded,
-                color: TelegramColors.accentBlue,
+                color: AppColor.gold,
               ),
               title: const Text('Ответил первым:'),
               subtitle: Text(responderName),
@@ -2483,7 +2474,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             ListTile(
               leading: const Icon(
                 Icons.access_time_rounded,
-                color: TelegramColors.accentBlue,
+                color: AppColor.gold,
               ),
               title: const Text('Время ответа:'),
               subtitle: Text(time),
@@ -2510,6 +2501,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     }
 
     final lastPinned = _pinnedMessages.first;
+    final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final content =
         lastPinned['content']?.toString() ??
@@ -2517,8 +2509,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
     return Container(
       width: double.infinity,
-      color: isDark ? TelegramColors.darkSurface : Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: cs.surface,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md,
+        vertical: AppSpace.sm,
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -2535,11 +2530,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 width: 2,
                 height: 35,
                 decoration: BoxDecoration(
-                  color: TelegramColors.accentBlue,
+                  color: AppColor.gold,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpace.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2549,8 +2544,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       _pinnedMessages.length > 1
                           ? 'Закрепленные сообщения'
                           : 'Закрепленное сообщение',
-                      style: TextStyle(
-                        color: TelegramColors.accentBlue,
+                      style: const TextStyle(
+                        color: AppColor.gold,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
@@ -2561,7 +2556,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: isDark ? Colors.white70 : Colors.black87,
+                        color: cs.onSurface.withAlpha(isDark ? 178 : 222),
                         fontSize: 14,
                       ),
                     ),
@@ -2570,20 +2565,20 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               ),
               if (_pinnedMessages.length > 1)
                 Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
+                  padding: const EdgeInsets.only(right: AppSpace.sm),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
+                      horizontal: AppSpace.xs + 2,
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: TelegramColors.accentBlue.withAlpha(30),
-                      borderRadius: BorderRadius.circular(10),
+                      color: AppColor.goldSoft,
+                      borderRadius: BorderRadius.circular(AppRadius.chip),
                     ),
                     child: Text(
                       '${_pinnedMessages.length}',
-                      style: TextStyle(
-                        color: TelegramColors.accentBlue,
+                      style: const TextStyle(
+                        color: AppColor.gold,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -2609,6 +2604,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   void _showPinnedMessagesDialog() {
+    final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     showDialog(
       context: context,
@@ -2617,12 +2613,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           _pinnedDialogSetState = setDialogState;
 
           return AlertDialog(
-            backgroundColor: isDark ? TelegramColors.darkSurface : Colors.white,
-            title: Row(
+            backgroundColor: cs.surface,
+            title: const Row(
               children: [
-                Icon(Icons.pin_drop_rounded, color: TelegramColors.accentBlue),
-                const SizedBox(width: 8),
-                const Expanded(
+                Icon(Icons.pin_drop_rounded, color: AppColor.gold),
+                SizedBox(width: AppSpace.sm),
+                Expanded(
                   child: Text(
                     'Закрепленные сообщения',
                     overflow: TextOverflow.ellipsis,
@@ -2641,7 +2637,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       shrinkWrap: true,
                       itemCount: _pinnedMessages.length,
                       separatorBuilder: (_, _) => Divider(
-                        color: isDark ? Colors.white12 : Colors.black12,
+                        color: isDark
+                            ? AppColor.divider
+                            : TelegramColors.lightDivider,
                         height: 1,
                       ),
                       itemBuilder: (context, index) {
@@ -3037,7 +3035,7 @@ class _MessageListViewState extends State<_MessageListView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
     final canAdminDelete =
         widget.role == 'admin' ||
         widget.role == 'manager' ||
@@ -3047,7 +3045,7 @@ class _MessageListViewState extends State<_MessageListView> {
       children: [
         ListView.builder(
           controller: _scrollController,
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
           itemCount: widget.messages.length,
           itemBuilder: (context, index) {
             final msg = widget.messages[index];
@@ -3105,8 +3103,8 @@ class _MessageListViewState extends State<_MessageListView> {
         // KVA-174: scroll-to-bottom button with unread badge.
         if (!_isAtBottom)
           Positioned(
-            bottom: 12,
-            right: 12,
+            bottom: AppSpace.md,
+            right: AppSpace.md,
             child: Stack(
               clipBehavior: Clip.none,
               children: [
@@ -3122,10 +3120,8 @@ class _MessageListViewState extends State<_MessageListView> {
                       );
                     }
                   },
-                  backgroundColor: isDark
-                      ? TelegramColors.darkSidebar
-                      : Colors.white,
-                  foregroundColor: TelegramColors.brandGold,
+                  backgroundColor: cs.surface,
+                  foregroundColor: AppColor.gold,
                   elevation: 4,
                   child: const Icon(Icons.keyboard_arrow_down),
                 ),
@@ -3134,9 +3130,9 @@ class _MessageListViewState extends State<_MessageListView> {
                     top: -4,
                     right: -4,
                     child: Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(AppSpace.xs),
                       decoration: const BoxDecoration(
-                        color: Colors.red,
+                        color: AppColor.danger,
                         shape: BoxShape.circle,
                       ),
                       child: Text(

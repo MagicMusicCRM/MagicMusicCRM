@@ -4,6 +4,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 import 'create_lesson_dialog.dart';
 
@@ -111,6 +112,18 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // selected day so evening lessons aren't hidden below the 06:00 fold.
   final ScrollController _dayGridController = ScrollController();
   DateTime? _dayGridScrolledFor;
+
+  // ── Drag-to-move (P2-2 / KVA-195) ──────────────────────────────────────────
+  // Key on the scrollable grid body so a drop's global offset can be converted
+  // to a grid-local offset (→ target hour/minute). Each room column carries an
+  // index in its DragTarget data so the drop column → target room is known
+  // without geometry math.
+  final GlobalKey _dayGridBodyKey = GlobalKey();
+  // True while a lesson block is being dragged, so the body suppresses the
+  // one-shot auto-scroll (it would yank the grid out from under the finger).
+  bool _isDraggingLesson = false;
+  // Guards against overlapping move requests (double-drop / refetch in flight).
+  bool _movingLesson = false;
 
   @override
   void initState() {
@@ -1537,15 +1550,32 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     }
 
     final unassignedColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    final cs = Theme.of(context).colorScheme;
 
     return Column(
       children: [
-        // Room headers
-        SizedBox(
-          height: headerHeight,
-          child: Row(
-            children: [
-              SizedBox(width: 52), // time column
+        // ── Room headers (PINNED / sticky — P2-1) ──────────────────────────
+        // This row lives OUTSIDE the scrollable grid body below, so the
+        // room/availability columns stay fixed while the time grid scrolls
+        // under them. The opaque surface + hairline divider make the pinned
+        // header read as a sticky bar once rows scroll beneath it. Column
+        // widths (52px gutter + Expanded rooms) mirror the body exactly so
+        // headers stay aligned with their columns.
+        Material(
+          color: cs.surface,
+          child: SizedBox(
+            height: headerHeight,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: cs.onSurfaceVariant.withAlpha(24),
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(width: 52), // time column (matches sticky gutter)
               ...rooms.map((r) {
                 final rid = r['id'].toString();
                 final color =
@@ -1643,19 +1673,25 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     ),
                   ),
                 ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
 
-        // Time grid + lesson cards
+        // ── Time grid + lesson cards (SCROLLABLE body) ─────────────────────
+        // The sticky gutter (left) and room columns share this single vertical
+        // scroll controller, so hour labels stay glued to their rows as the
+        // body scrolls under the pinned header above (P2-1).
         Expanded(
           child: SingleChildScrollView(
             controller: _dayGridController,
             child: SizedBox(
+              key: _dayGridBodyKey,
               height: (endHour - startHour) * hourHeight,
               child: Row(
                 children: [
-                  // Time axis
+                  // Time axis (sticky gutter — scrolls with rows, fixed width)
                   SizedBox(
                     width: 52,
                     child: Stack(
@@ -1684,7 +1720,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                       }),
                     ),
                   ),
-                  // Room columns
+                  // Room columns (each a DragTarget so a lesson block can be
+                  // dropped onto a new room/time slot — P2-2).
                   ...rooms.map((r) {
                     final rid = r['id'].toString();
                     final color =
@@ -1695,79 +1732,132 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                         .toList();
 
                     return Expanded(
-                      child: Stack(
-                        children: [
-                          // Grid lines
-                          ...List.generate(endHour - startHour, (i) {
-                            return Positioned(
-                              top: i * hourHeight,
-                              left: 0,
-                              right: 0,
-                              child: Container(
-                                height: hourHeight,
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    top: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant
-                                          .withAlpha(20),
-                                      width: 0.5,
+                      child: DragTarget<Map<String, dynamic>>(
+                        onWillAcceptWithDetails: (_) => !_movingLesson,
+                        onAcceptWithDetails: (details) => _onLessonDropped(
+                          lesson: details.data,
+                          globalDropOffset: details.offset,
+                          targetRoomId: rid,
+                          startHour: startHour,
+                          endHour: endHour,
+                          hourHeight: hourHeight,
+                        ),
+                        builder: (context, candidate, rejected) {
+                          final isHovering = candidate.isNotEmpty;
+                          return Stack(
+                            children: [
+                              // Drop highlight while a block hovers this column.
+                              if (isHovering)
+                                Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: AppColor.goldSoft,
+                                      border: Border.all(
+                                        color: AppColor.goldLine,
+                                      ),
                                     ),
                                   ),
                                 ),
+                              // Grid lines
+                              ...List.generate(endHour - startHour, (i) {
+                                return Positioned(
+                                  top: i * hourHeight,
+                                  left: 0,
+                                  right: 0,
+                                  child: Container(
+                                    height: hourHeight,
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        top: BorderSide(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant
+                                              .withAlpha(20),
+                                          width: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                              // Lesson cards
+                              ...roomLessons.map(
+                                (l) => _buildDayLessonCard(
+                                  l,
+                                  startHour,
+                                  hourHeight,
+                                  color,
+                                ),
                               ),
-                            );
-                          }),
-                          // Lesson cards
-                          ...roomLessons.map(
-                            (l) => _buildDayLessonCard(
-                              l,
-                              startHour,
-                              hourHeight,
-                              color,
-                            ),
-                          ),
-                        ],
+                            ],
+                          );
+                        },
                       ),
                     );
                   }),
                   // «Без аудитории» column — lessons with no/unknown room so they
                   // are never silently dropped from the day grid (KVA-166).
+                  // Also a DragTarget: dropping here moves the lesson off any
+                  // room (roomId cleared) while still re-timing it (P2-2).
                   if (unassignedLessons.isNotEmpty)
                     Expanded(
-                      child: Stack(
-                        children: [
-                          ...List.generate(endHour - startHour, (i) {
-                            return Positioned(
-                              top: i * hourHeight,
-                              left: 0,
-                              right: 0,
-                              child: Container(
-                                height: hourHeight,
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    top: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant
-                                          .withAlpha(20),
-                                      width: 0.5,
+                      child: DragTarget<Map<String, dynamic>>(
+                        onWillAcceptWithDetails: (_) => !_movingLesson,
+                        onAcceptWithDetails: (details) => _onLessonDropped(
+                          lesson: details.data,
+                          globalDropOffset: details.offset,
+                          targetRoomId: '',
+                          startHour: startHour,
+                          endHour: endHour,
+                          hourHeight: hourHeight,
+                        ),
+                        builder: (context, candidate, rejected) {
+                          final isHovering = candidate.isNotEmpty;
+                          return Stack(
+                            children: [
+                              if (isHovering)
+                                Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: AppColor.goldSoft,
+                                      border: Border.all(
+                                        color: AppColor.goldLine,
+                                      ),
                                     ),
                                   ),
                                 ),
+                              ...List.generate(endHour - startHour, (i) {
+                                return Positioned(
+                                  top: i * hourHeight,
+                                  left: 0,
+                                  right: 0,
+                                  child: Container(
+                                    height: hourHeight,
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        top: BorderSide(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant
+                                              .withAlpha(20),
+                                          width: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                              ...unassignedLessons.map(
+                                (l) => _buildDayLessonCard(
+                                  l,
+                                  startHour,
+                                  hourHeight,
+                                  unassignedColor,
+                                ),
                               ),
-                            );
-                          }),
-                          ...unassignedLessons.map(
-                            (l) => _buildDayLessonCard(
-                              l,
-                              startHour,
-                              hourHeight,
-                              unassignedColor,
-                            ),
-                          ),
-                        ],
+                            ],
+                          );
+                        },
                       ),
                     ),
                 ],
@@ -1789,6 +1879,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   ) {
     if (dayLessons.isEmpty) return;
     if (_dayGridScrolledFor == _selectedDate) return;
+    // Don't yank the grid while a block is mid-drag (P2-2).
+    if (_isDraggingLesson) return;
 
     double? earliestTop;
     for (final l in dayLessons) {
@@ -1834,82 +1926,263 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – '
         '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
 
+    final clampedHeight = height.clamp(24.0, double.infinity);
+
+    // The visual card body, reused for the in-grid block, the drag feedback,
+    // and the dimmed placeholder left behind while dragging (P2-2).
+    final cardBody = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      decoration: BoxDecoration(
+        color: conflicts.isEmpty
+            ? roomColor.withAlpha(40)
+            : AppColor.danger.withAlpha(32),
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          left: BorderSide(
+            color: conflicts.isEmpty ? roomColor : AppColor.danger,
+            width: 3,
+          ),
+          right: conflicts.isEmpty
+              ? BorderSide.none
+              : const BorderSide(color: AppColor.danger, width: 1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  timeStr,
+                  style: TextStyle(
+                    color: conflicts.isEmpty ? roomColor : AppColor.danger,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+              if (conflicts.isNotEmpty)
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: AppColor.danger,
+                  size: 12,
+                ),
+            ],
+          ),
+          if (height > 30)
+            Text(
+              studentName,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          if (height > 44)
+            Text(
+              teacherName,
+              style: TextStyle(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurfaceVariant.withAlpha(180),
+                fontSize: 9,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
+      ),
+    );
+
+    final tappable = GestureDetector(
+      onTap: () => _showLessonDetails(lesson),
+      child: cardBody,
+    );
+
+    // Only re-schedulable lessons are draggable: a cancelled/completed block
+    // must not be silently re-timed. Tap-to-open detail is unchanged for all.
+    final status = lesson['status']?.toString();
+    final movable =
+        lesson['id'] != null &&
+        status != 'cancelled' &&
+        status != 'completed' &&
+        status != 'done';
+
+    if (!movable) {
+      return Positioned(
+        top: topOffset,
+        left: 2,
+        right: 2,
+        height: clampedHeight,
+        child: tappable,
+      );
+    }
+
     return Positioned(
       top: topOffset,
       left: 2,
       right: 2,
-      height: height.clamp(24.0, double.infinity),
-      child: GestureDetector(
-        onTap: () => _showLessonDetails(lesson),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-          decoration: BoxDecoration(
-            color: conflicts.isEmpty
-                ? roomColor.withAlpha(40)
-                : AppColor.danger.withAlpha(32),
-            borderRadius: BorderRadius.circular(6),
-            border: Border(
-              left: BorderSide(
-                color: conflicts.isEmpty ? roomColor : AppColor.danger,
-                width: 3,
-              ),
-              right: conflicts.isEmpty
-                  ? BorderSide.none
-                  : const BorderSide(color: AppColor.danger, width: 1),
+      height: clampedHeight,
+      child: LongPressDraggable<Map<String, dynamic>>(
+        data: lesson,
+        onDragStarted: () {
+          if (!_isDraggingLesson) {
+            setState(() => _isDraggingLesson = true);
+          }
+        },
+        onDragEnd: (_) {
+          if (mounted && _isDraggingLesson) {
+            setState(() => _isDraggingLesson = false);
+          }
+        },
+        // The dragged proxy: a slightly opaque copy sized to the source block.
+        feedback: Material(
+          color: Colors.transparent,
+          child: Opacity(
+            opacity: 0.9,
+            child: SizedBox(
+              width: 120,
+              height: clampedHeight,
+              child: cardBody,
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      timeStr,
-                      style: TextStyle(
-                        color: conflicts.isEmpty ? roomColor : AppColor.danger,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                    ),
-                  ),
-                  if (conflicts.isNotEmpty)
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: AppColor.danger,
-                      size: 12,
-                    ),
-                ],
-              ),
-              if (height > 30)
-                Text(
-                  studentName,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              if (height > 44)
-                Text(
-                  teacherName,
-                  style: TextStyle(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurfaceVariant.withAlpha(180),
-                    fontSize: 9,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-            ],
-          ),
         ),
+        childWhenDragging: Opacity(opacity: 0.3, child: tappable),
+        child: tappable,
       ),
     );
+  }
+
+  // ── Drag-to-move drop handler (P2-2 / KVA-195) ──────────────────────────────
+  // Converts the drop's global offset into a grid-local Y → target hour/minute
+  // (snapped to 5 min, clamped to the visible [startHour, endHour) window), then
+  // routes the move through the SAME update path the widget already uses
+  // (`magicCrmServiceProvider.updateLesson` with a new `scheduledAt` + `roomId`).
+  // It does NOT invent any endpoint: after the update we re-run `_fetchAll`,
+  // whose `getScheduleMatrix` call recomputes conflicts server-side (the existing
+  // conflict check), and any returned `conflict_types` are surfaced to the user.
+  void _onLessonDropped({
+    required Map<String, dynamic> lesson,
+    required Offset globalDropOffset,
+    required String targetRoomId,
+    required int startHour,
+    required int endHour,
+    required double hourHeight,
+  }) {
+    final bodyContext = _dayGridBodyKey.currentContext;
+    final box = bodyContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+
+    // Local Y inside the (scrolled) grid body → minutes from startHour.
+    final localY = box.globalToLocal(globalDropOffset).dy;
+    final rawMinutes = (localY / hourHeight) * 60.0;
+    // Snap to 5-minute steps for a tidy slot.
+    var snapped = (rawMinutes / 5).round() * 5;
+
+    final duration = _durationMinutes(lesson);
+    final maxStartMinutes = (endHour - startHour) * 60 - duration;
+    if (snapped < 0) snapped = 0;
+    if (maxStartMinutes >= 0 && snapped > maxStartMinutes) {
+      snapped = maxStartMinutes;
+    }
+
+    final newHour = startHour + (snapped ~/ 60);
+    final newMinute = snapped % 60;
+
+    final currentStart = _parseLessonTime(lesson);
+    final currentRoomId = lesson['room_id']?.toString() ?? '';
+    if (currentStart != null &&
+        currentStart.hour == newHour &&
+        currentStart.minute == newMinute &&
+        currentRoomId == targetRoomId) {
+      return; // No-op drop (same slot) — skip the round-trip.
+    }
+
+    // Build the new instant directly in UTC space — the exact inverse of
+    // `_parseLessonTime` (which does `dbTimeUtc.add(branchOffset)`), so we
+    // subtract the branch offset from the chosen branch-local wall-clock. Using
+    // `DateTime.utc` (not local `DateTime`) avoids double-applying the device's
+    // own timezone.
+    final branchLocalUtc = DateTime.utc(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      newHour,
+      newMinute,
+    );
+    final utcStart =
+        branchLocalUtc.subtract(Duration(minutes: _offsetForLesson(lesson)));
+
+    _moveLesson(
+      lesson: lesson,
+      newScheduledAtUtcIso: utcStart.toIso8601String(),
+      newRoomId: targetRoomId,
+    );
+  }
+
+  Future<void> _moveLesson({
+    required Map<String, dynamic> lesson,
+    required String newScheduledAtUtcIso,
+    required String newRoomId,
+  }) async {
+    final lessonId = lesson['id']?.toString();
+    if (lessonId == null || _movingLesson) return;
+    setState(() => _movingLesson = true);
+
+    final currentRoomId = lesson['room_id']?.toString() ?? '';
+    // Only send roomId when it actually changed AND we're targeting a real room
+    // (empty target = «Без аудитории»; we leave room unchanged there rather than
+    // guessing a clear-room payload the existing API may not model).
+    final roomChanged = newRoomId.isNotEmpty && newRoomId != currentRoomId;
+
+    try {
+      await ref.read(magicCrmServiceProvider).updateLesson(
+            lessonId,
+            scheduledAt: newScheduledAtUtcIso,
+            roomId: roomChanged ? newRoomId : null,
+          );
+      // Re-fetch so the matrix (existing server-side conflict check) reruns and
+      // the grid reflects the new slot. Reset the per-day auto-scroll guard so
+      // the moved block stays visible.
+      _dayGridScrolledFor = null;
+      if (mounted) await _fetchAll();
+      if (!mounted) return;
+
+      // Surface any conflict the matrix flagged on the moved lesson.
+      final moved = _lessons.firstWhere(
+        (l) => l['id']?.toString() == lessonId,
+        orElse: () => const <String, dynamic>{},
+      );
+      final conflicts = _conflictTypes(moved['conflict_types']);
+      if (conflicts.isNotEmpty) {
+        MagicToast.show(
+          context,
+          'Занятие перенесено, но есть конфликт',
+          detail: conflicts.map(_conflictLabel).join(', '),
+          type: MagicToastType.danger,
+        );
+      } else {
+        MagicToast.show(
+          context,
+          'Занятие перенесено',
+          type: MagicToastType.success,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось перенести занятие',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
+    } finally {
+      if (mounted) setState(() => _movingLesson = false);
+    }
   }
 
   // ── Day view by Teacher ───────────────────────────────────────────────────
