@@ -2180,7 +2180,7 @@ async function fetchFromApi(): Promise<HolliHopData> {
     fetchRoot("GetOffices", "Offices"),
     fetchRoot("GetLeadStatuses", "Statuses"),
     fetchRoot("GetTeachers", "Teachers"),
-    fetchRoot("GetEdUnits", "EdUnits"),
+    fetchEdUnits(),
     fetchPaged("GetStudents", "Students"),
     fetchPaged("GetLeads", "Leads"),
     fetchPaged("GetEdUnitStudents", "EdUnitStudents"),
@@ -2219,6 +2219,20 @@ async function fetchFromApi(): Promise<HolliHopData> {
 async function fetchRoot(method: string, rootKey: string): Promise<JsonRow[]> {
   const data = await fetchJson(method);
   const items = data[rootKey];
+  return Array.isArray(items) ? (items as JsonRow[]) : [];
+}
+
+// GetEdUnits must be fetched with a date range AND queryDays=true so each unit
+// carries its actual occurrences (Days) — that is where per-lesson attendance
+// (Pass) and the administrator's note (Description) live. Without queryDays the
+// Days array is empty, so attendance and comments never import.
+async function fetchEdUnits(): Promise<JsonRow[]> {
+  const data = await fetchJson("GetEdUnits", {
+    dateFrom: LESSON_FROM,
+    dateTo: LESSON_TO,
+    queryDays: "true",
+  });
+  const items = data.EdUnits;
   return Array.isArray(items) ? (items as JsonRow[]) : [];
 }
 
@@ -2278,16 +2292,27 @@ function writeReport(report: JsonRow, startedAt: Date): string {
   const defaultDir = process.cwd().endsWith(`${process.platform === "win32" ? "\\" : "/"}server`)
     ? "exports"
     : "server/exports";
-  const dir = resolveInputPath(
-    process.env.HOLLIHOP_IMPORT_REPORT_DIR ?? defaultDir,
-  );
-  mkdirSync(dir, { recursive: true });
-  const file = join(
-    dir,
-    `hollihop-import-${startedAt.toISOString().replace(/[:.]/g, "-")}.json`,
-  );
-  writeFileSync(file, JSON.stringify(report, null, 2), "utf8");
-  return file;
+  const fileName = `hollihop-import-${startedAt.toISOString().replace(/[:.]/g, "-")}.json`;
+  // The report is written AFTER the data is committed, so a write failure (e.g.
+  // a read-only/owned exports dir in the container) must NOT fail the import.
+  // Try the configured dir, then the default, then /tmp; never throw.
+  const candidates = [
+    process.env.HOLLIHOP_IMPORT_REPORT_DIR,
+    defaultDir,
+    "/tmp",
+  ].filter((d): d is string => Boolean(d));
+  for (const base of candidates) {
+    try {
+      const dir = resolveInputPath(base);
+      mkdirSync(dir, { recursive: true });
+      const file = join(dir, fileName);
+      writeFileSync(file, JSON.stringify(report, null, 2), "utf8");
+      return file;
+    } catch {
+      // try the next candidate
+    }
+  }
+  return "(report not written)";
 }
 
 function resolveInputPath(value: string): string {
