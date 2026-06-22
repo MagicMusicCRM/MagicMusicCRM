@@ -1429,6 +1429,7 @@ class MagicCrmService {
     required String entityType,
     required String entityId,
     bool progressOnly = false,
+    String? kind,
     int limit = 50,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
@@ -1437,6 +1438,7 @@ class MagicCrmService {
         'entityType': entityType,
         'entityId': entityId,
         'progressOnly': progressOnly,
+        if (kind != null) 'kind': kind,
         'limit': limit,
       },
     );
@@ -1448,6 +1450,7 @@ class MagicCrmService {
     required String entityId,
     required String body,
     bool progress = false,
+    String? kind,
   }) async {
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/comments',
@@ -1456,6 +1459,7 @@ class MagicCrmService {
         'entityId': entityId,
         'body': body.trim(),
         'progress': progress,
+        if (kind != null) 'kind': kind,
       },
     );
     return _legacyComment(response);
@@ -2466,6 +2470,8 @@ class MagicCrmService {
       'author_name': item['authorName'],
       'body': content,
       'content': content,
+      'kind': item['kind'],
+      'progress': item['progress'],
       'created_at': item['createdAt'],
       'profiles': {
         'first_name': _splitName(item['authorName']?.toString() ?? '').$1,
