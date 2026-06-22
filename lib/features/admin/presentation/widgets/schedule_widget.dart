@@ -72,6 +72,10 @@ class ScheduleWidget extends ConsumerStatefulWidget {
 
 class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   bool _isLoading = true;
+  // True once the first successful load has populated the grid. After that we
+  // keep the existing calendar visible during re-fetches (branch/date/view
+  // changes) instead of flashing the skeleton — so interaction feels instant.
+  bool _hasLoadedOnce = false;
   Object? _loadError;
   // Guards the one-shot "auto-pick a branch with data" re-fetch so it can never
   // loop when every branch is genuinely empty (KVA-166).
@@ -319,6 +323,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         _teacherNames = tNames;
         _studentNames = sNames;
         _isLoading = false;
+        _hasLoadedOnce = true;
       });
     } catch (e) {
       debugPrint('Error fetching schedule: $e');
@@ -680,27 +685,39 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // ═══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    // Keep the header and date controls visible during loading/error so the
-    // manager can always tell where they are and retry, instead of staring at
-    // an anonymous skeleton grid.
-    final isBusy = _isLoading || _loadError != null;
+    // Chrome (branch selector, view toggle, availability bar, FAB) is hidden
+    // only on the FIRST load (no data yet). Once loaded, it stays visible during
+    // re-fetches — a thin progress bar shows the refresh — so the screen never
+    // collapses to a bare skeleton when you change branch/date/view.
+    final firstLoad = (_isLoading || _loadError != null) && !_hasLoadedOnce;
+    final refreshing = _isLoading && _hasLoadedOnce;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
           _buildHeader(),
-          if (!isBusy) ...[
+          SizedBox(
+            height: 2,
+            child: refreshing
+                ? const LinearProgressIndicator(
+                    minHeight: 2,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation(AppColor.gold),
+                  )
+                : null,
+          ),
+          if (!firstLoad) ...[
             _buildBranchSelector(),
             if (_currentView == _ScheduleView.day) _buildDayViewModeToggle(),
           ],
           _buildDateNavigation(),
-          if (!isBusy && _currentView == _ScheduleView.day)
+          if (!firstLoad && _currentView == _ScheduleView.day)
             _buildAvailabilitySummary(),
           Expanded(child: _buildScheduleContent()),
         ],
       ),
-      floatingActionButton: isBusy
+      floatingActionButton: firstLoad
           ? null
           : FloatingActionButton(
               onPressed: () => _showAddLessonDialog(
@@ -716,13 +733,16 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   Widget _buildScheduleContent() {
-    if (_isLoading) {
+    // Skeleton only on the very first load. On re-fetches we keep the existing
+    // calendar on screen (a thin progress bar in the header signals the refresh)
+    // so changing branch/date/view never blanks the grid.
+    if (_isLoading && !_hasLoadedOnce) {
       return const Padding(
         padding: EdgeInsets.all(16),
         child: ScheduleSkeleton(rows: 7, columns: 6),
       );
     }
-    if (_loadError != null) {
+    if (_loadError != null && !_hasLoadedOnce) {
       return _ScheduleError(error: _loadError, onRetry: _fetchAll);
     }
     return _currentView == _ScheduleView.month
@@ -1164,53 +1184,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     );
   }
 
-  // Empty-state hint shown when the loaded period has no lessons, so an empty
-  // calendar does not read as a broken/loading screen.
-  Widget _buildEmptyScheduleHint() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withAlpha(150),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(24),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.event_busy_rounded,
-              size: 16,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'На выбранный период занятий нет',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => _showAddLessonDialog(
-                _currentView == _ScheduleView.day
-                    ? _selectedDate
-                    : DateTime.now(),
-                null,
-              ),
-              child: const Text('Создать занятие'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   List<Map<String, dynamic>> _conflictsForSelectedDay() {
     return _scheduleConflicts.where((conflict) {
       final dt = _parseServerTime(conflict['scheduled_at']);
@@ -1265,8 +1238,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
     return Column(
       children: [
-        if (_monthDaySummary.isEmpty && _filteredLessons.isEmpty)
-          _buildEmptyScheduleHint(),
+        // Month calendar is always rendered (empty cells when there are no
+        // lessons), matching the v7 prototype — no text hint over the grid.
         // Weekday headers
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1545,9 +1518,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
     _scheduleDayGridAutoScroll(dayLessons, startHour, hourHeight);
 
-    if (dayLessons.isEmpty) {
-      return _buildEmptyScheduleHint();
-    }
+    // Like the v7 prototype, the calendar grid is ALWAYS rendered: rooms stay as
+    // columns and the time rows render empty when the day has no lessons. We do
+    // NOT swap the grid for a text hint — an empty day is an empty grid you can
+    // still tap to book, not a dead-end message.
 
     final unassignedColor = Theme.of(context).colorScheme.onSurfaceVariant;
     final cs = Theme.of(context).colorScheme;

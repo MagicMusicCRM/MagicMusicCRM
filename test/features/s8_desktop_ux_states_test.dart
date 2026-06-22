@@ -41,13 +41,17 @@ Widget _host(Widget child, {bool fail = false}) {
 
 void main() {
   group('S8 desktop UX states', () {
-    testWidgets('T8.1 schedule shows an empty hint when no lessons load', (
+    testWidgets('T8.1 schedule renders the calendar grid even with no lessons', (
       tester,
     ) async {
       await tester.pumpWidget(_host(const ScheduleWidget()));
       await tester.pumpAndSettle();
 
-      expect(find.text('На выбранный период занятий нет'), findsOneWidget);
+      // Like the v7 prototype, an empty period shows an EMPTY calendar (weekday
+      // headers + cells), never a "занятий нет" text card that replaces the grid.
+      expect(find.text('На выбранный период занятий нет'), findsNothing);
+      expect(find.text('ПН'), findsOneWidget);
+      expect(find.text('ВС'), findsOneWidget);
     });
 
     testWidgets('T8.1 schedule shows an error state with retry on failure', (

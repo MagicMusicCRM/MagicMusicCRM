@@ -1683,10 +1683,12 @@ class _LeadCard extends ConsumerWidget {
     return LongPressDraggable<String>(
       data: id,
       maxSimultaneousDrags: isPending ? 0 : null,
-      // Snappier than the default ~500ms long-press so dragging feels
-      // responsive with a mouse on desktop, while still not stealing the
-      // vertical scroll gesture inside the column list.
-      delay: const Duration(milliseconds: 180),
+      // Platform-standard long-press (~500ms). A shorter delay (was 180ms) let an
+      // ordinary desktop mouse click that lingers past the threshold start a drag
+      // with no movement, so clicking a card silently moved the lead to another
+      // column. The full long-press cleanly separates a click (tap → open) from a
+      // deliberate drag, on both mouse and touch, without stealing column scroll.
+      delay: const Duration(milliseconds: 500),
       hapticFeedbackOnStart: true,
       onDragUpdate: (details) => onDragUpdate(details.globalPosition),
       onDragEnd: (_) => onDragEnd(),

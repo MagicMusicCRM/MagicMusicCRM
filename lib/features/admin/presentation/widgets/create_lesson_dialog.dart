@@ -242,7 +242,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     const durationMinutes = 60; // matches the backend's default lesson length.
 
     List<String> conflictTypes = const [];
-    bool busy = false;
     try {
       final dayUtc = DateTime.utc(
         slotStartUtc.year,
@@ -265,7 +264,11 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         for (final raw in items) {
           if (raw is! Map) continue;
           if (raw['room_id']?.toString() != roomId) continue;
-          busy = raw['is_available'] == false;
+          // NB: is_available == false only means the room already has a lesson
+          // in this window — that is normal, NOT a conflict. We warn solely on
+          // real conflict_types (room_overlap/teacher_overlap/…), mirroring the
+          // schedule grid's own conflict semantics. Reading is_available as a
+          // block is what made «Создать» silently no-op on any busy room.
           final ct = raw['conflict_types'];
           if (ct is List) {
             conflictTypes = ct.map((e) => e.toString()).toList();
@@ -278,7 +281,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       return true; // soft-fail open — never block on a read error.
     }
 
-    if (!busy && conflictTypes.isEmpty) return true;
+    if (conflictTypes.isEmpty) return true;
 
     if (!mounted) return true;
     final labels = _conflictLabels(conflictTypes);
@@ -374,7 +377,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           break;
       }
     }
-    if (labels.isEmpty) labels.add('Аудитория занята в это время');
+    // Reached only for a genuine (but unmapped) conflict_type — stay generic
+    // rather than wrongly claiming the room is busy.
+    if (labels.isEmpty) labels.add('Возможен конфликт расписания');
     return labels;
   }
 
