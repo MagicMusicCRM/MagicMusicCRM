@@ -23,8 +23,13 @@ const CONNECTION_STRING =
   process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
 const SOURCE_DIR = process.env.HOLLIHOP_IMPORT_SOURCE_DIR?.trim();
 const TAKE = Number(process.env.HOLLIHOP_IMPORT_TAKE ?? "500");
-const LESSON_FROM = process.env.HOLLIHOP_LESSON_FROM ?? "2025-01-01";
-const LESSON_TO = process.env.HOLLIHOP_LESSON_TO ?? "2026-12-31";
+// Lesson generation window. This was the real cause of "too little data": the
+// importer pulls ALL EdUnits (GetEdUnits returns every unit), but only expands
+// their ScheduleItems into lessons within this window — previously a narrow
+// 2025-2026. Widened to HolliHop's full available range (data spans ~2024 → 2027)
+// so past and future schedule (by classroom/teacher) is imported, not just ~2y.
+const LESSON_FROM = process.env.HOLLIHOP_LESSON_FROM ?? "2024-01-01";
+const LESSON_TO = process.env.HOLLIHOP_LESSON_TO ?? "2028-01-01";
 const STORE_SOURCE_RECORDS =
   (process.env.HOLLIHOP_IMPORT_STORE_SOURCE_RECORDS ?? "true").toLowerCase() !==
   "false";
