@@ -1720,13 +1720,7 @@ class _LeadCard extends ConsumerWidget {
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(AppRadius.control),
               border: Border.all(color: statusColor, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(80),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
+              boxShadow: AppShadow.shLift,
             ),
             child: Row(
               children: [

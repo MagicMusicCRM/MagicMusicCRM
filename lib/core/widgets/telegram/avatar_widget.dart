@@ -75,9 +75,13 @@ class _TelegramAvatarState extends ConsumerState<TelegramAvatar> {
 
     Widget child;
     if (hasUrl) {
+      final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+      final cacheSize = (widget.radius * 2 * devicePixelRatio).round();
       child = Image.network(
         _resolvedAvatarUrl!,
         fit: BoxFit.cover,
+        cacheWidth: cacheSize,
+        cacheHeight: cacheSize,
         errorBuilder: (context, error, stackTrace) =>
             _buildInitials(gradientColors, initials),
         loadingBuilder: (context, child, loadingProgress) {

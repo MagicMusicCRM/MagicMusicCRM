@@ -171,6 +171,32 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
         child: FutureBuilder<_AuthMethodsData>(
           future: _authMethodsFuture,
           builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError || !snapshot.hasData) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpace.xl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Не удалось загрузить способы входа.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: AppSpace.lg),
+                      TextButton(
+                        onPressed: _refreshAuthMethods,
+                        child: const Text('Повторить'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
             final data = snapshot.data;
             final identities = data?.identities ?? const <MagicAuthIdentity>[];
             final userEmail = data?.email ?? '';

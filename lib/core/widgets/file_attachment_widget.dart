@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
@@ -253,16 +254,20 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
           width: 200,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: (widget.isMe ? Colors.white : AppTheme.primaryGold)
+            color: (widget.isMe ? AppColor.onGold : AppTheme.primaryGold)
                 .withAlpha(15),
             borderRadius: BorderRadius.circular(8),
           ),
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            color: widget.isMe ? Colors.white : AppTheme.primaryGold,
+            color: widget.isMe ? AppColor.onGold : AppTheme.primaryGold,
           ),
         );
       }
+
+      final dpr = MediaQuery.of(context).devicePixelRatio;
+      final cacheW = (280 * dpr).round();
+      final cacheH = (250 * dpr).round();
 
       return GestureDetector(
         onTap: () => unawaited(_showFullScreenImage(context)),
@@ -273,6 +278,8 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
             child: Image.network(
               _resolvedFileUrl!,
               fit: BoxFit.cover,
+              cacheWidth: cacheW,
+              cacheHeight: cacheH,
               loadingBuilder: (context, child, progress) {
                 if (progress == null) return child;
                 return Container(
@@ -280,7 +287,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
                   width: 200,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (widget.isMe ? Colors.white : AppTheme.primaryGold)
+                    color: (widget.isMe ? AppColor.onGold : AppTheme.primaryGold)
                         .withAlpha(15),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -290,7 +297,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
                               progress.expectedTotalBytes!
                         : null,
                     strokeWidth: 2,
-                    color: widget.isMe ? Colors.white : AppTheme.primaryGold,
+                    color: widget.isMe ? AppColor.onGold : AppTheme.primaryGold,
                   ),
                 );
               },
@@ -299,7 +306,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
                 width: 200,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: (widget.isMe ? Colors.white : AppTheme.primaryGold)
+                  color: (widget.isMe ? AppColor.onGold : AppTheme.primaryGold)
                       .withAlpha(15),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -309,7 +316,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
                     Icon(
                       Icons.broken_image_rounded,
                       color: widget.isMe
-                          ? Colors.white70
+                          ? AppColor.onGold.withAlpha(180)
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(height: 4),
@@ -318,7 +325,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
                       style: TextStyle(
                         fontSize: 11,
                         color: widget.isMe
-                            ? Colors.white70
+                            ? AppColor.onGold.withAlpha(180)
                             : Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -333,12 +340,12 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
 
     // ── Non-image file: show as downloadable card ──
     final sizeStr = ChatAttachmentService.formatFileSize(widget.fileSize);
-    final iconColor = widget.isMe ? Colors.white : AppTheme.primaryGold;
+    final iconColor = widget.isMe ? AppColor.onGold : AppTheme.primaryGold;
     final textCol = widget.isMe
-        ? Colors.white
+        ? AppColor.onGold
         : Theme.of(context).colorScheme.onSurface;
     final subtitleCol = widget.isMe
-        ? Colors.white.withAlpha(180)
+        ? AppColor.onGold.withAlpha(180)
         : Theme.of(context).colorScheme.onSurfaceVariant;
 
     return InkWell(
@@ -347,7 +354,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: (widget.isMe ? Colors.white : AppTheme.primaryGold)
+          color: (widget.isMe ? AppColor.onGold : AppTheme.primaryGold)
               .withAlpha(15),
           borderRadius: BorderRadius.circular(8),
         ),

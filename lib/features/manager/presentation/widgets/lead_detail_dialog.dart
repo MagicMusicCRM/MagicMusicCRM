@@ -1116,7 +1116,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
   ) {
     final dt = value == null ? null : DateTime.tryParse(value);
     final display = dt != null
-        ? DateFormat('dd.MM.yyyy').format(dt)
+        ? DateFormat('dd.MM.yyyy', 'ru').format(dt)
         : 'Не выбрано';
     final label = field.required ? '${field.label} *' : field.label;
     return Padding(
@@ -1988,7 +1988,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
   String _formatDate(Object? raw) {
     final dt = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
     if (dt == null) return '';
-    return DateFormat('dd.MM.yyyy HH:mm').format(dt);
+    return DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt);
   }
 
   Future<void> _addComment() async {
@@ -2018,20 +2018,58 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
   }
 }
 
-class _CommentsList extends ConsumerWidget {
+class _CommentsList extends ConsumerStatefulWidget {
   final String leadId;
   final int refreshKey;
   const _CommentsList({required this.leadId, required this.refreshKey});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CommentsList> createState() => _CommentsListState();
+}
+
+class _CommentsListState extends ConsumerState<_CommentsList> {
+  // Bumped on «Повторить» to rebuild the FutureBuilder with a fresh request.
+  int _retryKey = 0;
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return FutureBuilder<List<Map<String, dynamic>>>(
-      key: ValueKey(refreshKey),
+      key: ValueKey('${widget.refreshKey}:$_retryKey'),
       future: ref
           .watch(magicCrmServiceProvider)
-          .listComments(entityType: 'lead', entityId: leadId),
+          .listComments(entityType: 'lead', entityId: widget.leadId),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+            child: LinearProgressIndicator(color: AppColor.gold),
+          );
+        }
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Не удалось загрузить комментарии',
+                  style: TextStyle(
+                    color: cs.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.xs),
+                TextButton.icon(
+                  onPressed: () => setState(() => _retryKey++),
+                  style: TextButton.styleFrom(foregroundColor: AppColor.gold),
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Повторить'),
+                ),
+              ],
+            ),
+          );
+        }
         if (!snapshot.hasData) return const SizedBox.shrink();
         final comments = snapshot.data!;
         if (comments.isEmpty) {
@@ -2048,7 +2086,7 @@ class _CommentsList extends ConsumerWidget {
           children: comments.map((c) {
             final dt = DateTime.tryParse(c['created_at'] ?? '')?.toLocal();
             final dateStr = dt != null
-                ? DateFormat('d MMM HH:mm').format(dt)
+                ? DateFormat('d MMM HH:mm', 'ru').format(dt)
                 : '';
             return Container(
               width: double.infinity,

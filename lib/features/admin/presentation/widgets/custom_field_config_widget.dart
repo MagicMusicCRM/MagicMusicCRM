@@ -146,7 +146,26 @@ class _CustomFieldConfigWidgetState
     });
   }
 
-  void _deleteField(int index) {
+  Future<void> _deleteField(int index) async {
+    final field = _fields[index];
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить поле?'),
+        content: Text('«${field.label}» будет удалено из шаблонов.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Удалить', style: TextStyle(color: AppColor.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
     setState(() {
       final next = [..._fields]..removeAt(index);
       _fields = next;

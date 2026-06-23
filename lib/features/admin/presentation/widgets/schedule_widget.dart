@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
@@ -10,15 +12,17 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'create_lesson_dialog.dart';
 
 // ── Color palette for rooms / teachers ──────────────────────────────────────
+// Muted, token-aligned palette (gold + status hues, no neon) so room dots read
+// as «Flat Magic» chrome rather than vivid web colors.
 const List<Color> _roomColors = [
-  Color(0xFFEF4444), // red
-  Color(0xFFF59E0B), // amber
-  Color(0xFF22C55E), // green
-  Color(0xFF3B82F6), // blue
-  Color(0xFFD4AF37), // gold
-  Color(0xFFEC4899), // pink
-  Color(0xFF14B8A6), // teal
-  Color(0xFFF97316), // orange
+  AppColor.gold, // золото (бренд)
+  AppColor.gold2, // золото-2 (тёплый)
+  AppColor.success, // зелёный (статус)
+  Color(0xFF5B8DB8), // приглушённый синий
+  Color(0xFFB58DB8), // приглушённый сиреневый
+  Color(0xFF6FB0A6), // приглушённый бирюзовый
+  Color(0xFFC58A5B), // приглушённый терракотовый
+  AppColor.danger, // красный (статус)
 ];
 
 // ── Enums ───────────────────────────────────────────────────────────────────
@@ -135,6 +139,11 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   double? _selStartY;
   double? _selEndY;
 
+  // Debounce for realtime refetches: a burst of lesson events from other staff
+  // would otherwise trigger one full refetch each. Coalesce them into a single
+  // refetch ~350ms after the last event.
+  Timer? _realtimeDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -143,6 +152,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   @override
   void dispose() {
+    _realtimeDebounce?.cancel();
     _dayGridController.dispose();
     super.dispose();
   }
@@ -771,11 +781,17 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       final event = next.value;
       if (event == null || event.entity != 'lesson' || !mounted) return;
       if (_isLoading) return;
-      if (_currentView == _ScheduleView.day) {
-        _fetchDayLessons(_selectedDate);
-      } else {
-        _fetchAll();
-      }
+      // Debounce: coalesce a burst of lesson events into one refetch so we don't
+      // fire a full reload per event.
+      _realtimeDebounce?.cancel();
+      _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted || _isLoading) return;
+        if (_currentView == _ScheduleView.day) {
+          _fetchDayLessons(_selectedDate);
+        } else {
+          _fetchAll();
+        }
+      });
     });
     // Chrome (branch selector, view toggle, availability bar, FAB) is hidden
     // only on the FIRST load (no data yet). Once loaded, it stays visible during

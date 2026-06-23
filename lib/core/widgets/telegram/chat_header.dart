@@ -73,6 +73,7 @@ class ChatHeader extends StatelessWidget {
         if (showBackButton)
           IconButton(
             icon: const Icon(Icons.arrow_back_rounded),
+            tooltip: 'Назад',
             onPressed: onBack ?? () => Navigator.of(context).maybePop(),
             splashRadius: 20,
           ),
@@ -128,6 +129,7 @@ class ChatHeader extends StatelessWidget {
         if (onSearchToggle != null)
           IconButton(
             icon: const Icon(Icons.search_rounded),
+            tooltip: 'Поиск',
             onPressed: onSearchToggle,
             splashRadius: 20,
           ),
@@ -140,6 +142,7 @@ class ChatHeader extends StatelessWidget {
       children: [
         IconButton(
           icon: const Icon(Icons.close_rounded),
+          tooltip: 'Закрыть поиск',
           onPressed: onSearchToggle,
           splashRadius: 20,
         ),
@@ -171,11 +174,13 @@ class ChatHeader extends StatelessWidget {
           const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.keyboard_arrow_up_rounded),
+            tooltip: 'Предыдущее совпадение',
             onPressed: onPrevMatch,
             splashRadius: 20,
           ),
           IconButton(
             icon: const Icon(Icons.keyboard_arrow_down_rounded),
+            tooltip: 'Следующее совпадение',
             onPressed: onNextMatch,
             splashRadius: 20,
           ),

@@ -226,6 +226,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           autofillHints: const [AutofillHints.password],
                           onSubmitted: (_) => _isLoading ? null : _signIn(),
                           suffix: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Показать пароль'
+                                : 'Скрыть пароль',
                             icon: Icon(
                               _obscurePassword
                                   ? Icons.visibility_outlined

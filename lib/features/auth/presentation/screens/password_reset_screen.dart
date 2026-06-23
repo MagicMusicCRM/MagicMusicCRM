@@ -304,6 +304,7 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
 
   Widget _buildVisibilityToggle() {
     return IconButton(
+      tooltip: _obscurePassword ? 'Показать пароль' : 'Скрыть пароль',
       icon: Icon(
         _obscurePassword
             ? Icons.visibility_outlined

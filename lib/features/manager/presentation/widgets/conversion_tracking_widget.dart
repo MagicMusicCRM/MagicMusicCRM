@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 class ConversionTrackingWidget extends ConsumerStatefulWidget {
   const ConversionTrackingWidget({super.key});
@@ -14,6 +15,7 @@ class ConversionTrackingWidget extends ConsumerStatefulWidget {
 class _ConversionTrackingWidgetState
     extends ConsumerState<ConversionTrackingWidget> {
   bool _loading = true;
+  String? _error;
   Map<String, dynamic> _stats = {};
 
   @override
@@ -23,7 +25,10 @@ class _ConversionTrackingWidgetState
   }
 
   Future<void> _loadStats() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final crm = ref.read(magicCrmServiceProvider);
 
@@ -58,7 +63,12 @@ class _ConversionTrackingWidgetState
         _loading = false;
       });
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _error = '$e';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -68,6 +78,10 @@ class _ConversionTrackingWidgetState
       return const Center(
         child: CircularProgressIndicator(color: AppTheme.primaryGold),
       );
+    }
+
+    if (_error != null) {
+      return _buildError(_error!);
     }
 
     return RefreshIndicator(
@@ -82,7 +96,7 @@ class _ConversionTrackingWidgetState
           const SizedBox(height: 20),
           _buildStatCard(
             'Конверсия',
-            '${_stats['conversion_rate'].toStringAsFixed(1)}%',
+            '${(_stats['conversion_rate'] as num? ?? 0).toStringAsFixed(1)}%',
             'Из лидов в платящих учеников',
             Icons.analytics_rounded,
             AppTheme.primaryGold,
@@ -114,7 +128,7 @@ class _ConversionTrackingWidgetState
           const SizedBox(height: 16),
           _buildStatCard(
             'Успешность пробных',
-            '${_stats['trial_success_rate'].toStringAsFixed(1)}%',
+            '${(_stats['trial_success_rate'] as num? ?? 0).toStringAsFixed(1)}%',
             'Посещаемость пробных уроков',
             Icons.event_available_rounded,
             AppTheme.secondaryGold,
@@ -139,6 +153,37 @@ class _ConversionTrackingWidgetState
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildError(String message) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: AppColor.danger,
+            ),
+            const SizedBox(height: AppSpace.md),
+            Text(
+              'Ошибка: $message',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+            ),
+            const SizedBox(height: AppSpace.lg),
+            TextButton(
+              onPressed: _loadStats,
+              style: TextButton.styleFrom(foregroundColor: AppColor.gold),
+              child: const Text('Повторить'),
+            ),
+          ],
+        ),
       ),
     );
   }

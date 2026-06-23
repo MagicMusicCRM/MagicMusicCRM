@@ -35,6 +35,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   List<Map<String, dynamic>> _expectedPayments = [];
   Map<String, dynamic>? _family;
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -43,7 +44,10 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   }
 
   Future<void> _loadAllData() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final results = await Future.wait<dynamic>([
@@ -120,7 +124,12 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
       }
     } catch (e) {
       debugPrint('Error loading student data: $e');
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _error = '$e';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -128,6 +137,41 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const DetailPageSkeleton();
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpace.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  size: 48,
+                  color: AppColor.danger,
+                ),
+                const SizedBox(height: AppSpace.md),
+                Text(
+                  'Ошибка: $_error',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.lg),
+                TextButton(
+                  onPressed: _loadAllData,
+                  style: TextButton.styleFrom(foregroundColor: AppColor.gold),
+                  child: const Text('Повторить'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
     if (_student == null) {

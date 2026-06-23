@@ -992,8 +992,9 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
               ? (createdAt is String
                     ? DateFormat(
                         'dd.MM.yy HH:mm',
+                        'ru',
                       ).format(DateTime.parse(createdAt))
-                    : DateFormat('dd.MM.yy HH:mm').format(createdAt))
+                    : DateFormat('dd.MM.yy HH:mm', 'ru').format(createdAt))
               : 'Без даты';
 
           return Container(
@@ -1128,6 +1129,21 @@ class _ResolvedNetworkImageState extends ConsumerState<_ResolvedNetworkImage> {
         child: const Icon(Icons.broken_image_rounded, color: Colors.white70),
       );
     }
-    return Image.network(_resolvedUrl!, fit: widget.fit);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final dpr = MediaQuery.of(context).devicePixelRatio;
+        int? cacheDimension(double extent) {
+          if (!extent.isFinite || extent <= 0) return null;
+          return (extent * dpr).round();
+        }
+
+        return Image.network(
+          _resolvedUrl!,
+          fit: widget.fit,
+          cacheWidth: cacheDimension(constraints.maxWidth),
+          cacheHeight: cacheDimension(constraints.maxHeight),
+        );
+      },
+    );
   }
 }

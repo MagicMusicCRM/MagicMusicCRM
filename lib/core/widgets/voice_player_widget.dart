@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 /// Widget for playing back voice messages inside a message bubble.
 class VoicePlayerWidget extends ConsumerStatefulWidget {
@@ -161,13 +162,13 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
         ? _position.inMilliseconds / _duration.inMilliseconds
         : 0.0;
 
-    final iconColor = widget.isMe ? Colors.white : AppTheme.primaryGold;
+    final iconColor = widget.isMe ? AppColor.onGold : AppTheme.primaryGold;
     final trackBg = widget.isMe
-        ? Colors.white.withAlpha(50)
+        ? AppColor.onGold.withAlpha(50)
         : AppTheme.primaryGold.withAlpha(30);
-    final trackActive = widget.isMe ? Colors.white : AppTheme.primaryGold;
+    final trackActive = widget.isMe ? AppColor.onGold : AppTheme.primaryGold;
     final textColor = widget.isMe
-        ? Colors.white.withAlpha(200)
+        ? AppColor.onGold.withAlpha(200)
         : Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Row(

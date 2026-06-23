@@ -24,6 +24,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
   bool _loading = true;
   bool _saving = false;
   bool _changed = false;
+  String? _error;
   List<Map<String, dynamic>> _groupStudents = [];
   List<Map<String, dynamic>> _allStudents = [];
 
@@ -34,7 +35,10 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final results = await Future.wait([
@@ -50,7 +54,12 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
       });
     } catch (e) {
       debugPrint('Error loading group data: $e');
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _error = 'Не удалось загрузить данные группы';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -147,6 +156,36 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
               height: 200,
               child: Center(
                 child: CircularProgressIndicator(color: AppTheme.primaryGold),
+              ),
+            )
+          : _error != null
+          ? SizedBox(
+              height: 200,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      color: AppTheme.danger,
+                      size: 32,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _loadData,
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Повторить'),
+                    ),
+                  ],
+                ),
               ),
             )
           : SizedBox(

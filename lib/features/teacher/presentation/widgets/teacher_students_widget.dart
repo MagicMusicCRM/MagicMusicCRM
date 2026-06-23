@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 class TeacherStudentsWidget extends ConsumerStatefulWidget {
   const TeacherStudentsWidget({super.key});
@@ -14,6 +15,7 @@ class TeacherStudentsWidget extends ConsumerStatefulWidget {
 class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
   List<Map<String, dynamic>> _students = [];
   bool _loading = true;
+  Object? _loadError;
 
   @override
   void initState() {
@@ -22,7 +24,10 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
   }
 
   Future<void> _loadStudents() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final teacher = (await crm.listTeachers(limit: 1)).firstOrNull;
@@ -48,10 +53,14 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
         _students = students.map((s) {
           return {...s, '_lesson_count': counts[s['id'] as String? ?? ''] ?? 0};
         }).toList();
+        _loadError = null;
         _loading = false;
       });
     } catch (e) {
-      setState(() => _loading = false);
+      setState(() {
+        _loadError = e;
+        _loading = false;
+      });
     }
   }
 
@@ -60,6 +69,37 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
     if (_loading) {
       return const Center(
         child: CircularProgressIndicator(color: AppTheme.primaryGold),
+      );
+    }
+
+    if (_loadError != null) {
+      final scheme = Theme.of(context).colorScheme;
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                size: 48,
+                color: AppColor.danger,
+              ),
+              const SizedBox(height: AppSpace.md),
+              Text(
+                'Ошибка: $_loadError',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+              ),
+              const SizedBox(height: AppSpace.lg),
+              TextButton(
+                onPressed: _loadStudents,
+                style: TextButton.styleFrom(foregroundColor: AppColor.gold),
+                child: const Text('Повторить'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 

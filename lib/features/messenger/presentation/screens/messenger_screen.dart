@@ -1027,19 +1027,29 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     }
 
     if (editingMessageId != null) {
-      final updated = await messenger.updateMessage(
-        editingMessageId,
-        content: text,
-      );
-      setState(() {
-        final index = _messages.indexWhere(
-          (message) => message['id']?.toString() == editingMessageId,
+      try {
+        final updated = await messenger.updateMessage(
+          editingMessageId,
+          content: text,
         );
-        if (index != -1) {
-          _messages[index] = {..._messages[index], ...updated};
+        if (!mounted) return;
+        setState(() {
+          final index = _messages.indexWhere(
+            (message) => message['id']?.toString() == editingMessageId,
+          );
+          if (index != -1) {
+            _messages[index] = {..._messages[index], ...updated};
+          }
+          _editingMessage = null;
+        });
+      } catch (e) {
+        if (mounted) {
+          setState(() => _editingMessage = null);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Не удалось изменить сообщение: $e')),
+          );
         }
-        _editingMessage = null;
-      });
+      }
       return;
     }
 
@@ -2594,7 +2604,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                   }
                 },
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+                constraints: const BoxConstraints(
+                  minWidth: 48,
+                  minHeight: 48,
+                ),
               ),
             ],
           ),
@@ -2663,6 +2676,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                           ),
                           trailing: IconButton(
                             icon: const Icon(Icons.close, size: 18),
+                            tooltip: 'Открепить',
                             onPressed: () async {
                               await _togglePin(msg['id'].toString(), false);
                               if (_pinnedMessages.isEmpty) {

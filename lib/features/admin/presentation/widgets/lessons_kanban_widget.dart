@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -27,6 +28,21 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
   List<Map<String, dynamic>> _teachers = [];
   List<Map<String, dynamic>> _students = [];
 
+  // Pre-built id -> name maps so card rendering is O(1) instead of N+1 firstWhere.
+  Map<String, String> _studentNames = {};
+  Map<String, String> _teacherNames = {};
+
+  static String _resolveName(Map<String, dynamic> e) {
+    final fName = e['first_name']?.toString() ?? '';
+    final lName = e['last_name']?.toString() ?? '';
+    final p = e['profiles'] as Map<String, dynamic>?;
+    var name = '$fName $lName'.trim();
+    if (name.isEmpty && p != null) {
+      name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+    }
+    return name.isEmpty ? 'Без имени' : name;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -44,8 +60,8 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
     final crm = ref.read(magicCrmServiceProvider);
     final results = await Future.wait([
       crm.listRooms(limit: 100),
-      crm.listTeachers(limit: 100),
-      crm.listStudents(limit: 100),
+      crm.listTeachers(limit: 1000),
+      crm.listStudents(limit: 1000),
     ]);
 
     if (mounted) {
@@ -53,6 +69,12 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
         _rooms = results[0];
         _teachers = results[1];
         _students = results[2];
+        _studentNames = {
+          for (final s in _students) s['id'].toString(): _resolveName(s),
+        };
+        _teacherNames = {
+          for (final t in _teachers) t['id'].toString(): _resolveName(t),
+        };
       });
     }
   }
@@ -72,6 +94,13 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Realtime: refresh when another staff member changes a lesson.
+    ref.listen(crmRealtimeProvider, (prev, next) {
+      final event = next.value;
+      if (event == null || event.entity != 'lesson' || !mounted) return;
+      ref.invalidate(lessonsFilteredProvider(_selectedDate));
+    });
+
     final lessonsAsync = ref.watch(lessonsFilteredProvider(_selectedDate));
 
     return Scaffold(
@@ -80,7 +109,14 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
         children: [
           _buildFilters(),
           Expanded(
-            child: lessonsAsync.when(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(lessonsFilteredProvider(_selectedDate));
+                await ref.read(
+                  lessonsFilteredProvider(_selectedDate).future,
+                );
+              },
+              child: lessonsAsync.when(
               data: (lessons) {
                 var filtered = lessons;
                 if (_selectedRoomId != null) {
@@ -132,26 +168,32 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
                 }
 
                 if (filtered.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Нет занятий на эту дату',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
+                  return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 120),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Нет занятий на эту дату',
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => _selectDate(context),
+                              child: Text(
+                                'Выбрать другую дату (${DateFormat('d MMM').format(_selectedDate)})',
+                              ),
+                            ),
+                          ],
                         ),
-                        TextButton(
-                          onPressed: () => _selectDate(context),
-                          child: Text(
-                            'Выбрать другую дату (${DateFormat('d MMM').format(_selectedDate)})',
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   );
                 }
 
@@ -184,8 +226,8 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
                           return _KanbanColumn(
                             title: room['name'] ?? 'Без названия',
                             lessons: roomLessons,
-                            teachers: _teachers,
-                            students: _students,
+                            studentNames: _studentNames,
+                            teacherNames: _teacherNames,
                             selectedDate: _selectedDate,
                           );
                         }),
@@ -193,8 +235,8 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
                       _KanbanColumn(
                         title: 'Без аудитории',
                         lessons: grouped['unassigned']!,
-                        teachers: _teachers,
-                        students: _students,
+                        studentNames: _studentNames,
+                        teacherNames: _teacherNames,
                         selectedDate: _selectedDate,
                       ),
                   ],
@@ -208,7 +250,35 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
                   (i) => const _KanbanColumnSkeleton(),
                 ),
               ),
-              error: (e, _) => Center(child: Text('Ошибка: $e')),
+              error: (e, _) => ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 120),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Не удалось загрузить занятия',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () => ref.invalidate(
+                            lessonsFilteredProvider(_selectedDate),
+                          ),
+                          child: const Text('Повторить'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             ),
           ),
         ],
@@ -399,15 +469,15 @@ class _FilterDropdown extends StatelessWidget {
 class _KanbanColumn extends StatelessWidget {
   final String title;
   final List<Map<String, dynamic>> lessons;
-  final List<Map<String, dynamic>> teachers;
-  final List<Map<String, dynamic>> students;
+  final Map<String, String> studentNames;
+  final Map<String, String> teacherNames;
   final DateTime selectedDate;
 
   const _KanbanColumn({
     required this.title,
     required this.lessons,
-    required this.teachers,
-    required this.students,
+    required this.studentNames,
+    required this.teacherNames,
     required this.selectedDate,
   });
 
@@ -460,8 +530,8 @@ class _KanbanColumn extends StatelessWidget {
               itemCount: lessons.length,
               itemBuilder: (ctx, i) => _LessonKanbanCard(
                 lesson: lessons[i],
-                teachers: teachers,
-                students: students,
+                studentNames: studentNames,
+                teacherNames: teacherNames,
                 selectedDate: selectedDate,
               ),
             ),
@@ -540,14 +610,14 @@ class _LessonCardSkeleton extends StatelessWidget {
 
 class _LessonKanbanCard extends ConsumerWidget {
   final Map<String, dynamic> lesson;
-  final List<Map<String, dynamic>> teachers;
-  final List<Map<String, dynamic>> students;
+  final Map<String, String> studentNames;
+  final Map<String, String> teacherNames;
   final DateTime selectedDate;
 
   const _LessonKanbanCard({
     required this.lesson,
-    required this.teachers,
-    required this.students,
+    required this.studentNames,
+    required this.teacherNames,
     required this.selectedDate,
   });
 
@@ -557,45 +627,16 @@ class _LessonKanbanCard extends ConsumerWidget {
     final timeStr = dt != null ? DateFormat('HH:mm').format(dt.toLocal()) : '';
     final dateStr = dt != null ? DateFormat('d MMM').format(dt.toLocal()) : '';
 
-    // Manual name resolution
+    // O(1) name resolution via pre-built maps (built once in the parent).
     final studentId = lesson['student_id']?.toString();
     final teacherId = lesson['teacher_id']?.toString();
 
-    String studentName = '—';
-    if (studentId != null) {
-      final s = students.firstWhere(
-        (e) => e['id'].toString() == studentId,
-        orElse: () => {},
-      );
-      if (s.isNotEmpty) {
-        final sfName = s['first_name']?.toString() ?? '';
-        final slName = s['last_name']?.toString() ?? '';
-        final p = s['profiles'] as Map<String, dynamic>?;
-        var name = '$sfName $slName'.trim();
-        if (name.isEmpty && p != null) {
-          name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-        }
-        studentName = name.isEmpty ? 'Без имени' : name;
-      }
-    }
-
-    String teacherName = '—';
-    if (teacherId != null) {
-      final t = teachers.firstWhere(
-        (e) => e['id'].toString() == teacherId,
-        orElse: () => {},
-      );
-      if (t.isNotEmpty) {
-        final tfName = t['first_name']?.toString() ?? '';
-        final tlName = t['last_name']?.toString() ?? '';
-        final p = t['profiles'] as Map<String, dynamic>?;
-        var name = '$tfName $tlName'.trim();
-        if (name.isEmpty && p != null) {
-          name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-        }
-        teacherName = name.isEmpty ? 'Без имени' : name;
-      }
-    }
+    final studentName = studentId == null
+        ? '—'
+        : (studentNames[studentId] ?? '—');
+    final teacherName = teacherId == null
+        ? '—'
+        : (teacherNames[teacherId] ?? '—');
 
     final groupName =
         (lesson['group_name'] ?? lesson['groups']?['name'] ?? 'Индивидуально')

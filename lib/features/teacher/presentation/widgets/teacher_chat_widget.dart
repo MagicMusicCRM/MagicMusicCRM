@@ -364,6 +364,7 @@ class _ChatViewState extends State<_ChatView> {
             children: [
               IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Назад',
                 onPressed: widget.onBack,
               ),
               CircleAvatar(
@@ -406,7 +407,7 @@ class _ChatViewState extends State<_ChatView> {
                     final createdAt = message['created_at']?.toString();
                     final dt = DateTime.tryParse(createdAt ?? '');
                     final time = dt != null
-                        ? DateFormat('HH:mm').format(dt.toLocal())
+                        ? DateFormat('HH:mm', 'ru').format(dt.toLocal())
                         : '';
                     return Align(
                       alignment: isMe
@@ -497,6 +498,7 @@ class _ChatViewState extends State<_ChatView> {
                   Icons.send_rounded,
                   color: AppTheme.primaryGold,
                 ),
+                tooltip: 'Отправить',
                 onPressed: _send,
               ),
             ],

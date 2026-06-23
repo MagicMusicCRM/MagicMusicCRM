@@ -27,7 +27,12 @@ class _CreateStudentDialogState extends ConsumerState<CreateStudentDialog> {
 
   Future<void> _save() async {
     final firstName = _firstNameController.text.trim();
-    if (firstName.isEmpty) return;
+    if (firstName.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Введите имя ученика')));
+      return;
+    }
 
     setState(() => _saving = true);
 

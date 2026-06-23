@@ -202,45 +202,56 @@ class _RailItem extends StatelessWidget {
     final idle = isDark ? AppColor.text2 : TelegramColors.lightTextSecondary;
     final fg = selected ? AppColor.gold : idle;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      onTap: onTap,
-      child: Container(
-        width: 68,
-        height: 54,
-        decoration: BoxDecoration(
-          color: selected ? AppColor.goldSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _IconWithBadge(
-              icon: selected ? destination.selectedIcon : destination.icon,
-              color: fg,
-              size: 21,
-              badgeCount: destination.badgeCount,
-            ),
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(
-                destination.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: selected
-                      ? (isDark ? AppColor.text : TelegramColors.lightTextPrimary)
-                      : idle,
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.1,
-                  height: 1.1,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: destination.label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        onTap: onTap,
+        child: Container(
+          width: 68,
+          height: 54,
+          decoration: BoxDecoration(
+            color: selected ? AppColor.goldSoft : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _IconWithBadge(
+                icon: selected ? destination.selectedIcon : destination.icon,
+                color: fg,
+                size: 21,
+                badgeCount: destination.badgeCount,
+              ),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  destination.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  // Clamp scaling so big system fonts don't blow up the tiny
+                  // 9.5px label out of the fixed-height rail item.
+                  textScaler: MediaQuery.textScalerOf(context)
+                      .clamp(maxScaleFactor: 1.2),
+                  style: TextStyle(
+                    color: selected
+                        ? (isDark
+                            ? AppColor.text
+                            : TelegramColors.lightTextPrimary)
+                        : idle,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.1,
+                    height: 1.1,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -265,32 +276,42 @@ class _BarTab extends StatelessWidget {
     final idle = isDark ? AppColor.text2 : TelegramColors.lightTextSecondary;
     final fg = selected ? AppColor.gold : idle;
 
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _IconWithBadge(
-            icon: selected ? destination.selectedIcon : destination.icon,
-            color: fg,
-            size: 23,
-            badgeCount: destination.badgeCount,
-          ),
-          const SizedBox(height: 3),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Text(
-              destination.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: fg,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: destination.label,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _IconWithBadge(
+              icon: selected ? destination.selectedIcon : destination.icon,
+              color: fg,
+              size: 23,
+              badgeCount: destination.badgeCount,
+            ),
+            const SizedBox(height: 3),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(
+                destination.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                // Clamp scaling so big system fonts don't overflow the fixed
+                // 62px bottom-bar height.
+                textScaler:
+                    MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.2),
+                style: TextStyle(
+                  color: fg,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

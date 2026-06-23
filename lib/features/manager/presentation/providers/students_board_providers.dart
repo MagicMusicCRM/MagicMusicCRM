@@ -20,8 +20,8 @@ final studentBoardProvider =
 ) async {
   final service = ref.watch(magicCrmServiceProvider);
   final disciplines = await ref.watch(branchDisciplinesProvider(branchId).future);
-  // TODO: server-side student board endpoint if a branch exceeds this
-  final search = await service.searchStudents(branchId: branchId, limit: 2000);
+  // TODO: добавить серверную пагинацию/board-эндпоинт, если ветка превышает этот лимит.
+  final search = await service.searchStudents(branchId: branchId, limit: 500);
   final students =
       (search['items'] as List? ?? const []).whereType<Map<String, dynamic>>().toList();
   return groupStudentsByDiscipline(disciplines, students);

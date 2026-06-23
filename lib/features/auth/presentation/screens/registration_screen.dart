@@ -141,6 +141,9 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                           autocorrect: false,
                           autofillHints: const [AutofillHints.newPassword],
                           suffix: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Показать пароль'
+                                : 'Скрыть пароль',
                             icon: Icon(
                               _obscurePassword
                                   ? Icons.visibility_outlined

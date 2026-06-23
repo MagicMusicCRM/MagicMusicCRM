@@ -572,7 +572,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       if (d != null) setState(() => _selectedDate = d);
                     },
                     icon: const Icon(Icons.calendar_today_rounded, size: 18),
-                    label: Text(DateFormat('dd.MM.yyyy').format(_selectedDate)),
+                    label: Text(
+                      DateFormat('dd.MM.yyyy', 'ru').format(_selectedDate),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),

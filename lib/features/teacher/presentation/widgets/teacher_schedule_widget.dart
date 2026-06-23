@@ -213,7 +213,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
       context,
       title: appointment.subject,
       subtitle:
-          '${DateFormat('dd.MM.yyyy HH:mm').format(appointment.startTime)} – ${DateFormat('HH:mm').format(appointment.endTime)}',
+          '${DateFormat('dd.MM.yyyy HH:mm', 'ru').format(appointment.startTime)} – ${DateFormat('HH:mm', 'ru').format(appointment.endTime)}',
       icon: Icons.event_rounded,
       builder: (ctx) {
         return Column(
