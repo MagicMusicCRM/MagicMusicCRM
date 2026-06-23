@@ -719,7 +719,11 @@ describe("CrmService", () => {
       ],
     });
 
-    expect(query.mock.calls[0][0]).toContain("group_student_profile.user_id");
+    // Client visibility now via EXISTS (individual lessons OR group membership),
+    // replacing the former cartesian LEFT JOINs + DISTINCT.
+    expect(query.mock.calls[0][0]).toContain("csp.user_id = $2");
+    expect(query.mock.calls[0][0]).toContain("cgsp.user_id = $2");
+    expect(query.mock.calls[0][0]).not.toContain("select distinct");
     expect(query.mock.calls[0][1]).toEqual([
       "client",
       "client-a",

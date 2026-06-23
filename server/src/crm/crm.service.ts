@@ -1599,52 +1599,13 @@ export class CrmService {
     const q = query.q?.trim();
     const result = await this.database.query<TeacherRow>(
       `
-        select distinct t.id, t.status, t.specialization, t.custom_data,
+        select t.id, t.status, t.specialization, t.custom_data,
           t.profile_id, p.user_id as profile_user_id, u.role::text as app_role,
           coalesce(u.is_app_account, false) as is_app_account,
           p.first_name, p.last_name, u.email, p.phone,
-          (
-            select coalesce(
-              jsonb_agg(
-                distinct jsonb_build_object('id', branch_rows.id, 'name', branch_rows.name)
-              ) filter (where branch_rows.id is not null),
-              '[]'::jsonb
-            )
-            from (
-              select b.id, b.name
-              from app.groups group_branch
-              join app.branches b on b.id = group_branch.branch_id and b.deleted_at is null
-              where group_branch.teacher_id = t.id and group_branch.deleted_at is null
-              union
-              select b.id, b.name
-              from app.lessons lesson_branch
-              join app.branches b on b.id = lesson_branch.branch_id and b.deleted_at is null
-              where lesson_branch.teacher_id = t.id and lesson_branch.deleted_at is null
-            ) branch_rows
-          ) as branches,
-          (
-            select count(*)
-            from (
-              select l.student_id
-              from app.lessons l
-              where l.teacher_id = t.id
-                and l.student_id is not null
-                and l.deleted_at is null
-              union
-              select gs.student_id
-              from app.groups g
-              join app.group_students gs on gs.group_id = g.id and gs.left_at is null
-              where g.teacher_id = t.id
-                and gs.student_id is not null
-                and g.deleted_at is null
-            ) teacher_students
-          ) as students_count,
-          (
-            select count(*)
-            from app.lessons lesson_count
-            where lesson_count.teacher_id = t.id
-              and lesson_count.deleted_at is null
-          ) as lessons_count,
+          agg.branches,
+          agg.students_count,
+          agg.lessons_count,
           case
             when t.custom_data->>'rating' ~ '^-?[0-9]+(\\.[0-9]+)?$'
               then (t.custom_data->>'rating')::numeric
@@ -1654,18 +1615,71 @@ export class CrmService {
         from app.teachers t
         left join app.profiles p on p.id = t.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
-        left join app.lessons l on l.teacher_id = t.id and l.deleted_at is null
-        left join app.students s on s.id = l.student_id and s.deleted_at is null
-        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
-        left join app.groups g on g.teacher_id = t.id and g.deleted_at is null
-        left join app.group_students gs on gs.group_id = g.id and gs.left_at is null
-        left join app.students group_student on group_student.id = gs.student_id and group_student.deleted_at is null
-        left join app.profiles group_student_profile on group_student_profile.id = group_student.profile_id and group_student_profile.deleted_at is null
+        left join lateral (
+          select
+            coalesce(
+              (
+                select jsonb_agg(distinct jsonb_build_object('id', br.id, 'name', br.name))
+                  filter (where br.id is not null)
+                from (
+                  select b.id, b.name
+                  from app.groups gb
+                  join app.branches b on b.id = gb.branch_id and b.deleted_at is null
+                  where gb.teacher_id = t.id and gb.deleted_at is null
+                  union
+                  select b.id, b.name
+                  from app.lessons lb
+                  join app.branches b on b.id = lb.branch_id and b.deleted_at is null
+                  where lb.teacher_id = t.id and lb.deleted_at is null
+                ) br
+              ),
+              '[]'::jsonb
+            ) as branches,
+            (
+              select count(*)
+              from (
+                select l.student_id
+                from app.lessons l
+                where l.teacher_id = t.id
+                  and l.student_id is not null
+                  and l.deleted_at is null
+                union
+                select gs.student_id
+                from app.groups g
+                join app.group_students gs on gs.group_id = g.id and gs.left_at is null
+                where g.teacher_id = t.id
+                  and gs.student_id is not null
+                  and g.deleted_at is null
+              ) teacher_students
+            ) as students_count,
+            (
+              select count(*)
+              from app.lessons lesson_count
+              where lesson_count.teacher_id = t.id
+                and lesson_count.deleted_at is null
+            ) as lessons_count
+        ) agg on true
         where t.deleted_at is null
           and (
             $1::text in ('manager', 'admin', 'system_admin')
             or ($1::text = 'teacher' and p.user_id = $2)
-            or ($1::text = 'client' and (sp.user_id = $2 or group_student_profile.user_id = $2))
+            or ($1::text = 'client' and (
+              exists (
+                select 1
+                from app.lessons cl
+                join app.students cs on cs.id = cl.student_id and cs.deleted_at is null
+                join app.profiles csp on csp.id = cs.profile_id and csp.deleted_at is null
+                where cl.teacher_id = t.id and cl.deleted_at is null and csp.user_id = $2
+              )
+              or exists (
+                select 1
+                from app.groups cg
+                join app.group_students cgs on cgs.group_id = cg.id and cgs.left_at is null
+                join app.students cgst on cgst.id = cgs.student_id and cgst.deleted_at is null
+                join app.profiles cgsp on cgsp.id = cgst.profile_id and cgsp.deleted_at is null
+                where cg.teacher_id = t.id and cg.deleted_at is null and cgsp.user_id = $2
+              )
+            ))
           )
           and (
             $3::text is null
