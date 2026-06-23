@@ -216,6 +216,8 @@ interface TaskRow {
   assigned_last_name?: string | null;
   creator_first_name?: string | null;
   creator_last_name?: string | null;
+  assigned_profile_id?: string | null;
+  creator_profile_id?: string | null;
   entity_first_name?: string | null;
   entity_last_name?: string | null;
   entity_name?: string | null;
@@ -3741,8 +3743,10 @@ export class CrmService {
         select task.id, task.entity_type, task.entity_id, task.assigned_to,
           assigned_profile.first_name as assigned_first_name,
           assigned_profile.last_name as assigned_last_name,
+          assigned_profile.id as assigned_profile_id,
           creator_profile.first_name as creator_first_name,
           creator_profile.last_name as creator_last_name,
+          creator_profile.id as creator_profile_id,
           coalesce(student_profile.first_name, teacher_profile.first_name) as entity_first_name,
           coalesce(student_profile.last_name, teacher_profile.last_name) as entity_last_name,
           coalesce(
@@ -6737,6 +6741,8 @@ export class CrmService {
       entityId: row.entity_id,
       assignedTo: row.assigned_to,
       assignedName: assignedName || null,
+      assignedProfileId: row.assigned_profile_id ?? null,
+      creatorProfileId: row.creator_profile_id ?? null,
       entityName: personName || row.entity_name?.trim() || null,
       title: row.title,
       description: row.description,

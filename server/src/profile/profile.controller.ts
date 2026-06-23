@@ -53,6 +53,15 @@ export class AdminProfilesController {
     return this.profiles.listProfileNotes(actor, id);
   }
 
+  @Get(':id/links')
+  @Roles('manager', 'admin', 'system_admin')
+  listLinks(
+    @CurrentActor() actor: ActorContext,
+    @Param('id', ParseUUIDPipe) id: string
+  ) {
+    return this.profiles.listProfileLinks(actor, id);
+  }
+
   @Post(':id/notes')
   @Roles('manager', 'admin', 'system_admin')
   createNote(

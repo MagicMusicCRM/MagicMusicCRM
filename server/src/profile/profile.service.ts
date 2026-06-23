@@ -381,6 +381,63 @@ export class ProfileService {
     return { items: result.rows.map((row) => this.toProfileNoteDto(row)) };
   }
 
+  // Linked client cards (students/leads) for the Users section — returns ids so
+  // the UI can open each card (the list query only returned counts before, KVA).
+  async listProfileLinks(actor: ActorContext, profileId: string) {
+    const profile = await this.findById(profileId);
+    if (!profile) throw new NotFoundException("Профиль не найден.");
+    this.policy.assertCanListProfiles(actor);
+
+    const result = await this.database.query<{
+      entity_type: string;
+      entity_id: string;
+      name: string | null;
+    }>(
+      `
+        with prof as (
+          select id, user_id from app.profiles
+          where id = $1 and deleted_at is null
+        )
+        select 'student' as entity_type, s.id::text as entity_id,
+          nullif(btrim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')), '') as name
+        from app.students s
+        cross join prof
+        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        where s.deleted_at is null
+          and (
+            s.profile_id = prof.id
+            or exists (
+              select 1 from app.user_crm_links l
+              where l.entity_type = 'student' and l.entity_id = s.id
+                and l.user_id = prof.user_id and l.deleted_at is null
+            )
+          )
+        union all
+        select 'lead' as entity_type, ld.id::text as entity_id,
+          nullif(btrim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')), '') as name
+        from app.leads ld
+        cross join prof
+        where ld.deleted_at is null
+          and exists (
+            select 1 from app.user_crm_links l
+            where l.entity_type = 'lead' and l.entity_id = ld.id
+              and l.user_id = prof.user_id and l.deleted_at is null
+          )
+        order by 1, 3
+        limit 500
+      `,
+      [profileId],
+    );
+
+    return {
+      items: result.rows.map((row) => ({
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        name: row.name ?? "—",
+      })),
+    };
+  }
+
   async createProfileNote(
     actor: ActorContext,
     profileId: string,
