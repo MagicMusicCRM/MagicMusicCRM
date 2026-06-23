@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
@@ -65,15 +66,51 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _edited = false;
   String? _duplicateDecisionId;
 
-  // v7 segmented tab bar: Инфо / Задачи / Комментарии / Семья / История.
+  // Adaptive segmented tab bar. Leads keep the original 5 tabs; students get the
+  // ported student tab set (Инфо / Задачи / Комментарии / Семья / Занятия /
+  // Оплаты / Инвойсы / Документы / История / Прогресс).
   int _tabIndex = 0;
-  static const List<(IconData, String)> _tabs = [
+  bool get _isStudent => widget.entityType == 'student';
+  String get _entityId => widget.lead['id'].toString();
+
+  static const List<(IconData, String)> _leadTabs = [
     (Icons.info_outline_rounded, 'Инфо'),
     (Icons.task_alt_rounded, 'Задачи'),
     (Icons.forum_outlined, 'Комментарии'),
     (Icons.people_alt_outlined, 'Семья'),
     (Icons.history_rounded, 'История'),
   ];
+
+  static const List<(IconData, String)> _studentTabs = [
+    (Icons.info_outline_rounded, 'Инфо'),
+    (Icons.task_alt_rounded, 'Задачи'),
+    (Icons.forum_outlined, 'Комментарии'),
+    (Icons.people_alt_outlined, 'Семья'),
+    (Icons.event_note_rounded, 'Занятия'),
+    (Icons.account_balance_wallet_rounded, 'Оплаты'),
+    (Icons.receipt_long_rounded, 'Инвойсы'),
+    (Icons.description_rounded, 'Документы'),
+    (Icons.history_rounded, 'История'),
+    (Icons.auto_graph_rounded, 'Прогресс'),
+  ];
+
+  List<(IconData, String)> get _tabs => _isStudent ? _studentTabs : _leadTabs;
+
+  // ── Student state (entityType == 'student') ───────────────────────────────
+  // Loaded from `getStudentCard` (+ a family fetch). Each section is isolated so
+  // a single failed call never blanks the whole card.
+  Map<String, dynamic>? _student;
+  Map<String, dynamic>? _balance;
+  List<Map<String, dynamic>> _payments = [];
+  List<Map<String, dynamic>> _lessons = [];
+  List<Map<String, dynamic>> _studentTasks = [];
+  // Unified comment stream for the Прогресс tab ([PROGRESS]-prefixed notes) and
+  // the «История» merge — the «Комментарии» tab reads live via [_CommentsList].
+  List<Map<String, dynamic>> _studentComments = [];
+  List<Map<String, dynamic>> _groups = [];
+  List<Map<String, dynamic>> _expectedPayments = [];
+  bool _loadingStudent = true;
+  String? _studentError;
 
   Future<void> _handleClose() async {
     if (!_edited) {
@@ -117,6 +154,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
       text: _leadData['notes']?.toString() ?? '',
     );
     _commentCtrl = TextEditingController();
+    if (_isStudent) {
+      // Student card: family is shared with the lead flow; the rest comes from
+      // the student card endpoint. Lead-only fetches are skipped.
+      _loadingFamily = true;
+      _fetchFamily();
+      _fetchStudentData();
+      return;
+    }
     _statuses = widget.allStatuses ?? const [];
     if (widget.allStatuses == null) _fetchStatuses();
     _fetchMetadata();
@@ -124,6 +169,54 @@ class _ClientCardState extends ConsumerState<ClientCard>
     _fetchDuplicateCandidates();
     _fetchStatusHistory();
     _fetchFamily();
+  }
+
+  // Loads the student card in one round-trip (getStudentCard), mirroring
+  // student_detail_screen._loadAllData. Per-section failures are isolated: the
+  // bulk card load only fails the card if the student record itself is
+  // unavailable; family loads independently via [_fetchFamily].
+  Future<void> _fetchStudentData() async {
+    if (mounted) {
+      setState(() {
+        _loadingStudent = true;
+        _studentError = null;
+      });
+    }
+    try {
+      final crm = ref.read(magicCrmServiceProvider);
+      final card = await crm.getStudentCard(_entityId);
+      if (!mounted) return;
+      final student = card['student'] is Map<String, dynamic>
+          ? card['student'] as Map<String, dynamic>
+          : <String, dynamic>{};
+      setState(() {
+        _student = student;
+        _balance = card['balance'] is Map<String, dynamic>
+            ? card['balance'] as Map<String, dynamic>
+            : null;
+        _payments = _list(card['payments']);
+        _lessons = _list(card['lessons']);
+        _studentTasks = _list(card['tasks']);
+        _studentComments = _list(card['comments']);
+        _groups = _list(card['groups']);
+        _expectedPayments = _list(card['expected_payments']);
+        _studentTasks.sort(
+          (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+        );
+        _studentComments.sort(
+          (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+        );
+        _loadingStudent = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading student card: $e');
+      if (mounted) {
+        setState(() {
+          _studentError = '$e';
+          _loadingStudent = false;
+        });
+      }
+    }
   }
 
   Future<void> _fetchStatuses() async {
@@ -206,7 +299,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
       final result = await ref
           .read(magicCrmServiceProvider)
           .getFamilyForEntity(
-            entityType: 'lead',
+            entityType: widget.entityType,
             entityId: widget.lead['id'].toString(),
           );
       if (!mounted) return;
@@ -426,24 +519,37 @@ class _ClientCardState extends ConsumerState<ClientCard>
           color: cs.surface,
           child: Column(
             children: [
-              _buildHeader(cs, curStatus),
+              _isStudent ? _buildStudentHeader(cs) : _buildHeader(cs, curStatus),
               Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
               _buildTabBar(cs),
               Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
               Expanded(
                 child: IndexedStack(
                   index: _tabIndex,
-                  children: [
-                    _buildInfoTab(cs, curStatus),
-                    _buildTasksTab(cs),
-                    _buildCommentsTab(cs),
-                    _buildFamilyTab(cs),
-                    _buildHistoryTab(cs),
-                  ],
+                  children: _isStudent
+                      ? [
+                          _buildStudentInfoTab(cs),
+                          _buildStudentTasksTab(cs),
+                          _buildCommentsTab(cs),
+                          _buildFamilyTab(cs),
+                          _buildLessonsTab(cs),
+                          _buildPaymentsTab(cs),
+                          _buildInvoicesTab(cs),
+                          _buildDocumentsTab(cs),
+                          _buildStudentHistoryTab(cs),
+                          _buildProgressTab(cs),
+                        ]
+                      : [
+                          _buildInfoTab(cs, curStatus),
+                          _buildTasksTab(cs),
+                          _buildCommentsTab(cs),
+                          _buildFamilyTab(cs),
+                          _buildHistoryTab(cs),
+                        ],
                 ),
               ),
               Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
-              _buildActionBar(cs),
+              _isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs),
             ],
           ),
         ),
@@ -843,7 +949,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final confirmed = await showMagicSheet<bool>(
       context,
       title: 'Новая задача',
-      subtitle: 'Поставьте задачу по этому лиду',
+      subtitle: _isStudent
+          ? 'Поставьте задачу по этому ученику'
+          : 'Поставьте задачу по этому лиду',
       icon: Icons.task_alt_rounded,
       builder: (sheetContext) {
         return StatefulBuilder(
@@ -963,13 +1071,17 @@ class _ClientCardState extends ConsumerState<ClientCard>
       await ref
           .read(magicCrmServiceProvider)
           .createTask(
-            entityType: 'lead',
-            entityId: _leadData['id'].toString(),
+            entityType: widget.entityType,
+            entityId: _entityId,
             title: title,
             dueAt: dueAt,
           );
       _dirty = true;
-      await _fetchCard();
+      if (_isStudent) {
+        await _fetchStudentData();
+      } else {
+        await _fetchCard();
+      }
       if (mounted) {
         MagicToast.show(
           context,
@@ -1008,7 +1120,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
               children: [
                 _sectionTitle('Комментарии'),
                 _CommentsList(
-                  leadId: _leadData['id'].toString(),
+                  entityType: widget.entityType,
+                  entityId: _entityId,
                   refreshKey: _commentsRefreshKey,
                 ),
               ],
@@ -1099,6 +1212,1360 @@ class _ClientCardState extends ConsumerState<ClientCard>
       child: Text(
         text,
         style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+      ),
+    );
+  }
+
+  // ══ STUDENT (entityType == 'student') ════════════════════════════════════
+  // Ported from student_detail_screen.dart, adapted to the compact dialog and
+  // the unified comments tab. Lead methods above are untouched.
+
+  /// Resolves the student display name with a fallback to the linked profile,
+  /// matching student_detail_screen.
+  ({String name, String phone, String email}) _studentContact() {
+    final s = _student ?? const <String, dynamic>{};
+    final profile = s['profiles'] as Map<String, dynamic>?;
+    final sfName = s['first_name']?.toString() ?? '';
+    final slName = s['last_name']?.toString() ?? '';
+    var name = '$sfName $slName'.trim();
+    if (name.isEmpty && profile != null) {
+      name = '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'
+          .trim();
+    }
+    final phone =
+        (s['phone']?.toString().trim().isNotEmpty == true
+                ? s['phone']
+                : profile?['phone'])
+            ?.toString() ??
+        '—';
+    final email =
+        (s['email']?.toString().trim().isNotEmpty == true
+                ? s['email']
+                : profile?['email'])
+            ?.toString() ??
+        '—';
+    return (
+      name: name.isEmpty ? 'Без имени' : name,
+      phone: phone,
+      email: email,
+    );
+  }
+
+  // Parse the balance defensively (it can arrive as a string) and color it:
+  // red < 0, green > 0, neutral at exactly 0. (Ported from student_detail.)
+  num? get _studentBalanceNum {
+    if (_balance == null) return null;
+    final raw = _balance!['balance'];
+    return raw is num ? raw : num.tryParse(raw?.toString() ?? '');
+  }
+
+  Color _studentBalanceColor(ColorScheme cs) {
+    final b = _studentBalanceNum;
+    if (b == null || b == 0) return cs.onSurfaceVariant;
+    return b < 0 ? AppTheme.danger : AppTheme.success;
+  }
+
+  Widget _buildStudentHeader(ColorScheme cs) {
+    final contact = _studentContact();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.lg,
+        AppSpace.md,
+        AppSpace.md,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColor.goldSoft,
+              borderRadius: BorderRadius.circular(AppRadius.icon),
+              border: Border.all(color: AppColor.goldLine),
+            ),
+            child: const Icon(
+              Icons.school_outlined,
+              size: 22,
+              color: AppColor.gold,
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  contact.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColor.goldSoft,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          border: Border.all(color: AppColor.goldLine),
+                        ),
+                        child: const Text(
+                          'Ученик',
+                          style: TextStyle(
+                            color: AppColor.gold,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 10.5,
+                          ),
+                        ),
+                      ),
+                      if (_balance != null) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Баланс: ${_balance!['balance']} ₽',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: _studentBalanceColor(cs),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: _handleClose,
+            icon: const Icon(Icons.close_rounded),
+            iconSize: 20,
+            color: cs.onSurfaceVariant,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Wraps any student tab body with the shared loading / error / not-found
+  // states so per-tab isolation reuses one place.
+  Widget _studentGuard(ColorScheme cs, Widget Function() child) {
+    if (_loadingStudent) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColor.gold),
+      );
+    }
+    if (_studentError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 40,
+                color: AppColor.danger,
+              ),
+              const SizedBox(height: AppSpace.md),
+              Text(
+                'Ошибка: $_studentError',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+              ),
+              const SizedBox(height: AppSpace.md),
+              TextButton(
+                onPressed: _fetchStudentData,
+                style: TextButton.styleFrom(foregroundColor: AppColor.gold),
+                child: const Text('Повторить'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_student == null) {
+      return Center(
+        child: Text(
+          'Ученик не найден',
+          style: TextStyle(color: cs.onSurfaceVariant),
+        ),
+      );
+    }
+    return child();
+  }
+
+  // ── Student tab: Инфо ────────────────────────────────────────────────────
+  Widget _buildStudentInfoTab(ColorScheme cs) {
+    return _studentGuard(cs, () {
+      final contact = _studentContact();
+      final customData =
+          _student!['custom_data'] as Map<String, dynamic>? ?? {};
+      return ListView(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        children: [
+          _buildInfoCard('Контактные данные', [
+            _InfoRow(
+              icon: Icons.phone_rounded,
+              label: 'Телефон',
+              value: contact.phone,
+            ),
+            _InfoRow(
+              icon: Icons.email_rounded,
+              label: 'Электронная почта',
+              value: contact.email,
+            ),
+          ]),
+          const SizedBox(height: AppSpace.lg),
+          ClientAppUserPanel(
+            entityType: 'student',
+            entityId: _entityId,
+          ),
+          const SizedBox(height: AppSpace.lg),
+          _buildInfoCard('Дополнительная информация', [
+            _InfoRow(
+              icon: Icons.cake_rounded,
+              label: 'День рождения',
+              value: _student!['birthday']?.toString() ?? '—',
+            ),
+            _InfoRow(
+              icon: Icons.person_outline_rounded,
+              label: 'Пол',
+              value: _student!['gender'] == 'male'
+                  ? 'Мужской'
+                  : (_student!['gender'] == 'female' ? 'Женский' : '—'),
+            ),
+            if ((_student!['hollihop_id']?.toString().trim().isNotEmpty ??
+                false))
+              _InfoRow(
+                icon: Icons.fingerprint_rounded,
+                label: 'Идентификатор HolliHop',
+                value: _student!['hollihop_id'].toString(),
+              ),
+            ...customData.entries
+                .where(
+                  (e) =>
+                      !_isHiddenStudentCustomDataRow(e.key) &&
+                      (e.value?.toString().trim().isNotEmpty ?? false),
+                )
+                .map(
+                  (e) => _InfoRow(
+                    icon: Icons.info_outline_rounded,
+                    label: e.key,
+                    value: e.value.toString(),
+                  ),
+                ),
+          ]),
+          const SizedBox(height: AppSpace.lg),
+          _buildInfoCard('Финансовые настройки', [
+            _InfoRow(
+              icon: Icons.payments_outlined,
+              label: 'Цена инд. занятия',
+              value: _student!['individual_price'] != null
+                  ? '${_student!['individual_price']} ₽'
+                  : 'Не задана',
+              onEdit: _editStudentPrice,
+            ),
+            if (_balance != null) ...[
+              _InfoRow(
+                icon: Icons.summarize_outlined,
+                label: 'Всего оплачено',
+                value: '${_balance!['total_paid']} ₽',
+              ),
+              _InfoRow(
+                icon: Icons.history_edu_outlined,
+                label: 'Списано за уроки',
+                value: '${_balance!['total_cost']} ₽',
+              ),
+            ],
+          ]),
+          const SizedBox(height: AppSpace.lg),
+          _buildInfoCard('Группы', [
+            if (_groups.isEmpty)
+              const _InfoRow(
+                icon: Icons.group_off_rounded,
+                label: 'Группы',
+                value: 'Нет активных групп',
+              )
+            else
+              ..._groups.map((g) {
+                final teacher = g['teachers'];
+                String tName = '—';
+                if (teacher != null) {
+                  final tfName = teacher['first_name']?.toString() ?? '';
+                  final tlName = teacher['last_name']?.toString() ?? '';
+                  final p = teacher['profiles'] as Map<String, dynamic>?;
+                  tName = '$tfName $tlName'.trim();
+                  if (tName.isEmpty && p != null) {
+                    tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'
+                        .trim();
+                  }
+                }
+                return _InfoRow(
+                  icon: Icons.group_rounded,
+                  label: g['name']?.toString() ?? 'Группа',
+                  value: 'Преп.: $tName',
+                );
+              }),
+          ]),
+          const SizedBox(height: AppSpace.lg),
+          _buildInfoCard('Семья', _buildStudentFamilyRows()),
+        ],
+      );
+    });
+  }
+
+  bool _isHiddenStudentCustomDataRow(String key) {
+    const hidden = {
+      'hollihopid',
+      'hollihop_id',
+      'hollihopstudentid',
+      'hollihop_student_id',
+      'externalid',
+      'external_id',
+      'demoaccount',
+      'demo_account',
+      'isdemo',
+      'is_demo',
+      'sourceleadid',
+      'source_lead_id',
+      'leadid',
+      'lead_id',
+      'branchid',
+      'branch_id',
+      'disciplineid',
+      'discipline_id',
+      'disciplineinternal',
+      'discipline_internal',
+    };
+    return hidden.contains(key.trim().toLowerCase());
+  }
+
+  List<Widget> _buildStudentFamilyRows() {
+    final family = _family?['family'] as Map<String, dynamic>?;
+    final members =
+        (_family?['members'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .toList() ??
+        const <Map<String, dynamic>>[];
+    if (family == null || members.isEmpty) {
+      return const [
+        _InfoRow(
+          icon: Icons.people_outline_rounded,
+          label: 'Семья',
+          value: 'Не указана',
+        ),
+      ];
+    }
+    final primaryId = family['primary_payer_member_id']?.toString();
+    return members.map((m) {
+      final role = _familyRoleLabel(m['role']);
+      final isPayer = primaryId != null && m['id']?.toString() == primaryId;
+      final label = [
+        role,
+        if (m['is_primary_contact'] == true) 'осн. контакт',
+        if (isPayer) 'плательщик',
+      ].join(' · ');
+      return _InfoRow(
+        icon: Icons.people_alt_rounded,
+        label: label,
+        value: (m['name']?.toString().trim().isNotEmpty ?? false)
+            ? m['name'].toString()
+            : 'Без имени',
+      );
+    }).toList();
+  }
+
+  // ── Student tab: Задачи ──────────────────────────────────────────────────
+  Widget _buildStudentTasksTab(ColorScheme cs) {
+    return _studentGuard(cs, () {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.xl,
+          AppSpace.lg,
+          AppSpace.xl,
+          AppSpace.xl,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: _sectionTitle('Задачи')),
+                _buildAddTaskButton(cs),
+              ],
+            ),
+            if (_studentTasks.isEmpty)
+              _emptyHint(cs, 'Открытых задач нет')
+            else
+              ..._studentTasks.map(
+                (row) => _entityTile(
+                  cs,
+                  title: row['title']?.toString() ?? 'Задача',
+                  subtitle: _formatStatus(row['status']),
+                  leading: Icons.task_alt_rounded,
+                ),
+              ),
+          ],
+        ),
+      );
+    });
+  }
+
+  // ── Student tab: Занятия (flat list; Phase 5 adds past/upcoming) ──────────
+  Widget _buildLessonsTab(ColorScheme cs) {
+    return _studentGuard(cs, () {
+      if (_lessons.isEmpty) {
+        return Center(
+          child: Text(
+            'Занятий не найдено',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        itemCount: _lessons.length,
+        itemBuilder: (context, i) {
+          final l = _lessons[i];
+          final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
+          final dateStr = dt != null
+              ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
+              : '—';
+          final teacherData = l['teachers'] as Map<String, dynamic>?;
+          String teacherName = '—';
+          if (teacherData != null) {
+            final tfName = teacherData['first_name']?.toString() ?? '';
+            final tlName = teacherData['last_name']?.toString() ?? '';
+            final p = teacherData['profiles'] as Map<String, dynamic>?;
+            var tName = '$tfName $tlName'.trim();
+            if (tName.isEmpty && p != null) {
+              tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+            }
+            teacherName = tName.isEmpty ? '—' : tName;
+          }
+          final completed = l['status'] == 'completed';
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              title: Text(
+                dateStr,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                'Преп.: $teacherName • ${l['groups']?['name'] ?? 'Инд.'}',
+              ),
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (completed ? AppTheme.success : AppTheme.primaryGold)
+                      .withAlpha(30),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  completed ? 'Завершено' : 'Запланировано',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: completed ? AppTheme.success : AppTheme.primaryGold,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    });
+  }
+
+  // ── Student tab: Оплаты ──────────────────────────────────────────────────
+  Widget _buildPaymentsTab(ColorScheme cs) {
+    return _studentGuard(cs, () {
+      if (_payments.isEmpty) {
+        return Center(
+          child: Text(
+            'Оплат не найдено',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        itemCount: _payments.length,
+        itemBuilder: (context, i) {
+          final p = _payments[i];
+          final dt = DateTime.tryParse(p['payment_date']?.toString() ?? '');
+          final dateStr = dt != null
+              ? DateFormat('d MMM yyyy', 'ru').format(dt)
+              : '—';
+          final paymentNote = (p['notes'] ?? p['description'] ?? '')
+              .toString()
+              .trim();
+          final method = (p['method'] ?? p['type'] ?? '').toString().trim();
+          final subtitle = [
+            dateStr,
+            if (paymentNote.isNotEmpty) paymentNote,
+          ].join(' • ');
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: const Icon(
+                Icons.account_balance_wallet_rounded,
+                color: AppTheme.success,
+              ),
+              title: Text(
+                '${p['amount']} ₽',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(subtitle),
+              trailing: method.isEmpty
+                  ? null
+                  : Text(
+                      method,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+            ),
+          );
+        },
+      );
+    });
+  }
+
+  // ── Student tab: Инвойсы ─────────────────────────────────────────────────
+  Widget _buildInvoicesTab(ColorScheme cs) {
+    return _studentGuard(cs, () {
+      if (_expectedPayments.isEmpty) {
+        return Center(
+          child: Text(
+            'Инвойсов не найдено',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        itemCount: _expectedPayments.length,
+        itemBuilder: (context, i) {
+          final p = _expectedPayments[i];
+          final dt = DateTime.tryParse(p['due_date']?.toString() ?? '');
+          final dateStr = dt != null
+              ? DateFormat('d MMM yyyy', 'ru').format(dt)
+              : '—';
+          final status = p['status']?.toString() ?? 'pending';
+          final description = (p['description'] ?? '').toString().trim();
+          final paid = status == 'paid';
+          final subtitle = [
+            'Срок: $dateStr',
+            if (description.isNotEmpty) description,
+          ].join(' • ');
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: Icon(
+                paid
+                    ? Icons.check_circle_rounded
+                    : Icons.pending_actions_rounded,
+                color: paid ? AppTheme.success : AppTheme.warning,
+              ),
+              title: Text(
+                '${p['amount']} ₽',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(subtitle),
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (paid ? AppTheme.success : AppTheme.warning)
+                      .withAlpha(30),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  paid ? 'Оплачено' : 'Ожидает',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: paid ? AppTheme.success : AppTheme.warning,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    });
+  }
+
+  // ── Student tab: Документы ───────────────────────────────────────────────
+  Widget _buildDocumentsTab(ColorScheme cs) {
+    return _studentGuard(cs, () {
+      final contractUrl = _student!['contract_url'] as String?;
+      return ListView(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        children: [
+          _buildInfoCard('Договоры и документы', [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(
+                Icons.description_rounded,
+                color: AppTheme.primaryGold,
+              ),
+              title: const Text('Основной договор'),
+              subtitle: Text(contractUrl ?? 'Не прикреплен'),
+              trailing: IconButton(
+                icon: Icon(
+                  contractUrl != null
+                      ? Icons.edit_rounded
+                      : Icons.add_link_rounded,
+                ),
+                onPressed: _editStudentContractUrl,
+              ),
+              onTap: contractUrl != null
+                  ? () => _openStudentContractUrl(contractUrl)
+                  : null,
+            ),
+          ]),
+        ],
+      );
+    });
+  }
+
+  // ── Student tab: История (merged tasks + comments) ───────────────────────
+  Widget _buildStudentHistoryTab(ColorScheme cs) {
+    return _studentGuard(cs, () {
+      if (_studentTasks.isEmpty && _studentComments.isEmpty) {
+        return Center(
+          child: Text(
+            'История пуста',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+        );
+      }
+      final items = [
+        ..._studentTasks.map(
+          (t) => {'type': 'task', 'data': t, 'date': t['created_at']},
+        ),
+        ..._studentComments
+            .where(
+              (c) =>
+                  !(c['content']?.toString().startsWith('[PROGRESS]') ?? false),
+            )
+            .map(
+              (c) => {'type': 'comment', 'data': c, 'date': c['created_at']},
+            ),
+      ];
+      items.sort(
+        (a, b) => ((b['date'] as String?) ?? '').compareTo(
+          (a['date'] as String?) ?? '',
+        ),
+      );
+      return ListView.builder(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        itemCount: items.length,
+        itemBuilder: (ctx, i) {
+          final item = items[i];
+          final isTask = item['type'] == 'task';
+          final data = item['data'] as Map<String, dynamic>;
+          final dt = DateTime.tryParse(item['date'] as String? ?? '');
+          final dateStr = dt != null
+              ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
+              : '—';
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isTask
+                                ? Icons.task_alt_rounded
+                                : Icons.comment_rounded,
+                            size: 16,
+                            color: isTask
+                                ? AppTheme.warning
+                                : AppTheme.primaryGold,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            isTask ? 'Задача' : 'Комментарий',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isTask
+                                  ? AppTheme.warning
+                                  : AppTheme.primaryGold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        dateStr,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isTask
+                        ? (data['title']?.toString() ?? '')
+                        : (data['content']?.toString() ?? ''),
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  if (isTask && data['description'] != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      data['description'].toString(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    });
+  }
+
+  // ── Student tab: Прогресс ([PROGRESS]-prefixed comments) ──────────────────
+  Widget _buildProgressTab(ColorScheme cs) {
+    return _studentGuard(cs, () {
+      final progressNotes = _studentComments
+          .where(
+            (c) => c['content']?.toString().startsWith('[PROGRESS]') ?? false,
+          )
+          .toList();
+      if (progressNotes.isEmpty) {
+        return Center(
+          child: Text(
+            'Заметок об успехах ещё нет',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        itemCount: progressNotes.length,
+        itemBuilder: (ctx, i) {
+          final note = progressNotes[i];
+          final content = (note['content']?.toString() ?? '').replaceFirst(
+            '[PROGRESS] ',
+            '',
+          );
+          final dt = DateTime.tryParse(note['created_at']?.toString() ?? '');
+          final dateStr = dt != null
+              ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal())
+              : '—';
+          final author = note['profiles'];
+          final authorName = author != null
+              ? '${author['first_name'] ?? ''} ${author['last_name'] ?? ''}'
+                    .trim()
+              : 'Система';
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.stars_rounded,
+                        color: AppTheme.success,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        dateStr,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        authorName.isEmpty ? 'Система' : authorName,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    content,
+                    style: const TextStyle(fontSize: 15, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    });
+  }
+
+  // ── Student action bar (overflow menu hosts the v7 student actions) ───────
+  Widget _buildStudentActionBar(ColorScheme cs) {
+    final busy = _loadingStudent || _student == null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.md,
+        AppSpace.xl,
+        AppSpace.lg,
+      ),
+      child: Row(
+        children: [
+          PopupMenuButton<String>(
+            enabled: !busy,
+            tooltip: 'Действия',
+            position: PopupMenuPosition.under,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            ),
+            onSelected: (value) {
+              switch (value) {
+                case 'subscription':
+                  _showIssueSubscriptionSheet();
+                case 'homework':
+                  _showAssignHomeworkSheet();
+                case 'price':
+                  _editStudentPrice();
+                case 'contract':
+                  _editStudentContractUrl();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'subscription',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.card_membership_rounded,
+                    color: AppColor.gold,
+                  ),
+                  title: Text('Выдать абонемент'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'homework',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.assignment_rounded,
+                    color: AppColor.gold,
+                  ),
+                  title: Text('Задать ДЗ'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'price',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.payments_outlined, color: AppColor.gold),
+                  title: Text('Изменить цену'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'contract',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.description_rounded, color: AppColor.gold),
+                  title: Text('Редактировать договор'),
+                ),
+              ),
+            ],
+            child: OutlinedButton.icon(
+              onPressed: null,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: cs.onSurface,
+                disabledForegroundColor: cs.onSurface,
+                side: BorderSide(color: cs.outlineVariant),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+              ),
+              icon: const Icon(Icons.bolt_rounded, size: 18),
+              label: const Text('Действия'),
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: _handleClose,
+            style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Student actions (ported from student_detail_screen) ──────────────────
+  Future<void> _editStudentPrice() async {
+    final controller = TextEditingController(
+      text: _student?['individual_price']?.toString(),
+    );
+    final newPrice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Цена занятия'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Сумма (₽)'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+
+    if (newPrice != null && double.tryParse(newPrice) != null) {
+      try {
+        final price = double.parse(newPrice);
+        await ref
+            .read(magicCrmServiceProvider)
+            .updateStudent(
+              _entityId,
+              customDataPatch: {
+                'individualPrice': price,
+                'individual_price': price,
+              },
+            );
+        _dirty = true;
+        await _fetchStudentData();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        }
+      }
+    }
+  }
+
+  Future<void> _openStudentContractUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Некорректная ссылка на договор')),
+      );
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось открыть договор')),
+      );
+    }
+  }
+
+  Future<void> _editStudentContractUrl() async {
+    final controller = TextEditingController(
+      text: _student?['contract_url']?.toString(),
+    );
+    final newUrl = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ссылка на договор'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'https://...',
+            labelText: 'Ссылка на документ',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+
+    if (newUrl != null) {
+      try {
+        await ref
+            .read(magicCrmServiceProvider)
+            .updateStudent(
+              _entityId,
+              customDataPatch: {
+                'legacyContractUrl': newUrl.trim(),
+                'contract_url': newUrl.trim(),
+              },
+            );
+        _dirty = true;
+        await _fetchStudentData();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        }
+      }
+    }
+  }
+
+  /// Flat gold button used inside the v7 «Задать ДЗ» sheet (ported helper).
+  Widget _goldButton(String label, VoidCallback? onPressed) {
+    return FilledButton(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColor.gold,
+        foregroundColor: AppColor.onGold,
+        disabledBackgroundColor: AppColor.goldSoft,
+        disabledForegroundColor: AppColor.text2,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+      child: Text(label),
+    );
+  }
+
+  Widget _ghostButton(String label, VoidCallback? onPressed) {
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColor.text,
+        side: const BorderSide(color: AppColor.divider),
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      child: Text(label),
+    );
+  }
+
+  Future<void> _showIssueSubscriptionSheet() async {
+    final crm = ref.read(magicCrmServiceProvider);
+    List<Map<String, dynamic>> packages;
+    try {
+      packages = await crm.listSubscriptionPackages(limit: 100);
+    } catch (e) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось загрузить абонементы',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    if (packages.isEmpty) {
+      MagicToast.show(
+        context,
+        'Нет доступных абонементов',
+        type: MagicToastType.info,
+      );
+      return;
+    }
+
+    final selected = await showMagicSheet<Map<String, dynamic>>(
+      context,
+      title: 'Выдать абонемент',
+      subtitle: 'Выберите пакет занятий',
+      icon: Icons.card_membership_rounded,
+      builder: (sheetContext) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final pkg in packages) ...[
+              _SubscriptionPackageTile(
+                package: pkg,
+                onTap: () => Navigator.pop(sheetContext, pkg),
+              ),
+              const SizedBox(height: AppSpace.sm),
+            ],
+          ],
+        );
+      },
+    );
+
+    if (selected == null || !mounted) return;
+
+    final packageId = selected['id']?.toString();
+    if (packageId == null || packageId.isEmpty) return;
+
+    try {
+      await crm.issueSubscription(_entityId, packageId);
+      if (!mounted) return;
+      _dirty = true;
+      MagicToast.show(
+        context,
+        'Абонемент выдан',
+        detail: selected['name']?.toString(),
+        type: MagicToastType.success,
+      );
+      _fetchStudentData();
+    } catch (e) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось выдать абонемент',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
+    }
+  }
+
+  Future<void> _showAssignHomeworkSheet() async {
+    final crm = ref.read(magicCrmServiceProvider);
+
+    List<Map<String, dynamic>> homeworks = const [];
+    try {
+      homeworks = await crm.listHomeworks(studentId: _entityId, limit: 5);
+    } catch (_) {
+      // Listing is best-effort; the assign form still works without it.
+    }
+    if (!mounted) return;
+
+    final titleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    DateTime? dueAt;
+
+    final created = await showMagicSheet<bool>(
+      context,
+      title: 'Задать ДЗ',
+      subtitle: 'Новое домашнее задание',
+      icon: Icons.assignment_rounded,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final dueLabel = dueAt == null
+                ? 'Срок не задан'
+                : DateFormat('d MMM yyyy, HH:mm', 'ru').format(dueAt!);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                  autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Заголовок *',
+                    hintText: 'Что нужно выучить?',
+                  ),
+                ),
+                const SizedBox(height: AppSpace.md),
+                TextField(
+                  controller: descCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Описание',
+                    hintText: 'Подробности (необязательно)',
+                  ),
+                ),
+                const SizedBox(height: AppSpace.md),
+                InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  onTap: () async {
+                    final now = DateTime.now();
+                    final date = await showDatePicker(
+                      context: sheetContext,
+                      initialDate: dueAt ?? now,
+                      firstDate: now.subtract(const Duration(days: 1)),
+                      lastDate: now.add(const Duration(days: 365)),
+                    );
+                    if (date == null || !sheetContext.mounted) return;
+                    final time = await showTimePicker(
+                      context: sheetContext,
+                      initialTime: TimeOfDay.fromDateTime(dueAt ?? now),
+                    );
+                    setSheetState(() {
+                      dueAt = DateTime(
+                        date.year,
+                        date.month,
+                        date.day,
+                        time?.hour ?? 0,
+                        time?.minute ?? 0,
+                      );
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpace.md,
+                      vertical: AppSpace.md,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColor.input,
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                      border: Border.all(color: AppColor.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.event_rounded,
+                          size: 18,
+                          color: AppColor.gold,
+                        ),
+                        const SizedBox(width: AppSpace.md),
+                        Expanded(
+                          child: Text(
+                            dueLabel,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: dueAt == null
+                                  ? AppColor.text2
+                                  : AppColor.text,
+                            ),
+                          ),
+                        ),
+                        if (dueAt != null)
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            color: AppColor.text2,
+                            tooltip: 'Сбросить срок',
+                            onPressed: () => setSheetState(() => dueAt = null),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (homeworks.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.lg),
+                  const Divider(height: 1, color: AppColor.divider),
+                  const SizedBox(height: AppSpace.md),
+                  const Text(
+                    'Последние ДЗ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColor.gold,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpace.sm),
+                  for (final hw in homeworks) _HomeworkTile(homework: hw),
+                ],
+              ],
+            );
+          },
+        );
+      },
+      actions: [
+        _ghostButton('Отмена', () => Navigator.pop(context, false)),
+        _goldButton('Создать', () {
+          if (titleCtrl.text.trim().isEmpty) {
+            MagicToast.show(
+              context,
+              'Введите заголовок',
+              type: MagicToastType.danger,
+            );
+            return;
+          }
+          Navigator.pop(context, true);
+        }),
+      ],
+    );
+
+    if (created != true || !mounted) return;
+
+    final title = titleCtrl.text.trim();
+    if (title.isEmpty) return;
+
+    try {
+      await crm.createHomework(
+        studentId: _entityId,
+        title: title,
+        description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+        dueAt: dueAt?.toIso8601String(),
+      );
+      if (!mounted) return;
+      _dirty = true;
+      MagicToast.show(
+        context,
+        'ДЗ создано',
+        detail: title,
+        type: MagicToastType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось создать ДЗ',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
+    }
+  }
+
+  /// Shared card container used by the student Инфо/Документы tabs (ported from
+  /// student_detail_screen._buildInfoCard).
+  Widget _buildInfoCard(String title, List<Widget> children) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: AppTheme.primaryGold,
+              ),
+            ),
+            const Divider(height: 24),
+            ...children,
+          ],
+        ),
       ),
     );
   }
@@ -1648,16 +3115,19 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   Future<void> _openAddFamilyMemberSheet() async {
     final cs = Theme.of(context).colorScheme;
-    final leadId = _leadData['id']?.toString() ?? widget.lead['id']?.toString();
+    final selfId = _leadData['id']?.toString() ?? widget.lead['id']?.toString();
     var role = _familyRoleOptions.first.$1;
-    var entityType = 'lead';
-    final entityIdCtrl = TextEditingController(text: leadId ?? '');
+    // Default the linked record to this card's own entity (lead or student).
+    var entityType = widget.entityType;
+    final entityIdCtrl = TextEditingController(text: selfId ?? '');
     var isPrimaryContact = false;
 
     final confirmed = await showMagicSheet<bool>(
       context,
       title: 'Добавить участника',
-      subtitle: 'Свяжите запись с семьёй лида',
+      subtitle: _isStudent
+          ? 'Свяжите запись с семьёй ученика'
+          : 'Свяжите запись с семьёй лида',
       icon: Icons.person_add_alt_1_rounded,
       builder: (sheetContext) {
         return StatefulBuilder(
@@ -1721,9 +3191,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
                     cs,
                     label: 'ID записи',
                     hint: 'Идентификатор лида/ученика/профиля',
-                    helperText: leadId == null
+                    helperText: selfId == null
                         ? null
-                        : 'По умолчанию — текущий лид',
+                        : (_isStudent
+                              ? 'По умолчанию — текущий ученик'
+                              : 'По умолчанию — текущий лид'),
                     isDense: true,
                   ),
                 ),
@@ -2205,14 +3677,18 @@ class _ClientCardState extends ConsumerState<ClientCard>
       await ref
           .read(magicCrmServiceProvider)
           .createComment(
-            entityType: 'lead',
-            entityId: _leadData['id'].toString(),
+            entityType: widget.entityType,
+            entityId: _entityId,
             body: text,
           );
       _commentCtrl.clear();
       if (mounted) {
         setState(() => _commentsRefreshKey++);
-        _fetchCard();
+        if (_isStudent) {
+          _fetchStudentData();
+        } else {
+          _fetchCard();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -2225,9 +3701,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
 }
 
 class _CommentsList extends ConsumerStatefulWidget {
-  final String leadId;
+  final String entityType;
+  final String entityId;
   final int refreshKey;
-  const _CommentsList({required this.leadId, required this.refreshKey});
+  const _CommentsList({
+    required this.entityType,
+    required this.entityId,
+    required this.refreshKey,
+  });
 
   @override
   ConsumerState<_CommentsList> createState() => _CommentsListState();
@@ -2274,7 +3755,10 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
       key: ValueKey('${widget.refreshKey}:$_retryKey'),
       future: ref
           .watch(magicCrmServiceProvider)
-          .listComments(entityType: 'lead', entityId: widget.leadId),
+          .listComments(
+            entityType: widget.entityType,
+            entityId: widget.entityId,
+          ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -2392,5 +3876,232 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
         );
       },
     );
+  }
+}
+
+/// One labelled info row for the student Инфо / Документы tabs (ported from
+/// student_detail_screen). When [onEdit] is set the row is tappable and shows a
+/// trailing edit affordance.
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback? onEdit;
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onEdit,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onEdit != null)
+              const Icon(
+                Icons.edit_outlined,
+                size: 14,
+                color: AppTheme.primaryGold,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Selectable subscription-package row inside the «Выдать абонемент» v7 sheet
+/// (ported from student_detail_screen).
+class _SubscriptionPackageTile extends StatelessWidget {
+  final Map<String, dynamic> package;
+  final VoidCallback onTap;
+  const _SubscriptionPackageTile({required this.package, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = package['name']?.toString() ?? 'Абонемент';
+    final lessons = package['lessons_total'] ?? package['lessonsTotal'];
+    final price = package['price'];
+    final validity = package['validity_days'] ?? package['validityDays'];
+    final meta = [
+      if (lessons != null) '$lessons зан.',
+      if (price != null) '$price ₽',
+      if (validity != null) '$validity дн.',
+    ].join(' · ');
+
+    return Material(
+      color: AppColor.input,
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.md,
+            vertical: AppSpace.md,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            border: Border.all(color: AppColor.divider),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColor.goldSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.chip),
+                  border: Border.all(color: AppColor.goldLine),
+                ),
+                child: const Icon(
+                  Icons.card_membership_rounded,
+                  size: 18,
+                  color: AppColor.gold,
+                ),
+              ),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColor.text,
+                      ),
+                    ),
+                    if (meta.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          meta,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColor.text2,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColor.text2,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact read-only homework row for the «Последние ДЗ» section in the «Задать
+/// ДЗ» v7 sheet (ported from student_detail_screen).
+class _HomeworkTile extends StatelessWidget {
+  final Map<String, dynamic> homework;
+  const _HomeworkTile({required this.homework});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = homework['title']?.toString() ?? '—';
+    final status = homework['status']?.toString();
+    final dueRaw = homework['due_at'] ?? homework['dueAt'];
+    final due = DateTime.tryParse(dueRaw?.toString() ?? '');
+    final subtitle = [
+      if (status != null && status.isNotEmpty) _statusLabel(status),
+      if (due != null) DateFormat('d MMM yyyy', 'ru').format(due.toLocal()),
+    ].join(' · ');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.assignment_outlined,
+              size: 16,
+              color: AppColor.text2,
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, color: AppColor.text),
+                ),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColor.text2,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'assigned':
+        return 'Назначено';
+      case 'submitted':
+        return 'Сдано';
+      case 'done':
+      case 'completed':
+        return 'Завершено';
+      default:
+        return status;
+    }
   }
 }
