@@ -21,10 +21,7 @@ import 'package:magic_music_crm/features/manager/presentation/screens/manager_da
 import 'package:magic_music_crm/features/admin/presentation/screens/student_detail_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
-import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
-import 'package:magic_music_crm/core/models/types.dart';
-import 'package:magic_music_crm/core/utils/status_color.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_status_screen.dart';
@@ -449,10 +446,9 @@ String _deepLinkHomeRoute(WidgetRef ref) {
   return _roleToRoute(role);
 }
 
-/// Lightweight host that presents the existing [LeadDetailDialog] for a lead
-/// opened by id (deep link). The dialog self-fetches its full data from the
-/// minimal `{'id': …}` stub (the KVA-175 pattern); we only pre-resolve the
-/// status list so the status chips render immediately.
+/// Lightweight host that presents the unified [showClientCard] for a lead
+/// opened by id (deep link). The card self-fetches its full data (and the lead
+/// status list) from the minimal `{'id': …}` stub (the KVA-175 pattern).
 class _LeadDeepLinkScreen extends ConsumerStatefulWidget {
   const _LeadDeepLinkScreen({required this.leadId});
 
@@ -476,27 +472,10 @@ class _LeadDeepLinkScreenState extends ConsumerState<_LeadDeepLinkScreen> {
     if (_opened || !mounted) return;
     _opened = true;
 
-    final statuses = <StatusRecord>[];
-    try {
-      final raw = await ref.read(leadStatusesProvider.future);
-      for (final r in raw) {
-        statuses.add((
-          r['key'].toString(),
-          r['label'].toString(),
-          statusColorFromValue(r['color']),
-        ));
-      }
-    } catch (_) {
-      // Dialog still opens; it fetches its own data.
-    }
-    if (!mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (_) => LeadDetailDialog(
-        lead: <String, dynamic>{'id': widget.leadId},
-        allStatuses: statuses,
-      ),
+    await showClientCard(
+      context,
+      entityType: 'lead',
+      entityId: widget.leadId,
     );
 
     if (!mounted) return;

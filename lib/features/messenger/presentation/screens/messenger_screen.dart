@@ -44,10 +44,7 @@ import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_sc
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_students_widget.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
-import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
-import 'package:magic_music_crm/core/models/types.dart';
-import 'package:magic_music_crm/core/utils/status_color.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:mime/mime.dart';
 
 void _logMessenger(String message) {
@@ -308,25 +305,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     }
   }
 
-  // KVA-175: open LeadDetailDialog for a given lead stub/map.
+  // KVA-175: open the unified client card for a given lead stub/map.
   Future<void> _openLeadCard(Map<String, dynamic> lead) async {
     if (!mounted) return;
-    List<StatusRecord> statuses = [];
-    try {
-      final raw = await ref.read(leadStatusesProvider.future);
-      for (final r in raw) {
-        final key = r['key'].toString();
-        final label = r['label'].toString();
-        final color = statusColorFromValue(r['color']);
-        statuses.add((key, label, color));
-      }
-    } catch (_) {
-      // Dialog still opens; it will fetch its own data.
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => LeadDetailDialog(lead: lead, allStatuses: statuses),
+    await showClientCard(
+      context,
+      entityType: 'lead',
+      entityId: lead['id'].toString(),
+      seed: lead,
     );
   }
 

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/convert_lead_dialog.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -633,10 +633,11 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   }
 
   void _openDetail(Map<String, dynamic> lead) async {
-    final changed = await showDialog<bool>(
-      context: context,
-      builder: (_) =>
-          LeadDetailDialog(lead: lead, allStatuses: _activeStatuses),
+    final changed = await showClientCard(
+      context,
+      entityType: 'lead',
+      entityId: lead['id'].toString(),
+      seed: lead,
     );
     if (changed == true) {
       _refreshBoard();

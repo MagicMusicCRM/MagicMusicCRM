@@ -11,15 +11,12 @@ import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
 import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
 import 'package:magic_music_crm/core/widgets/voice_recorder_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/broadcast_dialog.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
-import 'package:magic_music_crm/core/models/types.dart';
-import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 
 // Bottom margin used for all floating SnackBars so they appear above the
 // message-input bar (~72 dp tall) and never obscure it.  KVA-173.
@@ -488,8 +485,8 @@ class _ChatViewState extends ConsumerState<_ChatView> {
       if (!mounted) return;
       final created = result['created'] == true;
       final leadId = result['leadId']?.toString() ?? '';
-      // Build a minimal lead map so LeadDetailDialog can open immediately
-      // (the dialog loads its own full data; we only need `id`).
+      // Build a minimal lead map so the client card can open immediately
+      // (the card loads its own full data; we only need `id`).
       final leadStub = <String, dynamic>{'id': leadId};
       messenger.showSnackBar(
         SnackBar(
@@ -516,26 +513,14 @@ class _ChatViewState extends ConsumerState<_ChatView> {
     }
   }
 
-  // KVA-175: open the lead detail dialog for a given lead map.
+  // KVA-175: open the unified client card for a given lead map.
   Future<void> _openLeadCard(Map<String, dynamic> lead) async {
     if (!mounted) return;
-    // We need the status list for LeadDetailDialog.  Use the cached provider.
-    List<StatusRecord> statuses = [];
-    try {
-      final raw = await ref.read(leadStatusesProvider.future);
-      for (final r in raw) {
-        final key = r['key'].toString();
-        final label = r['label'].toString();
-        final color = statusColorFromValue(r['color']);
-        statuses.add((key, label, color));
-      }
-    } catch (_) {
-      // Dialog still opens; it will fetch its own data.
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => LeadDetailDialog(lead: lead, allStatuses: statuses),
+    await showClientCard(
+      context,
+      entityType: 'lead',
+      entityId: lead['id'].toString(),
+      seed: lead,
     );
   }
 

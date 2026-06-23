@@ -4,31 +4,45 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
+import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 
-class LeadDetailDialog extends ConsumerStatefulWidget {
+/// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
+/// Инфо / Задачи / Комментарии / Семья / История). Behaviour is equivalent to
+/// the former `LeadDetailDialog`; the public surface gained an [entityType]
+/// discriminator (default `'lead'`) so later phases can host students too.
+///
+/// [allStatuses] is optional — when omitted the card resolves the lead status
+/// list itself via [leadStatusesProvider] so callers (e.g. deep links, the
+/// launcher) don't have to pre-fetch it.
+class ClientCard extends ConsumerStatefulWidget {
   final Map<String, dynamic> lead;
-  final List<StatusRecord> allStatuses;
+  final List<StatusRecord>? allStatuses;
+  final String entityType;
 
-  const LeadDetailDialog({
+  const ClientCard({
     super.key,
     required this.lead,
-    required this.allStatuses,
+    this.allStatuses,
+    this.entityType = 'lead',
   });
 
   @override
-  ConsumerState<LeadDetailDialog> createState() => _LeadDetailDialogState();
+  ConsumerState<ClientCard> createState() => _ClientCardState();
 }
 
-class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
+class _ClientCardState extends ConsumerState<ClientCard>
     with SingleTickerProviderStateMixin {
   late Map<String, dynamic> _leadData;
   late TextEditingController _notesCtrl;
   late TextEditingController _commentCtrl;
+  // Resolved status list: either the one passed in or self-fetched.
+  List<StatusRecord> _statuses = const [];
   bool _saving = false;
   bool _converting = false;
   bool _loadingCard = true;
@@ -44,6 +58,8 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
   // True while a family add/remove write is in flight — disables the family
   // action controls so a double-tap can't fire two mutations.
   bool _familyBusy = false;
+  // True while a task create is in flight — disables the add-task control.
+  bool _addingTask = false;
   // True once the user has edited a field but not saved — used to warn before
   // discarding unsaved changes on close.
   bool _edited = false;
@@ -101,11 +117,33 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
       text: _leadData['notes']?.toString() ?? '',
     );
     _commentCtrl = TextEditingController();
+    _statuses = widget.allStatuses ?? const [];
+    if (widget.allStatuses == null) _fetchStatuses();
     _fetchMetadata();
     _fetchCard();
     _fetchDuplicateCandidates();
     _fetchStatusHistory();
     _fetchFamily();
+  }
+
+  Future<void> _fetchStatuses() async {
+    try {
+      final raw = await ref.read(leadStatusesProvider.future);
+      if (!mounted) return;
+      setState(() {
+        _statuses = raw
+            .map<StatusRecord>(
+              (r) => (
+                r['key'].toString(),
+                r['label'].toString(),
+                statusColorFromValue(r['color']),
+              ),
+            )
+            .toList();
+      });
+    } catch (_) {
+      // Card still renders with a fallback status.
+    }
   }
 
   Future<void> _fetchCard() async {
@@ -357,10 +395,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final fallbackStatus = widget.allStatuses.isNotEmpty
-        ? widget.allStatuses.first
+    final fallbackStatus = _statuses.isNotEmpty
+        ? _statuses.first
         : ('new', 'Новый', AppTheme.primaryGold);
-    final curStatus = widget.allStatuses.firstWhere(
+    final curStatus = _statuses.firstWhere(
       (element) => element.$1 == _leadData['status'],
       orElse: () => fallbackStatus,
     );
@@ -379,10 +417,10 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
           side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
         ),
         child: Container(
-          // Cap the width on wide desktop monitors instead of stretching the
-          // form edge-to-edge.
-          width: (MediaQuery.of(context).size.width * 0.9)
-              .clamp(0.0, 900.0)
+          // Narrow card width so the form reads as a focused client card
+          // instead of stretching edge-to-edge on wide desktop monitors.
+          width: (MediaQuery.of(context).size.width * 0.92)
+              .clamp(0.0, 600.0)
               .toDouble(),
           height: MediaQuery.of(context).size.height * 0.85,
           color: cs.surface,
@@ -745,7 +783,12 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle('Задачи'),
+          Row(
+            children: [
+              Expanded(child: _sectionTitle('Задачи')),
+              _buildAddTaskButton(cs),
+            ],
+          ),
           if (card == null)
             _emptyHint(cs, 'Карточка активности временно недоступна')
           else if (tasks.isEmpty)
@@ -762,6 +805,190 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
         ],
       ),
     );
+  }
+
+  Widget _buildAddTaskButton(ColorScheme cs) {
+    return TextButton.icon(
+      onPressed: _addingTask ? null : _openAddTaskSheet,
+      style: TextButton.styleFrom(
+        foregroundColor: AppColor.gold,
+        backgroundColor: AppColor.goldSoft,
+        disabledForegroundColor: AppColor.gold.withValues(alpha: 0.5),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md,
+          vertical: AppSpace.xs,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.chip),
+          side: const BorderSide(color: AppColor.goldLine),
+        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+      ),
+      icon: _addingTask
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.add_rounded, size: 16),
+      label: const Text('Добавить'),
+    );
+  }
+
+  Future<void> _openAddTaskSheet() async {
+    final cs = Theme.of(context).colorScheme;
+    final titleCtrl = TextEditingController();
+    DateTime? due;
+
+    final confirmed = await showMagicSheet<bool>(
+      context,
+      title: 'Новая задача',
+      subtitle: 'Поставьте задачу по этому лиду',
+      icon: Icons.task_alt_rounded,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final dueLabel = due == null
+                ? 'Без срока'
+                : DateFormat('dd.MM.yyyy', 'ru').format(due!);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                  autofocus: true,
+                  decoration: _inputDecoration(
+                    cs,
+                    label: 'Название',
+                    hint: 'Например: Перезвонить клиенту',
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.md),
+                Text(
+                  'Срок',
+                  style: TextStyle(
+                    color: cs.onSurfaceVariant,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: due ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) setSheetState(() => due = picked);
+                  },
+                  child: InputDecorator(
+                    decoration: _inputDecoration(cs, isDense: true),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(dueLabel),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (due != null)
+                              InkWell(
+                                onTap: () => setSheetState(() => due = null),
+                                child: Icon(
+                                  Icons.clear_rounded,
+                                  size: 16,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.calendar_today_rounded,
+                              size: 16,
+                              color: AppColor.gold,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColor.gold,
+            foregroundColor: AppColor.onGold,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            ),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          child: const Text('Создать'),
+        ),
+      ],
+    );
+
+    final title = titleCtrl.text.trim();
+    final dueAt = due?.toUtc().toIso8601String();
+    titleCtrl.dispose();
+    if (confirmed != true) return;
+    if (title.isEmpty) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Укажите название задачи',
+          type: MagicToastType.danger,
+        );
+      }
+      return;
+    }
+
+    setState(() => _addingTask = true);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .createTask(
+            entityType: 'lead',
+            entityId: _leadData['id'].toString(),
+            title: title,
+            dueAt: dueAt,
+          );
+      _dirty = true;
+      await _fetchCard();
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Задача добавлена',
+          type: MagicToastType.success,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Ошибка добавления',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _addingTask = false);
+    }
   }
 
   // ── Tab: Комментарии ─────────────────────────────────────────────────────
@@ -941,7 +1168,7 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
         initialValue: _leadData['status'],
         isExpanded: true,
         decoration: _inputDecoration(cs, label: 'Статус', isDense: true),
-        items: widget.allStatuses.map((s) {
+        items: _statuses.map((s) {
           return DropdownMenuItem(
             value: s.$1,
             child: Row(
@@ -2010,6 +2237,36 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
   // Bumped on «Повторить» to rebuild the FutureBuilder with a fresh request.
   int _retryKey = 0;
 
+  // Maps a comment `kind` to a short Russian badge label. Unknown / generic
+  // kinds (e.g. plain staff comments) get no badge.
+  String? _kindLabel(Object? kind) {
+    return switch (kind?.toString()) {
+      'admin_comment' => 'Админ',
+      'teacher_note' => 'Педагог',
+      'progress' => 'Прогресс',
+      _ => null,
+    };
+  }
+
+  Widget _kindBadge(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColor.goldSoft,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: AppColor.goldLine),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppColor.gold,
+          fontWeight: FontWeight.w700,
+          fontSize: 10,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -2067,6 +2324,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
             final dateStr = dt != null
                 ? DateFormat('d MMM HH:mm', 'ru').format(dt)
                 : '';
+            final kindLabel = _kindLabel(c['kind']);
             return Container(
               width: double.infinity,
               margin: const EdgeInsets.only(bottom: AppSpace.sm),
@@ -2084,17 +2342,35 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        (c['author_name']?.toString().trim().isNotEmpty ??
-                                false)
-                            ? c['author_name'].toString()
-                            : 'Сотрудник',
-                        style: const TextStyle(
-                          color: AppColor.gold,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                (c['author_name']
+                                            ?.toString()
+                                            .trim()
+                                            .isNotEmpty ??
+                                        false)
+                                    ? c['author_name'].toString()
+                                    : 'Сотрудник',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColor.gold,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            if (kindLabel != null) ...[
+                              const SizedBox(width: 6),
+                              _kindBadge(kindLabel),
+                            ],
+                          ],
                         ),
                       ),
+                      const SizedBox(width: 6),
                       Text(
                         dateStr,
                         style: TextStyle(
