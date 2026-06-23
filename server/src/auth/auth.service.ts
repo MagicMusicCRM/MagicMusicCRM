@@ -8,7 +8,11 @@ import {
 } from "@nestjs/common";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
-import { ActorContext, UserRole } from "../common/security/actor-context";
+import {
+  ActorContext,
+  isManagerOrAdminRole,
+  UserRole,
+} from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { LoginDto } from "./dto/login.dto";
@@ -206,7 +210,10 @@ export class AuthService {
       [user.id],
     );
 
-    if (user.email_otp_2fa_enabled) {
+    // MFA обязательна для привилегированных ролей (Администратор/Управляющий/
+    // Администратор системы) независимо от пользовательского флага (KVA-218):
+    // компрометация одного пароля не должна давать полный доступ.
+    if (user.email_otp_2fa_enabled || isManagerOrAdminRole(user.role)) {
       await this.createOtpChallenge(user, email);
       await this.audit.record({
         actor: { userId: user.id, role: user.role },

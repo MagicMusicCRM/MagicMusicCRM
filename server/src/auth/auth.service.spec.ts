@@ -194,6 +194,38 @@ describe("AuthService", () => {
     );
   });
 
+  it("requires email OTP for privileged roles even without the 2FA flag", async () => {
+    const passwordHash = await passwordService.hash("strong-password-123");
+    query
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "admin-a",
+            email: "admin@example.com",
+            password_hash: passwordHash,
+            role: "admin",
+            email_verified_at: new Date(),
+            email_otp_2fa_enabled: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await service.login({
+      email: "admin@example.com",
+      password: "strong-password-123",
+    });
+
+    expect(result.emailOtpRequired).toBe(true);
+    expect(result.session).toBeUndefined();
+    expect(sessions.issueForUser).not.toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "auth.login_email_otp_required" }),
+    );
+  });
+
   it("rate limits repeated login failures before password verification", async () => {
     query.mockResolvedValueOnce({ rows: [{ count: "10" }] });
 
