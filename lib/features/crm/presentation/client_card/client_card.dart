@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
+import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';
@@ -1986,59 +1989,126 @@ class _ClientCardState extends ConsumerState<ClientCard>
           ),
         );
       }
-      return ListView.builder(
+
+      // Split into «Предстоящие» (scheduled_at >= now, ascending) and
+      // «Прошедшие» (scheduled_at < now, descending). Lessons without a parsable
+      // time fold into «Прошедшие» so they are never silently dropped.
+      final now = DateTime.now();
+      final upcoming = <Map<String, dynamic>>[];
+      final past = <Map<String, dynamic>>[];
+      for (final l in _lessons) {
+        final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
+        if (dt != null && !dt.isBefore(now)) {
+          upcoming.add(l);
+        } else {
+          past.add(l);
+        }
+      }
+      int byTime(Map<String, dynamic> a, Map<String, dynamic> b) {
+        final ad = DateTime.tryParse(a['scheduled_at']?.toString() ?? '');
+        final bd = DateTime.tryParse(b['scheduled_at']?.toString() ?? '');
+        if (ad == null && bd == null) return 0;
+        if (ad == null) return 1;
+        if (bd == null) return -1;
+        return ad.compareTo(bd);
+      }
+
+      upcoming.sort(byTime); // ascending (soonest first)
+      past.sort((a, b) => byTime(b, a)); // descending (most recent first)
+
+      return ListView(
         padding: const EdgeInsets.all(AppSpace.xl),
-        itemCount: _lessons.length,
-        itemBuilder: (context, i) {
-          final l = _lessons[i];
-          final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
-          final dateStr = dt != null
-              ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
-              : '—';
-          final teacherData = l['teachers'] as Map<String, dynamic>?;
-          String teacherName = '—';
-          if (teacherData != null) {
-            final tfName = teacherData['first_name']?.toString() ?? '';
-            final tlName = teacherData['last_name']?.toString() ?? '';
-            final p = teacherData['profiles'] as Map<String, dynamic>?;
-            var tName = '$tfName $tlName'.trim();
-            if (tName.isEmpty && p != null) {
-              tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-            }
-            teacherName = tName.isEmpty ? '—' : tName;
-          }
-          final completed = l['status'] == 'completed';
-          return Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              title: Text(
-                dateStr,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Text(
-                'Преп.: $teacherName • ${l['groups']?['name'] ?? 'Инд.'}',
-              ),
-              trailing: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (completed ? AppTheme.success : AppTheme.primaryGold)
-                      .withAlpha(30),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  completed ? 'Завершено' : 'Запланировано',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: completed ? AppTheme.success : AppTheme.primaryGold,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
+        children: [
+          if (upcoming.isNotEmpty) ...[
+            _sectionTitle('Предстоящие'),
+            ...upcoming.map((l) => _buildLessonRow(cs, l)),
+          ],
+          if (upcoming.isNotEmpty && past.isNotEmpty)
+            const SizedBox(height: AppSpace.md),
+          if (past.isNotEmpty) ...[
+            _sectionTitle('Прошедшие'),
+            ...past.map((l) => _buildLessonRow(cs, l)),
+          ],
+        ],
       );
     });
+  }
+
+  /// One tappable lesson row. Tapping focuses the dashboard schedule on the
+  /// lesson's day with the lesson highlighted, then closes the card.
+  Widget _buildLessonRow(ColorScheme cs, Map<String, dynamic> l) {
+    final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
+    final dateStr = dt != null
+        ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
+        : '—';
+    final teacherData = l['teachers'] as Map<String, dynamic>?;
+    String teacherName = '—';
+    if (teacherData != null) {
+      final tfName = teacherData['first_name']?.toString() ?? '';
+      final tlName = teacherData['last_name']?.toString() ?? '';
+      final p = teacherData['profiles'] as Map<String, dynamic>?;
+      var tName = '$tfName $tlName'.trim();
+      if (tName.isEmpty && p != null) {
+        tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+      }
+      teacherName = tName.isEmpty ? '—' : tName;
+    }
+    final completed = l['status'] == 'completed';
+    final lessonId = l['id']?.toString();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        onTap: (lessonId != null && lessonId.isNotEmpty && dt != null)
+            ? () => _openScheduleForLesson(dt, lessonId)
+            : null,
+        title: Text(
+          dateStr,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          'Преп.: $teacherName • ${l['groups']?['name'] ?? 'Инд.'}',
+        ),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: (completed ? AppTheme.success : AppTheme.primaryGold)
+                .withAlpha(30),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            completed ? 'Завершено' : 'Запланировано',
+            style: TextStyle(
+              fontSize: 11,
+              color: completed ? AppTheme.success : AppTheme.primaryGold,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Focus the dashboard schedule on [scheduledAt] with [lessonId] highlighted,
+  /// then close this card and route to the admin dashboard schedule tab.
+  ///
+  /// Mirrors [ClientAppUserPanel._openChat]: set the cross-screen navigation
+  /// target, pop this card (the dialog / sheet), then navigate to the host
+  /// screen. The schedule lives on canonical CRM tab 2 (Расписание) inside the
+  /// admin dashboard, so we also request that tab via [crmNavigationRequestProvider].
+  void _openScheduleForLesson(DateTime scheduledAt, String lessonId) {
+    ref
+        .read(scheduleNavigationProvider.notifier)
+        .focus(scheduledAt, lessonId);
+    // Select the schedule destination (tab 2) once the dashboard renders.
+    ref
+        .read(crmNavigationRequestProvider.notifier)
+        .navigateTo(const CrmNavigationRequest(tabIndex: 2));
+    // Close the card (dialog on desktop / bottom sheet on mobile).
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop(_dirty ? true : null);
+    }
+    // Route to the admin dashboard which hosts the schedule.
+    context.go('/admin');
   }
 
   // ── Student tab: Оплаты ──────────────────────────────────────────────────

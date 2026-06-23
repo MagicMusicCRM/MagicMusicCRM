@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -122,6 +123,17 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   final ScrollController _dayGridController = ScrollController();
   DateTime? _dayGridScrolledFor;
 
+  // ── Focus-on-lesson (Phase 5) ───────────────────────────────────────────────
+  // When the «Карточка клиента» taps a lesson, [scheduleNavigationProvider]
+  // carries the day + lesson id here. We switch to that day's day view, scroll
+  // the by-room grid to the lesson and render a transient gold pulse on it.
+  // The id is matched against the fetched day lessons by `id` (no UTC recompute).
+  String? _highlightLessonId;
+  // One-shot guard so the highlight scroll only fires once per focus request.
+  String? _highlightScrolledFor;
+  // Auto-clears the gold highlight a few seconds after it lands.
+  Timer? _highlightClearTimer;
+
   // ── Drag-to-move (P2-2 / KVA-195) ──────────────────────────────────────────
   // Key on the scrollable grid body so a drop's global offset can be converted
   // to a grid-local offset (→ target hour/minute). Each room column carries an
@@ -148,11 +160,20 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   void initState() {
     super.initState();
     _fetchAll();
+    // The client card sets the focus BEFORE this widget mounts (it sets focus,
+    // closes the card and routes here). `ref.listen` in build only catches
+    // *changes*, so pick up an already-set focus once on first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final focus = ref.read(scheduleNavigationProvider);
+      if (focus != null) _applyScheduleFocus(focus);
+    });
   }
 
   @override
   void dispose() {
     _realtimeDebounce?.cancel();
+    _highlightClearTimer?.cancel();
     _dayGridController.dispose();
     super.dispose();
   }
@@ -519,6 +540,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // ── Navigation ────────────────────────────────────────────────────────────
   void _goToToday() {
     setState(() {
+      _clearHighlight();
       _selectedDate = DateTime.now();
       _displayedMonth = DateTime(DateTime.now().year, DateTime.now().month);
     });
@@ -526,41 +548,48 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   void _prevMonth() {
-    setState(
-      () => _displayedMonth = DateTime(
+    setState(() {
+      _clearHighlight();
+      _displayedMonth = DateTime(
         _displayedMonth.year,
         _displayedMonth.month - 1,
-      ),
-    );
+      );
+    });
     _fetchAll();
   }
 
   void _nextMonth() {
-    setState(
-      () => _displayedMonth = DateTime(
+    setState(() {
+      _clearHighlight();
+      _displayedMonth = DateTime(
         _displayedMonth.year,
         _displayedMonth.month + 1,
-      ),
-    );
+      );
+    });
     _fetchAll();
   }
 
   void _prevDay() {
-    setState(
-      () => _selectedDate = _selectedDate.subtract(const Duration(days: 1)),
-    );
+    setState(() {
+      _clearHighlight();
+      _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+    });
     _fetchAvailabilityForSelectedDay();
     _fetchDayLessons(_selectedDate);
   }
 
   void _nextDay() {
-    setState(() => _selectedDate = _selectedDate.add(const Duration(days: 1)));
+    setState(() {
+      _clearHighlight();
+      _selectedDate = _selectedDate.add(const Duration(days: 1));
+    });
     _fetchAvailabilityForSelectedDay();
     _fetchDayLessons(_selectedDate);
   }
 
   void _onMonthDayTap(DateTime date) {
     setState(() {
+      _clearHighlight();
       _selectedDate = date;
       _currentView = _ScheduleView.day;
     });
@@ -759,6 +788,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
     if (result == null) return;
     setState(() {
+      _clearHighlight();
       _selectedBranchId = result.branchId;
       _dayViewMode = result.mode;
       if (_selectedTeacherId != null &&
@@ -792,6 +822,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           _fetchAll();
         }
       });
+    });
+    // Focus-on-lesson: the client card asks us to open a specific day with a
+    // lesson highlighted. Switch to that day's day view, store the highlight id,
+    // reset the scroll guards and fetch the day so the lesson exists in-memory.
+    ref.listen(scheduleNavigationProvider, (prev, next) {
+      if (next == null || !mounted) return;
+      _applyScheduleFocus(next);
     });
     // Chrome (branch selector, view toggle, availability bar, FAB) is hidden
     // only on the FIRST load (no data yet). Once loaded, it stays visible during
@@ -874,8 +911,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 Icons.arrow_back_rounded,
                 color: Theme.of(context).colorScheme.onSurface,
               ),
-              onPressed: () =>
-                  setState(() => _currentView = _ScheduleView.month),
+              onPressed: () => setState(() {
+                _clearHighlight();
+                _currentView = _ScheduleView.month;
+              }),
               tooltip: 'Назад к месяцу',
             ),
           Expanded(
@@ -945,7 +984,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 ),
                 selected: isSelected,
                 onSelected: (_) {
-                  setState(() => _selectedBranchId = id);
+                  setState(() {
+                    _clearHighlight();
+                    _selectedBranchId = id;
+                  });
                   _fetchAll();
                 },
                 backgroundColor: Theme.of(context).colorScheme.surface,
@@ -1625,6 +1667,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     const headerHeight = 50.0;
 
     _scheduleDayGridAutoScroll(dayLessons, startHour, hourHeight);
+    // After the day's lessons are present, scroll to the focused lesson (if any)
+    // — this runs after the auto-scroll so the highlight wins when both apply.
+    _scheduleHighlightScroll(dayLessons, startHour, hourHeight);
 
     // Like the v7 prototype, the calendar grid is ALWAYS rendered: rooms stay as
     // columns and the time rows render empty when the day has no lessons. We do
@@ -2043,6 +2088,98 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     });
   }
 
+  // ── Focus-on-lesson (Phase 5) ───────────────────────────────────────────────
+  // Applies a [ScheduleFocusState] from the client card: switch the calendar to
+  // the lesson's day, flip to day view, remember the highlight id and reset the
+  // one-shot guards so the highlight scroll/pulse re-fires. We then backfill the
+  // day's lessons (the month matrix is capped) and clear the navigation request
+  // so re-entering the same lesson works. The lesson is matched by id later in
+  // the day's fetched data — we never recompute UTC offsets here.
+  void _applyScheduleFocus(ScheduleFocusState focus) {
+    final date = focus.focusDate;
+    final day = DateTime(date.year, date.month, date.day);
+    _highlightClearTimer?.cancel();
+    setState(() {
+      _selectedDate = day;
+      _displayedMonth = DateTime(day.year, day.month);
+      _currentView = _ScheduleView.day;
+      _highlightLessonId = focus.highlightLessonId;
+      // Reset both one-shot guards so the grid re-scrolls for this focus.
+      _dayGridScrolledFor = null;
+      _highlightScrolledFor = null;
+    });
+    _fetchAvailabilityForSelectedDay();
+    _fetchDayLessons(day);
+    // Consume the request so a later re-tap of the same lesson re-triggers focus.
+    ref.read(scheduleNavigationProvider.notifier).clear();
+  }
+
+  // Scrolls the by-room day grid to the highlighted lesson (matched by id in the
+  // current day's lessons) using the same top-offset math as the auto-scroll.
+  // Best-effort: guards `hasClients`, clamps to maxScrollExtent, and no-ops when
+  // the lesson isn't found (the day is still focused, just without a scroll).
+  void _scheduleHighlightScroll(
+    List<Map<String, dynamic>> dayLessons,
+    int startHour,
+    double hourHeight,
+  ) {
+    final id = _highlightLessonId;
+    if (id == null) return;
+    if (_highlightScrolledFor == id) return;
+    if (_isDraggingLesson) return;
+
+    Map<String, dynamic>? target;
+    for (final l in dayLessons) {
+      if (l['id']?.toString() == id) {
+        target = l;
+        break;
+      }
+    }
+    // Lesson not in this day's data: still focused on the day, just no scroll.
+    if (target == null) {
+      _highlightScrolledFor = id;
+      _armHighlightClear();
+      return;
+    }
+    final start = _parseLessonTime(target);
+    if (start == null) {
+      _highlightScrolledFor = id;
+      _armHighlightClear();
+      return;
+    }
+    final top = ((start.hour - startHour) + start.minute / 60.0) * hourHeight;
+    final scrollTarget = top - 16; // keep a little context above the lesson
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _highlightScrolledFor = id;
+      if (_dayGridController.hasClients) {
+        final max = _dayGridController.position.maxScrollExtent;
+        _dayGridController.jumpTo(scrollTarget.clamp(0.0, max));
+      }
+      _armHighlightClear();
+    });
+  }
+
+  // Clears the gold highlight a few seconds after it lands (and the consumed
+  // navigation state is already cleared in _applyScheduleFocus).
+  void _armHighlightClear() {
+    _highlightClearTimer?.cancel();
+    _highlightClearTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted || _highlightLessonId == null) return;
+      setState(() => _highlightLessonId = null);
+    });
+  }
+
+  // Drop the focus highlight on the next day / view / branch change so it never
+  // lingers on an unrelated day. Safe to call when nothing is highlighted.
+  void _clearHighlight() {
+    if (_highlightLessonId == null) return;
+    _highlightClearTimer?.cancel();
+    _highlightLessonId = null;
+    _highlightScrolledFor = null;
+  }
+
   Widget _buildDayLessonCard(
     Map<String, dynamic> lesson,
     int startHour,
@@ -2069,24 +2206,44 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
     final clampedHeight = height.clamp(24.0, double.infinity);
 
+    // Transient focus highlight: the lesson the client card asked us to open.
+    final highlighted =
+        _highlightLessonId != null &&
+        lesson['id']?.toString() == _highlightLessonId;
+
     // The visual card body, reused for the in-grid block, the drag feedback,
-    // and the dimmed placeholder left behind while dragging (P2-2).
+    // and the dimmed placeholder left behind while dragging (P2-2). When
+    // highlighted it gains a gold all-round border + soft gold wash so the
+    // focused lesson reads at a glance.
     final cardBody = Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
       decoration: BoxDecoration(
-        color: conflicts.isEmpty
+        color: highlighted
+            ? AppColor.goldSoft
+            : conflicts.isEmpty
             ? roomColor.withAlpha(40)
             : AppColor.danger.withAlpha(32),
         borderRadius: BorderRadius.circular(6),
-        border: Border(
-          left: BorderSide(
-            color: conflicts.isEmpty ? roomColor : AppColor.danger,
-            width: 3,
-          ),
-          right: conflicts.isEmpty
-              ? BorderSide.none
-              : const BorderSide(color: AppColor.danger, width: 1),
-        ),
+        border: highlighted
+            ? Border.all(color: AppColor.gold, width: 2)
+            : Border(
+                left: BorderSide(
+                  color: conflicts.isEmpty ? roomColor : AppColor.danger,
+                  width: 3,
+                ),
+                right: conflicts.isEmpty
+                    ? BorderSide.none
+                    : const BorderSide(color: AppColor.danger, width: 1),
+              ),
+        boxShadow: highlighted
+            ? [
+                BoxShadow(
+                  color: AppColor.gold.withAlpha(90),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
