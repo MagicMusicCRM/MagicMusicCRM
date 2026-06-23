@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/utils/ru_phone.dart';
+import 'package:magic_music_crm/core/widgets/app_logo.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
@@ -262,49 +263,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         children: [
           Column(
             children: [
-              Container(
-                width: 62,
-                height: 62,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF2A2418), Color(0xFF1D1A12)],
-                  ),
-                  border: Border.all(color: AppColor.goldLine),
-                ),
-                child: const Icon(
-                  Icons.music_note_rounded,
-                  color: AppColor.gold,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(height: AppSpace.md),
-              RichText(
-                text: const TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'Magic',
-                      style: TextStyle(
-                        color: AppColor.text,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 21,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    TextSpan(
-                      text: 'Music',
-                      style: TextStyle(
-                        color: AppColor.gold,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 21,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              const AppLogo(size: 92),
               const SizedBox(height: AppSpace.xs),
               const Text(
                 'Заполните профиль',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/design_tokens.dart';
 import '../../theme/telegram_colors.dart';
+import '../app_logo.dart';
 import 'magic_menu.dart';
 
 /// One destination in a [V7NavShell].
@@ -91,20 +92,7 @@ class V7NavShell extends StatelessWidget {
   }
 
   Widget _brand() {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF2A2418), Color(0xFF1D1A12)],
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.icon),
-        border: Border.all(color: AppColor.goldLine),
-      ),
-      child: const Icon(Icons.music_note_rounded, size: 20, color: AppColor.gold),
-    );
+    return const AppLogo(size: 36);
   }
 
   // ── Phone bottom bar ─────────────────────────────────────────────────────────
