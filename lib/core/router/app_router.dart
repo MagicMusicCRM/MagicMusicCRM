@@ -341,54 +341,17 @@ class _AppGateLoadingScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Brand block (v7 — copied 1:1 from the login screen)
+                    // Brand block — the real school logo (assets/icon.png).
                     Column(
                       children: [
-                        Container(
-                          width: 62,
-                          height: 62,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(18),
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF2A2418), Color(0xFF1D1A12)],
-                            ),
-                            border: Border.all(color: AppColor.goldLine),
-                          ),
-                          child: const Icon(
-                            Icons.music_note_rounded,
-                            color: AppColor.gold,
-                            size: 30,
-                          ),
+                        Image.asset(
+                          'assets/icon.png',
+                          width: 140,
+                          height: 140,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.medium,
                         ),
-                        const SizedBox(height: AppSpace.md),
-                        RichText(
-                          textAlign: TextAlign.center,
-                          text: const TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'Magic',
-                                style: TextStyle(
-                                  color: AppColor.text,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 21,
-                                  letterSpacing: -0.4,
-                                ),
-                              ),
-                              TextSpan(
-                                text: 'Music',
-                                style: TextStyle(
-                                  color: AppColor.gold,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 21,
-                                  letterSpacing: -0.4,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: AppSpace.xs),
+                        const SizedBox(height: AppSpace.lg),
                         Text(
                           isGateError
                               ? 'Не удалось проверить доступ'
