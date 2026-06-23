@@ -49,30 +49,52 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     super.dispose();
   }
 
+  bool _saving = false;
+
   Future<void> _save() async {
     final name = _nameController.text.trim();
-    if (name.isEmpty || _selectedBranch == null) return;
-
-    final capacity = int.tryParse(_capacityController.text.trim()) ?? 1;
-    final crm = ref.read(magicCrmServiceProvider);
-
-    if (widget.room == null) {
-      await crm.createRoom(
-        name: name,
-        branchId: _selectedBranch,
-        capacity: capacity,
+    if (name.isEmpty || _selectedBranch == null) {
+      // Was a silent return → "button does nothing"; give explicit feedback.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Укажите название и филиал.')),
       );
-    } else {
-      final roomId = widget.room!['id']?.toString();
-      if (roomId == null || roomId.isEmpty) return;
-      await crm.updateRoom(
-        roomId,
-        name: name,
-        branchId: _selectedBranch,
-        capacity: capacity,
-      );
+      return;
     }
-    if (mounted) Navigator.pop(context, true);
+    if (_saving) return; // guard against double-submit
+    setState(() => _saving = true);
+
+    try {
+      final capacity = int.tryParse(_capacityController.text.trim()) ?? 1;
+      final crm = ref.read(magicCrmServiceProvider);
+
+      if (widget.room == null) {
+        await crm.createRoom(
+          name: name,
+          branchId: _selectedBranch,
+          capacity: capacity,
+        );
+      } else {
+        final roomId = widget.room!['id']?.toString();
+        if (roomId == null || roomId.isEmpty) {
+          if (mounted) setState(() => _saving = false);
+          return;
+        }
+        await crm.updateRoom(
+          roomId,
+          name: name,
+          branchId: _selectedBranch,
+          capacity: capacity,
+        );
+      }
+      if (mounted) Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось сохранить аудиторию.')),
+        );
+      }
+    }
   }
 
   Future<void> _delete() async {
@@ -102,8 +124,19 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     if (confirm == true) {
       final roomId = widget.room!['id']?.toString();
       if (roomId == null || roomId.isEmpty) return;
-      await ref.read(magicCrmServiceProvider).deleteRoom(roomId);
-      if (mounted) Navigator.pop(context, true);
+      if (_saving) return;
+      setState(() => _saving = true);
+      try {
+        await ref.read(magicCrmServiceProvider).deleteRoom(roomId);
+        if (mounted) Navigator.pop(context, true);
+      } catch (_) {
+        if (mounted) {
+          setState(() => _saving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Не удалось удалить аудиторию.')),
+          );
+        }
+      }
     }
   }
 
@@ -151,17 +184,26 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       actions: [
         if (widget.room != null)
           TextButton(
-            onPressed: _delete,
+            onPressed: _saving ? null : _delete,
             child: const Text(
               'Удалить',
               style: TextStyle(color: AppTheme.danger),
             ),
           ),
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _saving ? null : () => Navigator.pop(context),
           child: const Text('Отмена'),
         ),
-        FilledButton(onPressed: _save, child: const Text('Сохранить')),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Сохранить'),
+        ),
       ],
     );
   }

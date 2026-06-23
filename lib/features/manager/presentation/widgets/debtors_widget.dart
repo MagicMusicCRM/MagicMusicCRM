@@ -17,6 +17,7 @@ class DebtorsWidget extends ConsumerStatefulWidget {
 class _DebtorsWidgetState extends ConsumerState<DebtorsWidget> {
   List<Map<String, dynamic>> _debtors = [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -34,11 +35,51 @@ class _DebtorsWidgetState extends ConsumerState<DebtorsWidget> {
       if (!mounted) return;
       setState(() {
         _debtors = res;
+        _error = null;
         _loading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      // Don't collapse an error into the empty state — that falsely shows
+      // "no debtors" / ₽0 totals (KVA). Surface an explicit error + retry.
+      if (mounted) {
+        setState(() {
+          _error = 'Не удалось загрузить должников';
+          _loading = false;
+        });
+      }
     }
+  }
+
+  Widget _buildError() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.4,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, color: AppTheme.danger, size: 40),
+                const SizedBox(height: 12),
+                Text(
+                  _error ?? 'Ошибка загрузки',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _loadDebtors,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Повторить'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _showDebtorDetails(Map<String, dynamic> debtor) async {
@@ -131,6 +172,8 @@ class _DebtorsWidgetState extends ConsumerState<DebtorsWidget> {
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: ListSkeleton(count: 7),
                   )
+                : _error != null
+                ? _buildError()
                 : RefreshIndicator(
                     onRefresh: _loadDebtors,
                     color: AppTheme.danger,
