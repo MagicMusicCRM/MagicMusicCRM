@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 
 /// Ученики board widget — per-branch STATUS columns (draggable kanban).
@@ -15,7 +15,7 @@ import 'package:magic_music_crm/features/manager/presentation/providers/students
 /// [DragTarget], each card a [LongPressDraggable], the board auto-scrolls when a
 /// card is dragged near a horizontal edge, and a drop onto a different status
 /// optimistically moves the card then PATCHes the student's status. Tapping a
-/// card opens the full student screen (`/student/:id`).
+/// card opens the unified «Карточка клиента» dialog ([showClientCard]).
 class StudentsBoardWidget extends ConsumerStatefulWidget {
   const StudentsBoardWidget({super.key});
 
@@ -217,9 +217,16 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     );
   }
 
-  void _openStudent(String studentId) {
+  Future<void> _openStudent(Map<String, dynamic> student) async {
+    final studentId = student['id']?.toString() ?? '';
     if (studentId.isEmpty) return;
-    context.push('/student/$studentId');
+    final changed = await showClientCard(
+      context,
+      entityType: 'student',
+      entityId: studentId,
+      seed: student,
+    );
+    if (changed == true) _refreshBoard();
   }
 
   /// Re-bucket the board's columns honoring any in-flight optimistic moves so
@@ -557,7 +564,7 @@ class _StatusColumnData {
 class _StatusColumn extends StatelessWidget {
   final _StatusColumnData column;
   final Set<String> pendingStudentIds;
-  final ValueChanged<String> onTap;
+  final ValueChanged<Map<String, dynamic>> onTap;
   final Future<void> Function(Map<String, dynamic>, String) onMove;
   final ValueChanged<Offset> onDragUpdate;
   final VoidCallback onDragEnd;
@@ -697,7 +704,7 @@ class _StatusColumn extends StatelessWidget {
                           return _StudentCard(
                             student: student,
                             isPending: pendingStudentIds.contains(id),
-                            onTap: () => onTap(id),
+                            onTap: () => onTap(student),
                             onDragUpdate: onDragUpdate,
                             onDragEnd: onDragEnd,
                           );

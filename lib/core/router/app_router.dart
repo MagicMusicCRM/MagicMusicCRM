@@ -18,7 +18,6 @@ import 'package:magic_music_crm/features/client/presentation/screens/client_dash
 import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
-import 'package:magic_music_crm/features/admin/presentation/screens/student_detail_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
@@ -257,10 +256,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/student/:id',
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return StudentDetailScreen(studentId: id);
-        },
+        builder: (context, state) =>
+            _StudentDeepLinkScreen(studentId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/admin/profiles/:id',
@@ -268,15 +265,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             ProfileDetailScreen(profileId: state.pathParameters['id']!),
       ),
       // ── Deep links (KVA-196) ────────────────────────────────────────────────
-      // Open a lead/student/lesson directly by id. Students reuse the existing
-      // rich detail screen; leads/lessons present their existing dialogs (the
-      // KVA-175 pattern) over the active role dashboard via a thin host screen.
+      // Open a lead/student/lesson directly by id. Each presents the unified
+      // «Карточка клиента» (students/leads) or the existing dialog (lessons,
+      // the KVA-175 pattern) over the active role dashboard via a thin host
+      // screen; a cold deep link lands on the role dashboard once closed.
       GoRoute(
         path: '/students/:id',
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return StudentDetailScreen(studentId: id);
-        },
+        builder: (context, state) =>
+            _StudentDeepLinkScreen(studentId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/leads/:id',
@@ -476,6 +472,49 @@ class _LeadDeepLinkScreenState extends ConsumerState<_LeadDeepLinkScreen> {
       context,
       entityType: 'lead',
       entityId: widget.leadId,
+    );
+
+    if (!mounted) return;
+    context.go(_deepLinkHomeRoute(ref));
+  }
+
+  @override
+  Widget build(BuildContext context) => const _DeepLinkScaffold();
+}
+
+/// Lightweight host that presents the unified [showClientCard] for a student
+/// opened by id (deep link). The card self-fetches its full data from the
+/// minimal `{'id': …}` stub, mirroring the lead deep-link host. Reached both
+/// from raw `/student/:id` & `/students/:id` URLs and from in-app
+/// `context.push('/student/:id')` callers (tasks, finance/debtors, etc.).
+class _StudentDeepLinkScreen extends ConsumerStatefulWidget {
+  const _StudentDeepLinkScreen({required this.studentId});
+
+  final String studentId;
+
+  @override
+  ConsumerState<_StudentDeepLinkScreen> createState() =>
+      _StudentDeepLinkScreenState();
+}
+
+class _StudentDeepLinkScreenState
+    extends ConsumerState<_StudentDeepLinkScreen> {
+  bool _opened = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+  }
+
+  Future<void> _open() async {
+    if (_opened || !mounted) return;
+    _opened = true;
+
+    await showClientCard(
+      context,
+      entityType: 'student',
+      entityId: widget.studentId,
     );
 
     if (!mounted) return;
