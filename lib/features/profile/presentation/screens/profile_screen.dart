@@ -9,7 +9,6 @@ import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/avatar_cropper_dialog.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
-import 'package:magic_music_crm/core/utils/ru_phone.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
@@ -29,7 +28,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _dobController = TextEditingController();
 
   String _canonicalPhone = '';
-  bool _isInternational = false;
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -99,7 +97,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _firstNameController.text = _ogFirstName;
       _lastNameController.text = _ogLastName;
       _canonicalPhone = _ogPhone;
-      _isInternational = _ogPhone.isNotEmpty && !isCanonicalRu(_ogPhone);
       _dobController.text = _ogDob;
     } catch (e) {
       if (mounted) {
@@ -398,8 +395,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       vertical: 4,
                     ),
                     child: RuPhoneField(
-                      key: ValueKey('phone:$_isInternational'),
-                      international: _isInternational,
                       initialCanonical: _canonicalPhone,
                       labelText: 'Номер телефона',
                       decoration: InputDecoration(
@@ -421,21 +416,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         _checkForChanges();
                       },
                     ),
-                  ),
-                  CheckboxListTile(
-                    value: _isInternational,
-                    onChanged: (v) => setState(() {
-                      _isInternational = v ?? false;
-                      _canonicalPhone = '';
-                      _checkForChanges();
-                    }),
-                    title: Text(
-                      'Международный номер',
-                      style: TextStyle(color: secondaryTextColor, fontSize: 14),
-                    ),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    dense: true,
                   ),
                   Divider(
                     height: 1,

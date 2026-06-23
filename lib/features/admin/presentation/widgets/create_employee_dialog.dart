@@ -18,7 +18,6 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   String _canonicalPhone = '';
-  bool _isInternational = false;
   String _selectedRole = 'admin';
   bool _saving = false;
 
@@ -204,25 +203,9 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: RuPhoneField(
-                  key: ValueKey('phone:$_isInternational'),
-                  international: _isInternational,
                   decoration: _phoneDecoration(),
                   onCanonicalChanged: (c) => _canonicalPhone = c,
                 ),
-              ),
-              CheckboxListTile(
-                value: _isInternational,
-                onChanged: (v) => setState(() {
-                  _isInternational = v ?? false;
-                  _canonicalPhone = '';
-                }),
-                title: const Text(
-                  'Международный номер',
-                  style: TextStyle(color: Colors.white),
-                ),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                dense: true,
               ),
               _field(
                 controller: _emailController,

@@ -50,35 +50,56 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
     });
     try {
       final crm = ref.read(magicCrmServiceProvider);
+      // Изолируем сбои отдельных секций: недоступность одной (напр. задач)
+      // не должна ронять всю карточку. Списки → [], объекты → null.
       final results = await Future.wait<dynamic>([
         crm.getStudent(widget.studentId),
-        crm.listPayments(studentId: widget.studentId, limit: 100),
-        crm.listLessons(studentId: widget.studentId, limit: 100),
-        crm.listTasks(studentId: widget.studentId, limit: 100),
-        crm.listStudentGroups(widget.studentId, limit: 100),
-        crm.listStudentBalances(studentId: widget.studentId, limit: 1),
-        crm.listComments(
-          entityType: 'student',
-          entityId: widget.studentId,
-          limit: 100,
-        ),
-        crm.listExpectedPayments(studentId: widget.studentId, limit: 100),
-        crm.getFamilyForEntity(
-          entityType: 'student',
-          entityId: widget.studentId,
-        ),
-        crm.listComments(
-          entityType: 'student',
-          entityId: widget.studentId,
-          kind: 'admin_comment',
-          limit: 200,
-        ),
-        crm.listComments(
-          entityType: 'student',
-          entityId: widget.studentId,
-          kind: 'teacher_note',
-          limit: 200,
-        ),
+        crm
+            .listPayments(studentId: widget.studentId, limit: 100)
+            .catchError((_) => <Map<String, dynamic>>[]),
+        crm
+            .listLessons(studentId: widget.studentId, limit: 100)
+            .catchError((_) => <Map<String, dynamic>>[]),
+        crm
+            .listTasks(studentId: widget.studentId, limit: 100)
+            .catchError((_) => <Map<String, dynamic>>[]),
+        crm
+            .listStudentGroups(widget.studentId, limit: 100)
+            .catchError((_) => <Map<String, dynamic>>[]),
+        crm
+            .listStudentBalances(studentId: widget.studentId, limit: 1)
+            .catchError((_) => <Map<String, dynamic>>[]),
+        crm
+            .listComments(
+              entityType: 'student',
+              entityId: widget.studentId,
+              limit: 100,
+            )
+            .catchError((_) => <Map<String, dynamic>>[]),
+        crm
+            .listExpectedPayments(studentId: widget.studentId, limit: 100)
+            .catchError((_) => <Map<String, dynamic>>[]),
+        (crm.getFamilyForEntity(
+                  entityType: 'student',
+                  entityId: widget.studentId,
+                ) as Future<Map<String, dynamic>?>)
+            .catchError((_) => null),
+        crm
+            .listComments(
+              entityType: 'student',
+              entityId: widget.studentId,
+              kind: 'admin_comment',
+              limit: 200,
+            )
+            .catchError((_) => <Map<String, dynamic>>[]),
+        crm
+            .listComments(
+              entityType: 'student',
+              entityId: widget.studentId,
+              kind: 'teacher_note',
+              limit: 200,
+            )
+            .catchError((_) => <Map<String, dynamic>>[]),
       ]);
 
       final studentRes = results[0] as Map<String, dynamic>;
@@ -89,7 +110,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
       final balanceRows = results[5] as List<Map<String, dynamic>>;
       final commentsRes = results[6] as List<Map<String, dynamic>>;
       final expectedPaymentsRes = results[7] as List<Map<String, dynamic>>;
-      final familyRes = results[8] as Map<String, dynamic>;
+      final familyRes = results[8] as Map<String, dynamic>?;
       final adminCommentsRes = results[9] as List<Map<String, dynamic>>;
       final teacherNotesRes = results[10] as List<Map<String, dynamic>>;
 

@@ -2500,7 +2500,6 @@ class _LeadDialog extends StatefulWidget {
 class _LeadDialogState extends State<_LeadDialog> {
   final _nameCtrl = TextEditingController();
   String _canonicalPhone = '';
-  bool _isInternational = false;
   final _sourceCtrl = TextEditingController();
 
   @override
@@ -2524,20 +2523,7 @@ class _LeadDialogState extends State<_LeadDialog> {
           ),
           const SizedBox(height: 10),
           RuPhoneField(
-            key: ValueKey('phone:$_isInternational'),
-            international: _isInternational,
             onCanonicalChanged: (c) => _canonicalPhone = c,
-          ),
-          CheckboxListTile(
-            value: _isInternational,
-            onChanged: (v) => setState(() {
-              _isInternational = v ?? false;
-              _canonicalPhone = '';
-            }),
-            title: const Text('Международный номер'),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-            dense: true,
           ),
           const SizedBox(height: 10),
           TextField(

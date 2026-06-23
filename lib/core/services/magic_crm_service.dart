@@ -2130,6 +2130,15 @@ class MagicCrmService {
   }
 
   Map<String, dynamic> _legacyTeacher(Map<String, dynamic> item) {
+    final customData = item['customData'] is Map<String, dynamic>
+        ? item['customData'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    // Преподаватели без профиля хранят имя только в custom_data — берём оттуда,
+    // чтобы карточка не показывалась пустой (как в _legacyStudent).
+    final firstName =
+        item['firstName'] ?? customData['firstName'] ?? customData['first_name'];
+    final lastName =
+        item['lastName'] ?? customData['lastName'] ?? customData['last_name'];
     return {
       'id': item['id'],
       'status': item['status'],
@@ -2138,19 +2147,19 @@ class MagicCrmService {
       'profile_user_id': item['profileUserId'],
       'app_role': item['appRole'],
       'is_app_account': item['isAppAccount'],
-      'first_name': item['firstName'],
-      'last_name': item['lastName'],
+      'first_name': firstName,
+      'last_name': lastName,
       'email': item['email'],
       'phone': item['phone'],
-      'custom_data': item['customData'] ?? const <String, dynamic>{},
+      'custom_data': customData,
       'branches': item['branches'] ?? const [],
       'students_count': item['studentsCount'] ?? 0,
       'lessons_count': item['lessonsCount'] ?? 0,
       'rating': item['rating'],
       'created_at': item['createdAt'],
       'profiles': {
-        'first_name': item['firstName'],
-        'last_name': item['lastName'],
+        'first_name': firstName,
+        'last_name': lastName,
         'phone': item['phone'],
       },
     };

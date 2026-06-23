@@ -1017,10 +1017,18 @@ class _TaskCard extends StatelessWidget {
   }
 
   VoidCallback? _entityTap(BuildContext context, Map<String, dynamic> task) {
-    if (task['entity_type'] == 'student' && task['entity_id'] != null) {
-      return () => context.push('/student/${task['entity_id']}');
+    final entityId = task['entity_id'];
+    if (entityId == null) return null;
+    switch (task['entity_type']) {
+      case 'student':
+        return () => context.push('/student/$entityId');
+      case 'lead':
+        return () => context.push('/leads/$entityId');
+      case 'lesson':
+        return () => context.push('/lessons/$entityId');
+      default:
+        return null;
     }
-    return null;
   }
 }
 

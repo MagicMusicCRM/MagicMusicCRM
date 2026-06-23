@@ -54,7 +54,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   String _canonicalPhone = '';
-  bool _isInternational = false;
   String? _phoneError;
   bool _isSaving = false;
 
@@ -69,11 +68,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     super.dispose();
   }
 
-  /// Phone is valid when a canonical RU number is present, or — in
-  /// international mode — any non-empty value was entered.
-  bool get _phoneIsValid => _isInternational
-      ? _canonicalPhone.trim().isNotEmpty
-      : isCanonicalRu(_canonicalPhone);
+  /// Phone is valid when a canonical RU number is present.
+  bool get _phoneIsValid => isCanonicalRu(_canonicalPhone);
 
   Future<void> _submit() async {
     final formValid = _formKey.currentState!.validate();
@@ -359,8 +355,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
               const SizedBox(height: AppSpace.sm),
               RuPhoneField(
-                key: ValueKey('phone:$_isInternational'),
-                international: _isInternational,
                 decoration: _v7PhoneDecoration(),
                 onCanonicalChanged: (c) {
                   _canonicalPhone = c;
@@ -379,21 +373,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   ),
                 ),
               ],
-              CheckboxListTile(
-                value: _isInternational,
-                onChanged: (v) => setState(() {
-                  _isInternational = v ?? false;
-                  _canonicalPhone = '';
-                }),
-                title: const Text(
-                  'Международный номер',
-                  style: TextStyle(color: AppColor.text2, fontSize: 13),
-                ),
-                activeColor: AppColor.gold,
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-              ),
             ],
           ),
           const SizedBox(height: AppSpace.xxl),

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/utils/ru_phone.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 
 class StaffDetailDialog extends ConsumerStatefulWidget {
@@ -31,7 +30,6 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   late TextEditingController _positionController;
   late TextEditingController _birthdayController;
   late String _canonicalPhone;
-  late bool _isInternational;
   late String _role;
   late String _status;
   bool _saving = false;
@@ -61,11 +59,8 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     _lastNameController = TextEditingController(
       text: _staff['last_name']?.toString() ?? profile['last_name'] ?? '',
     );
-    final existingPhone =
+    _canonicalPhone =
         _staff['phone']?.toString() ?? profile['phone']?.toString() ?? '';
-    _canonicalPhone = existingPhone;
-    _isInternational =
-        existingPhone.isNotEmpty && !isCanonicalRu(existingPhone);
     _emailController = TextEditingController(
       text: _staff['email']?.toString() ?? '',
     );
@@ -235,22 +230,9 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                 ),
                 const SizedBox(height: 12),
                 RuPhoneField(
-                  key: ValueKey('phone:$_isInternational'),
-                  international: _isInternational,
                   initialCanonical: _canonicalPhone,
                   onCanonicalChanged: (c) =>
                       setState(() => _canonicalPhone = c),
-                ),
-                CheckboxListTile(
-                  value: _isInternational,
-                  onChanged: (v) => setState(() {
-                    _isInternational = v ?? false;
-                    _canonicalPhone = '';
-                  }),
-                  title: const Text('Международный номер'),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(

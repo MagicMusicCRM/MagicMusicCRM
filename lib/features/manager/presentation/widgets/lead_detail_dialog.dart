@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
-import 'package:magic_music_crm/core/utils/ru_phone.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -32,10 +31,6 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
   bool _saving = false;
   bool _converting = false;
   bool _loadingCard = true;
-  // True when the stored phone is not a canonical +7XXXXXXXXXX number so that
-  // foreign numbers open correctly in the plain text field (not mangled by the
-  // RU mask).
-  late bool _isInternational;
   int _commentsRefreshKey = 0;
   Map<String, dynamic>? _leadCard;
   List<Map<String, dynamic>> _duplicateCandidates = [];
@@ -101,12 +96,6 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
   void initState() {
     super.initState();
     _leadData = Map<String, dynamic>.from(widget.lead);
-    final initialPhone = _leadData['phone']?.toString();
-    // Auto-detect international only for a non-empty number that isn't canonical RU;
-    // an empty phone stays in the default RU/masked mode (don't pre-check the box).
-    _isInternational = initialPhone != null &&
-        initialPhone.isNotEmpty &&
-        !isCanonicalRu(initialPhone);
     _notesCtrl = TextEditingController(
       text: _leadData['notes']?.toString() ?? '',
     );
@@ -664,8 +653,6 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: RuPhoneField(
-              key: ValueKey('phone:$_isInternational'),
-              international: _isInternational,
               initialCanonical: _leadData['phone']?.toString(),
               onCanonicalChanged: (c) {
                 setState(() {
@@ -674,21 +661,6 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
                 });
               },
             ),
-          ),
-          CheckboxListTile(
-            value: _isInternational,
-            activeColor: AppColor.gold,
-            onChanged: (v) => setState(() {
-              // Keep the current number across a mode toggle — the field's
-              // ValueKey rebuild reseeds it from _leadData['phone'], so an
-              // accidental toggle can't wipe an existing phone.
-              _isInternational = v ?? false;
-              _edited = true;
-            }),
-            title: const Text('Международный номер'),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-            dense: true,
           ),
           const SizedBox(height: AppSpace.sm),
           _buildTextField(

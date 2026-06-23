@@ -21,9 +21,30 @@ class _FinancialDashboardWidgetState
   List<Map<String, dynamic>> _teacherEfficiency = [];
   Map<String, int> _roomLoad = {};
 
+  /// Selected reporting window. Defaults to the last 6 months → «сейчас»;
+  /// the calendar lets the manager pick an arbitrary range over the archive.
+  late DateTimeRange _range;
+
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _range = DateTimeRange(
+      start: DateTime(now.year, now.month - 5, 1),
+      end: now,
+    );
+    _loadData();
+  }
+
+  Future<void> _pickRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2018),
+      lastDate: DateTime.now(),
+      initialDateRange: _range,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _range = picked);
     _loadData();
   }
 
@@ -33,13 +54,14 @@ class _FinancialDashboardWidgetState
       _loadError = null;
     });
     try {
-      final now = DateTime.now();
-      final sixMonthsAgo = DateTime(now.year, now.month - 5, 1);
       final report = await ref
           .read(magicCrmServiceProvider)
           .getFinanceReport(
-            from: sixMonthsAgo.toUtc().toIso8601String(),
-            to: now.add(const Duration(days: 1)).toUtc().toIso8601String(),
+            from: _range.start.toUtc().toIso8601String(),
+            to: _range.end
+                .add(const Duration(days: 1))
+                .toUtc()
+                .toIso8601String(),
           );
       final chartData = (report['monthly'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
@@ -142,6 +164,8 @@ class _FinancialDashboardWidgetState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _buildRangeBar(),
+                  const SizedBox(height: 12),
                   _buildRevenueExpensesChart(),
                   const SizedBox(height: 16),
                   if (wide)
@@ -167,6 +191,30 @@ class _FinancialDashboardWidgetState
     );
   }
 
+  Widget _buildRangeBar() {
+    final fmt = DateFormat('d MMM yyyy', 'ru');
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            '${fmt.format(_range.start)} — ${fmt.format(_range.end)}',
+            style: TextStyle(
+              color: colors.onSurfaceVariant,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: _pickRange,
+          icon: const Icon(Icons.calendar_today_rounded, size: 18),
+          label: const Text('Период'),
+        ),
+      ],
+    );
+  }
+
   Widget _buildRevenueExpensesChart() {
     final maxY = _chartData.isEmpty
         ? 1.0
@@ -181,7 +229,7 @@ class _FinancialDashboardWidgetState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Прибыльность (6 мес)',
+              'Прибыльность',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),

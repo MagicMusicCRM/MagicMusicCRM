@@ -52,6 +52,10 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   bool _addingPayment = false;
   String _period = 'month';
 
+  /// When set, overrides [_period] with an explicit user-picked window;
+  /// `to` is then prokinut into every analytics call (otherwise «сейчас»).
+  DateTimeRange? _customRange;
+
   // ── Expenses (v7 «Расход» flow, P5-6) ──────────────────────────────────────
   List<Map<String, dynamic>> _expenses = [];
   bool _expensesLoading = true;
@@ -71,6 +75,8 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   }
 
   DateTime _periodStart() {
+    final range = _customRange;
+    if (range != null) return range.start;
     final now = DateTime.now();
     switch (_period) {
       case 'week':
@@ -80,6 +86,21 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
       default:
         return DateTime(now.year, now.month, 1);
     }
+  }
+
+  DateTime _periodEnd() => _customRange?.end ?? DateTime.now();
+
+  Future<void> _pickRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2018),
+      lastDate: DateTime.now(),
+      initialDateRange: _customRange,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _customRange = picked);
+    _loadPayments();
+    _loadExpenses();
   }
 
   Future<void> _loadPayments() async {
@@ -95,7 +116,11 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
       // understates revenue once a period exceeds the page size.
       final result = await ref
           .read(magicCrmServiceProvider)
-          .listPaymentsWithTotal(from: from.toIso8601String(), limit: 100);
+          .listPaymentsWithTotal(
+            from: from.toIso8601String(),
+            to: _periodEnd().toIso8601String(),
+            limit: 100,
+          );
 
       setState(() {
         _payments = result.items;
@@ -154,7 +179,11 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     try {
       final res = await ref
           .read(magicCrmServiceProvider)
-          .listExpenses(from: _periodStart().toIso8601String(), limit: 50);
+          .listExpenses(
+            from: _periodStart().toIso8601String(),
+            to: _periodEnd().toIso8601String(),
+            limit: 50,
+          );
       final items = (res['items'] as List? ?? const [])
           .whereType<Map>()
           .map((e) => e.cast<String, dynamic>())
@@ -258,7 +287,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
       final url = '$baseUrl' 'analytics/finance/monthly.$ext';
 
       final from = _periodStart().toIso8601String();
-      final to = DateTime.now().toIso8601String();
+      final to = _periodEnd().toIso8601String();
 
       final dir = await _exportDirectory();
       final stamp = DateFormat('yyyyMM').format(_periodStart());
@@ -381,6 +410,15 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
+                      if (_customRange != null)
+                        Text(
+                          '${DateFormat('d MMM yyyy', 'ru').format(_customRange!.start)} — '
+                          '${DateFormat('d MMM yyyy', 'ru').format(_customRange!.end)}',
+                          style: TextStyle(
+                            color: colors.onSurfaceVariant,
+                            fontSize: 11,
+                          ),
+                        ),
                       if (_totalCount > _payments.length)
                         Text(
                           'Всего платежей: $_totalCount · '
@@ -393,6 +431,31 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                     ],
                   ),
                 ),
+                IconButton(
+                  tooltip: 'Выбрать диапазон',
+                  onPressed: _pickRange,
+                  icon: Icon(
+                    Icons.calendar_today_rounded,
+                    size: 20,
+                    color: _customRange != null
+                        ? AppTheme.success
+                        : colors.onSurfaceVariant,
+                  ),
+                ),
+                if (_customRange != null)
+                  IconButton(
+                    tooltip: 'Сбросить диапазон',
+                    onPressed: () {
+                      setState(() => _customRange = null);
+                      _loadPayments();
+                      _loadExpenses();
+                    },
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 20,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
                 SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'week', label: Text('Нед.')),
@@ -401,7 +464,10 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                   ],
                   selected: {_period},
                   onSelectionChanged: (s) {
-                    setState(() => _period = s.first);
+                    setState(() {
+                      _period = s.first;
+                      _customRange = null;
+                    });
                     _loadPayments();
                     _loadExpenses();
                   },
