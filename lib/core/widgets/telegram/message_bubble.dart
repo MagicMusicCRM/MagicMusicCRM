@@ -86,9 +86,9 @@ class MessageBubble extends StatelessWidget {
     // Highlight color (brand gold with low alpha)
     final highlightColor = AppColor.gold.withAlpha(isDark ? 80 : 100);
 
-    final outgoingTextColor = isDark
-        ? Colors.white
-        : TelegramColors.lightTextPrimary;
+    // Outgoing bubbles are always brand gold, so text/time/ticks use the dark
+    // on-gold token for WCAG-AA contrast (KVA-228) instead of low-contrast white.
+    final outgoingTextColor = AppColor.onGold;
     final incomingTextColor = isDark
         ? Colors.white
         : TelegramColors.lightTextPrimary;
@@ -132,14 +132,9 @@ class MessageBubble extends StatelessWidget {
                 bottomLeft: Radius.circular(isMe ? AppRadius.card : 4),
                 bottomRight: Radius.circular(isMe ? 4 : AppRadius.card),
               ),
-              boxShadow: isHighlighted
-                  ? [
-                      BoxShadow(
-                        color: AppColor.gold.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        spreadRadius: 2,
-                      ),
-                    ]
+              // Flat Magic: highlight via a flat gold border, not a glow shadow.
+              border: isHighlighted
+                  ? Border.all(color: AppColor.gold, width: 1.5)
                   : null,
             ),
             child: IntrinsicWidth(
