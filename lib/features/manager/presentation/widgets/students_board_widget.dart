@@ -1,15 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 
-/// Ученики board widget — per-branch discipline columns (read-only kanban).
+/// Ученики board widget — per-branch STATUS columns (draggable kanban).
 ///
-/// Mirrors the visual structure of [LeadsWidget] (column header with count
-/// badge, card layout, horizontal scroll, [KanbanSkeleton] loading) but is
-/// read-only (no drag-and-drop in v1).
+/// Mirrors the Leads board ([LeadsWidget]): each status column is a
+/// [DragTarget], each card a [LongPressDraggable], the board auto-scrolls when a
+/// card is dragged near a horizontal edge, and a drop onto a different status
+/// optimistically moves the card then PATCHes the student's status. Tapping a
+/// card opens the full student screen (`/student/:id`).
 class StudentsBoardWidget extends ConsumerStatefulWidget {
   const StudentsBoardWidget({super.key});
 
@@ -25,6 +31,24 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   bool _branchesLoaded = false;
   String? _branchLoadError;
 
+  // ── Optimistic move state (mirrors leads_widget) ──────────────────────────
+  /// studentId → status currently shown while a move is in flight / settled.
+  final Map<String, String> _optimisticStatuses = {};
+
+  /// studentIds with an update in flight (card shows a spinner, drag disabled).
+  final Set<String> _pendingStudentIds = {};
+
+  // ── Auto-scroll while dragging near the board edges (mirrors leads_widget) ──
+  Timer? _autoScrollTimer;
+  int _autoScrollDir = 0;
+  double _autoScrollSpeed = 0;
+  Offset? _dragStartPosition;
+  bool _dragMovedEnough = false;
+  static const double _autoScrollMinSpeed = 8.0;
+  static const double _autoScrollMaxSpeed = 24.0;
+  static const double _dragStartThreshold = 12.0;
+  static const double _autoScrollEdge = 110.0;
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +57,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   @override
   void dispose() {
+    _autoScrollTimer?.cancel();
     _boardScrollController.dispose();
     super.dispose();
   }
@@ -65,112 +90,184 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     }
   }
 
-  void _openStudentInfo(BuildContext context, Map<String, dynamic> student) {
-    final firstName = student['first_name']?.toString() ?? '';
-    final lastName = student['last_name']?.toString() ?? '';
-    final displayName = '$firstName $lastName'.trim();
-    final phone = student['phone']?.toString() ?? '';
-    final branchName = student['branch_name']?.toString() ?? '';
-    final customData = student['custom_data'];
-    final discipline = customData is Map
-        ? customData['discipline']?.toString() ?? ''
-        : '';
-    final status = student['status']?.toString() ?? '';
-    final openTasks = _intValue(student['open_tasks_count']);
-    final lessonsCount = _intValue(student['lessons_count']);
-    final groupsCount = _intValue(student['groups_count']);
+  // ── Auto-scroll handlers (mirrors leads_widget) ───────────────────────────
 
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(displayName.isEmpty ? 'Ученик' : displayName),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (phone.isNotEmpty) _infoRow(Icons.phone_rounded, phone),
-            if (branchName.isNotEmpty)
-              _infoRow(Icons.location_on_outlined, branchName),
-            if (discipline.isNotEmpty)
-              _infoRow(Icons.school_rounded, discipline),
-            if (status.isNotEmpty) _infoRow(Icons.info_outline_rounded, status),
-            if (openTasks > 0 || lessonsCount > 0 || groupsCount > 0) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  if (openTasks > 0)
-                    _metricChip(
-                      ctx,
-                      Icons.task_alt_rounded,
-                      '$openTasks задач',
-                    ),
-                  if (lessonsCount > 0)
-                    _metricChip(
-                      ctx,
-                      Icons.event_rounded,
-                      '$lessonsCount уроков',
-                    ),
-                  if (groupsCount > 0)
-                    _metricChip(
-                      ctx,
-                      Icons.group_rounded,
-                      '$groupsCount групп',
-                    ),
-                ],
-              ),
-            ],
-          ],
+  /// While a card is dragged near the left/right edge of the board, scroll the
+  /// horizontal view so off-screen columns can be reached without dropping. The
+  /// speed eases from a small min rate at the activation threshold up to a max
+  /// at the very edge; suppressed when the platform requests reduced motion.
+  void _handleDragUpdate(Offset globalPosition) {
+    if (!mounted) return;
+
+    // Reduced-motion: skip the eased autoscroll entirely.
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+      _stopAutoScroll();
+      return;
+    }
+
+    // Drag-start threshold: ignore tiny jitters until the pointer has moved a
+    // meaningful distance from where the long-press began.
+    _dragStartPosition ??= globalPosition;
+    if (!_dragMovedEnough) {
+      if ((globalPosition - _dragStartPosition!).distance <
+          _dragStartThreshold) {
+        return;
+      }
+      _dragMovedEnough = true;
+    }
+
+    final width = MediaQuery.of(context).size.width;
+    double penetration = 0;
+    if (globalPosition.dx < _autoScrollEdge) {
+      _autoScrollDir = -1;
+      penetration =
+          ((_autoScrollEdge - globalPosition.dx) / _autoScrollEdge).clamp(
+            0.0,
+            1.0,
+          );
+    } else if (globalPosition.dx > width - _autoScrollEdge) {
+      _autoScrollDir = 1;
+      penetration =
+          ((globalPosition.dx - (width - _autoScrollEdge)) / _autoScrollEdge)
+              .clamp(0.0, 1.0);
+    } else {
+      _autoScrollDir = 0;
+    }
+
+    if (_autoScrollDir == 0) {
+      _autoScrollTimer?.cancel();
+      _autoScrollTimer = null;
+      _autoScrollSpeed = 0;
+      return;
+    }
+
+    // Ease-in (quadratic) ramp from min → max speed across the band.
+    final eased = penetration * penetration;
+    _autoScrollSpeed =
+        _autoScrollMinSpeed +
+        (_autoScrollMaxSpeed - _autoScrollMinSpeed) * eased;
+
+    _autoScrollTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!_boardScrollController.hasClients || _autoScrollDir == 0) return;
+      final pos = _boardScrollController.position;
+      final next = (pos.pixels + _autoScrollDir * _autoScrollSpeed).clamp(
+        0.0,
+        pos.maxScrollExtent,
+      );
+      if (next != pos.pixels) _boardScrollController.jumpTo(next);
+    });
+  }
+
+  void _stopAutoScroll() {
+    _autoScrollDir = 0;
+    _autoScrollSpeed = 0;
+    _dragStartPosition = null;
+    _dragMovedEnough = false;
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
+  }
+
+  // ── Status move (optimistic) ──────────────────────────────────────────────
+
+  Future<void> _moveStatus(Map<String, dynamic> student, String newStatus) async {
+    final id = student['id']?.toString() ?? '';
+    if (id.isEmpty || _pendingStudentIds.contains(id)) return;
+
+    final current =
+        _optimisticStatuses[id] ?? student['status']?.toString() ?? '';
+    if (current == newStatus) return; // already there → no-op
+
+    final previous = _optimisticStatuses[id];
+    setState(() {
+      _optimisticStatuses[id] = newStatus;
+      _pendingStudentIds.add(id);
+    });
+
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateStudent(id, status: newStatus);
+      _refreshBoard();
+      if (_selectedBranchId != null) {
+        await ref.read(studentBoardProvider(_selectedBranchId!).future);
+      }
+      if (!mounted) return;
+      setState(() {
+        _optimisticStatuses.remove(id);
+        _pendingStudentIds.remove(id);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (previous == null) {
+          _optimisticStatuses.remove(id);
+        } else {
+          _optimisticStatuses[id] = previous;
+        }
+        _pendingStudentIds.remove(id);
+      });
+      _showError('Не удалось изменить статус ученика: $e');
+    }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
+    );
+  }
+
+  void _openStudent(String studentId) {
+    if (studentId.isEmpty) return;
+    context.push('/student/$studentId');
+  }
+
+  /// Re-bucket the board's columns honoring any in-flight optimistic moves so
+  /// the dragged card appears in its target column immediately.
+  List<_StatusColumnData> _applyOptimistic(List<Map<String, dynamic>> columns) {
+    // Index every column by its status key (null = «Прочие», non-droppable).
+    final result = [
+      for (final column in columns)
+        _StatusColumnData(
+          status: column['status'] as String?,
+          name: column['name']?.toString() ?? 'Без названия',
+          students: column['students'] is List
+              ? (column['students'] as List)
+                    .whereType<Map<String, dynamic>>()
+                    .toList()
+              : <Map<String, dynamic>>[],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Закрыть'),
-          ),
-        ],
-      ),
-    );
-  }
+    ];
 
-  Widget _infoRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: AppTheme.primaryGold),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(text, overflow: TextOverflow.ellipsis),
-          ),
-        ],
-      ),
-    );
-  }
+    if (_optimisticStatuses.isEmpty) return result;
 
-  Widget _metricChip(BuildContext context, IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppTheme.primaryGold.withAlpha(36),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: AppTheme.primaryGold),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppTheme.primaryGold,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
+    final byStatus = <String, _StatusColumnData>{
+      for (final c in result)
+        if (c.status != null) c.status!: c,
+    };
+
+    for (final entry in _optimisticStatuses.entries) {
+      final id = entry.key;
+      final target = byStatus[entry.value];
+      if (target == null) continue;
+      // Find the card in its current column.
+      Map<String, dynamic>? card;
+      _StatusColumnData? source;
+      for (final c in result) {
+        final idx = c.students.indexWhere((s) => s['id']?.toString() == id);
+        if (idx != -1) {
+          card = c.students[idx];
+          source = c;
+          break;
+        }
+      }
+      if (card == null || source == null || identical(source, target)) {
+        continue;
+      }
+      source.students.remove(card);
+      target.students.add(card);
+    }
+    return result;
   }
 
   Widget _buildBranchSelector() {
@@ -381,7 +478,12 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
               ),
             ),
             data: (columns) {
-              if (columns.isEmpty) {
+              final data = _applyOptimistic(columns);
+              final total = data.fold<int>(
+                0,
+                (sum, c) => sum + c.students.length,
+              );
+              if (total == 0) {
                 return const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -415,17 +517,14 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: columns.map((column) {
-                      final name = column['name']?.toString() ?? 'Без названия';
-                      final students = column['students'] is List
-                          ? (column['students'] as List)
-                                .whereType<Map<String, dynamic>>()
-                                .toList()
-                          : <Map<String, dynamic>>[];
-                      return _DisciplineColumn(
-                        name: name,
-                        students: students,
-                        onTap: (s) => _openStudentInfo(context, s),
+                    children: data.map((column) {
+                      return _StatusColumn(
+                        column: column,
+                        pendingStudentIds: _pendingStudentIds,
+                        onTap: _openStudent,
+                        onMove: _moveStatus,
+                        onDragUpdate: _handleDragUpdate,
+                        onDragEnd: _stopAutoScroll,
                       );
                     }).toList(),
                   ),
@@ -437,101 +536,220 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
       ],
     );
   }
-
-  int _intValue(Object? value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
 }
 
-// ── Column ────────────────────────────────────────────────────────────────────
+// ── Column data ────────────────────────────────────────────────────────────
 
-class _DisciplineColumn extends StatelessWidget {
+class _StatusColumnData {
+  final String? status; // null → «Прочие», non-droppable
   final String name;
   final List<Map<String, dynamic>> students;
-  final ValueChanged<Map<String, dynamic>> onTap;
 
-  const _DisciplineColumn({
+  _StatusColumnData({
+    required this.status,
     required this.name,
     required this.students,
-    required this.onTap,
   });
+}
+
+// ── Column ───────────────────────────────────────────────────────────────────
+
+class _StatusColumn extends StatelessWidget {
+  final _StatusColumnData column;
+  final Set<String> pendingStudentIds;
+  final ValueChanged<String> onTap;
+  final Future<void> Function(Map<String, dynamic>, String) onMove;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
+
+  const _StatusColumn({
+    required this.column,
+    required this.pendingStudentIds,
+    required this.onTap,
+    required this.onMove,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+  });
+
+  bool get _droppable => column.status != null;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 300,
-      margin: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withAlpha(127),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          // ── Header ──────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.school_rounded,
-                  size: 14,
-                  color: AppTheme.primaryGold,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    name,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${students.length}',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              ],
+    return DragTarget<Map<String, dynamic>>(
+      onWillAcceptWithDetails: (_) => _droppable,
+      onAcceptWithDetails: (details) {
+        onDragEnd();
+        if (column.status != null) {
+          onMove(details.data, column.status!);
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        final hovering = _droppable && candidateData.isNotEmpty;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final columnWidth = screenWidth < 360
+            ? (screenWidth - 24).clamp(220.0, 300.0)
+            : 300.0;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          width: columnWidth,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: hovering
+                ? AppTheme.primaryGold.withAlpha(30)
+                : Theme.of(context).colorScheme.surface.withAlpha(127),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: hovering
+                  ? AppTheme.primaryGold
+                  : Theme.of(context).colorScheme.outlineVariant,
+              width: hovering ? 1.5 : 1,
             ),
           ),
-          // ── Cards ────────────────────────────────────────────────────────
-          Expanded(
-            child: students.isEmpty
-                ? Center(
-                    child: Text(
-                      'Нет учеников',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12,
+          child: Column(
+            children: [
+              // ── Header ──────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.school_rounded,
+                      size: 14,
+                      color: AppTheme.primaryGold,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        column.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    itemCount: students.length,
-                    itemBuilder: (context, index) => _StudentCard(
-                      student: students[index],
-                      onTap: onTap,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(AppRadius.chip),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        '${column.students.length}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
+                ),
+              ),
+              // ── Drop hint ─────────────────────────────────────────────────
+              AnimatedSize(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: hovering
+                    ? Container(
+                        height: 40,
+                        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppTheme.primaryGold),
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.control,
+                          ),
+                          color: AppTheme.primaryGold.withAlpha(25),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Отпустите, чтобы перенести',
+                            style: TextStyle(
+                              color: AppTheme.primaryGold,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              // ── Cards ─────────────────────────────────────────────────────
+              Expanded(
+                child: column.students.isEmpty
+                    ? _buildEmptyColumn(context)
+                    : ListView.builder(
+                        key: PageStorageKey(
+                          'students_col_${column.status ?? 'other'}',
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        itemCount: column.students.length,
+                        itemBuilder: (context, index) {
+                          final student = column.students[index];
+                          final id = student['id']?.toString() ?? '';
+                          return _StudentCard(
+                            student: student,
+                            isPending: pendingStudentIds.contains(id),
+                            onTap: () => onTap(id),
+                            onDragUpdate: onDragUpdate,
+                            onDragEnd: onDragEnd,
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
-        ],
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyColumn(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md,
+          vertical: AppSpace.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.inbox_outlined,
+              size: 28,
+              color: cs.onSurfaceVariant.withAlpha(140),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              'Нет учеников',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: cs.onSurfaceVariant,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (_droppable) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Перетащите карточку сюда',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: cs.onSurfaceVariant.withAlpha(160),
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -541,9 +759,133 @@ class _DisciplineColumn extends StatelessWidget {
 
 class _StudentCard extends StatelessWidget {
   final Map<String, dynamic> student;
-  final ValueChanged<Map<String, dynamic>> onTap;
+  final bool isPending;
+  final VoidCallback onTap;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
 
-  const _StudentCard({required this.student, required this.onTap});
+  const _StudentCard({
+    required this.student,
+    required this.isPending,
+    required this.onTap,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final firstName = student['first_name']?.toString() ?? '';
+    final lastName = student['last_name']?.toString() ?? '';
+    final displayName = '$firstName $lastName'.trim();
+    final name = displayName.isEmpty ? 'Без имени' : displayName;
+    final phone = student['phone']?.toString() ?? '';
+
+    return LongPressDraggable<Map<String, dynamic>>(
+      data: student,
+      maxSimultaneousDrags: isPending ? 0 : null,
+      // Platform-standard long-press (~500ms) cleanly separates a click
+      // (tap → open the student) from a deliberate drag.
+      delay: const Duration(milliseconds: 500),
+      hapticFeedbackOnStart: true,
+      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
+      onDragEnd: (_) => onDragEnd(),
+      onDraggableCanceled: (_, _) => onDragEnd(),
+      onDragCompleted: onDragEnd,
+      feedback: Transform.rotate(
+        angle: 0.03,
+        child: Material(
+          color: Colors.transparent,
+          child: Builder(
+            builder: (context) {
+              final screenWidth = MediaQuery.of(context).size.width;
+              final feedbackWidth = screenWidth < 360
+                  ? (screenWidth - 24).clamp(220.0, 300.0) - 24
+                  : 276.0;
+              return Container(
+                width: feedbackWidth,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  border: Border.all(color: AppTheme.primaryGold, width: 2),
+                  boxShadow: AppShadow.shLift,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.school_rounded,
+                      size: 14,
+                      color: AppTheme.primaryGold,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (phone.isNotEmpty)
+                            Text(
+                              phone,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.drag_indicator_rounded, size: 18),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+      // Faded placeholder gap in the source column while dragging.
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            side: BorderSide(
+              color: AppTheme.primaryGold.withAlpha(120),
+            ),
+          ),
+          child: const SizedBox(height: 64, width: double.infinity),
+        ),
+      ),
+      child: Opacity(
+        opacity: isPending ? 0.62 : 1,
+        child: AbsorbPointer(
+          absorbing: isPending,
+          child: GestureDetector(
+            onTap: onTap,
+            child: _CardBody(student: student, isPending: isPending),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CardBody extends StatelessWidget {
+  final Map<String, dynamic> student;
+  final bool isPending;
+
+  const _CardBody({required this.student, required this.isPending});
 
   @override
   Widget build(BuildContext context) {
@@ -561,97 +903,111 @@ class _StudentCard extends StatelessWidget {
     final lessonsCount = _intValue(student['lessons_count']);
     final groupsCount = _intValue(student['groups_count']);
 
-    return GestureDetector(
-      onTap: () => onTap(student),
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      color: Theme.of(context).colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          width: 1,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Name ──────────────────────────────────────────────────
-              Text(
-                name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              // ── Phone ─────────────────────────────────────────────────
-              if (phone.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Name + pending spinner ────────────────────────────────────
+            Row(
+              children: [
+                Expanded(
                   child: Text(
-                    phone,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              // ── Discipline badge ───────────────────────────────────────
-              if (discipline.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryGold.withAlpha(51),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    discipline,
-                    style: TextStyle(
-                      color: AppTheme.primaryGold,
-                      fontSize: 10,
+                    name,
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              // ── Branch badge ───────────────────────────────────────────
-              if (branchName.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: _IconBadge(
-                    icon: Icons.location_on_outlined,
-                    text: branchName,
+                if (isPending)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            // ── Phone ─────────────────────────────────────────────────────
+            if (phone.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  phone,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 12,
                   ),
                 ),
-              // ── Metric badges (tasks / lessons / groups) ───────────────
-              if (openTasks > 0 || lessonsCount > 0 || groupsCount > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      if (openTasks > 0)
-                        _MetricBadge(
-                          icon: Icons.task_alt_rounded,
-                          text: '$openTasks',
-                        ),
-                      if (lessonsCount > 0)
-                        _MetricBadge(
-                          icon: Icons.event_rounded,
-                          text: '$lessonsCount',
-                        ),
-                      if (groupsCount > 0)
-                        _MetricBadge(
-                          icon: Icons.group_rounded,
-                          text: '$groupsCount',
-                        ),
-                    ],
+              ),
+            const SizedBox(height: 8),
+            // ── Discipline badge ──────────────────────────────────────────
+            if (discipline.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryGold.withAlpha(51),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  discipline,
+                  style: const TextStyle(
+                    color: AppTheme.primaryGold,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-            ],
-          ),
+              ),
+            // ── Branch badge ──────────────────────────────────────────────
+            if (branchName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: _IconBadge(
+                  icon: Icons.location_on_outlined,
+                  text: branchName,
+                ),
+              ),
+            // ── Metric badges (tasks / lessons / groups) ──────────────────
+            if (openTasks > 0 || lessonsCount > 0 || groupsCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    if (openTasks > 0)
+                      _MetricBadge(
+                        icon: Icons.task_alt_rounded,
+                        text: '$openTasks',
+                      ),
+                    if (lessonsCount > 0)
+                      _MetricBadge(
+                        icon: Icons.event_rounded,
+                        text: '$lessonsCount',
+                      ),
+                    if (groupsCount > 0)
+                      _MetricBadge(
+                        icon: Icons.group_rounded,
+                        text: '$groupsCount',
+                      ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );

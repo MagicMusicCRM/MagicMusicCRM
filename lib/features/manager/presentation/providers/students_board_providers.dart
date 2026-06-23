@@ -12,20 +12,73 @@ final branchDisciplinesProvider =
   return ref.watch(magicCrmServiceProvider).listBranchDisciplines(branchId);
 });
 
-/// The Ученики board for a branch: discipline columns + grouped students.
+/// The Ученики board for a branch: STATUS columns (Активные / Неактивные /
+/// Прочие) + grouped students. Mirrors how the Leads board is organised so the
+/// board can act as a status-based draggable kanban.
 final studentBoardProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((
   ref,
   branchId,
 ) async {
   final service = ref.watch(magicCrmServiceProvider);
-  final disciplines = await ref.watch(branchDisciplinesProvider(branchId).future);
   // TODO: добавить серверную пагинацию/board-эндпоинт, если ветка превышает этот лимит.
   final search = await service.searchStudents(branchId: branchId, limit: 500);
   final students =
       (search['items'] as List? ?? const []).whereType<Map<String, dynamic>>().toList();
-  return groupStudentsByDiscipline(disciplines, students);
+  return groupStudentsByStatus(students);
 });
+
+/// The student statuses that act as the board's draggable columns.
+/// `key` is the value sent to the backend (`status`), `name` is the Russian
+/// column title.
+const List<({String key, String name})> studentStatusColumns = [
+  (key: 'active', name: 'Активные'),
+  (key: 'inactive', name: 'Неактивные'),
+];
+
+/// Pure: bucket students into the column whose `status` matches (case-
+/// insensitive). Active/inactive are the draggable targets; any unknown status
+/// (or missing status) lands in a trailing «Прочие» column.
+List<Map<String, dynamic>> groupStudentsByStatus(
+  List<Map<String, dynamic>> students,
+) {
+  final columns = <Map<String, dynamic>>[
+    for (final s in studentStatusColumns)
+      {
+        'status': s.key,
+        'name': s.name,
+        'students': <Map<String, dynamic>>[],
+      },
+  ];
+  // Trailing bucket for unknown / empty statuses. `status: null` marks it as a
+  // non-droppable column (the widget only accepts drops onto real statuses).
+  final other = <String, dynamic>{
+    'status': null,
+    'name': 'Прочие',
+    'students': <Map<String, dynamic>>[],
+  };
+
+  final byStatus = <String, List<Map<String, dynamic>>>{
+    for (final c in columns)
+      (c['status'] as String): c['students'] as List<Map<String, dynamic>>,
+  };
+
+  for (final student in students) {
+    final status = student['status']?.toString().trim().toLowerCase() ?? '';
+    final bucket = byStatus[status];
+    if (bucket != null) {
+      bucket.add(student);
+    } else {
+      (other['students'] as List<Map<String, dynamic>>).add(student);
+    }
+  }
+
+  // Only show «Прочие» when it actually holds students.
+  if ((other['students'] as List).isEmpty) {
+    return columns;
+  }
+  return [...columns, other];
+}
 
 /// Pure: order the branch disciplines by sort_order, bucket students into the
 /// column whose name matches `custom_data['discipline']` (case-insensitive),
