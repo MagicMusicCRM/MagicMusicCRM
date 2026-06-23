@@ -61,6 +61,8 @@ services:
       HOLLIHOP_BASE_URL: ${HOLLIHOP_BASE_URL:-https://sokol.t8s.ru/Api/V2/}
       HOLLIHOP_AUTH_KEY: ${HOLLIHOP_AUTH_KEY:-}
       HOLLIHOP_TIMEOUT_MS: ${HOLLIHOP_TIMEOUT_MS:-5000}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
     volumes:
       - ../../storage:/opt/magicmusiccrm/storage
     command: sh -c "node dist/db/migrate.js up && node dist/main.js"
