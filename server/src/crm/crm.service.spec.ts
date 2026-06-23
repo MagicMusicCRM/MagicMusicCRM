@@ -1379,7 +1379,7 @@ describe("CrmService", () => {
   });
 
   it("lists tasks with status and student filters plus display names", async () => {
-    const { service, query } = createService([
+    const { service, query, policy } = createService([
       {
         id: "task-a",
         entity_type: "student",
@@ -1442,6 +1442,10 @@ describe("CrmService", () => {
       null,
       null,
     ]);
+    // Reading tasks is operational (shown in client cards to admin/teacher),
+    // not a manager-only management op.
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).not.toHaveBeenCalled();
   });
 
   it("lists task board with operational filters and branch context", async () => {

@@ -959,7 +959,8 @@ export class CrmService {
 
   async searchStudents(actor: ActorContext, query: StudentSearchQuery) {
     this.policy.assertCanListStudents(actor);
-    const limit = Math.min(query.limit ?? 50, 100);
+    // Board pulls a whole branch (up to ~1.5k students); cap matches DTO @Max(500).
+    const limit = Math.min(query.limit ?? 50, 500);
     const filter = this.buildStudentSearchFilter(actor, query);
     const result = await this.database.query<StudentSearchRow>(
       `
@@ -1602,7 +1603,9 @@ export class CrmService {
         select t.id, t.status, t.specialization, t.custom_data,
           t.profile_id, p.user_id as profile_user_id, u.role::text as app_role,
           coalesce(u.is_app_account, false) as is_app_account,
-          p.first_name, p.last_name, u.email, p.phone,
+          coalesce(p.first_name, t.custom_data->>'firstName') as first_name,
+          coalesce(p.last_name, t.custom_data->>'lastName') as last_name,
+          u.email, p.phone,
           agg.branches,
           agg.students_count,
           agg.lessons_count,
@@ -3716,7 +3719,9 @@ export class CrmService {
   }
 
   async listTasks(actor: ActorContext, query: TaskBoardQuery) {
-    this.policy.assertManagerOnly(actor);
+    // Reading tasks is operational data (shown in client cards to admin/teacher),
+    // not a manager-only management op; row-level RBAC is enforced in the SQL below.
+    this.policy.assertCanReadOperationalData(actor);
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<TaskRow>(
       `
