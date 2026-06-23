@@ -121,7 +121,7 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
   Color _getRoleColor(String? role) {
     switch (role) {
       case 'admin':
-        return TelegramColors.accentBlue;
+        return TelegramColors.accent;
       case 'system_admin':
         return TelegramColors.brandGold;
       case 'manager':
@@ -272,7 +272,7 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
                           trailing: isSelected
                               ? const Icon(
                                   Icons.check_circle_rounded,
-                                  color: TelegramColors.accentBlue,
+                                  color: TelegramColors.accent,
                                 )
                               : Icon(
                                   Icons.circle_outlined,

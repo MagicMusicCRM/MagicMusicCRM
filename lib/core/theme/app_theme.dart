@@ -60,24 +60,24 @@ class AppTheme {
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: TelegramColors.darkSurface,
-        selectedItemColor: TelegramColors.accentBlue,
+        selectedItemColor: TelegramColors.accent,
         unselectedItemColor: TelegramColors.darkTextSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: TelegramColors.darkSurface,
-        indicatorColor: TelegramColors.accentBlue.withAlpha(30),
+        indicatorColor: TelegramColors.accent.withAlpha(30),
         elevation: 0,
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: TelegramColors.accentBlue);
+            return const IconThemeData(color: TelegramColors.accent);
           }
           return const IconThemeData(color: TelegramColors.darkTextSecondary);
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const TextStyle(color: TelegramColors.accentBlue, fontWeight: FontWeight.w600, fontSize: 12);
+            return const TextStyle(color: TelegramColors.accent, fontWeight: FontWeight.w600, fontSize: 12);
           }
           return const TextStyle(color: TelegramColors.darkTextSecondary, fontSize: 12);
         }),
@@ -94,13 +94,13 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: TelegramColors.accentBlue, width: 1.5),
+          borderSide: const BorderSide(color: TelegramColors.accent, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: TelegramColors.accentBlue,
+          backgroundColor: TelegramColors.accent,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -110,7 +110,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: TelegramColors.accentBlue,
+          foregroundColor: TelegramColors.accent,
           elevation: 0,
         ),
       ),
@@ -140,7 +140,7 @@ class AppTheme {
         elevation: 0,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: TelegramColors.accentBlue,
+        backgroundColor: TelegramColors.accent,
         foregroundColor: Colors.white,
         shape: CircleBorder(),
         elevation: 0,
@@ -207,19 +207,19 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: TelegramColors.accentBlue, width: 1.5),
+          borderSide: const BorderSide(color: TelegramColors.accent, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: TelegramColors.accentBlue,
+          backgroundColor: TelegramColors.accent,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: TelegramColors.accentBlue),
+        style: TextButton.styleFrom(foregroundColor: TelegramColors.accent),
       ),
       dividerTheme: const DividerThemeData(
         color: TelegramColors.lightDivider,
@@ -246,7 +246,7 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: TelegramColors.accentBlue,
+        backgroundColor: TelegramColors.accent,
         foregroundColor: Colors.white,
         shape: CircleBorder(),
       ),

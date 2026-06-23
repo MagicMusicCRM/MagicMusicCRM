@@ -49,7 +49,7 @@ class TelegramColors {
   static const Color lightMutedBadge = Color(0xFFA1A1AA);
 
   // ── Shared Accent ──────────────────────────────────────────────────────────
-  static const Color accentBlue = brandGold; // Using gold instead of previous purple
+  static const Color accent = brandGold; // Using gold instead of previous purple
   static const Color success = Color(0xFF10B981);
   static const Color danger = Color(0xFFEF4444);
   static const Color warning = Color(0xFFF59E0B);

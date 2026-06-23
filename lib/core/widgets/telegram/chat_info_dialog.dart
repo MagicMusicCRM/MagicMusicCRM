@@ -370,8 +370,8 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       color: isDark ? TelegramColors.darkSurface : TelegramColors.lightBg,
       child: TabBar(
         controller: _tabController,
-        indicatorColor: TelegramColors.accentBlue,
-        labelColor: TelegramColors.accentBlue,
+        indicatorColor: TelegramColors.accent,
+        labelColor: TelegramColors.accent,
         unselectedLabelColor: isDark
             ? TelegramColors.darkTextSecondary
             : TelegramColors.lightTextSecondary,
@@ -445,12 +445,12 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
           leading: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: TelegramColors.accentBlue.withValues(alpha: 40 / 255),
+              color: TelegramColors.accent.withValues(alpha: 40 / 255),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               Icons.insert_drive_file,
-              color: TelegramColors.accentBlue,
+              color: TelegramColors.accent,
             ),
           ),
           title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -487,16 +487,16 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
           leading: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: TelegramColors.accentBlue.withValues(alpha: 40 / 255),
+              color: TelegramColors.accent.withValues(alpha: 40 / 255),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.link, color: TelegramColors.accentBlue),
+            child: Icon(Icons.link, color: TelegramColors.accent),
           ),
           title: Text(
             link,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: TelegramColors.accentBlue),
+            style: TextStyle(color: TelegramColors.accent),
           ),
           onTap: () => launchUrl(Uri.parse(link)),
         );
@@ -601,7 +601,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
                               Icon(
                                 Icons.edit_rounded,
                                 size: 14,
-                                color: TelegramColors.accentBlue,
+                                color: TelegramColors.accent,
                               ),
                           ],
                         ),
@@ -774,7 +774,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
                                         Icon(
                                           Icons.edit_rounded,
                                           size: 14,
-                                          color: TelegramColors.accentBlue,
+                                          color: TelegramColors.accent,
                                         ),
                                     ],
                                   ),
@@ -943,7 +943,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
         if (_members.length > previewMembers.length)
           Text(
             'Ещё ${_members.length - previewMembers.length}',
-            style: TextStyle(fontSize: 12, color: TelegramColors.accentBlue),
+            style: TextStyle(fontSize: 12, color: TelegramColors.accent),
           ),
       ],
     );
@@ -973,7 +973,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.small(
         onPressed: _addNote,
-        backgroundColor: TelegramColors.accentBlue,
+        backgroundColor: TelegramColors.accent,
         child: const Icon(Icons.add_comment_rounded, color: Colors.white),
       ),
       body: ListView.builder(
@@ -1016,7 +1016,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
                       authorName,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: TelegramColors.accentBlue,
+                        color: TelegramColors.accent,
                         fontSize: 13,
                       ),
                     ),
