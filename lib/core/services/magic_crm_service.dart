@@ -1029,6 +1029,45 @@ class MagicCrmService {
     );
   }
 
+  // ── Client ↔ app-user linking (shared lead/student panel) ────────────────
+  /// App users already linked to this CRM entity (own account or staff-linked).
+  /// [entityType] is exactly 'lead' or 'student'. Each item: `{userId, name,
+  /// phone, linkSource}`.
+  Future<List<Map<String, dynamic>>> getClientLinkedUsers(
+    String entityType,
+    String entityId,
+  ) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/clients/$entityType/$entityId/linked-users',
+    );
+    return _items(response);
+  }
+
+  /// App users whose phone matches this entity and can be linked to it. Each
+  /// item: `{userId, name, phone, email}`.
+  Future<List<Map<String, dynamic>>> listClientUserCandidates(
+    String entityType,
+    String entityId,
+  ) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/clients/$entityType/$entityId/user-candidates',
+    );
+    return _items(response);
+  }
+
+  /// Links [userId] to this entity. Returns the updated linked-users list.
+  Future<List<Map<String, dynamic>>> linkUserToClient(
+    String entityType,
+    String entityId,
+    String userId,
+  ) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/clients/$entityType/$entityId/link-user',
+      data: {'userId': userId},
+    );
+    return _items(response);
+  }
+
   Future<Map<String, dynamic>> createLeadStatus({
     required String key,
     required String label,

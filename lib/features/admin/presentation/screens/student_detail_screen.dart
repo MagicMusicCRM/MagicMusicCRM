@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:go_router/go_router.dart';
@@ -352,6 +353,11 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             value: email,
           ),
         ]),
+        const SizedBox(height: 16),
+        ClientAppUserPanel(
+          entityType: 'student',
+          entityId: widget.studentId,
+        ),
         SizedBox(height: 16),
         _buildInfoCard('Дополнительная информация', [
           _InfoRow(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -702,6 +703,12 @@ class _LeadDetailDialogState extends ConsumerState<LeadDetailDialog>
               cs,
               hint: 'Общие примечания по лиду...',
             ),
+          ),
+
+          const SizedBox(height: AppSpace.lg),
+          ClientAppUserPanel(
+            entityType: 'lead',
+            entityId: widget.lead['id'].toString(),
           ),
 
           const SizedBox(height: AppSpace.lg),
