@@ -19,6 +19,7 @@ import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashbo
 import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/student_detail_screen.dart';
+import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
@@ -181,7 +182,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // Proactive role-path enforcement.
+      // `/admin/profiles/:id` (the shared user card) is opened from the
+      // manager CRM (user-roles + tasks widgets), so it is exempt from the
+      // admin-dashboard gate — managers reach it legitimately. The server
+      // still authorizes the underlying profile fetch.
       if (loc.startsWith('/admin') &&
+          !loc.startsWith('/admin/profiles/') &&
           role != 'admin' &&
           role != 'system_admin') {
         return roleRoute;
@@ -258,6 +264,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id']!;
           return StudentDetailScreen(studentId: id);
         },
+      ),
+      GoRoute(
+        path: '/admin/profiles/:id',
+        builder: (context, state) =>
+            ProfileDetailScreen(profileId: state.pathParameters['id']!),
       ),
       // ── Deep links (KVA-196) ────────────────────────────────────────────────
       // Open a lead/student/lesson directly by id. Students reuse the existing

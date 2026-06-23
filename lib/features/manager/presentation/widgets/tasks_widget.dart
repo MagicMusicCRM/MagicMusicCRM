@@ -837,6 +837,8 @@ class _TaskCard extends StatelessWidget {
         status != 'cancelled';
     final assigneeText = task['assigned_name']?.toString();
     final creatorText = task['creator_name']?.toString();
+    final assignedProfileId = task['assigned_profile_id']?.toString();
+    final creatorProfileId = task['creator_profile_id']?.toString();
     final branchText = task['branch_name']?.toString();
     final entityText = _taskEntityLabel(task);
     final onEntityTap = _entityTap(context, task);
@@ -993,11 +995,27 @@ class _TaskCard extends StatelessWidget {
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   if (assigneeText != null && assigneeText.trim().isNotEmpty)
-                    _Tag(label: assigneeText, color: AppColor.gold2),
+                    _Tag(
+                      label: assigneeText,
+                      color: AppColor.gold2,
+                      onTap:
+                          (assignedProfileId != null &&
+                              assignedProfileId.isNotEmpty)
+                          ? () => context.push(
+                              '/admin/profiles/$assignedProfileId',
+                            )
+                          : null,
+                    ),
                   if (creatorText != null && creatorText.trim().isNotEmpty)
                     _Tag(
                       label: 'Создал: $creatorText',
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      onTap:
+                          (creatorProfileId != null &&
+                              creatorProfileId.isNotEmpty)
+                          ? () =>
+                                context.push('/admin/profiles/$creatorProfileId')
+                          : null,
                     ),
                   if (branchText != null && branchText.trim().isNotEmpty)
                     _Tag(label: branchText, color: AppColor.success),

@@ -35,6 +35,30 @@ class MagicProfileAdminService {
     return items.whereType<Map<String, dynamic>>().map(_legacyProfile).toList();
   }
 
+  Future<Map<String, dynamic>> getProfile(String profileId) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/admin/profiles/$profileId',
+    );
+    return _legacyProfile(response);
+  }
+
+  /// Загружает привязанные к профилю CRM-сущности (ученики/лиды).
+  /// Возвращает список `{entityType, entityId, name}`.
+  Future<List<Map<String, dynamic>>> getProfileLinks(String profileId) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/admin/profiles/$profileId/links',
+    );
+    final items = response['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map<String, dynamic>>().map((item) {
+      return {
+        'entity_type': item['entityType'],
+        'entity_id': item['entityId'],
+        'name': item['name'],
+      };
+    }).toList();
+  }
+
   Future<Map<String, dynamic>> updateRole({
     required String profileId,
     required String role,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -716,9 +717,9 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                         ),
                       );
 
+                      final profileId = p['id']?.toString();
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(AppRadius.card),
@@ -726,55 +727,83 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                             color: Theme.of(context).colorScheme.outlineVariant,
                           ),
                         ),
-                        // Narrow (phone) screens stack the role dropdown below
-                        // the identity so a wide role label can't squeeze the
-                        // name to a single vertical character per line.
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            if (constraints.maxWidth < 480) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                        clipBehavior: Clip.antiAlias,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            // Открыть карточку пользователя (профиль/админ).
+                            onTap:
+                                (profileId == null || profileId.isEmpty)
+                                ? null
+                                : () =>
+                                      context.push('/admin/profiles/$profileId'),
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              // Narrow (phone) screens stack the role dropdown
+                              // below the identity so a wide role label can't
+                              // squeeze the name to a single vertical character
+                              // per line.
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  if (constraints.maxWidth < 480) {
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            avatar,
+                                            const SizedBox(width: 12),
+                                            Expanded(child: identity),
+                                            linkButton,
+                                            const Icon(
+                                              Icons.chevron_right_rounded,
+                                              color: AppColor.text2,
+                                              size: 20,
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        badges,
+                                        const SizedBox(height: 10),
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: roleDropdown,
+                                        ),
+                                      ],
+                                    );
+                                  }
+                                  return Row(
                                     children: [
                                       avatar,
-                                      const SizedBox(width: 12),
-                                      Expanded(child: identity),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            identity,
+                                            const SizedBox(height: 4),
+                                            badges,
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
                                       linkButton,
+                                      const SizedBox(width: 8),
+                                      roleDropdown,
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.chevron_right_rounded,
+                                        color: AppColor.text2,
+                                        size: 20,
+                                      ),
                                     ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  badges,
-                                  const SizedBox(height: 10),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: roleDropdown,
-                                  ),
-                                ],
-                              );
-                            }
-                            return Row(
-                              children: [
-                                avatar,
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      identity,
-                                      const SizedBox(height: 4),
-                                      badges,
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                linkButton,
-                                const SizedBox(width: 8),
-                                roleDropdown,
-                              ],
-                            );
-                          },
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
                         ),
                       );
                     },

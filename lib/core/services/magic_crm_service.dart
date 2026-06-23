@@ -2436,6 +2436,8 @@ class MagicCrmService {
       'entity_id': entityId,
       'student_id': entityType == 'student' ? entityId : null,
       'assigned_to': item['assignedTo'],
+      'assigned_profile_id': item['assignedProfileId'],
+      'creator_profile_id': item['creatorProfileId'],
       'assigned_name': assignedName,
       'entity_name': entityName,
       'title': item['title'],
