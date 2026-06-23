@@ -155,14 +155,28 @@ export class FilesService {
     if (!row)
       throw new NotFoundException("Ссылка недействительна или истекла.");
 
-    // Record first use for audit only — do NOT consume the token. Media players
-    // (just_audio) re-request the same URL for range/seek/replay, so a one-time
-    // token 404s on the second request and surfaces as a "source error". The
-    // token stays valid until it expires (short TTL set at issue time).
-    await this.database.query(
-      "update app.file_download_tokens set used_at = now() where token_hash = $1 and used_at is null",
-      [this.tokenHash(token)],
-    );
+    // Sensitive documents (legal/CRM) are single-use: consume the token
+    // atomically so a leaked link cannot be replayed for the whole TTL
+    // (KVA-220). Media purposes (chat_voice/attachments/avatars) stay
+    // replayable because players re-request the same URL for range/seek/render
+    // — making those one-time surfaces as a "source error".
+    const oneTime =
+      row.purpose === "legal_document" || row.purpose === "crm_document";
+    if (oneTime) {
+      const consumed = await this.database.query(
+        "update app.file_download_tokens set used_at = now() where token_hash = $1 and used_at is null returning file_id",
+        [this.tokenHash(token)],
+      );
+      if (!consumed.rowCount) {
+        throw new NotFoundException("Ссылка недействительна или истекла.");
+      }
+    } else {
+      // Replayable media: record first use for audit only.
+      await this.database.query(
+        "update app.file_download_tokens set used_at = now() where token_hash = $1 and used_at is null",
+        [this.tokenHash(token)],
+      );
+    }
 
     const totalSize = Number(row.size_bytes);
     const range = this.parseRange(rangeHeader, totalSize);

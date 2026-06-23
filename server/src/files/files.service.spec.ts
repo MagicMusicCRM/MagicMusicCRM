@@ -53,6 +53,33 @@ describe('FilesService.downloadByToken', () => {
     expect(storage.createReadStream).toHaveBeenCalledTimes(2);
   });
 
+  it('consumes one-time tokens for sensitive documents (second use 404s)', async () => {
+    const docRow = {
+      ...tokenRow,
+      purpose: 'crm_document',
+      mime_type: 'application/pdf',
+      original_name: 'doc.pdf'
+    };
+    let consumed = false;
+    const query = jest.fn(async (sql: string) => {
+      if (/select/i.test(sql)) return { rows: [docRow] };
+      if (/returning/i.test(sql)) {
+        if (consumed) return { rows: [], rowCount: 0 };
+        consumed = true;
+        return { rows: [{ file_id: 'file-1' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const { service, storage } = build(query);
+
+    const first = await service.downloadByToken('doc-token');
+    expect(first.totalSize).toBe(10);
+    await expect(service.downloadByToken('doc-token')).rejects.toThrow(
+      NotFoundException
+    );
+    expect(storage.createReadStream).toHaveBeenCalledTimes(1);
+  });
+
   it('serves a partial range when a Range header is supplied', async () => {
     const query = jest.fn(async (sql: string) =>
       /select/i.test(sql) ? { rows: [tokenRow] } : { rows: [] }
