@@ -25,3 +25,36 @@ export function isAdminRole(role: UserRole): boolean {
 export function isManagerOrAdminRole(role: UserRole): boolean {
   return role === 'manager' || isAdminRole(role);
 }
+
+// Иерархия ролей (бизнес-правило владельца): Управляющий (manager) ВЫШЕ
+// Администратора (admin). client < teacher < admin < manager < system_admin.
+export const ROLE_LEVEL: Record<UserRole, number> = {
+  client: 0,
+  teacher: 1,
+  admin: 2,
+  manager: 3,
+  system_admin: 4,
+};
+
+// Управляющий или Администратор системы (но НЕ Администратор).
+export function isManagerRole(role: UserRole): boolean {
+  return role === 'manager' || role === 'system_admin';
+}
+
+/**
+ * Может ли актор с ролью `actorRole` назначать/управлять ролью `targetRole`
+ * (используется и для назначаемой новой роли, и для текущей роли цели).
+ *
+ * - system_admin: полный контроль (может назначить любую роль, включая
+ *   system_admin); защита последнего system_admin реализована в сервисе.
+ * - manager (Управляющий): только роли СТРОГО НИЖЕ себя (client/teacher/admin).
+ * - admin и ниже: НЕ управляют ролями вообще.
+ */
+export function canAssignRole(
+  actorRole: UserRole,
+  targetRole: UserRole
+): boolean {
+  if (actorRole === 'system_admin') return true;
+  if (actorRole === 'manager') return ROLE_LEVEL[targetRole] < ROLE_LEVEL.manager;
+  return false;
+}

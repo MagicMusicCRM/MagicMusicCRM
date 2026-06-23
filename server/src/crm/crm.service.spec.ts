@@ -875,21 +875,35 @@ describe("CrmService", () => {
     );
   });
 
-  it("limits staff creation to admins", async () => {
+  it("forbids admin from creating staff and manager from minting manager/system_admin", async () => {
     const { service } = createService();
 
+    // Администратор (ниже Управляющего) не управляет ролями вовсе.
+    await expect(
+      service.createStaff(
+        { userId: "admin-a", role: "admin" as const },
+        {
+          firstName: "Ольга",
+          lastName: "Смирнова",
+          email: "staff-admin@example.com",
+          role: "manager",
+        },
+      ),
+    ).rejects.toThrow("Недостаточно прав");
+
+    // Управляющий не может создать manager или system_admin (роль >= своей).
     await expect(
       service.createStaff(actor, {
         firstName: "Ольга",
         lastName: "Смирнова",
         email: "staff@example.com",
-        role: "manager",
+        role: "system_admin",
       }),
-    ).rejects.toThrow("Только администратор");
+    ).rejects.toThrow("Недостаточно прав");
   });
 
-  it("creates staff profiles for admins", async () => {
-    const adminActor = { userId: "admin-a", role: "admin" as const };
+  it("creates staff profiles for privileged roles (system_admin)", async () => {
+    const adminActor = { userId: "sys-a", role: "system_admin" as const };
     const { service, query, audit } = createService([
       {
         id: "profile-a",

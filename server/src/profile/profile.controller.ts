@@ -92,7 +92,7 @@ export class AdminProfilesController {
   }
 
   @Patch(':id/role')
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'system_admin')
   updateRole(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string,

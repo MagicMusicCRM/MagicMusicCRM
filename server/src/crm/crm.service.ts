@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import {
   ActorContext,
+  canAssignRole,
   isAdminRole,
   isManagerOrAdminRole,
 } from "../common/security/actor-context";
@@ -2033,9 +2034,12 @@ export class CrmService {
   }
 
   async createStaff(actor: ActorContext, dto: CreateStaffDto) {
-    if (!isAdminRole(actor.role)) {
+    // Назначить роль сотруднику может только тот, кто стоит в иерархии выше этой
+    // роли: Управляющий (manager) — admin и ниже; Администратор системы — любую.
+    // Администратор (admin) ролями не управляет вовсе. См. canAssignRole.
+    if (!canAssignRole(actor.role, dto.role)) {
       throw new ForbiddenException(
-        "Только администратор может создавать сотрудников.",
+        "Недостаточно прав для назначения этой роли сотруднику.",
       );
     }
     const firstName = this.requiredTrim(

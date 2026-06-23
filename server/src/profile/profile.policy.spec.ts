@@ -4,85 +4,101 @@ import { ProfilePolicy } from './profile.policy';
 describe('ProfilePolicy', () => {
   const policy = new ProfilePolicy();
 
+  const sys = { userId: 'sys-a', role: 'system_admin' as const };
+  const manager = { userId: 'mgr-a', role: 'manager' as const };
+  const admin = { userId: 'adm-a', role: 'admin' as const };
+  const teacher = { userId: 'tch-a', role: 'teacher' as const };
+  const client = { userId: 'cli-a', role: 'client' as const };
+
   it('allows users to read their own profile', () => {
     expect(() =>
-      policy.assertCanReadProfile({ userId: 'user-a', role: 'client' }, 'user-a')
+      policy.assertCanReadProfile(client, 'cli-a')
     ).not.toThrow();
   });
 
   it('hides foreign profiles from clients', () => {
     expect(() =>
-      policy.assertCanReadProfile({ userId: 'user-a', role: 'client' }, 'user-b')
+      policy.assertCanReadProfile(client, 'user-b')
     ).toThrow(NotFoundException);
   });
 
-  it('allows managers full role control: any role to any user', () => {
-    expect(() =>
-      policy.assertCanListProfiles({ userId: 'manager-a', role: 'manager' })
-    ).not.toThrow();
-    // Operational roles.
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'manager-a', role: 'manager' },
+  it('allows managers to list profiles, forbids clients', () => {
+    expect(() => policy.assertCanListProfiles(manager)).not.toThrow();
+    expect(() => policy.assertCanListProfiles(client)).toThrow(ForbiddenException);
+  });
+
+  describe('assertCanUpdateRole — иерархия ролей (manager > admin)', () => {
+    it('system_admin may assign any role, including system_admin', () => {
+      for (const target of [
         'client',
-        'teacher'
-      )
-    ).not.toThrow();
-    // May now grant admin-tier roles.
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'manager-a', role: 'manager' },
-        'client',
-        'admin'
-      )
-    ).not.toThrow();
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'manager-a', role: 'manager' },
-        'client',
-        'system_admin'
-      )
-    ).not.toThrow();
-    // May now modify users who already hold an admin-tier role.
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'manager-a', role: 'manager' },
+        'teacher',
         'admin',
-        'manager'
-      )
-    ).not.toThrow();
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'manager-a', role: 'manager' },
+        'manager',
         'system_admin',
-        'teacher'
-      )
-    ).not.toThrow();
-  });
+      ] as const) {
+        expect(() =>
+          policy.assertCanUpdateRole(sys, 'client', target)
+        ).not.toThrow();
+      }
+      // and may modify a user who already holds system_admin
+      expect(() =>
+        policy.assertCanUpdateRole(sys, 'system_admin', 'manager')
+      ).not.toThrow();
+    });
 
-  it('forbids clients and teachers from updating roles', () => {
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'client-a', role: 'client' },
-        'client',
-        'teacher'
-      )
-    ).toThrow(ForbiddenException);
-    expect(() =>
-      policy.assertCanUpdateRole(
-        { userId: 'teacher-a', role: 'teacher' },
-        'client',
-        'manager'
-      )
-    ).toThrow(ForbiddenException);
-  });
+    it('manager may assign roles strictly below manager (client/teacher/admin)', () => {
+      expect(() =>
+        policy.assertCanUpdateRole(manager, 'client', 'teacher')
+      ).not.toThrow();
+      expect(() =>
+        policy.assertCanUpdateRole(manager, 'client', 'admin')
+      ).not.toThrow();
+      expect(() =>
+        policy.assertCanUpdateRole(manager, 'teacher', 'client')
+      ).not.toThrow();
+    });
 
-  it('allows admins and system admins to update roles', () => {
-    expect(() =>
-      policy.assertCanUpdateRole({ userId: 'admin-a', role: 'admin' })
-    ).not.toThrow();
-    expect(() =>
-      policy.assertCanUpdateRole({ userId: 'system-a', role: 'system_admin' })
-    ).not.toThrow();
+    it('manager may NOT grant manager or system_admin', () => {
+      expect(() =>
+        policy.assertCanUpdateRole(manager, 'client', 'manager')
+      ).toThrow(ForbiddenException);
+      expect(() =>
+        policy.assertCanUpdateRole(manager, 'client', 'system_admin')
+      ).toThrow(ForbiddenException);
+    });
+
+    it('manager may NOT modify a user who currently holds manager or system_admin', () => {
+      expect(() =>
+        policy.assertCanUpdateRole(manager, 'manager', 'admin')
+      ).toThrow(ForbiddenException);
+      expect(() =>
+        policy.assertCanUpdateRole(manager, 'system_admin', 'teacher')
+      ).toThrow(ForbiddenException);
+    });
+
+    it('admin may NOT manage roles at all (admin is below manager)', () => {
+      expect(() =>
+        policy.assertCanUpdateRole(admin, 'client', 'teacher')
+      ).toThrow(ForbiddenException);
+      expect(() =>
+        policy.assertCanUpdateRole(admin, 'client', 'admin')
+      ).toThrow(ForbiddenException);
+      expect(() =>
+        policy.assertCanUpdateRole(admin, 'client', 'system_admin')
+      ).toThrow(ForbiddenException);
+      // cannot promote itself to manager
+      expect(() =>
+        policy.assertCanUpdateRole(admin, 'admin', 'manager')
+      ).toThrow(ForbiddenException);
+    });
+
+    it('clients and teachers may not update roles', () => {
+      expect(() =>
+        policy.assertCanUpdateRole(client, 'client', 'teacher')
+      ).toThrow(ForbiddenException);
+      expect(() =>
+        policy.assertCanUpdateRole(teacher, 'client', 'admin')
+      ).toThrow(ForbiddenException);
+    });
   });
 });
