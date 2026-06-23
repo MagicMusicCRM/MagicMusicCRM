@@ -24,13 +24,31 @@ describe('JwtAuthGuard', () => {
     const jwt = new JwtService();
     const token = await jwt.signAsync(
       { sub: 'user-a', role: 'client' },
-      { secret: 'test-secret-test-secret-test-secret-123' }
+      {
+        secret: 'test-secret-test-secret-test-secret-123',
+        issuer: 'magicmusiccrm',
+        audience: 'magicmusiccrm-app'
+      }
     );
     const { request, context } = executionContext(`Bearer ${token}`);
     const guard = new JwtAuthGuard(jwt, config);
 
     await expect(guard.canActivate(context as never)).resolves.toBe(true);
     expect(request.user).toEqual({ userId: 'user-a', role: 'client' });
+  });
+
+  it('rejects a token missing the expected audience/issuer', async () => {
+    const jwt = new JwtService();
+    const token = await jwt.signAsync(
+      { sub: 'user-a', role: 'client' },
+      { secret: 'test-secret-test-secret-test-secret-123' } // no iss/aud
+    );
+    const guard = new JwtAuthGuard(jwt, config);
+    const { context } = executionContext(`Bearer ${token}`);
+
+    await expect(guard.canActivate(context as never)).rejects.toThrow(
+      UnauthorizedException
+    );
   });
 
   it('rejects missing bearer token', async () => {

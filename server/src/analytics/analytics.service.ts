@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ActorContext } from "../common/security/actor-context";
+import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { CrmService } from "../crm/crm.service";
 import { CrmPolicy } from "../crm/crm.policy";
@@ -10,6 +11,7 @@ export class AnalyticsService {
     private readonly database: DatabaseService,
     private readonly crm: CrmService,
     private readonly policy: CrmPolicy,
+    private readonly audit: AuditService,
   ) {}
 
   overview(actor: ActorContext) {
@@ -574,6 +576,12 @@ export class AnalyticsService {
 
   async financeMonthlyCsv(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const rows = await this.financeMonthlyRows(actor, query);
+    await this.audit.record({
+      actor,
+      action: "analytics.finance_exported",
+      entityType: "report",
+      metadata: { format: "csv", from: query.from ?? null, to: query.to ?? null },
+    });
     const header = AnalyticsService.FINANCE_MONTHLY_HEADER.join(",");
     const escape = (v: unknown) => {
       const s = String(v ?? "");
@@ -587,6 +595,12 @@ export class AnalyticsService {
   // when served as application/vnd.ms-excel with an .xls filename — no exceljs needed.
   async financeMonthlyXlsx(actor: ActorContext, query: { from?: string; to?: string }): Promise<string> {
     const rows = await this.financeMonthlyRows(actor, query);
+    await this.audit.record({
+      actor,
+      action: "analytics.finance_exported",
+      entityType: "report",
+      metadata: { format: "xlsx", from: query.from ?? null, to: query.to ?? null },
+    });
     const escapeXml = (v: unknown) =>
       String(v ?? "")
         .replace(/&/g, "&amp;")

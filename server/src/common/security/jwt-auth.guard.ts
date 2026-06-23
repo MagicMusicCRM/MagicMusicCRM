@@ -7,7 +7,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
-import { AuthenticatedRequest, UserRole } from './actor-context';
+import {
+  AuthenticatedRequest,
+  JWT_AUDIENCE,
+  JWT_ISSUER,
+  UserRole
+} from './actor-context';
 
 interface AccessTokenPayload {
   sub?: string;
@@ -39,7 +44,10 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwt.verifyAsync<AccessTokenPayload>(token, {
-        secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET')
+        secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+        algorithms: ['HS256']
       });
 
       if (!payload.sub || !payload.role || !VALID_ROLES.has(payload.role)) {

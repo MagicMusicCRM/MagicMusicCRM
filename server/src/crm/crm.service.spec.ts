@@ -4541,6 +4541,43 @@ describe("CrmService", () => {
     );
   });
 
+  it("is idempotent for duplicate payment submits within the window", async () => {
+    const paymentRow = {
+      id: "pay-a",
+      student_id: "student-a",
+      student_user_id: null,
+      amount: "1500.00",
+      student_first_name: null,
+      student_last_name: null,
+      currency: "RUB",
+      payment_date: "2026-06-23",
+      method: "cash",
+      external_id: null,
+      notes: null,
+      created_by: "manager-a",
+      created_at: "2026-06-23T00:00:00.000Z",
+    };
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // 1st: dup-check empty
+      { rows: [paymentRow] }, // insert
+      { rows: [paymentRow] }, // 2nd: dup-check returns existing
+    ]);
+    const dto = {
+      studentId: "student-a",
+      amount: 1500,
+      paymentDate: "2026-06-23",
+      method: "cash",
+    } as never;
+
+    const first = await service.createPayment(actor, dto);
+    const second = await service.createPayment(actor, dto);
+
+    expect(first.id).toBe("pay-a");
+    expect(second.id).toBe("pay-a");
+    // dup-check, insert, dup-check — the second submit must NOT insert again.
+    expect(query).toHaveBeenCalledTimes(3);
+  });
+
   it("lists expenses with branch/category filters and a total (P5-5)", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       {

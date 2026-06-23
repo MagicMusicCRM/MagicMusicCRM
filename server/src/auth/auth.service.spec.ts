@@ -54,7 +54,8 @@ describe("AuthService", () => {
 
   it("creates users with client role and normalized email", async () => {
     query
-      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // signup rate-limit
+      .mockResolvedValueOnce({ rows: [] }) // existing-email check
       .mockResolvedValueOnce({
         rows: [
           {
@@ -74,8 +75,8 @@ describe("AuthService", () => {
       fullName: "User Example",
     });
 
-    expect(query.mock.calls[1][1][0]).toBe("user@example.com");
-    expect(query.mock.calls[1][1][2]).toBe("User Example");
+    expect(query.mock.calls[2][1][0]).toBe("user@example.com");
+    expect(query.mock.calls[2][1][2]).toBe("User Example");
     expect(result.user.role).toBe("client");
     expect(result.emailVerificationRequired).toBe(true);
     expect(audit.record).toHaveBeenCalledWith(
@@ -87,9 +88,11 @@ describe("AuthService", () => {
   });
 
   it("rejects duplicate signup", async () => {
-    query.mockResolvedValueOnce({
-      rows: [{ id: "existing-user", is_app_account: true }],
-    });
+    query
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // signup rate-limit
+      .mockResolvedValueOnce({
+        rows: [{ id: "existing-user", is_app_account: true }],
+      });
 
     await expect(
       service.signup({
@@ -98,6 +101,25 @@ describe("AuthService", () => {
         fullName: "User Example",
       }),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it("rate limits signups per IP", async () => {
+    query.mockResolvedValueOnce({ rows: [{ count: "10" }] }); // limit reached
+
+    await expect(
+      service.signup(
+        {
+          email: "flood@example.com",
+          password: "strong-password-123",
+          fullName: "Flood User",
+        },
+        "9.9.9.9",
+      ),
+    ).rejects.toThrow(HttpException);
+
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "auth.signup_rate_limited" }),
+    );
   });
 
   it("logs in with valid credentials", async () => {

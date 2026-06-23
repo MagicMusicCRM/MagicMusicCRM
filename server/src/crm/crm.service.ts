@@ -4288,6 +4288,32 @@ export class CrmService {
 
   async createPayment(actor: ActorContext, dto: CreatePaymentDto) {
     this.policy.assertManagerOnly(actor);
+    // Idempotency guard (KVA): an identical payment by the same actor within a
+    // short window (double-click / network retry) returns the existing row
+    // instead of creating a duplicate that would corrupt the balance/reports.
+    const dup = await this.database.query<PaymentRow>(
+      `
+        select id, student_id, null::uuid as student_user_id, amount,
+          null::text as student_first_name, null::text as student_last_name,
+          currency, payment_date, method, external_id, notes, created_by, created_at
+        from app.payments
+        where student_id = $1 and amount = $2 and created_by = $3
+          and coalesce(method, '') = coalesce($4, '')
+          and payment_date = $5 and deleted_at is null
+          and created_at > now() - interval '15 seconds'
+        order by created_at desc
+        limit 1
+      `,
+      [
+        dto.studentId,
+        dto.amount,
+        actor.userId,
+        dto.method?.trim() || null,
+        dto.paymentDate,
+      ],
+    );
+    if (dup.rows[0]) return this.toPaymentDto(dup.rows[0]);
+
     const result = await this.database.query<PaymentRow>(
       `
         insert into app.payments (

@@ -1,4 +1,5 @@
 import { AnalyticsService } from "./analytics.service";
+import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { CrmService } from "../crm/crm.service";
 import { CrmPolicy } from "../crm/crm.policy";
@@ -9,12 +10,14 @@ describe("AnalyticsService", () => {
     const query = jest.fn().mockResolvedValue({ rows });
     const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn() };
     const crm = {} as unknown as CrmService;
+    const audit = { record: jest.fn() };
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
       crm,
       policy as unknown as CrmPolicy,
+      audit as unknown as AuditService,
     );
-    return { service, query, policy };
+    return { service, query, policy, audit };
   };
 
   it("reads finance monthly from the matview with a date filter", async () => {
@@ -109,6 +112,7 @@ describe("AnalyticsService", () => {
       { query } as unknown as DatabaseService,
       crm,
       policy as unknown as CrmPolicy,
+      { record: jest.fn() } as unknown as AuditService,
     );
     const result = await service.debts(actor, {});
     expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
@@ -235,6 +239,7 @@ describe("AnalyticsService", () => {
       { query } as unknown as DatabaseService,
       crm,
       policy as unknown as CrmPolicy,
+      { record: jest.fn() } as unknown as AuditService,
     );
     const result = await service.lossReasons(actor, { from: "2026-01-01", to: "2026-04-01" });
     expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
@@ -260,6 +265,7 @@ describe("AnalyticsService", () => {
       { query } as unknown as DatabaseService,
       crm,
       policy as unknown as CrmPolicy,
+      { record: jest.fn() } as unknown as AuditService,
     );
     const result = await service.dataQuality(actor, {});
     expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
@@ -285,6 +291,7 @@ describe("AnalyticsService", () => {
       { query } as unknown as DatabaseService,
       crm,
       policy as unknown as CrmPolicy,
+      { record: jest.fn() } as unknown as AuditService,
     );
     const result = await service.responsibleDistribution(actor, { from: "2026-01-01", to: "2026-04-01" });
     expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);

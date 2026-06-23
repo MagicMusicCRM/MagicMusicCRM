@@ -6,7 +6,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AuditService } from '../audit/audit.service';
-import { ActorContext, UserRole } from '../common/security/actor-context';
+import {
+  ActorContext,
+  JWT_AUDIENCE,
+  JWT_ISSUER,
+  UserRole
+} from '../common/security/actor-context';
 import { DatabaseService } from '../db/database.service';
 
 export interface TokenPair {
@@ -211,7 +216,10 @@ export class SessionService {
       },
       {
         secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
-        expiresIn: this.config.get<number>('ACCESS_TOKEN_TTL_SECONDS', 900)
+        expiresIn: this.config.get<number>('ACCESS_TOKEN_TTL_SECONDS', 900),
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+        algorithm: 'HS256'
       }
     );
   }

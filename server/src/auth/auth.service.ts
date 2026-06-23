@@ -64,7 +64,11 @@ export class AuthService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async signup(dto: SignupDto): Promise<SignupResponse> {
+  async signup(dto: SignupDto, clientIp?: string): Promise<SignupResponse> {
+    // Throttle mass account creation per client IP (KVA): prevents spam signups
+    // and outbound-email-quota abuse.
+    const ipHash = this.tokenHash(clientIp ?? "unknown");
+    await this.assertSignupAllowed(ipHash);
     const email = this.normalizeEmail(dto.email);
     const existing = await this.database.query<{
       id: string;
@@ -126,7 +130,7 @@ export class AuthService {
       action: "auth.signup",
       entityType: "user",
       entityId: user.id,
-      metadata: { emailHash: this.emailHash(email) },
+      metadata: { emailHash: this.emailHash(email), ipHash },
     });
 
     return { user: this.toResponse(user), emailVerificationRequired: true };
@@ -711,6 +715,32 @@ export class AuthService {
     });
     throw new HttpException(
       "Слишком много попыток. Попробуйте позже.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  private async assertSignupAllowed(ipHash: string): Promise<void> {
+    const rateLimited = await this.hasRecentCountReached(
+      `
+        select count(*)::text as count
+        from app.audit_events
+        where action = 'auth.signup'
+          and metadata ->> 'ipHash' = $1
+          and created_at > now() - interval '1 hour'
+      `,
+      [ipHash],
+      10,
+    );
+
+    if (!rateLimited) return;
+
+    await this.audit.record({
+      action: "auth.signup_rate_limited",
+      entityType: "user",
+      metadata: { ipHash },
+    });
+    throw new HttpException(
+      "Слишком много регистраций. Попробуйте позже.",
       HttpStatus.TOO_MANY_REQUESTS,
     );
   }

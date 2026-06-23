@@ -10,6 +10,12 @@ export interface ActorContext {
   role: UserRole;
 }
 
+// JWT issuer/audience claims — set on sign, verified on every request, so a
+// token minted for another service/environment (or with a reused secret) is
+// rejected (KVA: "JWT не содержит/не проверяет iss/aud").
+export const JWT_ISSUER = 'magicmusiccrm';
+export const JWT_AUDIENCE = 'magicmusiccrm-app';
+
 export interface AuthenticatedRequest {
   user?: ActorContext;
 }

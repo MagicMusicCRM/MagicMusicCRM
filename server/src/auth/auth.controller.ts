@@ -28,8 +28,8 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post("signup")
-  async signup(@Body() dto: SignupDto) {
-    return this.authService.signup(dto);
+  async signup(@Body() dto: SignupDto, @Ip() ip: string) {
+    return this.authService.signup(dto, ip);
   }
 
   @Post("login")
