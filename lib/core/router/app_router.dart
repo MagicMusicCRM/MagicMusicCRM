@@ -321,12 +321,7 @@ class _AppGateLoadingScreen extends ConsumerWidget {
       backgroundColor: AppColor.bg,
       body: DecoratedBox(
         decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0.0, -1.0),
-            radius: 1.1,
-            colors: [Color(0x1AC5A059), AppColor.bg],
-            stops: [0.0, 0.6],
-          ),
+          color: AppColor.bg,
         ),
         child: SafeArea(
           child: Center(
@@ -422,24 +417,14 @@ class _AppGateLoadingScreen extends ConsumerWidget {
                         child: const Text('Выйти'),
                       ),
                     ] else ...[
-                      // Boot affordance — v7 skeleton shimmer lines.
-                      const SkeletonBox(
-                        height: 12,
-                        radius: AppRadius.sm,
-                      ),
-                      const SizedBox(height: AppSpace.md),
-                      const SkeletonBox(
-                        height: 12,
-                        radius: AppRadius.sm,
-                      ),
-                      const SizedBox(height: AppSpace.md),
-                      const Align(
-                        alignment: Alignment.centerLeft,
+                      // Real loading indicator.
+                      const Center(
                         child: SizedBox(
-                          width: 160,
-                          child: SkeletonBox(
-                            height: 12,
-                            radius: AppRadius.sm,
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: AppColor.gold,
                           ),
                         ),
                       ),
