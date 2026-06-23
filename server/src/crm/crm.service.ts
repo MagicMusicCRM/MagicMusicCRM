@@ -698,6 +698,11 @@ export class CrmService {
                     and other_room.status <> 'cancelled'
                     and other_room.id <> l.id
                     and other_room.room_id = l.room_id
+                    -- Bound the conflict candidate to the dashboard window so the
+                    -- (room_id, scheduled_at) index drives the scan instead of a
+                    -- per-lesson seq scan over all 47k lessons (6.3s -> ~40ms).
+                    and other_room.scheduled_at >= $1::timestamptz
+                    and other_room.scheduled_at < $2::timestamptz
                     -- Lessons of the SAME group share a room legitimately (one
                     -- group class = many participant rows). Only a different
                     -- group (or an individual lesson) is a real double-booking.
@@ -3023,6 +3028,8 @@ export class CrmService {
                 and other_room.status <> 'cancelled'
                 and other_room.id <> scoped.id
                 and other_room.room_id = scoped.room_id
+                and other_room.scheduled_at >= $1::timestamptz
+                and other_room.scheduled_at < $2::timestamptz
                 -- Same group sharing a room is not a conflict (see schedule_issues).
                 and (scoped.group_id is null or other_room.group_id is null
                      or other_room.group_id <> scoped.group_id)
@@ -3036,6 +3043,8 @@ export class CrmService {
                 and other_teacher.status <> 'cancelled'
                 and other_teacher.id <> scoped.id
                 and other_teacher.teacher_id = scoped.teacher_id
+                and other_teacher.scheduled_at >= $1::timestamptz
+                and other_teacher.scheduled_at < $2::timestamptz
                 -- One teacher running one group class spans many participant
                 -- rows at the same time — not a teacher double-booking.
                 and (scoped.group_id is null or other_teacher.group_id is null
@@ -3056,6 +3065,8 @@ export class CrmService {
               and other_room.status <> 'cancelled'
               and other_room.id <> scoped.id
               and other_room.room_id = scoped.room_id
+              and other_room.scheduled_at >= $1::timestamptz
+              and other_room.scheduled_at < $2::timestamptz
               and (scoped.group_id is null or other_room.group_id is null
                    or other_room.group_id <> scoped.group_id)
               and other_room.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
@@ -3069,6 +3080,8 @@ export class CrmService {
               and other_teacher.status <> 'cancelled'
               and other_teacher.id <> scoped.id
               and other_teacher.teacher_id = scoped.teacher_id
+              and other_teacher.scheduled_at >= $1::timestamptz
+              and other_teacher.scheduled_at < $2::timestamptz
               and (scoped.group_id is null or other_teacher.group_id is null
                    or other_teacher.group_id <> scoped.group_id)
               and other_teacher.scheduled_at < scoped.scheduled_at + scoped.duration_minutes * interval '1 minute'
