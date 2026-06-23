@@ -1,11 +1,25 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import * as Sentry from '@sentry/node';
 import { AppModule } from './app.module';
 import { SafeExceptionFilter } from './common/filters/safe-exception.filter';
 import { SafeLogger } from './common/logging/safe-logger.service';
 
 async function bootstrap() {
+  // Backend error tracking (KVA-225), gated on SENTRY_DSN like the Flutter
+  // client. No-op when DSN is unset. PII is not sent by default.
+  const sentryDsn = process.env.SENTRY_DSN;
+  if (sentryDsn) {
+    Sentry.init({
+      dsn: sentryDsn,
+      environment: process.env.NODE_ENV ?? 'staging',
+      release: process.env.SENTRY_RELEASE,
+      sendDefaultPii: false,
+      tracesSampleRate: 0
+    });
+  }
+
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const logger = app.get(SafeLogger);
   const config = app.get(ConfigService);

@@ -5,6 +5,7 @@ import {
   HttpException,
   HttpStatus
 } from '@nestjs/common';
+import * as Sentry from '@sentry/node';
 import { Request, Response } from 'express';
 import { SafeLogger } from '../logging/safe-logger.service';
 
@@ -34,6 +35,17 @@ export class SafeExceptionFilter implements ExceptionFilter {
         undefined,
         'SafeExceptionFilter'
       );
+    }
+
+    // Report server-side faults to Sentry (KVA-225). No-op when Sentry is not
+    // initialised (SENTRY_DSN unset). 4xx client errors are not reported.
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      Sentry.withScope((scope) => {
+        scope.setTag('path', request.path);
+        scope.setTag('method', request.method);
+        if (requestId) scope.setExtra('requestId', requestId);
+        Sentry.captureException(exception);
+      });
     }
 
     response.status(status).json({
