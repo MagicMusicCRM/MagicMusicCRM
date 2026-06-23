@@ -878,4 +878,32 @@ export class CrmController {
   ) {
     return this.crm.undoMerge(actor, mergeLogId);
   }
+
+  @Get("clients/:entityType/:entityId/linked-users")
+  getClientLinkedUsers(
+    @CurrentActor() actor: ActorContext,
+    @Param("entityType") entityType: string,
+    @Param("entityId", ParseUUIDPipe) entityId: string,
+  ) {
+    return this.crm.getClientLinkedUsers(actor, entityType, entityId);
+  }
+
+  @Get("clients/:entityType/:entityId/user-candidates")
+  listClientUserCandidates(
+    @CurrentActor() actor: ActorContext,
+    @Param("entityType") entityType: string,
+    @Param("entityId", ParseUUIDPipe) entityId: string,
+  ) {
+    return this.crm.listClientUserCandidates(actor, entityType, entityId);
+  }
+
+  @Post("clients/:entityType/:entityId/link-user")
+  linkUserToClient(
+    @CurrentActor() actor: ActorContext,
+    @Param("entityType") entityType: string,
+    @Param("entityId", ParseUUIDPipe) entityId: string,
+    @Body() dto: { userId: string },
+  ) {
+    return this.crm.linkUserToClient(actor, entityType, entityId, dto.userId);
+  }
 }
