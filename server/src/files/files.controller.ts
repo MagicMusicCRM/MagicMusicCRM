@@ -29,7 +29,23 @@ export class FilesController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 26 * 1024 * 1024 } }))
+  // Strict multipart limits (KVA-227): the endpoint accepts exactly one file
+  // plus a few short DTO text fields. Capping files/fields/parts/fieldNameSize
+  // neutralises the multer DoS vectors (deeply-nested field names, part
+  // flooding, aborted-upload buffering) at the boundary regardless of the
+  // transitive multer version.
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: 26 * 1024 * 1024,
+        files: 1,
+        fields: 8,
+        parts: 12,
+        fieldNameSize: 100,
+        fieldSize: 64 * 1024
+      }
+    })
+  )
   upload(
     @CurrentActor() actor: ActorContext,
     @Body() dto: UploadFileDto,
