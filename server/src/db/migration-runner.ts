@@ -4,6 +4,13 @@ import { Pool } from 'pg';
 
 const migrationTable = 'app_schema_migrations';
 
+// Migrations whose first lines contain this marker run OUTSIDE a transaction
+// block, so statements like `CREATE INDEX CONCURRENTLY` (forbidden inside a
+// transaction) can be used on large/high-write tables without a write lock.
+// Such migration bodies must be safe under autocommit: a single statement
+// and/or `IF NOT EXISTS` so a partial failure can be safely re-run.
+const NO_TRANSACTION_MARKER = /^\s*--\s*migrate:no-transaction/im;
+
 interface MigrationFile {
   id: string;
   upPath: string;
@@ -25,6 +32,15 @@ export class MigrationRunner {
 
     for (const migration of pending) {
       const sql = await fs.readFile(migration.upPath, 'utf8');
+      if (NO_TRANSACTION_MARKER.test(sql)) {
+        await this.pool.query(sql);
+        await this.pool.query(
+          `insert into ${migrationTable} (id, applied_at) values ($1, now())`,
+          [migration.id]
+        );
+        completed.push(migration.id);
+        continue;
+      }
       await this.pool.query('begin');
       try {
         await this.pool.query(sql);
@@ -57,6 +73,13 @@ export class MigrationRunner {
     if (!migration) throw new Error(`Missing down migration for ${migrationId}`);
 
     const sql = await fs.readFile(migration.downPath, 'utf8');
+    if (NO_TRANSACTION_MARKER.test(sql)) {
+      await this.pool.query(sql);
+      await this.pool.query(`delete from ${migrationTable} where id = $1`, [
+        migrationId
+      ]);
+      return migrationId;
+    }
     await this.pool.query('begin');
     try {
       await this.pool.query(sql);
