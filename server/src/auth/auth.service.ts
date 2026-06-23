@@ -425,7 +425,13 @@ export class AuthService {
   async resetPassword(
     token: string,
     password: string,
+    clientIp?: string,
   ): Promise<{ user: AuthUserResponse }> {
+    // Защита от перебора 6-значного кода: ограничиваем попытки подтверждения по
+    // IP клиента (req.ip корректен за reverse-proxy благодаря trust proxy).
+    const ipHash = this.tokenHash(clientIp ?? "unknown");
+    await this.assertResetConfirmAllowed(ipHash);
+
     const passwordHash = await this.passwordService.hash(password);
     const result = await this.database.query<UserRecord>(
       `
@@ -455,6 +461,12 @@ export class AuthService {
 
     const user = result.rows[0];
     if (!user) {
+      // Неверный/просроченный код — фиксируем для троттлинга по IP.
+      await this.audit.record({
+        action: "auth.password_reset_failed",
+        entityType: "user",
+        metadata: { ipHash },
+      });
       throw new BadRequestException(
         "Ссылка для сброса пароля недействительна или истекла.",
       );
@@ -494,6 +506,9 @@ export class AuthService {
       throw new UnauthorizedException("Пользователь не найден.");
     }
 
+    // Смена пароля инвалидирует все активные сессии/refresh-токены (High #2):
+    // украденная сессия не должна пережить смену пароля.
+    await this.sessions.revokeAll(actor);
     await this.audit.record({
       actor,
       action: "auth.password_changed",
@@ -686,6 +701,32 @@ export class AuthService {
       action: rateLimitedAction,
       entityType: "user",
       metadata: { emailHash },
+    });
+    throw new HttpException(
+      "Слишком много попыток. Попробуйте позже.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  private async assertResetConfirmAllowed(ipHash: string): Promise<void> {
+    const rateLimited = await this.hasRecentCountReached(
+      `
+        select count(*)::text as count
+        from app.audit_events
+        where action = 'auth.password_reset_failed'
+          and metadata ->> 'ipHash' = $1
+          and created_at > now() - interval '15 minutes'
+      `,
+      [ipHash],
+      10,
+    );
+
+    if (!rateLimited) return;
+
+    await this.audit.record({
+      action: "auth.password_reset_rate_limited",
+      entityType: "user",
+      metadata: { ipHash },
     });
     throw new HttpException(
       "Слишком много попыток. Попробуйте позже.",

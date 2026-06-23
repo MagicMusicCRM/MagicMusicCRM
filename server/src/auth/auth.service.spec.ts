@@ -427,25 +427,28 @@ describe("AuthService", () => {
   });
 
   it("resets password and revokes existing sessions", async () => {
-    query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: "user-a",
-          email: "user@example.com",
-          password_hash: "new-hash",
-          role: "client",
-          email_verified_at: new Date(),
-        },
-      ],
-    });
+    query
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // confirm rate-limit ok
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "user-a",
+            email: "user@example.com",
+            password_hash: "new-hash",
+            role: "client",
+            email_verified_at: new Date(),
+          },
+        ],
+      });
 
     const result = await service.resetPassword(
       "abcdefghijklmnopqrstuvwxyz0123456789",
       "new-strong-password-123",
+      "1.2.3.4",
     );
 
     expect(result.user.id).toBe("user-a");
-    expect(query.mock.calls[0][0]).toContain(
+    expect(query.mock.calls[1][0]).toContain(
       "update app.password_reset_tokens",
     );
     expect(sessions.revokeAll).toHaveBeenCalledWith({
@@ -454,6 +457,34 @@ describe("AuthService", () => {
     });
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "auth.password_reset_completed" }),
+    );
+  });
+
+  it("rate limits repeated password reset confirmations by IP", async () => {
+    query.mockResolvedValueOnce({ rows: [{ count: "10" }] }); // limit reached
+
+    await expect(
+      service.resetPassword("000000", "new-strong-password-123", "9.9.9.9"),
+    ).rejects.toThrow(HttpException);
+
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "auth.password_reset_rate_limited" }),
+    );
+    // Must not even attempt to consume a token once rate limited.
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it("records failed password reset confirmations for abuse detection", async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // rate-limit ok
+      .mockResolvedValueOnce({ rows: [] }); // wrong/expired token -> no row
+
+    await expect(
+      service.resetPassword("123456", "new-strong-password-123", "9.9.9.9"),
+    ).rejects.toThrow("недействительна");
+
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "auth.password_reset_failed" }),
     );
   });
 
@@ -479,6 +510,11 @@ describe("AuthService", () => {
     expect(query.mock.calls[0][0]).toContain("update app.users");
     expect(query.mock.calls[0][1][0]).toBe("user-a");
     expect(query.mock.calls[0][1][1]).not.toBe("new-strong-password-123");
+    // Changing the password must invalidate every existing session (High #2).
+    expect(sessions.revokeAll).toHaveBeenCalledWith({
+      userId: "user-a",
+      role: "client",
+    });
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "auth.password_changed",

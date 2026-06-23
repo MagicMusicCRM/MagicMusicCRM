@@ -21,6 +21,9 @@ async function bootstrap() {
   app.useGlobalFilters(new SafeExceptionFilter(logger));
   app.enableShutdownHooks();
   app.getHttpAdapter().getInstance().disable('x-powered-by');
+  // За единственным reverse-proxy (Caddy): доверяем 1 hop, чтобы req.ip
+  // отражал реальный IP клиента (нужно для IP-троттлинга сброса пароля и т.п.).
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.setGlobalPrefix('api');
 
   const allowedOrigins = config.get<string>('CORS_ALLOWED_ORIGINS', '');
