@@ -12,6 +12,8 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'client_card_aggregation.dart';
+import 'show_client_card.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
 /// Инфо / Задачи / Комментарии / Семья / История). Behaviour is equivalent to
@@ -68,10 +70,38 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   // Adaptive segmented tab bar. Leads keep the original 5 tabs; students get the
   // ported student tab set (Инфо / Задачи / Комментарии / Семья / Занятия /
-  // Оплаты / Инвойсы / Документы / История / Прогресс).
+  // Оплаты / Инвойсы / Документы / История / Прогресс). A converted client
+  // (lead → student) reuses the student tab set — its body folds in the lead
+  // Инфо/source section and the merged comments / tasks / history.
   int _tabIndex = 0;
-  bool get _isStudent => widget.entityType == 'student';
+
+  // ── Aggregation (Phase 4) ─────────────────────────────────────────────────
+  // The card opens for one entity (widget.entityType / widget.lead['id']) but a
+  // converted client owns BOTH a lead and a student record. We resolve the
+  // counterpart on load and surface them in one card.
+  //
+  // `_mode` starts from the open entity and is upgraded to `converted` only once
+  // a counterpart is actually resolved. `_resolvedLeadId` / `_resolvedStudentId`
+  // are the ids the lead-side / student-side fetches run against (which may
+  // differ from the open entity id when the counterpart is loaded).
+  ClientMode _mode = ClientMode.leadOnly;
+  String? _resolvedLeadId;
+  String? _resolvedStudentId;
+
+  // True while the card renders the student layout (plain student OR converted).
+  // Drives the header, tab set and action bar.
+  bool get _isStudent => _mode.hasStudentHalf;
+  bool get _isConverted => _mode.isConverted;
+
+  // The id of the entity the card was opened for (unchanged from Phase 1/2).
   String get _entityId => widget.lead['id'].toString();
+
+  // Effective ids for each half once resolution settles. Fall back to the open
+  // entity id so the single-side modes behave exactly as before.
+  String get _studentId =>
+      _resolvedStudentId ?? (widget.entityType == 'student' ? _entityId : '');
+  String get _leadId =>
+      _resolvedLeadId ?? (widget.entityType == 'lead' ? _entityId : '');
 
   static const List<(IconData, String)> _leadTabs = [
     (Icons.info_outline_rounded, 'Инфо'),
@@ -95,6 +125,16 @@ class _ClientCardState extends ConsumerState<ClientCard>
   ];
 
   List<(IconData, String)> get _tabs => _isStudent ? _studentTabs : _leadTabs;
+
+  // The (entityType, entityId) pairs whose comment / task / history streams the
+  // card aggregates. A single-side card returns one pair; a converted client
+  // returns both halves so merged lists de-dup and origin-badge correctly.
+  List<ClientHalfRef> get _halfRefs => [
+    if (_mode.hasLeadHalf && _leadId.isNotEmpty)
+      (entityType: 'lead', entityId: _leadId),
+    if (_mode.hasStudentHalf && _studentId.isNotEmpty)
+      (entityType: 'student', entityId: _studentId),
+  ];
 
   // ── Student state (entityType == 'student') ───────────────────────────────
   // Loaded from `getStudentCard` (+ a family fetch). Each section is isolated so
@@ -154,28 +194,185 @@ class _ClientCardState extends ConsumerState<ClientCard>
       text: _leadData['notes']?.toString() ?? '',
     );
     _commentCtrl = TextEditingController();
-    if (_isStudent) {
-      // Student card: family is shared with the lead flow; the rest comes from
-      // the student card endpoint. Lead-only fetches are skipped.
+    if (widget.entityType == 'student') {
+      // Opened as a student. Start in studentOnly; once the student loads we
+      // read its `lead_id` and, if present, resolve the lead half (converted).
+      _mode = ClientMode.studentOnly;
+      _resolvedStudentId = _entityId;
       _loadingFamily = true;
       _fetchFamily();
-      _fetchStudentData();
+      _fetchStudentData(then: _resolveLeadCounterpart);
       return;
     }
+    // Opened as a lead. Start in leadOnly; once the lead card loads we inspect
+    // `linked_students` and, if non-empty, resolve the student half (converted).
+    _mode = ClientMode.leadOnly;
+    _resolvedLeadId = _entityId;
     _statuses = widget.allStatuses ?? const [];
     if (widget.allStatuses == null) _fetchStatuses();
     _fetchMetadata();
-    _fetchCard();
+    _fetchCard(then: _resolveStudentCounterpart);
     _fetchDuplicateCandidates();
     _fetchStatusHistory();
     _fetchFamily();
+  }
+
+  // ── Counterpart resolution (Phase 4) ──────────────────────────────────────
+  // Each resolver runs AFTER its own half has loaded and isolates failures: a
+  // failed counterpart fetch leaves the card in its single-side mode rather than
+  // blanking it. The two halves still load in parallel — the counterpart's
+  // fetches are fired without awaiting and update their own sections.
+
+  /// Student-opened path: if the loaded student carries a `lead_id`, fetch the
+  /// lead half (lead card, status history, statuses, metadata) and flip to
+  /// `converted`. Failures degrade silently back to studentOnly.
+  void _resolveLeadCounterpart() {
+    if (!mounted) return;
+    final leadId = _student?['lead_id']?.toString();
+    if (leadId == null || leadId.isEmpty) return;
+    setState(() {
+      _mode = ClientMode.converted;
+      _resolvedLeadId = leadId;
+      // Lead-side sections start loading now.
+      _loadingCard = true;
+      _loadingHistory = true;
+    });
+    // Parallel, isolated lead-half fetches against the resolved lead id. Lead
+    // statuses are needed for the header label and the originating-lead card;
+    // the editable lead form / branch metadata isn't shown in converted mode,
+    // so we skip _fetchMetadata here.
+    _statuses = widget.allStatuses ?? _statuses;
+    if (_statuses.isEmpty) _fetchStatuses();
+    _fetchCard(leadId: leadId);
+    _fetchStatusHistory(leadId: leadId);
+  }
+
+  /// Lead-opened path: if the lead card lists linked students, pick the primary
+  /// (first / most recent) one, fetch the student half and flip to `converted`.
+  /// Additional linked students stay visible via the existing linked-students
+  /// UI. Failures degrade silently back to leadOnly.
+  void _resolveStudentCounterpart() {
+    if (!mounted) return;
+    final linked = _list(_leadCard?['linked_students']);
+    if (linked.isEmpty) return;
+    final primary = _primaryLinkedStudent(linked);
+    final studentId = primary?['id']?.toString();
+    if (studentId == null || studentId.isEmpty) return;
+    setState(() {
+      _mode = ClientMode.converted;
+      _resolvedStudentId = studentId;
+      _loadingStudent = true;
+      _studentError = null;
+    });
+    // Parallel, isolated student-half fetch against the resolved student id.
+    _fetchStudentData(studentId: studentId);
+  }
+
+  /// Picks the primary linked student: most recently created, falling back to
+  /// the first row when no timestamps are present.
+  Map<String, dynamic>? _primaryLinkedStudent(
+    List<Map<String, dynamic>> linked,
+  ) {
+    if (linked.isEmpty) return null;
+    final sorted = [...linked]..sort(
+      (a, b) => (b['created_at']?.toString() ?? '').compareTo(
+        a['created_at']?.toString() ?? '',
+      ),
+    );
+    return sorted.first;
+  }
+
+  // ── Merged section data (Phase 4) ─────────────────────────────────────────
+  // Each merge tags rows with `_origin` (entityType) so converted views can show
+  // an origin chip, then de-dups by `id` and sorts desc by date. Single-side
+  // modes return just their own half (no behavioural change vs Phase 1/2).
+
+  List<Map<String, dynamic>> _origin(
+    List<Map<String, dynamic>> rows,
+    String entityType,
+  ) => rows.map((r) => {...r, '_origin': entityType}).toList();
+
+  /// Lead tasks (from the lead card) + student tasks, de-duped by id.
+  List<Map<String, dynamic>> get _mergedTasks {
+    final leadTasks = _mode.hasLeadHalf
+        ? _origin(_list(_leadCard?['tasks']), 'lead')
+        : const <Map<String, dynamic>>[];
+    final studentTasks = _mode.hasStudentHalf
+        ? _origin(_studentTasks, 'student')
+        : const <Map<String, dynamic>>[];
+    return mergeByIdSorted([studentTasks, leadTasks], dateKey: 'created_at');
+  }
+
+  /// Lead status history + student timeline, normalised onto a shared shape and
+  /// merged/sorted desc. Returns rows with: `_kind` ('status'|'event'),
+  /// `_origin`, `_date`, `_title`, `_subtitle`.
+  List<Map<String, dynamic>> get _mergedHistory {
+    final out = <List<Map<String, dynamic>>>[];
+    if (_mode.hasLeadHalf) {
+      out.add(
+        _statusHistory.map((h) {
+          final from = h['old_status']?.toString();
+          final to = h['new_status']?.toString();
+          final transition = [
+            if (from != null && from.isNotEmpty) from else '—',
+            '→',
+            if (to != null && to.isNotEmpty) to else '—',
+          ].join(' ');
+          final comment = h['comment']?.toString().trim() ?? '';
+          return {
+            'id': h['id'],
+            '_origin': 'lead',
+            '_kind': 'status',
+            '_date': h['changed_at'],
+            '_title': transition,
+            '_subtitle': comment,
+          };
+        }).toList(),
+      );
+    }
+    if (_mode.hasStudentHalf) {
+      out.add(
+        _list(_studentCardTimeline).map((t) {
+          return {
+            'id': t['id'],
+            '_origin': 'student',
+            '_kind': 'event',
+            '_date': t['occurred_at'],
+            '_title': t['title']?.toString() ?? 'Событие',
+            '_subtitle': t['body']?.toString() ?? '',
+          };
+        }).toList(),
+      );
+    }
+    return mergeByIdSorted(out, dateKey: '_date');
+  }
+
+  // The student timeline is part of the student card payload; kept separately so
+  // the merged history can fold it in alongside the lead status history.
+  List<Map<String, dynamic>> _studentCardTimeline = const [];
+
+  // True when the lead card lists at least one linked student — used to hide the
+  // «Создать ученика» button even before resolution flips the mode.
+  bool get _hasLinkedStudent => _list(_leadCard?['linked_students']).isNotEmpty;
+
+  // Linked students other than the active (primary) one — surfaced as links in
+  // the converted Инфо so the user can see siblings on the same lead.
+  List<Map<String, dynamic>> get _otherLinkedStudents {
+    final linked = _list(_leadCard?['linked_students']);
+    if (linked.length <= 1) return const [];
+    final activeId = _studentId;
+    return linked
+        .where((s) => s['id']?.toString() != activeId)
+        .toList();
   }
 
   // Loads the student card in one round-trip (getStudentCard), mirroring
   // student_detail_screen._loadAllData. Per-section failures are isolated: the
   // bulk card load only fails the card if the student record itself is
   // unavailable; family loads independently via [_fetchFamily].
-  Future<void> _fetchStudentData() async {
+  Future<void> _fetchStudentData({String? studentId, VoidCallback? then}) async {
+    final id = studentId ?? _studentId;
+    if (id.isEmpty) return;
     if (mounted) {
       setState(() {
         _loadingStudent = true;
@@ -184,7 +381,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
     try {
       final crm = ref.read(magicCrmServiceProvider);
-      final card = await crm.getStudentCard(_entityId);
+      final card = await crm.getStudentCard(id);
       if (!mounted) return;
       final student = card['student'] is Map<String, dynamic>
           ? card['student'] as Map<String, dynamic>
@@ -200,6 +397,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
         _studentComments = _list(card['comments']);
         _groups = _list(card['groups']);
         _expectedPayments = _list(card['expected_payments']);
+        _studentCardTimeline = _list(card['timeline']);
         _studentTasks.sort(
           (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
         );
@@ -208,6 +406,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
         );
         _loadingStudent = false;
       });
+      then?.call();
     } catch (e) {
       debugPrint('Error loading student card: $e');
       if (mounted) {
@@ -239,19 +438,26 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
   }
 
-  Future<void> _fetchCard() async {
+  Future<void> _fetchCard({String? leadId, VoidCallback? then}) async {
+    final id = leadId ?? _leadId;
+    if (id.isEmpty) {
+      if (mounted) setState(() => _loadingCard = false);
+      return;
+    }
     try {
-      final card = await ref
-          .read(magicCrmServiceProvider)
-          .getLeadCard(widget.lead['id'].toString());
+      final card = await ref.read(magicCrmServiceProvider).getLeadCard(id);
       if (!mounted) return;
       setState(() {
         _leadCard = card;
         if (card['lead'] is Map<String, dynamic>) {
           _leadData = {..._leadData, ...(card['lead'] as Map<String, dynamic>)};
+          // After merging the lead record, `_leadData['id']` is the lead id —
+          // keep `_resolvedLeadId` in sync so lead-side ops target it.
+          _resolvedLeadId = _leadData['id']?.toString() ?? id;
         }
         _loadingCard = false;
       });
+      then?.call();
     } catch (_) {
       if (mounted) setState(() => _loadingCard = false);
     }
@@ -279,11 +485,16 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
   }
 
-  Future<void> _fetchStatusHistory() async {
+  Future<void> _fetchStatusHistory({String? leadId}) async {
+    final id = leadId ?? _leadId;
+    if (id.isEmpty) {
+      if (mounted) setState(() => _loadingHistory = false);
+      return;
+    }
     try {
       final items = await ref
           .read(magicCrmServiceProvider)
-          .getLeadStatusHistory(widget.lead['id'].toString());
+          .getLeadStatusHistory(id);
       if (!mounted) return;
       setState(() {
         _statusHistory = items;
@@ -519,7 +730,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
           color: cs.surface,
           child: Column(
             children: [
-              _isStudent ? _buildStudentHeader(cs) : _buildHeader(cs, curStatus),
+              _isStudent
+                  ? _buildStudentHeader(cs, curStatus)
+                  : _buildHeader(cs, curStatus),
               Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
               _buildTabBar(cs),
               Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
@@ -720,24 +933,30 @@ class _ClientCardState extends ConsumerState<ClientCard>
           runSpacing: AppSpace.sm,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            OutlinedButton.icon(
-              onPressed: _saving || _converting ? null : _convertToStudent,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: cs.onSurface,
-                side: BorderSide(color: cs.outlineVariant),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
+            // Hide «Создать ученика» once a linked student exists (the card is
+            // — or is about to become — converted): the conversion already
+            // happened. `_isConverted` covers the resolved case; the
+            // linked_students check covers the brief window before resolution
+            // flips the mode.
+            if (!_isConverted && !_hasLinkedStudent)
+              OutlinedButton.icon(
+                onPressed: _saving || _converting ? null : _convertToStudent,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: cs.onSurface,
+                  side: BorderSide(color: cs.outlineVariant),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                  ),
                 ),
+                icon: _converting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                label: const Text('Создать ученика'),
               ),
-              icon: _converting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.person_add_alt_1_rounded, size: 18),
-              label: const Text('Создать ученика'),
-            ),
             TextButton(
               onPressed: _saving || _converting ? null : _handleClose,
               style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
@@ -1066,20 +1285,26 @@ class _ClientCardState extends ConsumerState<ClientCard>
       return;
     }
 
+    // New tasks target the primary half: the student side for a converted
+    // client, otherwise the open entity.
+    final targetType = _isConverted ? 'student' : widget.entityType;
+    final targetId = _isConverted ? _studentId : _entityId;
+    if (targetId.isEmpty) return;
     setState(() => _addingTask = true);
     try {
       await ref
           .read(magicCrmServiceProvider)
           .createTask(
-            entityType: widget.entityType,
-            entityId: _entityId,
+            entityType: targetType,
+            entityId: targetId,
             title: title,
             dueAt: dueAt,
           );
       _dirty = true;
-      if (_isStudent) {
+      if (_mode.hasStudentHalf) {
         await _fetchStudentData();
-      } else {
+      }
+      if (_mode.hasLeadHalf) {
         await _fetchCard();
       }
       if (mounted) {
@@ -1120,8 +1345,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
               children: [
                 _sectionTitle('Комментарии'),
                 _CommentsList(
-                  entityType: widget.entityType,
-                  entityId: _entityId,
+                  // For a converted client both halves are loaded, merged,
+                  // de-duped by id and origin-badged; single-side cards pass one
+                  // ref and render exactly as before (no origin chip).
+                  refs: _halfRefs,
+                  showOrigin: _isConverted,
                   refreshKey: _commentsRefreshKey,
                 ),
               ],
@@ -1265,8 +1493,29 @@ class _ClientCardState extends ConsumerState<ClientCard>
     return b < 0 ? AppTheme.danger : AppTheme.success;
   }
 
-  Widget _buildStudentHeader(ColorScheme cs) {
+  // Pill badge for the header («Ученик» / «Лид→Ученик»).
+  Widget _headerBadge(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColor.goldSoft,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: AppColor.goldLine),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppColor.gold,
+          fontWeight: FontWeight.w700,
+          fontSize: 10.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStudentHeader(ColorScheme cs, StatusRecord curStatus) {
     final contact = _studentContact();
+    final converted = _isConverted;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpace.xl,
@@ -1284,8 +1533,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
               borderRadius: BorderRadius.circular(AppRadius.icon),
               border: Border.all(color: AppColor.goldLine),
             ),
-            child: const Icon(
-              Icons.school_outlined,
+            child: Icon(
+              converted
+                  ? Icons.swap_horiz_rounded
+                  : Icons.school_outlined,
               size: 22,
               color: AppColor.gold,
             ),
@@ -1309,25 +1560,32 @@ class _ClientCardState extends ConsumerState<ClientCard>
                   padding: const EdgeInsets.only(top: 2),
                   child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColor.goldSoft,
-                          borderRadius: BorderRadius.circular(AppRadius.pill),
-                          border: Border.all(color: AppColor.goldLine),
-                        ),
-                        child: const Text(
-                          'Ученик',
-                          style: TextStyle(
-                            color: AppColor.gold,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 10.5,
+                      _headerBadge(converted ? 'Лид→Ученик' : 'Ученик'),
+                      // For a converted client surface BOTH halves: the lead
+                      // status (origin) and the student balance.
+                      if (converted) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: curStatus.$3,
+                            shape: BoxShape.circle,
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            curStatus.$2,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
                       if (_balance != null) ...[
                         const SizedBox(width: 8),
                         Flexible(
@@ -1408,6 +1666,85 @@ class _ClientCardState extends ConsumerState<ClientCard>
     return child();
   }
 
+  // Read-only «Исходный лид» card for the converted Инфо tab: source, request
+  // (creation) date and lead status. Shows a spinner while the lead half loads.
+  Widget _buildOriginatingLeadCard(ColorScheme cs) {
+    if (_loadingCard) {
+      return _buildInfoCard('Исходный лид', const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+          child: LinearProgressIndicator(color: AppColor.gold),
+        ),
+      ]);
+    }
+    final source = _leadData['source']?.toString().trim();
+    final requestDate = _formatDate(_leadData['created_at']);
+    final statusKey = _leadData['status']?.toString();
+    final statusLabel = _statuses
+        .firstWhere(
+          (s) => s.$1 == statusKey,
+          orElse: () => (
+            statusKey ?? '—',
+            _leadData['status_label']?.toString() ?? statusKey ?? '—',
+            AppTheme.primaryGold,
+          ),
+        )
+        .$2;
+    return _buildInfoCard('Исходный лид', [
+      _InfoRow(
+        icon: Icons.flag_rounded,
+        label: 'Статус лида',
+        value: statusLabel,
+      ),
+      _InfoRow(
+        icon: Icons.campaign_rounded,
+        label: 'Источник',
+        value: (source != null && source.isNotEmpty) ? source : '—',
+      ),
+      _InfoRow(
+        icon: Icons.event_rounded,
+        label: 'Дата заявки',
+        value: requestDate.isEmpty ? '—' : requestDate,
+      ),
+      if ((_leadData['hollihop_id']?.toString().trim().isNotEmpty ?? false))
+        _InfoRow(
+          icon: Icons.fingerprint_rounded,
+          label: 'ID лида',
+          value: _leadData['hollihop_id'].toString(),
+        ),
+    ]);
+  }
+
+  // Read-only links to the other students sharing this lead (siblings). Tapping
+  // a row opens that student in a fresh card.
+  Widget _buildLinkedStudentsCard(ColorScheme cs) {
+    return _buildInfoCard('Другие связанные ученики', [
+      for (final s in _otherLinkedStudents)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          leading: const Icon(Icons.school_outlined, color: AppColor.gold),
+          title: Text(
+            '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim().isEmpty
+                ? 'Без имени'
+                : '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: (s['phone']?.toString().trim().isNotEmpty ?? false)
+              ? Text(s['phone'].toString())
+              : null,
+          trailing: const Icon(Icons.open_in_new_rounded, size: 16),
+          onTap: () {
+            final id = s['id']?.toString();
+            if (id == null || id.isEmpty) return;
+            showClientCard(context, entityType: 'student', entityId: id);
+          },
+        ),
+    ]);
+  }
+
   // ── Student tab: Инфо ────────────────────────────────────────────────────
   Widget _buildStudentInfoTab(ColorScheme cs) {
     return _studentGuard(cs, () {
@@ -1429,10 +1766,22 @@ class _ClientCardState extends ConsumerState<ClientCard>
               value: contact.email,
             ),
           ]),
+          // Converted client: surface the originating lead (source, request
+          // date, lead status) as a read-only section so the lead Инфо isn't
+          // lost when the student layout takes over.
+          if (_isConverted) ...[
+            const SizedBox(height: AppSpace.lg),
+            _buildOriginatingLeadCard(cs),
+            // Additional linked students (beyond the active one) shown as links.
+            if (_otherLinkedStudents.isNotEmpty) ...[
+              const SizedBox(height: AppSpace.lg),
+              _buildLinkedStudentsCard(cs),
+            ],
+          ],
           const SizedBox(height: AppSpace.lg),
           ClientAppUserPanel(
             entityType: 'student',
-            entityId: _entityId,
+            entityId: _studentId.isEmpty ? _entityId : _studentId,
           ),
           const SizedBox(height: AppSpace.lg),
           _buildInfoCard('Дополнительная информация', [
@@ -1608,15 +1957,16 @@ class _ClientCardState extends ConsumerState<ClientCard>
                 _buildAddTaskButton(cs),
               ],
             ),
-            if (_studentTasks.isEmpty)
+            if (_mergedTasks.isEmpty)
               _emptyHint(cs, 'Открытых задач нет')
             else
-              ..._studentTasks.map(
+              ..._mergedTasks.map(
                 (row) => _entityTile(
                   cs,
                   title: row['title']?.toString() ?? 'Задача',
                   subtitle: _formatStatus(row['status']),
                   leading: Icons.task_alt_rounded,
+                  origin: _isConverted ? row['_origin']?.toString() : null,
                 ),
               ),
           ],
@@ -1845,8 +2195,108 @@ class _ClientCardState extends ConsumerState<ClientCard>
     });
   }
 
-  // ── Student tab: История (merged tasks + comments) ───────────────────────
+  // Merged-history list (converted): lead status history + student timeline,
+  // sorted desc, each row carrying an origin chip.
+  Widget _buildMergedHistoryView(ColorScheme cs) {
+    // Lead status history loads independently; show a spinner until it settles
+    // so converted history isn't briefly missing its lead half.
+    if (_loadingHistory) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColor.gold),
+      );
+    }
+    final items = _mergedHistory;
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          'История пуста',
+          style: TextStyle(color: cs.onSurfaceVariant),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpace.xl),
+      itemCount: items.length,
+      itemBuilder: (ctx, i) {
+        final item = items[i];
+        final isStatus = item['_kind'] == 'status';
+        final dt = DateTime.tryParse(item['_date']?.toString() ?? '');
+        final dateStr = dt != null
+            ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
+            : '—';
+        final subtitle = item['_subtitle']?.toString() ?? '';
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isStatus
+                              ? Icons.flag_rounded
+                              : Icons.timeline_rounded,
+                          size: 16,
+                          color: isStatus
+                              ? AppTheme.warning
+                              : AppTheme.primaryGold,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isStatus ? 'Статус' : 'Событие',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isStatus
+                                ? AppTheme.warning
+                                : AppTheme.primaryGold,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        ClientOriginChip(
+                          entityType: item['_origin']?.toString() ?? 'student',
+                        ),
+                      ],
+                    ),
+                    Text(
+                      dateStr,
+                      style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  item['_title']?.toString() ?? '',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Student tab: История ─────────────────────────────────────────────────
+  // For a converted client this folds lead status history into the student
+  // timeline (merged, de-duped by id, origin-badged). A plain student keeps the
+  // Phase 2 view (its own tasks + comments).
   Widget _buildStudentHistoryTab(ColorScheme cs) {
+    if (_isConverted) {
+      return _studentGuard(cs, () => _buildMergedHistoryView(cs));
+    }
     return _studentGuard(cs, () {
       if (_studentTasks.isEmpty && _studentComments.isEmpty) {
         return Center(
@@ -3568,6 +4018,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     required String title,
     String? subtitle,
     required IconData leading,
+    String? origin,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -3588,6 +4039,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
         subtitle: subtitle == null || subtitle.isEmpty
             ? null
             : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: origin == null
+            ? null
+            : ClientOriginChip(entityType: origin),
       ),
     );
   }
@@ -3673,20 +4127,26 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final text = _commentCtrl.text.trim();
     if (text.isEmpty) return;
 
+    // New comments target the card's primary half: the student side for a
+    // converted client (where most activity lives), otherwise the open entity.
+    final targetType = _isConverted ? 'student' : widget.entityType;
+    final targetId = _isConverted ? _studentId : _entityId;
+    if (targetId.isEmpty) return;
     try {
       await ref
           .read(magicCrmServiceProvider)
           .createComment(
-            entityType: widget.entityType,
-            entityId: _entityId,
+            entityType: targetType,
+            entityId: targetId,
             body: text,
           );
       _commentCtrl.clear();
       if (mounted) {
         setState(() => _commentsRefreshKey++);
-        if (_isStudent) {
+        if (_mode.hasStudentHalf) {
           _fetchStudentData();
-        } else {
+        }
+        if (_mode.hasLeadHalf) {
           _fetchCard();
         }
       }
@@ -3701,12 +4161,16 @@ class _ClientCardState extends ConsumerState<ClientCard>
 }
 
 class _CommentsList extends ConsumerStatefulWidget {
-  final String entityType;
-  final String entityId;
+  /// One ref per half whose comments should be shown. A single-side card passes
+  /// one ref; a converted client passes both ('lead', …) and ('student', …).
+  final List<ClientHalfRef> refs;
+
+  /// When true (converted), each comment gets a «Лид»/«Ученик» origin chip.
+  final bool showOrigin;
   final int refreshKey;
   const _CommentsList({
-    required this.entityType,
-    required this.entityId,
+    required this.refs,
+    required this.showOrigin,
     required this.refreshKey,
   });
 
@@ -3748,17 +4212,38 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
     );
   }
 
+  // Loads every ref's comments in PARALLEL, isolates per-ref failures (a failed
+  // half contributes no rows but never fails the whole list), tags each comment
+  // with its origin entityType (`_origin`), merges, de-dups by id and sorts by
+  // created_at desc.
+  Future<List<Map<String, dynamic>>> _loadMerged() async {
+    final crm = ref.read(magicCrmServiceProvider);
+    final results = await Future.wait(
+      widget.refs.map((r) async {
+        try {
+          final rows = await crm.listComments(
+            entityType: r.entityType,
+            entityId: r.entityId,
+          );
+          return rows
+              .map((c) => {...c, '_origin': r.entityType})
+              .toList();
+        } catch (_) {
+          return <Map<String, dynamic>>[];
+        }
+      }),
+    );
+    return mergeByIdSorted(results, dateKey: 'created_at');
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return FutureBuilder<List<Map<String, dynamic>>>(
-      key: ValueKey('${widget.refreshKey}:$_retryKey'),
-      future: ref
-          .watch(magicCrmServiceProvider)
-          .listComments(
-            entityType: widget.entityType,
-            entityId: widget.entityId,
-          ),
+      key: ValueKey(
+        '${widget.refreshKey}:$_retryKey:${widget.refs.map((r) => '${r.entityType}/${r.entityId}').join(',')}',
+      ),
+      future: _loadMerged(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -3850,6 +4335,13 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                             if (kindLabel != null) ...[
                               const SizedBox(width: 6),
                               _kindBadge(kindLabel),
+                            ],
+                            if (widget.showOrigin &&
+                                c['_origin'] != null) ...[
+                              const SizedBox(width: 6),
+                              ClientOriginChip(
+                                entityType: c['_origin'].toString(),
+                              ),
                             ],
                           ],
                         ),
