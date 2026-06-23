@@ -23,6 +23,8 @@ delete from app.file_download_tokens
 delete from app.refresh_sessions
   where (revoked_at is not null and revoked_at < now() - interval '30 days')
      or expires_at < now() - interval '30 days';
+delete from app.import_source_records
+  where imported_at < now() - interval '180 days';
 SQL
 
 echo "[token-cleanup $(date -u +%FT%TZ)] done"
