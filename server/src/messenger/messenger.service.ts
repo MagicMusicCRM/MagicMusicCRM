@@ -661,6 +661,13 @@ export class MessengerService {
       [messageId, mode],
     );
     const payload = this.toMessageDto(result.rows[0]);
+    await this.audit.record({
+      actor,
+      action: "messenger.message_deleted",
+      entityType: "message",
+      entityId: messageId,
+      metadata: { mode },
+    });
     this.realtime.publishChatEvent(message.chat_id, "message.updated", payload);
     return payload;
   }

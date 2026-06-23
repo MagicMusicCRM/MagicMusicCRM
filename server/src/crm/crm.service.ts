@@ -6344,11 +6344,48 @@ export class CrmService {
 
   private sanitizeJsonObject(value: unknown): Record<string, unknown> {
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    // Defense-in-depth on customData (JSONB): bound depth/breadth/string size so
+    // a pathological patch can't bloat the row or DoS queries (KVA).
+    this.assertJsonWithinLimits(value, 0);
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).filter(
         ([, entryValue]) => entryValue !== undefined,
       ),
     );
+  }
+
+  private assertJsonWithinLimits(value: unknown, depth: number): void {
+    const MAX_DEPTH = 6;
+    const MAX_KEYS = 100;
+    const MAX_STRING = 10_000;
+    if (depth > MAX_DEPTH) {
+      throw new BadRequestException("customData: слишком глубокая вложенность.");
+    }
+    if (typeof value === "string") {
+      if (value.length > MAX_STRING) {
+        throw new BadRequestException("customData: слишком длинное значение.");
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      if (value.length > MAX_KEYS) {
+        throw new BadRequestException("customData: слишком большой массив.");
+      }
+      for (const item of value) this.assertJsonWithinLimits(item, depth + 1);
+      return;
+    }
+    if (value && typeof value === "object") {
+      const keys = Object.keys(value as Record<string, unknown>);
+      if (keys.length > MAX_KEYS) {
+        throw new BadRequestException("customData: слишком много полей.");
+      }
+      for (const key of keys) {
+        this.assertJsonWithinLimits(
+          (value as Record<string, unknown>)[key],
+          depth + 1,
+        );
+      }
+    }
   }
 
   private requiredTrim(value: string | undefined, message: string): string {
@@ -7031,6 +7068,18 @@ export class CrmService {
       [familyId, dto.entityType, dto.entityId, dto.role, dto.isPrimaryContact ?? false],
     );
     const row = result.rows[0];
+    await this.audit.record({
+      actor,
+      action: "crm.family_member_added",
+      entityType: "family",
+      entityId: familyId,
+      metadata: {
+        memberId: row.id,
+        entityType: dto.entityType,
+        entityId: dto.entityId,
+        role: dto.role,
+      },
+    });
     return { id: row.id, familyId: row.family_id, entityType: row.entity_type, entityId: row.entity_id, role: row.role };
   }
 
@@ -7101,6 +7150,12 @@ export class CrmService {
     if (!result.rowCount) {
       throw new NotFoundException("Участник семьи не найден.");
     }
+    await this.audit.record({
+      actor,
+      action: "crm.family_member_removed",
+      entityType: "family_member",
+      entityId: memberId,
+    });
     return { success: true as const };
   }
 
@@ -7119,6 +7174,13 @@ export class CrmService {
     if (!result.rowCount) {
       throw new NotFoundException("Семья или участник не найдены.");
     }
+    await this.audit.record({
+      actor,
+      action: "crm.family_primary_payer_set",
+      entityType: "family",
+      entityId: familyId,
+      metadata: { memberId },
+    });
     return { success: true as const };
   }
 

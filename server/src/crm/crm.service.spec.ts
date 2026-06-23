@@ -4154,6 +4154,72 @@ describe("CrmService", () => {
     await expect(service.removeFamilyMember(actor, "missing")).rejects.toThrow("Участник семьи не найден.");
   });
 
+  it("audits adding a family member", async () => {
+    const { service, audit } = createServiceWithQueryResults([
+      {
+        rows: [
+          { id: "fm-1", family_id: "fam-1", entity_type: "student", entity_id: "st-1", role: "child" },
+        ],
+      },
+    ]);
+    await service.addFamilyMember(actor, "fam-1", {
+      entityType: "student",
+      entityId: "st-1",
+      role: "child",
+    });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "crm.family_member_added", entityId: "fam-1" }),
+    );
+  });
+
+  it("audits removing a family member", async () => {
+    const { service, audit } = createServiceWithQueryResults([
+      { rows: [], rowCount: 1 } as unknown as { rows: Record<string, unknown>[] },
+    ]);
+    await service.removeFamilyMember(actor, "fm-1");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "crm.family_member_removed", entityId: "fm-1" }),
+    );
+  });
+
+  it("audits setting the primary payer", async () => {
+    const { service, audit } = createServiceWithQueryResults([
+      { rows: [], rowCount: 1 } as unknown as { rows: Record<string, unknown>[] },
+    ]);
+    await service.setPrimaryPayer(actor, "fam-1", "fm-1");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "crm.family_primary_payer_set", entityId: "fam-1" }),
+    );
+  });
+
+  it("rejects customData nested beyond the depth limit", () => {
+    const { service } = createServiceWithQueryResults([]);
+    let deep: unknown = "x";
+    for (let i = 0; i < 9; i++) deep = { nested: deep };
+    expect(() =>
+      (service as unknown as { sanitizeJsonObject: (v: unknown) => unknown }).sanitizeJsonObject(deep),
+    ).toThrow(BadRequestException);
+  });
+
+  it("rejects customData with too many keys", () => {
+    const { service } = createServiceWithQueryResults([]);
+    const big: Record<string, unknown> = {};
+    for (let i = 0; i < 200; i++) big["k" + i] = i;
+    expect(() =>
+      (service as unknown as { sanitizeJsonObject: (v: unknown) => unknown }).sanitizeJsonObject(big),
+    ).toThrow(BadRequestException);
+  });
+
+  it("accepts reasonable customData", () => {
+    const { service } = createServiceWithQueryResults([]);
+    expect(
+      (service as unknown as { sanitizeJsonObject: (v: unknown) => unknown }).sanitizeJsonObject({
+        a: 1,
+        b: { c: "ok" },
+      }),
+    ).toEqual({ a: 1, b: { c: "ok" } });
+  });
+
   it("getMySummary includes family-linked children and dedups own students (KVA-156)", async () => {
     const clientActor = { userId: "parent-user-a", role: "client" as const };
     const { service, query } = createServiceWithQueryResults([

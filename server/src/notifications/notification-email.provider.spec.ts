@@ -1,5 +1,15 @@
 import { ConfigService } from '@nestjs/config';
-import { ResendEmailProvider } from './notification-email.provider';
+import { ResendEmailProvider, sanitizeEmailHeaderValue } from './notification-email.provider';
+
+describe('sanitizeEmailHeaderValue', () => {
+  it('removes CR/LF to prevent SMTP header injection', () => {
+    expect(sanitizeEmailHeaderValue('a@b.com\r\nBcc: evil@x.com')).toBe('a@b.comBcc: evil@x.com');
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(sanitizeEmailHeaderValue('  a@b.com  ')).toBe('a@b.com');
+  });
+});
 
 describe('ResendEmailProvider', () => {
   const message = {

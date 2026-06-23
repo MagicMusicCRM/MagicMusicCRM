@@ -554,6 +554,50 @@ describe("MessengerService", () => {
     );
   });
 
+  it("audits message deletion (moderation log)", async () => {
+    const baseRow = {
+      id: "message-a",
+      chat_id: "chat-a",
+      sender_id: "user-a",
+      content: "hi",
+      message_type: "text",
+      attachment_file_id: null,
+      reply_to_id: null,
+      forwarded_from_id: null,
+      pinned_by: null,
+      pinned_at: null,
+      created_at: new Date("2026-06-13T10:00:00Z"),
+      updated_at: new Date("2026-06-13T10:00:00Z"),
+      deleted_at: null,
+      sender_email: null,
+      sender_first_name: null,
+      sender_last_name: null,
+    };
+    const { service, audit } = createService({
+      database: {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({ rows: [baseRow] })
+          .mockResolvedValueOnce({
+            rows: [
+              { ...baseRow, content: null, deleted_at: new Date("2026-06-13T10:05:00Z") },
+            ],
+          }),
+      },
+      policy: { assertCanModerateMessage: jest.fn() },
+    });
+
+    await service.deleteMessage(actor, "message-a", {});
+
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "messenger.message_deleted",
+        entityType: "message",
+        entityId: "message-a",
+      }),
+    );
+  });
+
   it("creates administration chats with Russian title", async () => {
     type MockClient = { query: jest.Mock };
     const client = {

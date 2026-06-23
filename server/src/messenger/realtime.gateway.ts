@@ -22,6 +22,27 @@ interface AccessTokenPayload {
   role?: UserRole;
 }
 
+/**
+ * Вычисляет allowlist origin'ов для WebSocket-CORS из строки env
+ * CORS_ALLOWED_ORIGINS (значения через запятую).
+ *
+ * - Непустой список → массив доверенных origin'ов.
+ * - Пусто/не задано в production → false (CORS закрыт).
+ * - Пусто/не задано вне production (dev) → true (для локальной разработки).
+ */
+export function resolveRealtimeCorsOrigin(
+  allowedOrigins: string | undefined,
+  nodeEnv: string | undefined = process.env.NODE_ENV
+): string[] | boolean {
+  const origins = (allowedOrigins ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (origins.length > 0) return origins;
+  return nodeEnv === 'production' ? false : true;
+}
+
 interface RealtimeSocketData {
   actor?: ActorContext;
   rooms?: Set<string>;
@@ -40,7 +61,12 @@ type RealtimeSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<
 
 @WebSocketGateway({
   path: '/realtime',
-  cors: { origin: true, credentials: true },
+  cors: {
+    // CORS сокета ограничен allowlist'ом из CORS_ALLOWED_ORIGINS; вне prod
+    // при пустом списке допускается true для локальной разработки.
+    origin: resolveRealtimeCorsOrigin(process.env.CORS_ALLOWED_ORIGINS),
+    credentials: true
+  },
   pingInterval: 25_000,
   pingTimeout: 20_000
 })

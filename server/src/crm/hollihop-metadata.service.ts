@@ -13,8 +13,18 @@ export interface HolliHopLeadStatus {
   sortOrder: number;
 }
 
+type CircuitState = "closed" | "open" | "half-open";
+
 @Injectable()
 export class HolliHopMetadataService {
+  // Простой circuit-breaker вокруг исходящих вызовов HolliHop API.
+  private static readonly FAILURE_THRESHOLD = 5;
+  private static readonly COOLDOWN_MS = 30_000;
+
+  private consecutiveFailures = 0;
+  private circuitState: CircuitState = "closed";
+  private openedAt = 0;
+
   constructor(private readonly config: ConfigService) {}
 
   async listDisciplines(): Promise<HolliHopResult<string>> {
@@ -53,6 +63,11 @@ export class HolliHopMetadataService {
     const authKey = this.config.get<string>("HOLLIHOP_AUTH_KEY", "").trim();
     if (!authKey) return null;
 
+    // Если брейкер открыт и cooldown ещё не истёк — деградируем без вызова fetch.
+    if (!this.canAttempt()) {
+      return null;
+    }
+
     const timeoutMs = this.config.get<number>("HOLLIHOP_TIMEOUT_MS", 5000);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -61,13 +76,51 @@ export class HolliHopMetadataService {
         method: "GET",
         signal: controller.signal,
       });
-      if (!response.ok) return null;
+      if (!response.ok) {
+        this.recordFailure();
+        return null;
+      }
+      this.recordSuccess();
       return await response.json();
     } catch {
+      this.recordFailure();
       return null;
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  // Возвращает true, если исходящий вызов разрешён (closed/half-open probe).
+  private canAttempt(): boolean {
+    if (this.circuitState === "open") {
+      if (this.now() - this.openedAt >= HolliHopMetadataService.COOLDOWN_MS) {
+        // Cooldown истёк — пропускаем один пробный вызов.
+        this.circuitState = "half-open";
+        return true;
+      }
+      return false;
+    }
+    return true;
+  }
+
+  private recordSuccess(): void {
+    this.consecutiveFailures = 0;
+    this.circuitState = "closed";
+  }
+
+  private recordFailure(): void {
+    this.consecutiveFailures += 1;
+    if (
+      this.circuitState === "half-open" ||
+      this.consecutiveFailures >= HolliHopMetadataService.FAILURE_THRESHOLD
+    ) {
+      this.circuitState = "open";
+      this.openedAt = this.now();
+    }
+  }
+
+  private now(): number {
+    return Date.now();
   }
 
   private url(method: string, authKey: string): string {

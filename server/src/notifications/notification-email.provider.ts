@@ -4,6 +4,10 @@ import { Socket } from 'node:net';
 import { connect as tlsConnect, TLSSocket } from 'node:tls';
 import { EmailMessage, ProviderResult } from './notifications.types';
 
+export function sanitizeEmailHeaderValue(value: string): string {
+  return value.replace(/[\r\n]/g, '').trim();
+}
+
 @Injectable()
 export class ResendEmailProvider {
   constructor(private readonly config: ConfigService) {}
@@ -88,8 +92,8 @@ export class SmtpFallbackEmailProvider {
         const auth = Buffer.from(`\u0000${user}\u0000${password}`).toString('base64');
         await this.command(socket, `AUTH PLAIN ${auth}\r\n`, [235]);
       }
-      await this.command(socket, `MAIL FROM:<${input.from}>\r\n`);
-      await this.command(socket, `RCPT TO:<${input.message.to}>\r\n`);
+      await this.command(socket, `MAIL FROM:<${sanitizeEmailHeaderValue(input.from)}>\r\n`);
+      await this.command(socket, `RCPT TO:<${sanitizeEmailHeaderValue(input.message.to)}>\r\n`);
       await this.command(socket, 'DATA\r\n', [354]);
       await this.command(
         socket,
@@ -103,9 +107,9 @@ export class SmtpFallbackEmailProvider {
 
   private composeMimeMessage(from: string, message: EmailMessage): string {
     const headers = [
-      `From: ${from}`,
-      `To: ${message.to}`,
-      `Subject: ${message.subject.replace(/\r|\n/g, ' ')}`,
+      `From: ${sanitizeEmailHeaderValue(from)}`,
+      `To: ${sanitizeEmailHeaderValue(message.to)}`,
+      `Subject: ${sanitizeEmailHeaderValue(message.subject)}`,
       'MIME-Version: 1.0'
     ];
     if (!message.html) {

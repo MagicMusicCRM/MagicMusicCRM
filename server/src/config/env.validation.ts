@@ -9,7 +9,16 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string()
     .uri({ scheme: ['postgres', 'postgresql'] })
     .required(),
-  JWT_ACCESS_SECRET: Joi.string().min(32).default('dev-only-change-me-dev-only-change-me'),
+  JWT_ACCESS_SECRET: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string()
+      .min(32)
+      .invalid('dev-only-change-me-dev-only-change-me')
+      .required(),
+    otherwise: Joi.string()
+      .min(32)
+      .default('dev-only-change-me-dev-only-change-me')
+  }),
   ACCESS_TOKEN_TTL_SECONDS: Joi.number().integer().min(60).max(3600).default(900),
   REFRESH_TOKEN_TTL_DAYS: Joi.number().integer().min(1).max(90).default(30),
   FILE_STORAGE_ROOT: Joi.string().default('/opt/magicmusiccrm/storage'),
