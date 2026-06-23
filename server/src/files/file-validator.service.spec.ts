@@ -10,7 +10,7 @@ describe('FileValidator', () => {
       originalname: 'avatar.png',
       mimetype: 'image/png',
       size: 128,
-      buffer: Buffer.from('file'),
+      buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       ...overrides
     };
   }
@@ -29,7 +29,11 @@ describe('FileValidator', () => {
 
   it('normalizes path traversal names for display only and derives extension from MIME', () => {
     const result = validator.validate(
-      file({ originalname: '..\\..\\secret.php.jpg', mimetype: 'image/jpeg' }),
+      file({
+        originalname: '..\\..\\secret.php.jpg',
+        mimetype: 'image/jpeg',
+        buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0])
+      }),
       'profile_avatar'
     );
 
@@ -42,7 +46,8 @@ describe('FileValidator', () => {
       file({
         originalname: 'homework.pdf',
         mimetype: 'application/pdf',
-        size: 25 * 1024 * 1024
+        size: 25 * 1024 * 1024,
+        buffer: Buffer.from('%PDF-1.4 homework')
       }),
       'homework_attachment'
     );
@@ -56,6 +61,18 @@ describe('FileValidator', () => {
       validator.validate(
         file({ mimetype: 'application/pdf', size: 25 * 1024 * 1024 + 1 }),
         'homework_attachment'
+      )
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects content that does not match the declared image MIME (spoofing)', () => {
+    expect(() =>
+      validator.validate(
+        file({
+          mimetype: 'image/png',
+          buffer: Buffer.from('<html>not really a png</html>')
+        }),
+        'profile_avatar'
       )
     ).toThrow(BadRequestException);
   });

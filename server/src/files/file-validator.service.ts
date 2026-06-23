@@ -90,6 +90,12 @@ export class FileValidator {
       throw new BadRequestException('Тип файла не разрешен.');
     }
 
+    if (!FileValidator.contentMatchesMime(file.buffer, file.mimetype)) {
+      throw new BadRequestException(
+        'Содержимое файла не соответствует заявленному типу.'
+      );
+    }
+
     return {
       originalName: this.normalizeOriginalName(file.originalname),
       mimeType: file.mimetype,
@@ -109,5 +115,34 @@ export class FileValidator {
       .replace(/[<>:"|?*]/g, '_')
       .slice(0, 180);
     return safe.length > 0 ? safe : 'file';
+  }
+
+  // Magic-byte sniff for spoofable inline-served types (images / pdf): rejects
+  // e.g. an HTML payload uploaded as image/jpeg (KVA content-spoofing). Types
+  // without a defined signature (audio/video/office/text) pass through.
+  private static contentMatchesMime(buffer: Buffer, mime: string): boolean {
+    const b = buffer;
+    switch (mime) {
+      case 'image/png':
+        return (
+          b.length >= 8 &&
+          b[0] === 0x89 &&
+          b[1] === 0x50 &&
+          b[2] === 0x4e &&
+          b[3] === 0x47
+        );
+      case 'image/jpeg':
+        return b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+      case 'image/webp':
+        return (
+          b.length >= 12 &&
+          b.toString('ascii', 0, 4) === 'RIFF' &&
+          b.toString('ascii', 8, 12) === 'WEBP'
+        );
+      case 'application/pdf':
+        return b.length >= 5 && b.toString('ascii', 0, 5) === '%PDF-';
+      default:
+        return true;
+    }
   }
 }

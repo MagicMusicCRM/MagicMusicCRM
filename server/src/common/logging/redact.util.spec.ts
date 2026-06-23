@@ -12,12 +12,26 @@ describe('redactSensitive', () => {
     });
 
     expect(result).toEqual({
-      email: 'user@example.com',
+      email: '[PII]',
       password: '[REDACTED]',
       nested: {
         refreshToken: '[REDACTED]',
         safe: 'visible'
       }
+    });
+  });
+
+  it('masks PII fields and emails embedded in strings', () => {
+    expect(
+      redactSensitive({
+        phone: '+79991234567',
+        firstName: 'Анна',
+        note: 'напишите на a.b@example.com'
+      })
+    ).toEqual({
+      phone: '[PII]',
+      firstName: '[PII]',
+      note: 'напишите на [EMAIL]'
     });
   });
 
