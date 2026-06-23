@@ -4,6 +4,8 @@ services:
   caddy:
     image: caddy:2.8.4-alpine
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       api:
         condition: service_healthy
@@ -25,6 +27,10 @@ services:
       context: ../../server
       dockerfile: Dockerfile
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
       - path: ./.env
         required: false
@@ -76,6 +82,8 @@ services:
   postgres:
     image: postgres:16.4-alpine
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_OWNER_USER}
@@ -96,6 +104,8 @@ services:
   redis:
     image: redis:7.4.1-alpine
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
     volumes:
       - redis_data:/data
