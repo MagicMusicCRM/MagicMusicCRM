@@ -7,7 +7,7 @@ describe("AnalyticsService", () => {
   const actor = { userId: "u1", role: "manager" as const };
   const build = (rows: Record<string, unknown>[]) => {
     const query = jest.fn().mockResolvedValue({ rows });
-    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn() };
     const crm = {} as unknown as CrmService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
@@ -25,7 +25,7 @@ describe("AnalyticsService", () => {
     expect(result.items[0]).toEqual({
       monthStart: "2026-06-01", lessons: 10, completedLessons: 8, revenue: 5000, expenses: 1200, newStudents: 3,
     });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.mv_finance_monthly");
   });
 
@@ -72,7 +72,7 @@ describe("AnalyticsService", () => {
       { status_id: "s2", name: "Пробный", sort_order: 1, leads_entered: "40" },
     ]);
     const result = await service.funnel(actor, { from: "2026-01-01", to: "2026-04-01" });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.lead_status_history");
     expect(result.from).toBe("2026-01-01");
     expect(result.to).toBe("2026-04-01");
@@ -87,7 +87,7 @@ describe("AnalyticsService", () => {
       { branch_id: "b1", name: "Сокол", revenue: "500000", active_students: "120", new_leads: "30", completed_lessons: "800" },
     ]);
     const result = await service.branchComparison(actor, { from: "2026-01-01", to: "2026-04-01" });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.branches");
     expect(result.from).toBe("2026-01-01");
     expect(result.to).toBe("2026-04-01");
@@ -103,7 +103,7 @@ describe("AnalyticsService", () => {
         { bucket: "30+", students: "2", amount: "30000" },
       ] })
       .mockResolvedValueOnce({ rows: [{ distinct_students: "6" }] });
-    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn() };
     const crm = {} as unknown as CrmService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
@@ -111,7 +111,7 @@ describe("AnalyticsService", () => {
       policy as unknown as CrmPolicy,
     );
     const result = await service.debts(actor, {});
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.expected_payments");
     expect(result.buckets).toEqual([
       { bucket: "0-7", students: 5, amount: 50000 },
@@ -127,7 +127,7 @@ describe("AnalyticsService", () => {
   it("revenueForecast sums unpaid payments due within 7/14/30 days, gated", async () => {
     const { service, query, policy } = build([{ next7: "10000", next14: "25000", next30: "60000" }]);
     const result = await service.revenueForecast(actor, {});
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.expected_payments");
     expect(result).toEqual({ next7: 10000, next14: 25000, next30: 60000 });
   });
@@ -138,7 +138,7 @@ describe("AnalyticsService", () => {
       { student_id: "stu2", name: "Без занятий", last_completed_at: null, days_since_last: null, total_at_risk: "250" },
     ]);
     const result = await service.churnRisk(actor, { inactiveDays: 30 });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("app.lessons");
     expect(sql).toContain("lesson_participation");
@@ -161,7 +161,7 @@ describe("AnalyticsService", () => {
       },
     ]);
     const result = await service.chatsSla(actor, { from: "2026-06-01", to: "2026-06-08" });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("'administration'");
     expect(sql).toContain("percentile_cont");
@@ -189,7 +189,7 @@ describe("AnalyticsService", () => {
 
     const result = await service.weeklyReport(actor, {});
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(result.funnel).toEqual({ from: "x", to: "y", stages: ["F"] });
     expect(result.debts).toEqual({ buckets: ["D"] });
     expect(result.forecast).toEqual({ next7: 1, next14: 2, next30: 3 });
@@ -229,7 +229,7 @@ describe("AnalyticsService", () => {
         { reason_id: "r2", name: "Переезд", kind: "lost", leads: "10" },
       ] })
       .mockResolvedValueOnce({ rows: [{ unspecified: "5" }] });
-    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn() };
     const crm = {} as unknown as CrmService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
@@ -237,7 +237,7 @@ describe("AnalyticsService", () => {
       policy as unknown as CrmPolicy,
     );
     const result = await service.lossReasons(actor, { from: "2026-01-01", to: "2026-04-01" });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("app.lead_status_history");
     expect(sql).toContain("is_terminal");
@@ -254,7 +254,7 @@ describe("AnalyticsService", () => {
     const query = jest.fn()
       .mockResolvedValueOnce({ rows: [{ total: "200", missing_phone: "15", missing_branch: "8" }] })
       .mockResolvedValueOnce({ rows: [{ total: "300", missing_branch: "5", missing_discipline: "40" }] });
-    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn() };
     const crm = {} as unknown as CrmService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
@@ -262,7 +262,7 @@ describe("AnalyticsService", () => {
       policy as unknown as CrmPolicy,
     );
     const result = await service.dataQuality(actor, {});
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(String(query.mock.calls[0][0])).toContain("app.leads");
     expect(String(query.mock.calls[1][0])).toContain("app.students");
     expect(String(query.mock.calls[1][0])).toContain("student_disciplines");
@@ -279,7 +279,7 @@ describe("AnalyticsService", () => {
         { user_id: "u2", name: "Борис Менеджер", leads: "30" },
       ] })
       .mockResolvedValueOnce({ rows: [{ unassigned: "12" }] });
-    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn() };
+    const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn() };
     const crm = {} as unknown as CrmService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
@@ -287,7 +287,7 @@ describe("AnalyticsService", () => {
       policy as unknown as CrmPolicy,
     );
     const result = await service.responsibleDistribution(actor, { from: "2026-01-01", to: "2026-04-01" });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("app.leads");
     expect(sql).toContain("assigned_to");
@@ -309,7 +309,7 @@ describe("AnalyticsService", () => {
       { source: null, display_name: null, leads: "10" },
     ]);
     const result = await service.sourceAnalytics(actor, { from: "2026-01-01", to: "2026-04-01" });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("app.leads");
     expect(sql).toContain("app.lead_sources");

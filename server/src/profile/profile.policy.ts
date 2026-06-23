@@ -3,6 +3,7 @@ import {
   ActorContext,
   canAssignRole,
   isManagerOrAdminRole,
+  isManagerRole,
   UserRole
 } from '../common/security/actor-context';
 
@@ -15,7 +16,8 @@ export class ProfilePolicy {
   }
 
   assertCanListProfiles(actor: ActorContext): void {
-    if (isManagerOrAdminRole(actor.role)) return;
+    // «Пользователи» — управляющий-онли (A1); Администратор исключён.
+    if (isManagerRole(actor.role)) return;
     throw new ForbiddenException('Недостаточно прав для просмотра профилей.');
   }
 

@@ -547,7 +547,7 @@ export class CrmService {
   }
 
   async getOverview(actor: ActorContext) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const result = await this.database.query<OverviewRow>(
       `
         with bounds as (
@@ -613,7 +613,7 @@ export class CrmService {
   }
 
   async getManagerDashboard(actor: ActorContext, query: ManagerDashboardQuery) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const bounds = this.dashboardBounds(query);
     const result = await this.database.query<ManagerDashboardRow>(
       `
@@ -758,7 +758,7 @@ export class CrmService {
   }
 
   async getFinanceReport(actor: ActorContext, query: ReportQuery) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const bounds = this.reportBounds(query);
     const monthly = await this.database.query<FinanceReportMonthlyRow>(
       `
@@ -3702,6 +3702,7 @@ export class CrmService {
   }
 
   async listTasks(actor: ActorContext, query: TaskBoardQuery) {
+    this.policy.assertManagerOnly(actor);
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<TaskRow>(
       `
@@ -4016,7 +4017,7 @@ export class CrmService {
   }
 
   async createTask(actor: ActorContext, dto: UpsertTaskDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     if (!dto.entityType || !dto.entityId || !dto.title) {
       throw new BadRequestException(
         "Тип, объект и название задачи обязательны.",
@@ -4054,7 +4055,7 @@ export class CrmService {
   }
 
   async updateTask(actor: ActorContext, taskId: string, dto: UpsertTaskDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const result = await this.database.query<TaskRow>(
       `
         update app.tasks
@@ -4108,7 +4109,7 @@ export class CrmService {
           and ($4::timestamptz is null or pay.payment_date >= $4)
           and ($5::timestamptz is null or pay.payment_date < $5)
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
           )
         order by pay.payment_date desc, pay.id desc
@@ -4140,7 +4141,7 @@ export class CrmService {
           and ($4::timestamptz is null or pay.payment_date >= $4)
           and ($5::timestamptz is null or pay.payment_date < $5)
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
           )
       `,
@@ -4191,7 +4192,7 @@ export class CrmService {
   }
 
   async listStudentBalances(actor: ActorContext, query: StudentBalanceQuery) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<StudentBalanceRow>(
       `
@@ -4274,7 +4275,7 @@ export class CrmService {
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where ($3::uuid is null or sub.student_id = $3)
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
           )
         order by sub.expires_at desc nulls last, sub.created_at desc, sub.id desc
@@ -4286,7 +4287,7 @@ export class CrmService {
   }
 
   async createPayment(actor: ActorContext, dto: CreatePaymentDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const result = await this.database.query<PaymentRow>(
       `
         insert into app.payments (
@@ -4334,7 +4335,7 @@ export class CrmService {
   }
 
   async listExpenses(actor: ActorContext, query: ExpenseQuery) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const conditions: string[] = ["e.deleted_at is null"];
     const params: unknown[] = [];
     if (query.branchId) {
@@ -4382,7 +4383,7 @@ export class CrmService {
   }
 
   async createExpense(actor: ActorContext, dto: UpsertExpenseDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const result = await this.database.query<ExpenseRow>(
       `
         insert into app.expenses (amount, category, description, branch_id)

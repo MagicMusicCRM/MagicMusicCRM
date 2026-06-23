@@ -24,6 +24,7 @@ describe("CrmService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertManagerOnly: jest.fn(),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -67,6 +68,7 @@ describe("CrmService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertManagerOnly: jest.fn(),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -149,7 +151,7 @@ describe("CrmService", () => {
       revenueMonth: 125000.5,
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
   });
 
   it("returns manager dashboard KPIs with period and branch filters", async () => {
@@ -203,7 +205,7 @@ describe("CrmService", () => {
       },
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual([
       "2026-06-01T00:00:00.000Z",
       "2026-07-01T00:00:00.000Z",
@@ -287,7 +289,7 @@ describe("CrmService", () => {
       ],
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query).toHaveBeenCalledTimes(3);
     expect(query.mock.calls[0][1]).toEqual([
       "2026-06-01T00:00:00.000Z",
@@ -2297,7 +2299,7 @@ describe("CrmService", () => {
       ],
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual(["student-a", true, 20]);
   });
 
@@ -4246,6 +4248,7 @@ describe("CrmService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertManagerOnly: jest.fn(),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -4355,6 +4358,7 @@ describe("CrmService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertManagerOnly: jest.fn(),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -4402,6 +4406,7 @@ describe("CrmService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertManagerOnly: jest.fn(),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -4465,6 +4470,7 @@ describe("CrmService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertManagerOnly: jest.fn(),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -4524,7 +4530,7 @@ describe("CrmService", () => {
       createdAt: "2026-06-22T00:00:00.000Z",
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual([1500, "rent", "Аренда", "branch-a"]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -4559,7 +4565,7 @@ describe("CrmService", () => {
       limit: 50,
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(result.total).toBe(1500);
     expect(result.items).toEqual([
       {

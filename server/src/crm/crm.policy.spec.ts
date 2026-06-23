@@ -76,4 +76,30 @@ describe("CrmPolicy", () => {
       ),
     ).toThrow(NotFoundException);
   });
+
+  it("restricts manager-only operations to manager/system_admin (A1: admin excluded)", () => {
+    expect(() =>
+      policy.assertManagerOnly({ userId: "m", role: "manager" }),
+    ).not.toThrow();
+    expect(() =>
+      policy.assertManagerOnly({ userId: "s", role: "system_admin" }),
+    ).not.toThrow();
+    // Администратор — ниже Управляющего: нет доступа к Финансам/Отчётам/и т.д.
+    expect(() =>
+      policy.assertManagerOnly({ userId: "a", role: "admin" }),
+    ).toThrow(ForbiddenException);
+    expect(() =>
+      policy.assertManagerOnly({ userId: "t", role: "teacher" }),
+    ).toThrow(ForbiddenException);
+  });
+
+  it("excludes admin from reading other users' finance (A1)", () => {
+    // Управляющий видит чужие платежи, Администратор — нет.
+    expect(() =>
+      policy.assertCanReadFinance({ userId: "m", role: "manager" }, "client-b"),
+    ).not.toThrow();
+    expect(() =>
+      policy.assertCanReadFinance({ userId: "a", role: "admin" }, "client-b"),
+    ).toThrow(NotFoundException);
+  });
 });

@@ -6,6 +6,7 @@ import {
 import {
   ActorContext,
   isManagerOrAdminRole,
+  isManagerRole,
 } from "../common/security/actor-context";
 
 export interface StudentAccessRecord {
@@ -44,6 +45,17 @@ export class CrmPolicy {
     throw new ForbiddenException("Недостаточно прав для изменения CRM.");
   }
 
+  // Управляющий-онли операции: Обзор/Финансы/Отчёты/Задачи/Пользователи.
+  // Администратор (admin) — ниже Управляющего и сюда не допускается (бизнес-
+  // правило A1, KVA-216; зеркалит фронтовый crm_nav_rbac.dart). system_admin —
+  // полный доступ.
+  assertManagerOnly(actor: ActorContext): void {
+    if (isManagerRole(actor.role)) return;
+    throw new ForbiddenException(
+      "Недостаточно прав: операция доступна только Управляющему.",
+    );
+  }
+
   assertCanReadOperationalData(actor: ActorContext): void {
     if (
       actor.role === "teacher" ||
@@ -56,7 +68,8 @@ export class CrmPolicy {
   }
 
   assertCanReadFinance(actor: ActorContext, ownerUserId: string | null): void {
-    if (isManagerOrAdminRole(actor.role)) return;
+    // Финансы — только Управляющий/Администратор системы (A1); клиент видит свои.
+    if (isManagerRole(actor.role)) return;
     if (actor.role === "client" && ownerUserId === actor.userId) return;
     throw new NotFoundException("Платежи не найдены.");
   }

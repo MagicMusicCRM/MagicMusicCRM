@@ -21,7 +21,7 @@ export class AnalyticsService {
   }
 
   async financeMonthly(actor: ActorContext, query: { from?: string; to?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const result = await this.database.query<{
       month_start: string;
       lessons: number;
@@ -57,7 +57,7 @@ export class AnalyticsService {
   }
 
   async funnel(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const { from, to } = this.rangeBounds(query);
     const result = await this.database.query<{
       status_id: string;
@@ -91,7 +91,7 @@ export class AnalyticsService {
   }
 
   async branchComparison(actor: ActorContext, query: { from?: string; to?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const { from, to } = this.rangeBounds(query);
     // Mirror of CrmService.branchIdExpr (column preferred, custom_data fallback).
     const branchOf = (a: string) =>
@@ -138,7 +138,7 @@ export class AnalyticsService {
   }
 
   async lossReasons(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const { from, to } = this.rangeBounds(query);
     const result = await this.database.query<{
       reason_id: string;
@@ -184,7 +184,7 @@ export class AnalyticsService {
   }
 
   async debts(actor: ActorContext, query: { branchId?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const branchOf = (a: string) =>
       `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
     const result = await this.database.query<{ bucket: string; students: string; amount: string }>(
@@ -231,7 +231,7 @@ export class AnalyticsService {
   }
 
   async revenueForecast(actor: ActorContext, query: { branchId?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const branchOf = (a: string) =>
       `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
     const result = await this.database.query<{ next7: string; next14: string; next30: string }>(
@@ -250,7 +250,7 @@ export class AnalyticsService {
   }
 
   async churnRisk(actor: ActorContext, query: { inactiveDays?: number | string; branchId?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const inactiveDays = Number(query.inactiveDays ?? 21);
     const branchOf = (a: string) =>
       `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
@@ -303,7 +303,7 @@ export class AnalyticsService {
 
   // Org-wide only — chats.branch_id is not populated, so chat SLA is not branch-scoped (branch attribution for chats is a follow-up).
   async chatsSla(actor: ActorContext, query: { from?: string; to?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const { from, to } = this.rangeBounds(query);
     const result = await this.database.query<{
       inbound_count: string;
@@ -370,7 +370,7 @@ export class AnalyticsService {
   }
 
   async weeklyReport(actor: ActorContext, query: { branchId?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const to = new Date().toISOString();
     const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const branchId = query.branchId;
@@ -409,7 +409,7 @@ export class AnalyticsService {
   }
 
   async dataQuality(actor: ActorContext, query: { branchId?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const branchOf = (a: string) =>
       `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
 
@@ -463,7 +463,7 @@ export class AnalyticsService {
   }
 
   async responsibleDistribution(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const { from, to } = this.rangeBounds(query);
     const result = await this.database.query<{
       user_id: string;
@@ -507,7 +507,7 @@ export class AnalyticsService {
   }
 
   async sourceAnalytics(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertManagerOnly(actor);
     const { from, to } = this.rangeBounds(query);
     const result = await this.database.query<{
       source: string | null;
