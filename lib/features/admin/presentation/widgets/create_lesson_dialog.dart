@@ -10,6 +10,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
   final DateTime? initialDate;
   final String? initialRoomId;
   final String? initialBranchId;
+  final int? initialDurationMinutes;
   // When provided, the dialog edits this existing lesson instead of creating a
   // new one (pre-filled fields, "Сохранить" updates via PATCH).
   final Map<String, dynamic>? lesson;
@@ -19,6 +20,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     this.initialDate,
     this.initialRoomId,
     this.initialBranchId,
+    this.initialDurationMinutes,
     this.lesson,
   });
 
@@ -27,6 +29,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     DateTime? initialDate,
     String? initialRoomId,
     String? initialBranchId,
+    int? initialDurationMinutes,
     Map<String, dynamic>? lesson,
   }) {
     return showDialog<bool>(
@@ -35,6 +38,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
         initialDate: initialDate,
         initialRoomId: initialRoomId,
         initialBranchId: initialBranchId,
+        initialDurationMinutes: initialDurationMinutes,
         lesson: lesson,
       ),
     );
@@ -61,6 +65,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   String? _selectedRoomId;
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
+  int _durationMinutes = 60;
 
   bool get _isEdit => widget.lesson != null;
 
@@ -77,6 +82,10 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     if (widget.initialBranchId != null) {
       _selectedBranchId = widget.initialBranchId;
       _loadRooms(widget.initialBranchId!);
+    }
+    if (widget.initialDurationMinutes != null &&
+        widget.initialDurationMinutes! > 0) {
+      _durationMinutes = widget.initialDurationMinutes!;
     }
     // Pre-fill from the lesson being edited.
     final lesson = widget.lesson;
@@ -205,6 +214,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           branchId: _selectedBranchId,
           roomId: _selectedRoomId,
           scheduledAt: scheduledAt,
+          durationMinutes: _durationMinutes,
           status: 'scheduled',
         );
       }
@@ -239,7 +249,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     // No room selected → nothing to conflict on (the lesson has no room).
     if (branchId == null || roomId == null || roomId.isEmpty) return true;
 
-    const durationMinutes = 60; // matches the backend's default lesson length.
+    final durationMinutes = _durationMinutes;
 
     List<String> conflictTypes = const [];
     try {

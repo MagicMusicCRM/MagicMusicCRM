@@ -84,6 +84,29 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
     });
   }
 
+  /// Resolve a short-lived download URL (POST /files/:id/download-token) and
+  /// hand it to the player. The backend token is reusable within its TTL and
+  /// supports HTTP range requests, so play/seek/replay all work; if a cached
+  /// URL has expired we drop it and request a fresh token once.
+  Future<void> _loadSource() async {
+    Future<void> resolveAndSet({required bool forceFresh}) async {
+      if (forceFresh) _resolvedAudioUrl = null;
+      _resolvedAudioUrl ??= await ref
+          .read(chatAttachmentServiceProvider)
+          .resolveUrl(widget.audioUrl);
+      if (_resolvedAudioUrl == null) {
+        throw StateError('Аудиофайл недоступен');
+      }
+      await _player.setUrl(_resolvedAudioUrl!);
+    }
+
+    try {
+      await resolveAndSet(forceFresh: false);
+    } catch (_) {
+      await resolveAndSet(forceFresh: true);
+    }
+  }
+
   Future<void> _togglePlay() async {
     try {
       if (_isPlaying) {
@@ -94,13 +117,7 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
         if (_player.processingState == ProcessingState.idle) {
           if (mounted) setState(() => _isLoading = true);
           try {
-            _resolvedAudioUrl ??= await ref
-                .read(chatAttachmentServiceProvider)
-                .resolveUrl(widget.audioUrl);
-            if (_resolvedAudioUrl == null) {
-              throw StateError('Аудиофайл недоступен');
-            }
-            await _player.setUrl(_resolvedAudioUrl!);
+            await _loadSource();
           } finally {
             // Clear the manual loading flag on the success path too — from here
             // on the player's processingState stream owns the buffering state.

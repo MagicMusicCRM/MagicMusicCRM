@@ -19,8 +19,15 @@ export class LocalStorageDriver {
     await writeFile(path, buffer, { flag: 'wx' });
   }
 
-  createReadStream(storageKey: string): Readable {
-    return createReadStream(this.resolveStoragePath(storageKey));
+  createReadStream(
+    storageKey: string,
+    range?: { start: number; end: number }
+  ): Readable {
+    const path = this.resolveStoragePath(storageKey);
+    // fs range end is inclusive, matching HTTP Range semantics.
+    return range
+      ? createReadStream(path, { start: range.start, end: range.end })
+      : createReadStream(path);
   }
 
   async read(storageKey: string): Promise<Buffer> {

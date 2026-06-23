@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/convert_lead_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lead_detail_dialog.dart';
 import 'package:intl/intl.dart';
@@ -1159,6 +1160,12 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context); // D5: required by AutomaticKeepAliveClientMixin.
+    // Realtime: refresh when another staff member changes a lead.
+    ref.listen(crmRealtimeProvider, (prev, next) {
+      final event = next.value;
+      if (event == null || event.entity != 'lead' || !mounted) return;
+      _refreshBoard();
+    });
     final boardAsync = ref.watch(leadBoardProvider(_filters));
 
     // D1: keep the PREVIOUS board visible during a (debounced) refetch instead

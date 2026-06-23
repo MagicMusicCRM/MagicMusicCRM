@@ -155,6 +155,11 @@ class MagicRealtimeConnection {
     _onMap('presence.updated', handler);
   }
 
+  /// CRM invalidation hint broadcast to staff (lessons/leads/etc. changed).
+  void onCrmChanged(MagicRealtimeHandler handler) {
+    _onMap('crm.changed', handler);
+  }
+
   void off(String event) => _transport.off(event);
 
   void _onMap(String event, MagicRealtimeHandler handler) {

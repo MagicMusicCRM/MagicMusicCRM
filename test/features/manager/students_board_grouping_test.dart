@@ -37,6 +37,34 @@ void main() {
       expect((fallback['students'] as List).map((s) => s['id']), ['s4', 's5', 's6']);
     });
 
+    test('buckets by the relational disciplines list (multi-discipline → multiple columns)', () {
+      final students = [
+        {
+          'id': 's7',
+          'first_name': 'Зоя',
+          'disciplines': [
+            {'id': 'd1', 'name': 'Вокал'},
+            {'id': 'd2', 'name': 'Гитара'},
+          ],
+        },
+        {
+          'id': 's8',
+          'first_name': 'Иван',
+          'disciplines': [
+            {'id': 'd2', 'name': 'гитара'},
+          ],
+          // custom_data fallback must be ignored when disciplines are present.
+          'custom_data': {'discipline': 'Вокал'},
+        },
+      ];
+
+      final columns = groupStudentsByDiscipline(disciplines, students);
+
+      expect((columns[0]['students'] as List).map((s) => s['id']), ['s7']);
+      expect((columns[1]['students'] as List).map((s) => s['id']), ['s7', 's8']);
+      expect((columns[2]['students'] as List), isEmpty);
+    });
+
     test('keeps discipline column order by sort_order', () {
       final unordered = [
         {'discipline_id': 'd2', 'name': 'Гитара', 'sort_order': 1},

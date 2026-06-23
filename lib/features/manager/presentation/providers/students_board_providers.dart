@@ -59,15 +59,32 @@ List<Map<String, dynamic>> groupStudentsByDiscipline(
   };
 
   for (final student in students) {
-    final custom = student['custom_data'];
-    final discipline = custom is Map
-        ? custom['discipline']?.toString().trim() ?? ''
-        : '';
-    final bucket = byName[discipline.toLowerCase()];
-    if (discipline.isEmpty || bucket == null) {
+    // Prefer the relational disciplines (from student_disciplines, surfaced by
+    // the search DTO); fall back to the legacy custom_data['discipline'] string.
+    final names = <String>{};
+    final disc = student['disciplines'];
+    if (disc is List) {
+      for (final d in disc) {
+        final n = (d is Map ? d['name']?.toString() : d?.toString())?.trim();
+        if (n != null && n.isNotEmpty) names.add(n.toLowerCase());
+      }
+    }
+    if (names.isEmpty) {
+      final custom = student['custom_data'];
+      final legacy = custom is Map
+          ? custom['discipline']?.toString().trim() ?? ''
+          : '';
+      if (legacy.isNotEmpty) names.add(legacy.toLowerCase());
+    }
+
+    final matched = names.where(byName.containsKey).toList();
+    if (matched.isEmpty) {
       (fallback['students'] as List<Map<String, dynamic>>).add(student);
     } else {
-      bucket.add(student);
+      // A student studying several disciplines appears in each column.
+      for (final n in matched) {
+        byName[n]!.add(student);
+      }
     }
   }
 

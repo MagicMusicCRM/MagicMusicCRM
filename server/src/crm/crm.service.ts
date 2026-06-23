@@ -14,6 +14,7 @@ import {
 } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { RealtimeBus } from "../realtime/realtime-bus";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateBranchDto } from "./dto/create-branch.dto";
@@ -88,6 +89,7 @@ interface StudentSearchRow extends StudentRow {
   linked_user_id: string | null;
   linked_user_email: string | null;
   is_app_account: boolean | null;
+  disciplines: { id: string; name: string }[] | null;
 }
 
 interface TeacherRow {
@@ -517,6 +519,7 @@ export class CrmService {
     private readonly policy: CrmPolicy,
     private readonly hollihop: HolliHopMetadataService,
     private readonly notifications: NotificationsService,
+    private readonly realtime: RealtimeBus,
   ) {}
 
   async getMySummary(actor: ActorContext) {
@@ -993,7 +996,16 @@ export class CrmService {
           ) as payments_total,
           coalesce(link_user.id, case when u.is_app_account = true then u.id else null end) as linked_user_id,
           coalesce(link_user.email, case when u.is_app_account = true then u.email else null end) as linked_user_email,
-          coalesce(link_user.is_app_account, u.is_app_account, false) as is_app_account
+          coalesce(link_user.is_app_account, u.is_app_account, false) as is_app_account,
+          (
+            select coalesce(
+              json_agg(json_build_object('id', d.id, 'name', d.name) order by d.name),
+              '[]'::json
+            )
+            from app.student_disciplines sd
+            join app.disciplines d on d.id = sd.discipline_id
+            where sd.student_id = s.id
+          ) as disciplines
         from app.students s
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
@@ -3290,6 +3302,12 @@ export class CrmService {
       entityType: "lesson",
       entityId: lesson.id,
     });
+    this.realtime.emitCrmChanged({
+      entity: "lesson",
+      action: "created",
+      id: lesson.id,
+      branchId: lesson.branch_id ?? null,
+    });
     return this.toLessonDto(lesson);
   }
 
@@ -3370,6 +3388,12 @@ export class CrmService {
       action: "crm.lesson_updated",
       entityType: "lesson",
       entityId: lesson.id,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "lesson",
+      action: "updated",
+      id: lesson.id,
+      branchId: lesson.branch_id ?? null,
     });
     return this.toLessonDto(lesson);
   }
@@ -3505,6 +3529,11 @@ export class CrmService {
       action: "crm.lesson_deleted",
       entityType: "lesson",
       entityId: row.id,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "lesson",
+      action: "deleted",
+      id: row.id,
     });
     return { success: true };
   }
@@ -5430,6 +5459,12 @@ export class CrmService {
       entityType: "lead",
       entityId: lead.id,
     });
+    this.realtime.emitCrmChanged({
+      entity: "lead",
+      action: "created",
+      id: lead.id,
+      branchId: branchId ?? null,
+    });
     return this.toLeadDto(lead);
   }
 
@@ -5511,6 +5546,12 @@ export class CrmService {
         ],
       );
     }
+    this.realtime.emitCrmChanged({
+      entity: "lead",
+      action: "updated",
+      id: lead.id,
+      branchId: branchId ?? before?.branch_id ?? null,
+    });
     return this.toLeadDto(lead);
   }
 
@@ -5532,6 +5573,11 @@ export class CrmService {
       action: "crm.lead_deleted",
       entityType: "lead",
       entityId: row.id,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "lead",
+      action: "deleted",
+      id: row.id,
     });
     return { success: true };
   }
@@ -6342,6 +6388,7 @@ export class CrmService {
       linkedUserId: row.linked_user_id,
       linkedUserEmail: row.linked_user_email,
       isAppAccount: row.is_app_account ?? false,
+      disciplines: row.disciplines ?? [],
     };
   }
 

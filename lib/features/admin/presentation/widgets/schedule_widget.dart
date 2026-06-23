@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -128,6 +129,11 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   bool _isDraggingLesson = false;
   // Guards against overlapping move requests (double-drop / refetch in flight).
   bool _movingLesson = false;
+
+  // Tap / long-press-drag booking selection on empty day-grid cells (KVA-195).
+  String? _selRoomId;
+  double? _selStartY;
+  double? _selEndY;
 
   @override
   void initState() {
@@ -325,6 +331,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         _isLoading = false;
         _hasLoadedOnce = true;
       });
+
+      // The month-wide matrix is capped at 300 rows; if we're already in the day
+      // view, backfill the selected day so it isn't left empty for dates past the
+      // cap (e.g. today mid-month).
+      if (_currentView == _ScheduleView.day) {
+        _fetchDayLessons(_selectedDate);
+      }
     } catch (e) {
       debugPrint('Error fetching schedule: $e');
       setState(() {
@@ -359,6 +372,67 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       debugPrint('Error fetching room availability: $e');
     } finally {
       if (mounted) setState(() => _availabilityLoading = false);
+    }
+  }
+
+  // Fetch the lessons for ONE day (branch-local) and merge them into _lessons.
+  // The month-wide matrix in _fetchAll is capped at limit=300 ordered ascending,
+  // so days past the first few are missing from the in-memory list and the day
+  // grid renders empty even though the month summary counts them. A day-scoped
+  // fetch (≈tens of lessons, well under the cap) backfills the selected day.
+  Future<void> _fetchDayLessons(DateTime date) async {
+    final branchId = _selectedBranchId;
+    if (branchId == null || branchId.isEmpty) return;
+    final offset = _branchOffsets[branchId] ?? 180;
+    // Branch-local midnight expressed as the corresponding UTC instant.
+    final dayStartUtc = DateTime.utc(date.year, date.month, date.day)
+        .subtract(Duration(minutes: offset));
+    final dayEndUtc = dayStartUtc.add(const Duration(days: 1));
+    try {
+      final result = await ref.read(magicCrmServiceProvider).getScheduleMatrix(
+        from: dayStartUtc.toIso8601String(),
+        to: dayEndUtc.toIso8601String(),
+        branchId: branchId,
+        groupBy: _dayViewMode == _DayViewMode.byTeacher ? 'teacher' : 'room',
+        limit: 500,
+      );
+      final items = result['items'];
+      if (items is! List || !mounted) return;
+      final dayLessons = items.whereType<Map<String, dynamic>>().toList();
+
+      // Upsert by id so the rest of the loaded window is preserved while the
+      // selected day becomes complete.
+      final byId = <String, Map<String, dynamic>>{
+        for (final l in _lessons)
+          if (l['id'] != null) l['id'].toString(): l,
+      };
+      for (final l in dayLessons) {
+        final id = l['id']?.toString();
+        if (id != null) byId[id] = l;
+      }
+
+      final tNames = Map<String, String>.from(_teacherNames);
+      final sNames = Map<String, String>.from(_studentNames);
+      for (final l in dayLessons) {
+        final tid = l['teacher_id']?.toString();
+        final tn = l['teacher_name']?.toString();
+        if (tid != null && tid.isNotEmpty && tn != null && tn.isNotEmpty) {
+          tNames[tid] = tn;
+        }
+        final sid = l['student_id']?.toString();
+        final sn = l['student_name']?.toString();
+        if (sid != null && sid.isNotEmpty && sn != null && sn.isNotEmpty) {
+          sNames[sid] = sn;
+        }
+      }
+
+      setState(() {
+        _lessons = byId.values.toList();
+        _teacherNames = tNames;
+        _studentNames = sNames;
+      });
+    } catch (e) {
+      debugPrint('Error fetching day lessons: $e');
     }
   }
 
@@ -466,11 +540,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       () => _selectedDate = _selectedDate.subtract(const Duration(days: 1)),
     );
     _fetchAvailabilityForSelectedDay();
+    _fetchDayLessons(_selectedDate);
   }
 
   void _nextDay() {
     setState(() => _selectedDate = _selectedDate.add(const Duration(days: 1)));
     _fetchAvailabilityForSelectedDay();
+    _fetchDayLessons(_selectedDate);
   }
 
   void _onMonthDayTap(DateTime date) {
@@ -479,6 +555,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       _currentView = _ScheduleView.day;
     });
     _fetchAvailabilityForSelectedDay();
+    _fetchDayLessons(_selectedDate);
   }
 
   void _showAddLessonDialog(DateTime date, String? roomId) async {
@@ -540,6 +617,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           _displayedMonth = DateTime(date.year, date.month);
           _currentView = _ScheduleView.day;
         });
+        // Reload the window for the (possibly new) month; since the view is now
+        // day, _fetchAll backfills the selected day's lessons too.
+        _fetchAll();
         return;
       }
     }
@@ -584,6 +664,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         _selectedTeacherId = foundTeacherId;
       }
     });
+    _fetchDayLessons(lessonDate);
   }
 
   Future<void> _showScheduleFilters() async {
@@ -685,6 +766,17 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // ═══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    // Realtime: refresh when another staff member changes a lesson.
+    ref.listen(crmRealtimeProvider, (prev, next) {
+      final event = next.value;
+      if (event == null || event.entity != 'lesson' || !mounted) return;
+      if (_isLoading) return;
+      if (_currentView == _ScheduleView.day) {
+        _fetchDayLessons(_selectedDate);
+      } else {
+        _fetchAll();
+      }
+    });
     // Chrome (branch selector, view toggle, availability bar, FAB) is hidden
     // only on the FIRST load (no data yet). Once loaded, it stays visible during
     // re-fetches — a thin progress bar shows the refresh — so the screen never
@@ -1718,8 +1810,45 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                         ),
                         builder: (context, candidate, rejected) {
                           final isHovering = candidate.isNotEmpty;
-                          return Stack(
+                          return GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTapUp: (d) => _onSlotTap(
+                              rid,
+                              d.localPosition.dy,
+                              startHour,
+                              endHour,
+                              hourHeight,
+                            ),
+                            onLongPressStart: (d) =>
+                                _onSlotSelectStart(rid, d.localPosition.dy),
+                            onLongPressMoveUpdate: (d) =>
+                                _onSlotSelectUpdate(d.localPosition.dy),
+                            onLongPressEnd: (_) =>
+                                _onSlotSelectEnd(startHour, endHour, hourHeight),
+                            child: Stack(
                             children: [
+                              // Booking selection overlay (tap / long-press-drag).
+                              if (_selRoomId == rid &&
+                                  _selStartY != null &&
+                                  _selEndY != null)
+                                Positioned(
+                                  left: 2,
+                                  right: 2,
+                                  top: _selStartY! < _selEndY!
+                                      ? _selStartY!
+                                      : _selEndY!,
+                                  height: (_selStartY! - _selEndY!)
+                                      .abs()
+                                      .clamp(10.0, 2000.0),
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: AppColor.goldSoft,
+                                      border:
+                                          Border.all(color: AppColor.goldLine),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                ),
                               // Drop highlight while a block hovers this column.
                               if (isHovering)
                                 Positioned.fill(
@@ -1754,6 +1883,27 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                                   ),
                                 );
                               }),
+                              // Affordance: an empty room column invites booking
+                              // (the tap/long-press gesture is otherwise invisible).
+                              if (roomLessons.isEmpty)
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    child: Center(
+                                      child: Text(
+                                        'Нажмите,\nчтобы назначить',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          height: 1.3,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant
+                                              .withAlpha(90),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               // Lesson cards
                               ...roomLessons.map(
                                 (l) => _buildDayLessonCard(
@@ -1764,6 +1914,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                                 ),
                               ),
                             ],
+                          ),
                           );
                         },
                       ),
@@ -2039,6 +2190,92 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // It does NOT invent any endpoint: after the update we re-run `_fetchAll`,
   // whose `getScheduleMatrix` call recomputes conflicts server-side (the existing
   // conflict check), and any returned `conflict_types` are surfaced to the user.
+  // ── Tap / drag-to-book on empty grid cells (KVA-195) ───────────────────────
+  // Convert a vertical offset inside a day-grid room column to a 15-min-snapped
+  // DateTime on the selected day.
+  DateTime _slotDateTime(
+    double localY,
+    int startHour,
+    int endHour,
+    double hourHeight,
+  ) {
+    final raw = startHour * 60 + (localY / hourHeight) * 60.0;
+    var minutes = (raw / 15).round() * 15;
+    minutes = minutes.clamp(startHour * 60, endHour * 60 - 15);
+    return DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      minutes ~/ 60,
+      minutes % 60,
+    );
+  }
+
+  void _onSlotTap(
+    String roomId,
+    double localY,
+    int startHour,
+    int endHour,
+    double hourHeight,
+  ) {
+    _openCreateForSlot(
+      roomId,
+      _slotDateTime(localY, startHour, endHour, hourHeight),
+      60,
+    );
+  }
+
+  void _onSlotSelectStart(String roomId, double localY) {
+    setState(() {
+      _selRoomId = roomId;
+      _selStartY = localY;
+      _selEndY = localY;
+    });
+  }
+
+  void _onSlotSelectUpdate(double localY) {
+    if (_selRoomId == null) return;
+    setState(() => _selEndY = localY);
+  }
+
+  void _onSlotSelectEnd(int startHour, int endHour, double hourHeight) {
+    final roomId = _selRoomId;
+    final a = _selStartY;
+    final b = _selEndY;
+    setState(() {
+      _selRoomId = null;
+      _selStartY = null;
+      _selEndY = null;
+    });
+    if (roomId == null || a == null || b == null) return;
+    final start = _slotDateTime(a < b ? a : b, startHour, endHour, hourHeight);
+    final end = _slotDateTime(a < b ? b : a, startHour, endHour, hourHeight);
+    var duration = end.difference(start).inMinutes;
+    if (duration < 30) duration = 60; // a near-tap behaves like one slot
+    _openCreateForSlot(roomId, start, duration);
+  }
+
+  Future<void> _openCreateForSlot(
+    String roomId,
+    DateTime start,
+    int durationMinutes,
+  ) async {
+    final created = await CreateLessonDialog.show(
+      context,
+      initialDate: start,
+      initialRoomId: roomId.isEmpty ? null : roomId,
+      initialBranchId: _selectedBranchId,
+      initialDurationMinutes: durationMinutes,
+    );
+    if (created == true && mounted) {
+      if (_currentView == _ScheduleView.day) {
+        _fetchDayLessons(_selectedDate);
+      } else {
+        _fetchAll();
+      }
+    }
+  }
+
   void _onLessonDropped({
     required Map<String, dynamic> lesson,
     required Offset globalDropOffset,

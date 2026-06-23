@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, StreamableFile } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { basename } from "node:path";
+import { Readable } from "node:stream";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
@@ -127,46 +128,85 @@ export class FilesService {
 
   async downloadByToken(
     token: string,
+    rangeHeader?: string,
   ): Promise<{
-    stream: StreamableFile;
+    stream: Readable;
     fileName: string;
     mimeType: string;
-    sizeBytes: number;
+    totalSize: number;
+    start: number;
+    end: number;
+    isPartial: boolean;
   }> {
-    const result = await this.database.transaction(async (client) => {
-      const selected = await client.query<TokenRow>(
-        `
-          select f.id as file_id, f.storage_key, f.original_name, f.mime_type,
-            f.size_bytes, f.purpose
-          from app.file_download_tokens t
-          join app.file_objects f on f.id = t.file_id
-          where t.token_hash = $1
-            and t.expires_at > now()
-            and t.used_at is null
-            and f.deleted_at is null
-          limit 1
-          for update of t
-        `,
-        [this.tokenHash(token)],
-      );
-      const row = selected.rows[0];
-      if (!row)
-        throw new NotFoundException("Ссылка недействительна или истекла.");
-      await client.query(
-        "update app.file_download_tokens set used_at = now() where token_hash = $1",
-        [this.tokenHash(token)],
-      );
-      return row;
-    });
+    const selected = await this.database.query<TokenRow>(
+      `
+        select f.id as file_id, f.storage_key, f.original_name, f.mime_type,
+          f.size_bytes, f.purpose
+        from app.file_download_tokens t
+        join app.file_objects f on f.id = t.file_id
+        where t.token_hash = $1
+          and t.expires_at > now()
+          and f.deleted_at is null
+        limit 1
+      `,
+      [this.tokenHash(token)],
+    );
+    const row = selected.rows[0];
+    if (!row)
+      throw new NotFoundException("Ссылка недействительна или истекла.");
 
+    // Record first use for audit only — do NOT consume the token. Media players
+    // (just_audio) re-request the same URL for range/seek/replay, so a one-time
+    // token 404s on the second request and surfaces as a "source error". The
+    // token stays valid until it expires (short TTL set at issue time).
+    await this.database.query(
+      "update app.file_download_tokens set used_at = now() where token_hash = $1 and used_at is null",
+      [this.tokenHash(token)],
+    );
+
+    const totalSize = Number(row.size_bytes);
+    const range = this.parseRange(rangeHeader, totalSize);
+    const stream = this.storage.createReadStream(
+      row.storage_key,
+      range ? { start: range.start, end: range.end } : undefined,
+    );
     return {
-      stream: new StreamableFile(
-        this.storage.createReadStream(result.storage_key),
-      ),
-      fileName: basename(result.original_name),
-      mimeType: result.mime_type,
-      sizeBytes: Number(result.size_bytes),
+      stream,
+      fileName: basename(row.original_name),
+      mimeType: row.mime_type,
+      totalSize,
+      start: range ? range.start : 0,
+      end: range ? range.end : Math.max(totalSize - 1, 0),
+      isPartial: range != null,
     };
+  }
+
+  /** Parse a single HTTP Range header (`bytes=start-end`). Returns null for a
+   *  missing/invalid/unsatisfiable range so the caller serves the full file. */
+  private parseRange(
+    header: string | undefined,
+    size: number,
+  ): { start: number; end: number } | null {
+    if (!header || size <= 0) return null;
+    const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+    if (!match) return null;
+    const hasStart = match[1] !== "";
+    const hasEnd = match[2] !== "";
+    if (!hasStart && !hasEnd) return null;
+    let start: number;
+    let end: number;
+    if (!hasStart) {
+      const suffix = Number(match[2]);
+      if (suffix <= 0) return null;
+      start = Math.max(size - suffix, 0);
+      end = size - 1;
+    } else {
+      start = Number(match[1]);
+      end = hasEnd ? Number(match[2]) : size - 1;
+    }
+    if (Number.isNaN(start) || Number.isNaN(end)) return null;
+    if (start > end || start >= size) return null;
+    return { start, end: Math.min(end, size - 1) };
   }
 
   async delete(actor: ActorContext, fileId: string) {

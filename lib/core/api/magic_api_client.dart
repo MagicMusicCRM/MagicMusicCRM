@@ -121,7 +121,7 @@ class MagicApiClient {
   }) async {
     _addApiBreadcrumb(method, path, authenticated: authenticated);
     try {
-      return await _send<T>(
+      return await _sendWithRetry<T>(
         method,
         path,
         data: data,
@@ -141,7 +141,7 @@ class MagicApiClient {
       }
 
       try {
-        return await _send<T>(
+        return await _sendWithRetry<T>(
           method,
           path,
           data: data,
@@ -152,6 +152,52 @@ class MagicApiClient {
         await _captureApiException(retryError, method, path);
         throw MagicApiException.fromDio(retryError);
       }
+    }
+  }
+
+  /// Wraps [_send] with a single retry for connection-phase failures. The first
+  /// request after the app/network has been idle can be slow or dropped (cold
+  /// DNS resolution, a dropped first SYN behind a rate-limiter); an immediate
+  /// retry then succeeds because the route/DNS cache is warm. Connection-phase
+  /// failures mean the request never reached the server, so retrying is safe for
+  /// any method; a slow response (receiveTimeout) is only retried for reads.
+  Future<T> _sendWithRetry<T>(
+    String method,
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    required bool authenticated,
+  }) async {
+    const maxAttempts = 2;
+    var attempt = 0;
+    while (true) {
+      attempt++;
+      try {
+        return await _send<T>(
+          method,
+          path,
+          data: data,
+          queryParameters: queryParameters,
+          authenticated: authenticated,
+        );
+      } on DioException catch (e) {
+        if (attempt >= maxAttempts || !_isRetriableConnectionError(e, method)) {
+          rethrow;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+    }
+  }
+
+  bool _isRetriableConnectionError(DioException e, String method) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.connectionError:
+        return true;
+      case DioExceptionType.receiveTimeout:
+        return method == 'GET';
+      default:
+        return false;
     }
   }
 

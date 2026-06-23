@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Req,
   Res,
   StreamableFile,
   UploadedFile,
@@ -14,7 +15,7 @@ import {
   UseInterceptors
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { ActorContext } from '../common/security/actor-context';
 import { CurrentActor } from '../common/security/current-actor.decorator';
 import { JwtAuthGuard } from '../common/security/jwt-auth.guard';
@@ -41,16 +42,29 @@ export class FilesController {
   @Header('Cache-Control', 'private, no-store')
   async download(
     @Param('token') token: string,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response
   ): Promise<StreamableFile> {
-    const download = await this.files.downloadByToken(token);
+    const rangeHeader =
+      typeof request.headers.range === 'string' ? request.headers.range : undefined;
+    const download = await this.files.downloadByToken(token, rangeHeader);
+    response.setHeader('Accept-Ranges', 'bytes');
     response.setHeader('Content-Type', download.mimeType);
-    response.setHeader('Content-Length', String(download.sizeBytes));
     response.setHeader(
       'Content-Disposition',
-      `attachment; filename="${download.fileName.replace(/"/g, '_')}"`
+      `inline; filename="${download.fileName.replace(/"/g, '_')}"`
     );
-    return download.stream;
+    if (download.isPartial) {
+      response.status(206);
+      response.setHeader(
+        'Content-Range',
+        `bytes ${download.start}-${download.end}/${download.totalSize}`
+      );
+      response.setHeader('Content-Length', String(download.end - download.start + 1));
+    } else {
+      response.setHeader('Content-Length', String(download.totalSize));
+    }
+    return new StreamableFile(download.stream);
   }
 
   @Get(':id')

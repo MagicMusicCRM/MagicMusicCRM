@@ -6,6 +6,7 @@ import {
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { RealtimeBus } from "../realtime/realtime-bus";
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
 import { CrmPolicy } from "./crm.policy";
 import { CrmService } from "./crm.service";
@@ -45,6 +46,7 @@ describe("CrmService", () => {
       policy as unknown as CrmPolicy,
       hollihop as unknown as HolliHopMetadataService,
       notifications as unknown as NotificationsService,
+      { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
     return { service, query, audit, policy, hollihop, notifications };
@@ -87,6 +89,7 @@ describe("CrmService", () => {
       policy as unknown as CrmPolicy,
       hollihop as unknown as HolliHopMetadataService,
       notifications as unknown as NotificationsService,
+      { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
     return { service, query, audit, policy, hollihop, notifications };
@@ -3834,6 +3837,7 @@ describe("CrmService", () => {
       policy as unknown as CrmPolicy,
       {} as unknown as HolliHopMetadataService,
       {} as unknown as NotificationsService,
+      {} as unknown as RealtimeBus,
     );
     const result = await service.saveContactFromChat(actor, {
       userId: "u1",
@@ -4243,6 +4247,7 @@ describe("CrmService", () => {
       policy as unknown as CrmPolicy,
       hollihop as unknown as HolliHopMetadataService,
       notifications as unknown as NotificationsService,
+      { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
     return { service, query, transaction, policy };
   };
@@ -4345,6 +4350,7 @@ describe("CrmService", () => {
       policy as unknown as CrmPolicy,
       {} as unknown as HolliHopMetadataService,
       {} as unknown as NotificationsService,
+      {} as unknown as RealtimeBus,
     );
     const result = await service.autoCreateLeadFromChat(actor, "user-1");
     expect(result).toEqual({ leadId: "lead-existing", created: false });
@@ -4391,6 +4397,7 @@ describe("CrmService", () => {
       policy as unknown as CrmPolicy,
       {} as unknown as HolliHopMetadataService,
       {} as unknown as NotificationsService,
+      {} as unknown as RealtimeBus,
     );
     const result = await service.autoCreateLeadFromChat(actor, "user-1");
     expect(result).toEqual({ leadId: "lead-new", created: true });
@@ -4453,6 +4460,7 @@ describe("CrmService", () => {
       policy as unknown as CrmPolicy,
       {} as unknown as HolliHopMetadataService,
       {} as unknown as NotificationsService,
+      {} as unknown as RealtimeBus,
     );
     const result = await service.autoCreateLeadFromChat(actor, "user-no-profile");
     expect(result).toEqual({ leadId: null, created: false });

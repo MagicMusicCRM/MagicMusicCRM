@@ -1987,8 +1987,12 @@ class MagicCrmService {
       'custom_data': customData,
       'profile_id': item['profileId'],
       'profile_user_id': item['profileUserId'],
-      'first_name': item['firstName'],
-      'last_name': item['lastName'],
+      // HolliHop-imported clients have no linked profile, so their name/contact
+      // live only in custom_data — fall back to it so the card isn't blank.
+      'first_name':
+          item['firstName'] ?? customData['firstName'] ?? customData['first_name'],
+      'last_name':
+          item['lastName'] ?? customData['lastName'] ?? customData['last_name'],
       'middle_name': customData['middleName'] ?? customData['middle_name'],
       'hollihop_id': customData['hollihopId'] ?? customData['hollihop_id'],
       'birthday': customData['birthday'],
@@ -1997,15 +2001,17 @@ class MagicCrmService {
           customData['individualPrice'] ?? customData['individual_price'],
       'contract_url':
           customData['legacyContractUrl'] ?? customData['contract_url'],
-      'email': item['email'],
-      'phone': item['phone'],
+      'email': item['email'] ?? customData['email'],
+      'phone': item['phone'] ?? customData['phone'],
       'created_at': item['createdAt'],
       'profiles': {
         'id': item['profileId'],
         'user_id': item['profileUserId'],
-        'first_name': item['firstName'],
-        'last_name': item['lastName'],
-        'phone': item['phone'],
+        'first_name':
+            item['firstName'] ?? customData['firstName'] ?? customData['first_name'],
+        'last_name':
+            item['lastName'] ?? customData['lastName'] ?? customData['last_name'],
+        'phone': item['phone'] ?? customData['phone'],
       },
     };
   }
@@ -2023,6 +2029,7 @@ class MagicCrmService {
       'linked_user_id': item['linkedUserId'],
       'linked_user_email': item['linkedUserEmail'],
       'is_app_account': item['isAppAccount'] ?? false,
+      'disciplines': item['disciplines'] ?? const <dynamic>[],
     };
   }
 

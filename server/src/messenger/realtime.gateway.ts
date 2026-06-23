@@ -6,12 +6,14 @@ import {
   MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ActorContext, UserRole } from '../common/security/actor-context';
+import { RealtimeBus } from '../realtime/realtime-bus';
 import { MessengerPolicy } from './messenger.policy';
 import { JoinRoomPayload, PresencePayload, TypingPayload } from './dto/realtime-events.dto';
 
@@ -43,7 +45,9 @@ type RealtimeSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<
   pingTimeout: 20_000
 })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
+{
   @WebSocketServer()
   private server?: Server;
 
@@ -52,8 +56,15 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   constructor(
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
-    private readonly policy: MessengerPolicy
+    private readonly policy: MessengerPolicy,
+    private readonly bus: RealtimeBus
   ) {}
+
+  afterInit(server: Server): void {
+    // Hand the Socket.IO server to the decoupled bus so CRM modules can
+    // broadcast invalidation hints without depending on this gateway.
+    this.bus.setServer(server);
+  }
 
   async handleConnection(socket: RealtimeSocket): Promise<void> {
     const token = this.extractToken(socket);
@@ -75,6 +86,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       socket.data.rooms = new Set<string>();
       socket.data.rate = new Map();
       await socket.join(this.userRoom(payload.sub));
+      // Staff receive CRM realtime invalidation hints (lessons/leads/etc.).
+      if (payload.role !== 'client') {
+        await socket.join(RealtimeBus.crmRoom);
+      }
       this.logger.log(`Realtime connected user=${payload.sub}`);
     } catch {
       socket.disconnect(true);

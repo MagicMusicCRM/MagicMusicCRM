@@ -14,6 +14,7 @@ import { LegalModule } from "./legal/legal.module";
 import { MessengerModule } from "./messenger/messenger.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ProfileModule } from "./profile/profile.module";
+import { RealtimeModule } from "./realtime/realtime.module";
 import { SettingsModule } from "./settings/settings.module";
 
 @Module({
@@ -23,6 +24,7 @@ import { SettingsModule } from "./settings/settings.module";
       validationSchema: envValidationSchema,
     }),
     DatabaseModule,
+    RealtimeModule,
     AuditModule,
     AuthModule,
     ProfileModule,
