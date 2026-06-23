@@ -183,7 +183,7 @@ describe('LegalService', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('updates deletion lifecycle and revokes user access on completion', async () => {
+  it('anonymizes PII and revokes access on completion', async () => {
     const { service, database, audit } = createService();
     const processing = { ...deletionRequest, status: 'processing' };
     const completed = {
@@ -193,15 +193,13 @@ describe('LegalService', () => {
       resolved_by: admin.userId
     };
     database.query.mockResolvedValueOnce({ rows: [processing] } as never);
-    database.transaction.mockImplementationOnce(async (work) => {
-      const client = {
-        query: jest
-          .fn()
-          .mockResolvedValueOnce({ rows: [completed] })
-          .mockResolvedValue({ rows: [] })
-      };
-      return work(client as never);
-    });
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [completed] })
+      .mockResolvedValue({ rows: [] });
+    database.transaction.mockImplementationOnce(async (work) =>
+      work({ query: clientQuery } as never)
+    );
 
     await expect(
       service.updateDeletionRequest(admin, deletionRequest.id, {
@@ -209,6 +207,20 @@ describe('LegalService', () => {
         resolutionNote: 'done'
       })
     ).resolves.toMatchObject({ id: deletionRequest.id, status: 'completed' });
+
+    const sql = clientQuery.mock.calls.map((call) => call[0] as string);
+    const userUpdate = sql.find((s) => s.includes('update app.users'));
+    // PII masked + email freed (re-registration), credentials cleared.
+    expect(userUpdate).toMatch(/@deleted\.invalid/);
+    expect(userUpdate).toMatch(/full_name\s*=\s*null/);
+    expect(userUpdate).toMatch(/password_hash\s*=\s*null/);
+    const profileUpdate = sql.find((s) => s.includes('update app.profiles'));
+    expect(profileUpdate).toMatch(/first_name\s*=\s*null/);
+    // imported PII lives in custom_data (S4) — must be cleared too
+    expect(profileUpdate).toMatch(/custom_data\s*=\s*'\{\}'::jsonb/);
+    // external login identities + push tokens removed
+    expect(sql.some((s) => s.includes('delete from app.user_identities'))).toBe(true);
+    expect(sql.some((s) => s.includes('delete from app.notification_devices'))).toBe(true);
 
     expect(database.transaction).toHaveBeenCalledTimes(1);
     expect(audit.record).toHaveBeenCalledWith(

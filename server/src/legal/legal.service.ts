@@ -256,20 +256,60 @@ export class LegalService {
       );
 
       if (dto.status === 'completed') {
+        // 152-ФЗ / Google Play Data Safety: при завершении удаления ОБЕЗЛИЧИВАЕМ
+        // персональные данные, а не только проставляем deleted_at.
+        // email маскируется уникальным плейсхолдером (освобождает повторную
+        // регистрацию); пароль и контакты обнуляются.
         await client.query(
           `
             update app.users
-            set deleted_at = coalesce(deleted_at, now()), updated_at = now()
+            set email = 'deleted-' || id::text || '@deleted.invalid',
+                full_name = null,
+                phone = null,
+                password_hash = null,
+                deleted_at = coalesce(deleted_at, now()),
+                updated_at = now()
             where id = $1
           `,
           [current.user_id]
         );
+        // Профиль: ФИО/телефон/дата рождения/аватар + импортированные PII в
+        // custom_data (наследие HolliHop, S4) полностью очищаются.
         await client.query(
           `
             update app.profiles
-            set deleted_at = coalesce(deleted_at, now()), updated_at = now()
+            set first_name = null,
+                last_name = null,
+                phone = null,
+                dob = null,
+                avatar_file_id = null,
+                custom_data = '{}'::jsonb,
+                deleted_at = coalesce(deleted_at, now()),
+                updated_at = now()
             where user_id = $1
           `,
+          [current.user_id]
+        );
+        // Внешние идентификаторы входа (хранят email/sub) и push-токены удаляем.
+        await client.query(
+          `delete from app.user_identities where user_id = $1`,
+          [current.user_id]
+        );
+        await client.query(
+          `delete from app.notification_devices where user_id = $1`,
+          [current.user_id]
+        );
+        // Аннулируем непогашенные одноразовые креденшелы.
+        await client.query(
+          `delete from app.password_reset_tokens where user_id = $1`,
+          [current.user_id]
+        );
+        await client.query(
+          `delete from app.email_verification_tokens where user_id = $1`,
+          [current.user_id]
+        );
+        await client.query(
+          `delete from app.otp_challenges where user_id = $1`,
           [current.user_id]
         );
         await client.query(
