@@ -1123,4 +1123,226 @@ describe("MessengerService", () => {
     expect(insert![0]).toContain('owner_user_id');
     expect(insert![1]).toContain('user-a');
   });
+
+  describe("archiveChat / unarchiveChat", () => {
+    const staffActor = { userId: "staff-user-1", role: "manager" as const };
+    const adminChat = {
+      id: "chat-admin-1",
+      type: "administration",
+      memberUserId: null,
+      memberRole: null,
+      assignedToUserId: null,
+    };
+
+    it("archiveChat upserts chat_inbox_state with archived_at=now() and emits chat.updated to staff user room", async () => {
+      const { service, database, realtime } = createService({
+        database: {
+          query: jest.fn().mockResolvedValueOnce({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(adminChat),
+        },
+      });
+
+      await service.archiveChat(staffActor, "chat-admin-1");
+
+      expect(database.query).toHaveBeenCalledWith(
+        expect.stringContaining("chat_inbox_state"),
+        expect.arrayContaining(["chat-admin-1", "staff-user-1"]),
+      );
+      expect(database.query).toHaveBeenCalledWith(
+        expect.stringContaining("on conflict"),
+        expect.anything(),
+      );
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "staff-user-1",
+        "chat.updated",
+        expect.objectContaining({ id: "chat-admin-1", archived: true }),
+      );
+    });
+
+    it("unarchiveChat upserts chat_inbox_state with archived_at=null and emits chat.updated { archived: false }", async () => {
+      const { service, database, realtime } = createService({
+        database: {
+          query: jest.fn().mockResolvedValueOnce({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(adminChat),
+        },
+      });
+
+      await service.unarchiveChat(staffActor, "chat-admin-1");
+
+      expect(database.query).toHaveBeenCalledWith(
+        expect.stringContaining("chat_inbox_state"),
+        expect.arrayContaining(["chat-admin-1", "staff-user-1"]),
+      );
+      expect(database.query).toHaveBeenCalledWith(
+        expect.stringContaining("on conflict"),
+        expect.anything(),
+      );
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "staff-user-1",
+        "chat.updated",
+        expect.objectContaining({ id: "chat-admin-1", archived: false }),
+      );
+    });
+
+    it("archiveChat rejects non-staff actors", async () => {
+      const clientActor = { userId: "client-1", role: "client" as const };
+      const { service } = createService({
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(adminChat),
+        },
+      });
+
+      await expect(service.archiveChat(clientActor, "chat-admin-1")).rejects.toThrow();
+    });
+
+    it("archiveChat rejects non-administration chats", async () => {
+      const { service } = createService({
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue({
+            id: "chat-direct-1",
+            type: "direct",
+            memberUserId: "staff-user-1",
+            memberRole: "member",
+          }),
+        },
+      });
+
+      await expect(service.archiveChat(staffActor, "chat-direct-1")).rejects.toThrow();
+    });
+  });
+
+  describe("sendMessage resurface on administration chat", () => {
+    it("clears archived_at for all staff when a message is sent in an administration chat", async () => {
+      const adminChatId = "chat-admin-resurface";
+      type MockClient = { query: jest.Mock };
+      const client = {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id: "msg-r1",
+                chat_id: adminChatId,
+                sender_id: "client-r",
+                content: "Resurface me",
+                message_type: "text",
+                attachment_file_id: null,
+                reply_to_id: null,
+                forwarded_from_id: null,
+                pinned_by: null,
+                pinned_at: null,
+                created_at: new Date("2026-06-25T10:00:00Z"),
+                updated_at: new Date("2026-06-25T10:00:00Z"),
+                deleted_at: null,
+                sender_email: null,
+                sender_first_name: null,
+                sender_last_name: null,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({ rows: [] }), // update chats last_message_id
+      };
+      const dbQuery = jest.fn().mockResolvedValue({ rows: [] });
+      const { service, database } = createService({
+        database: {
+          transaction: jest.fn(
+            async (work: (c: MockClient) => Promise<unknown>) => work(client),
+          ) as never,
+          query: dbQuery,
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue({
+            id: adminChatId,
+            type: "administration",
+            memberUserId: "client-r",
+            memberRole: "member",
+          }),
+          assertCanWriteChat: jest.fn(),
+        },
+      });
+
+      await service.sendMessage(
+        { userId: "client-r", role: "client" },
+        adminChatId,
+        { content: "Resurface me" } as never,
+      );
+
+      // The resurface update must have been issued
+      const calls = dbQuery.mock.calls as Array<[string, unknown[]]>;
+      const resurface = calls.find(
+        ([sql]) =>
+          sql.includes("chat_inbox_state") &&
+          sql.includes("archived_at = null") &&
+          sql.includes("chat_id = $1"),
+      );
+      expect(resurface).toBeDefined();
+      expect(resurface![1]).toEqual([adminChatId]);
+    });
+
+    it("does NOT issue the resurface update for a non-administration chat", async () => {
+      const directChatId = "chat-direct-resurface";
+      type MockClient = { query: jest.Mock };
+      const client = {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id: "msg-d1",
+                chat_id: directChatId,
+                sender_id: "user-d",
+                content: "hi",
+                message_type: "text",
+                attachment_file_id: null,
+                reply_to_id: null,
+                forwarded_from_id: null,
+                pinned_by: null,
+                pinned_at: null,
+                created_at: new Date("2026-06-25T10:00:00Z"),
+                updated_at: new Date("2026-06-25T10:00:00Z"),
+                deleted_at: null,
+                sender_email: null,
+                sender_first_name: null,
+                sender_last_name: null,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({ rows: [] }),
+      };
+      const dbQuery = jest.fn().mockResolvedValue({ rows: [] });
+      const { service } = createService({
+        database: {
+          transaction: jest.fn(
+            async (work: (c: MockClient) => Promise<unknown>) => work(client),
+          ) as never,
+          query: dbQuery,
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue({
+            id: directChatId,
+            type: "direct",
+            memberUserId: "user-d",
+            memberRole: "member",
+          }),
+          assertCanWriteChat: jest.fn(),
+        },
+      });
+
+      await service.sendMessage(
+        { userId: "user-d", role: "client" },
+        directChatId,
+        { content: "hi" } as never,
+      );
+
+      const calls = dbQuery.mock.calls as Array<[string, unknown[]]>;
+      const resurface = calls.find(
+        ([sql]) => sql.includes("chat_inbox_state") && sql.includes("archived_at = null"),
+      );
+      expect(resurface).toBeUndefined();
+    });
+  });
 });

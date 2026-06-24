@@ -126,6 +126,22 @@ export class MessengerController {
     return this.messenger.unassignChat(actor, chatId);
   }
 
+  @Post("chats/:chatId/archive")
+  archiveChat(
+    @CurrentActor() actor: ActorContext,
+    @Param("chatId", ParseUUIDPipe) chatId: string,
+  ) {
+    return this.messenger.archiveChat(actor, chatId);
+  }
+
+  @Post("chats/:chatId/unarchive")
+  unarchiveChat(
+    @CurrentActor() actor: ActorContext,
+    @Param("chatId", ParseUUIDPipe) chatId: string,
+  ) {
+    return this.messenger.unarchiveChat(actor, chatId);
+  }
+
   @Put("chats/:chatId/mute")
   setChatMute(
     @CurrentActor() actor: ActorContext,

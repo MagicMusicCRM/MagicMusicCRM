@@ -466,6 +466,18 @@ export class MessengerService implements OnModuleInit {
     const payload = this.toMessageDto(message);
     this.realtime.publishChatEvent(chatId, "message.created", payload);
     await this.fanoutChatListUpdate(chat, chatId, payload);
+    if (chat.type === "administration") {
+      // Resurface: clear archived_at for ALL staff so the thread reappears in inboxes.
+      // Best-effort: a failure here must not break the send.
+      try {
+        await this.database.query(
+          "update app.chat_inbox_state set archived_at = null where chat_id = $1",
+          [chatId],
+        );
+      } catch (err) {
+        this.logger.warn(`resurface chat_inbox_state failed: ${String(err)}`);
+      }
+    }
     if (chat.type === "administration" && !isStaffRole(actor.role)) {
       void this.crm.autoCreateLeadFromChat(actor, actor.userId).catch(() => undefined);
     }
@@ -708,6 +720,48 @@ export class MessengerService implements OnModuleInit {
         this.toMessageDto(message),
       );
     }
+    return { success: true };
+  }
+
+  async archiveChat(actor: ActorContext, chatId: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "administration") {
+      throw new NotFoundException("Чат не найден.");
+    }
+    if (!isStaffRole(actor.role)) {
+      throw new ForbiddenException("Только сотрудники могут архивировать чаты.");
+    }
+    await this.database.query(
+      `insert into app.chat_inbox_state (chat_id, staff_user_id, archived_at)
+       values ($1, $2, now())
+       on conflict (chat_id, staff_user_id) do update set archived_at = now()`,
+      [chatId, actor.userId],
+    );
+    this.realtime.publishUserEvent(actor.userId, "chat.updated", {
+      id: chatId,
+      archived: true,
+    });
+    return { success: true };
+  }
+
+  async unarchiveChat(actor: ActorContext, chatId: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "administration") {
+      throw new NotFoundException("Чат не найден.");
+    }
+    if (!isStaffRole(actor.role)) {
+      throw new ForbiddenException("Только сотрудники могут разархивировать чаты.");
+    }
+    await this.database.query(
+      `insert into app.chat_inbox_state (chat_id, staff_user_id, archived_at)
+       values ($1, $2, null)
+       on conflict (chat_id, staff_user_id) do update set archived_at = null`,
+      [chatId, actor.userId],
+    );
+    this.realtime.publishUserEvent(actor.userId, "chat.updated", {
+      id: chatId,
+      archived: false,
+    });
     return { success: true };
   }
 
