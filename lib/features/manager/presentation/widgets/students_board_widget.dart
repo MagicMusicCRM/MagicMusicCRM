@@ -8,6 +8,8 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
+import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
+import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
 
 /// Ученики board widget — per-branch STATUS columns (draggable kanban).
 ///
@@ -290,7 +292,14 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
             ),
           ),
         )
-        .toList();
+        .toList()
+      // «Без филиала» board — students with no branch assigned.
+      ..add(
+        const DropdownMenuItem<String>(
+          value: kNoBranchBoardId,
+          child: Text('Без филиала'),
+        ),
+      );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -344,6 +353,30 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final transfer = ref.watch(leadTransferControllerProvider);
+    // Persist the branch chosen during a transfer into the local selection so it
+    // stays the active filter once the flow finishes (storyboard screen 7).
+    ref.listen<String?>(
+      leadTransferControllerProvider.select((c) => c.selectedBranchId),
+      (prev, next) {
+        if (next != null && next != _selectedBranchId && mounted) {
+          setState(() => _selectedBranchId = next);
+        }
+      },
+    );
+
+    // During a transfer the host's branch strip drives the selection — render
+    // the chosen branch's board directly (no local selector chrome) so the card
+    // can be dropped into a status column.
+    if (transfer.isActive) {
+      final branchId = transfer.selectedBranchId ?? _selectedBranchId;
+      if (branchId != null) {
+        return Column(
+          children: [Expanded(child: _buildBoardArea(branchId, transfer))],
+        );
+      }
+    }
+
     // Loading state — branches not yet fetched.
     if (!_branchesLoaded && _branchLoadError == null) {
       return Column(
@@ -442,105 +475,127 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
       );
     }
 
-    final boardAsync = ref.watch(studentBoardProvider(_selectedBranchId!));
-
     return Column(
       children: [
         _buildBranchSelector(),
-        Expanded(
-          child: boardAsync.when(
-            loading: () => const KanbanSkeleton(),
-            error: (err, _) => Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.error_outline_rounded,
-                      color: AppTheme.danger,
-                      size: 42,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Не удалось загрузить учеников',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Проверьте подключение и попробуйте снова.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    FilledButton.icon(
-                      onPressed: _refreshBoard,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Повторить'),
-                    ),
-                  ],
+        Expanded(child: _buildBoardArea(_selectedBranchId!, transfer)),
+      ],
+    );
+  }
+
+  /// The kanban area for [branchId]. Shared by the normal path and the active
+  /// transfer path. When [transfer] is active, each droppable status column is
+  /// wrapped in a [TransferDropZone] so the dragged lead can be released into it.
+  Widget _buildBoardArea(String branchId, LeadTransferController transfer) {
+    final boardAsync = ref.watch(studentBoardProvider(branchId));
+    return boardAsync.when(
+      loading: () => const KanbanSkeleton(),
+      error: (err, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppTheme.danger,
+                size: 42,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Не удалось загрузить учеников',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Проверьте подключение и попробуйте снова.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-            ),
-            data: (columns) {
-              final data = _applyOptimistic(columns);
-              final total = data.fold<int>(
-                0,
-                (sum, c) => sum + c.students.length,
-              );
-              if (total == 0) {
-                return const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.people_outline_rounded,
-                        size: 42,
-                        color: Colors.grey,
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        'Нет учеников',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return Scrollbar(
-                controller: _boardScrollController,
-                thumbVisibility: true,
-                child: SingleChildScrollView(
-                  controller: _boardScrollController,
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: data.map((column) {
-                      return _StatusColumn(
-                        column: column,
-                        pendingStudentIds: _pendingStudentIds,
-                        onTap: _openStudent,
-                        onMove: _moveStatus,
-                        onDragUpdate: _handleDragUpdate,
-                        onDragEnd: _stopAutoScroll,
-                      );
-                    }).toList(),
-                  ),
-                ),
-              );
-            },
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: _refreshBoard,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Повторить'),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
+      data: (columns) {
+        final data = _applyOptimistic(columns);
+        final total = data.fold<int>(
+          0,
+          (sum, c) => sum + c.students.length,
+        );
+        if (total == 0 && !transfer.isActive) {
+          return const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.people_outline_rounded,
+                  size: 42,
+                  color: Colors.grey,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Нет учеников',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        return Scrollbar(
+          controller: _boardScrollController,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _boardScrollController,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 12,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: data.map((column) {
+                final col = _StatusColumn(
+                  column: column,
+                  pendingStudentIds: _pendingStudentIds,
+                  onTap: _openStudent,
+                  onMove: _moveStatus,
+                  onDragUpdate: _handleDragUpdate,
+                  onDragEnd: _stopAutoScroll,
+                );
+                if (transfer.isActive && column.status != null) {
+                  return TransferDropZone(
+                    zoneId: 'column:${column.status}',
+                    kind: TransferZoneKind.column,
+                    value: column.status,
+                    label: column.name,
+                    controller: transfer,
+                    // Keep the column wrapped at all times (transparent → cyan)
+                    // so toggling the hover highlight never rebuilds its subtree.
+                    builder: (ctx, hovering, _) => DashedRoundedBorder(
+                      color: hovering
+                          ? AppColor.transferCyan
+                          : Colors.transparent,
+                      child: col,
+                    ),
+                  );
+                }
+                return col;
+              }).toList(),
+            ),
+          ),
+        );
+      },
     );
   }
 }
