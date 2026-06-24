@@ -644,8 +644,12 @@ export class MessengerService implements OnModuleInit {
     this.realtime.publishChatEvent(chatId, "chat.updated", { id: chatId });
     const result = await this.getChat(actor, chatId);
     // Fan-out: added members receive chat.created; removed members receive chat.removed.
+    // The summary from getChat carries the manager's actor-scoped fields (isMuted,
+    // unreadCount). Freshly-added members have no prior membership state, so send
+    // a neutral copy with isMuted: false and unreadCount: 0.
+    const addedMemberSummary = { ...result, isMuted: false, unreadCount: 0 };
     for (const userId of dto.addUserIds ?? []) {
-      this.realtime.publishUserEvent(userId, "chat.created", result);
+      this.realtime.publishUserEvent(userId, "chat.created", addedMemberSummary);
     }
     for (const userId of dto.removeUserIds ?? []) {
       this.realtime.publishUserEvent(userId, "chat.removed", { id: chatId });
@@ -656,6 +660,9 @@ export class MessengerService implements OnModuleInit {
   async leaveGroup(actor: ActorContext, chatId: string) {
     const chat = await this.requireChat(actor, chatId);
     if (chat.type !== "group") {
+      throw new NotFoundException("Группа не найдена.");
+    }
+    if (chat.memberUserId !== actor.userId) {
       throw new NotFoundException("Группа не найдена.");
     }
     await this.database.query(

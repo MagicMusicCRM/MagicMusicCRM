@@ -2060,7 +2060,7 @@ describe("MessengerService", () => {
       await expect(service.leaveGroup(leaveActor, "chat-direct-1")).rejects.toThrow();
     });
 
-    it("rejects leaveGroup when the actor is not a member (getChatAccess returns no membership)", async () => {
+    it("rejects leaveGroup when the chat does not exist (getChatAccess returns null)", async () => {
       const { service } = createService({
         policy: {
           getChatAccess: jest.fn().mockResolvedValue(null),
@@ -2068,6 +2068,26 @@ describe("MessengerService", () => {
       });
 
       await expect(service.leaveGroup(leaveActor, "chat-group-leave")).rejects.toThrow();
+    });
+
+    it("rejects leaveGroup when actor has no membership row (group exists but memberUserId is null), emits NO events", async () => {
+      const { service, realtime } = createService({
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue({
+            id: "chat-group-leave",
+            type: "group",
+            memberUserId: null,
+            memberRole: null,
+          }),
+        },
+      });
+
+      await expect(
+        service.leaveGroup(leaveActor, "chat-group-leave"),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(realtime.publishUserEvent).not.toHaveBeenCalled();
+      expect(realtime.publishChatEvent).not.toHaveBeenCalled();
     });
   });
 
@@ -2202,11 +2222,11 @@ describe("MessengerService", () => {
         removeUserIds: ["user-old"],
       });
 
-      // chat.created to added member's user room
+      // chat.created to added member's user room — must carry neutral isMuted/unreadCount
       expect(realtime.publishUserEvent).toHaveBeenCalledWith(
         "user-new",
         "chat.created",
-        expect.objectContaining({ id: "chat-group-upd", type: "group" }),
+        expect.objectContaining({ id: "chat-group-upd", type: "group", isMuted: false, unreadCount: 0 }),
       );
       // chat.removed to removed member's user room
       expect(realtime.publishUserEvent).toHaveBeenCalledWith(
