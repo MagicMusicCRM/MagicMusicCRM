@@ -141,6 +141,14 @@ class MagicRealtimeConnection {
     _onMap('message.updated', handler);
   }
 
+  void onChatCreated(MagicRealtimeHandler handler) {
+    _onMap('chat.created', handler);
+  }
+
+  void onChatRemoved(MagicRealtimeHandler handler) {
+    _onMap('chat.removed', handler);
+  }
+
   void onChatUpdated(MagicRealtimeHandler handler) {
     _onMap('chat.updated', handler);
   }

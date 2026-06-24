@@ -124,6 +124,29 @@ void main() {
       ]);
     });
 
+    test('onChatCreated receives chat.created payloads', () {
+      final transport = _FakeTransport();
+      final connection = MagicRealtimeConnection(transport);
+      Map<String, dynamic>? got;
+
+      connection.onChatCreated((p) => got = p);
+      transport.fire('chat.created', {'id': 'c9', 'type': 'group', 'title': 'Группа'});
+
+      expect(got!['id'], 'c9');
+      expect(got!['type'], 'group');
+    });
+
+    test('onChatRemoved receives chat.removed payloads', () {
+      final transport = _FakeTransport();
+      final connection = MagicRealtimeConnection(transport);
+      String? removedId;
+
+      connection.onChatRemoved((p) => removedId = p['id'] as String?);
+      transport.fire('chat.removed', {'id': 'c9'});
+
+      expect(removedId, 'c9');
+    });
+
     test('rejects connect without an authenticated session', () async {
       final service = MagicRealtimeService(
         api: _client(MemoryMagicTokenStore()),
