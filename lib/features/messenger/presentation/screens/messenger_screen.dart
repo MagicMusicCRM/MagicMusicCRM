@@ -46,6 +46,8 @@ import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:mime/mime.dart';
+import 'package:magic_music_crm/features/messenger/inbox_logic.dart';
+import 'package:magic_music_crm/features/messenger/widgets/inbox_folder_bar.dart';
 
 void _logMessenger(String message) {
   if (kDebugMode) {
@@ -108,6 +110,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   final Set<String> _joinedChannelIds = {};
   Timer? _chatListReloadTimer;
   String? _currentUserId;
+
+  // Folder bar state (staff / manager+admin only)
+  InboxFolder _selectedFolder = InboxFolder.leads;
 
   bool get _isAdminRole =>
       widget.role == 'admin' || widget.role == 'system_admin';
@@ -2149,66 +2154,90 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         ),
         // Search
         ChatSearchBar(onChanged: (q) => setState(() => _searchQuery = q)),
+        // Folder bar — staff (manager/admin) only
+        if (_isManagerOrAdminRole)
+          InboxFolderBar(
+            selected: _selectedFolder,
+            unread: {
+              for (final f in InboxFolder.values)
+                f: unreadForFolder(_chatItems, _unreadCounts, f),
+            },
+            onSelected: (f) => setState(() => _selectedFolder = f),
+          ),
         // Chat list
         Expanded(
           child: _loadingChats
               ? const Center(
                   child: CircularProgressIndicator(color: AppColor.gold),
                 )
-              : sortedItems.isEmpty
-              ? Center(
-                  child: Text(
-                    _searchQuery.isNotEmpty ? 'Ничего не найдено' : 'Нет чатов',
-                    style: TextStyle(color: secondaryText),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadChatList,
-                  color: AppColor.gold,
-                  child: ListView.builder(
-                    itemCount: sortedItems.length,
-                    itemBuilder: (context, index) {
-                      final item = sortedItems[index];
-                      final id = (item['id'] ?? '').toString();
-                      final type =
-                          (item['_item_type'] ??
-                                  item['item_type'] ??
-                                  'individual')
-                              .toString();
-                      final name =
-                          (item['_display_name'] ??
-                                  item['display_name'] ??
-                                  'Аноним')
-                              .toString();
-                      final lastMsg =
-                          item['_last_message'] as Map<String, dynamic>?;
-                      final unread = _unreadCounts[id] ?? 0;
-                      final avatarUrl = _getAvatarUrl(item);
+              : Builder(builder: (context) {
+                  // For staff: show administration chats in the selected folder
+                  // first, then groups/channels/direct (non-inbox) chats.
+                  // For non-staff: use sortedItems unchanged.
+                  final listItems = _isManagerOrAdminRole
+                      ? [
+                          ...chatsInFolder(sortedItems, _selectedFolder),
+                          ...nonInboxChats(sortedItems),
+                        ]
+                      : sortedItems;
 
-                      return ChatListTile(
-                        title: name,
-                        subtitle: _messagePreview(lastMsg),
-                        time: _formatTime(
-                          item['_last_message_time'] as String?,
-                        ),
-                        unreadCount: unread,
-                        isSelected: _selectedChatId == id,
-                        isChannel: type == 'channel',
-                        uniqueId: id,
-                        avatarUrl: avatarUrl,
-                        channelIcon: type == 'channel'
-                            ? Icons.campaign_rounded
-                            : type == 'group'
-                            ? Icons.group_rounded
-                            : null,
-                        onTap: () => _selectChat(item),
-                        isMuted: _mutedChatIds.contains(id),
-                        statusIcon: _buildStatusIcon(item, isDark),
-                        onStatusTap: () => _showStatusInfo(item),
-                      );
-                    },
-                  ),
-                ),
+                  if (listItems.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _searchQuery.isNotEmpty ? 'Ничего не найдено' : 'Нет чатов',
+                        style: TextStyle(color: secondaryText),
+                      ),
+                    );
+                  }
+
+                  return RefreshIndicator(
+                    onRefresh: _loadChatList,
+                    color: AppColor.gold,
+                    child: ListView.builder(
+                      itemCount: listItems.length,
+                      itemBuilder: (context, index) {
+                        final item = listItems[index];
+                        final id = (item['id'] ?? '').toString();
+                        final type =
+                            (item['_item_type'] ??
+                                    item['item_type'] ??
+                                    'individual')
+                                .toString();
+                        final name =
+                            (item['_display_name'] ??
+                                    item['display_name'] ??
+                                    'Аноним')
+                                .toString();
+                        final lastMsg =
+                            item['_last_message'] as Map<String, dynamic>?;
+                        final unread = _unreadCounts[id] ?? 0;
+                        final avatarUrl = _getAvatarUrl(item);
+
+                        return ChatListTile(
+                          title: name,
+                          subtitle: _messagePreview(lastMsg),
+                          time: _formatTime(
+                            item['_last_message_time'] as String?,
+                          ),
+                          unreadCount: unread,
+                          isSelected: _selectedChatId == id,
+                          isChannel: type == 'channel',
+                          uniqueId: id,
+                          avatarUrl: avatarUrl,
+                          channelIcon: type == 'channel'
+                              ? Icons.campaign_rounded
+                              : type == 'group'
+                              ? Icons.group_rounded
+                              : null,
+                          onTap: () => _selectChat(item),
+                          isMuted: _mutedChatIds.contains(id),
+                          statusIcon: _buildStatusIcon(item, isDark),
+                          onStatusTap: () => _showStatusInfo(item),
+                        );
+                      },
+                    ),
+                  );
+                }),
         ),
       ],
     );
