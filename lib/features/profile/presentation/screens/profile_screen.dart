@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/avatar_cropper_dialog.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/utils/ru_phone.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
@@ -138,6 +139,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Имя обязательно')));
+      return;
+    }
+
+    final phone = _canonicalPhone.trim();
+    if (phone.isNotEmpty && !isCanonicalRu(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Введите корректный номер в формате +7 (XXX) XXX XX XX'),
+        ),
+      );
       return;
     }
 
