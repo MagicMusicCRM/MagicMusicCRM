@@ -1065,8 +1065,8 @@ export class MessengerService implements OnModuleInit {
 
       const inserted = await client.query<ChatRow>(
         `
-          insert into app.chats (type, title, created_by)
-          values ('administration', 'Администрация', $1)
+          insert into app.chats (type, title, created_by, owner_user_id)
+          values ('administration', 'Администрация', $1, $1)
           returning id, type, title, created_by, last_message_id,
             null::text as last_message_content, null::timestamptz as last_message_created_at,
             '0'::text as unread_count, created_at, updated_at

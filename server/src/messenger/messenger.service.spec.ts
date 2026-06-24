@@ -644,7 +644,7 @@ describe("MessengerService", () => {
     expect(chat.title).toBe("Администрация");
     expect(client.query).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining("values ('administration', 'Администрация', $1)"),
+      expect.stringContaining("values ('administration', 'Администрация', $1, $1)"),
       ["user-a"],
     );
     expect(database.transaction).toHaveBeenCalledTimes(1);
@@ -976,5 +976,22 @@ describe("MessengerService", () => {
       "chat.updated",
       expect.objectContaining({ id: adminChatId, lastMessageId: "msg-1" }),
     );
+  });
+
+  it("creates an administration chat with the actor as owner", async () => {
+    type MockClient = { query: jest.Mock };
+    const client = { query: jest.fn()
+      .mockResolvedValueOnce({ rows: [] }) // existing lookup
+      .mockResolvedValueOnce({ rows: [{ id: 'chat-admin', type: 'administration', title: 'Администрация',
+        created_by: 'user-a', last_message_id: null, last_message_content: null,
+        last_message_created_at: null, unread_count: '0',
+        created_at: new Date(), updated_at: new Date() }] }) // insert
+      .mockResolvedValueOnce({ rows: [] }) }; // insertMembers
+    const { service } = createService({ database: { transaction: jest.fn(
+      async (w: (c: MockClient) => Promise<unknown>) => w(client)) as never } });
+    await service.createDirectChat({ userId: 'user-a', role: 'client' }, { type: 'administration' });
+    const insert = client.query.mock.calls.find(c => String(c[0]).includes("values ('administration'"));
+    expect(insert![0]).toContain('owner_user_id');
+    expect(insert![1]).toContain('user-a');
   });
 });
