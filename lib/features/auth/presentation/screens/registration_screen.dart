@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/app_logo.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/email_otp_screen.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
@@ -27,6 +28,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
+  String _canonicalPhone = '';
 
   @override
   void dispose() {
@@ -43,6 +45,11 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
       _isLoading = true;
       _errorMessage = null;
     });
+    if (_canonicalPhone.isEmpty) {
+      _showError('Введите корректный номер телефона в формате +7…');
+      setState(() => _isLoading = false);
+      return;
+    }
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
@@ -52,6 +59,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
             email: _emailController.text.trim(),
             password: password,
             fullName: _nameController.text.trim(),
+            phone: _canonicalPhone,
           );
       if (!mounted) return;
       if (response.hasSession) {
@@ -123,6 +131,54 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                           validator: (v) => (v == null || !v.contains('@'))
                               ? 'Некорректная почта'
                               : null,
+                        ),
+                        const SizedBox(height: AppSpace.lg),
+                        RuPhoneField(
+                          labelText: 'Номер телефона',
+                          onCanonicalChanged: (v) => _canonicalPhone = v,
+                          decoration: InputDecoration(
+                            hintStyle: const TextStyle(color: AppColor.text2),
+                            filled: true,
+                            fillColor: AppColor.input,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 13,
+                              vertical: 12,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.control),
+                              borderSide:
+                                  const BorderSide(color: AppColor.divider),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.control),
+                              borderSide: const BorderSide(
+                                color: AppColor.goldLine,
+                                width: 2,
+                              ),
+                            ),
+                            disabledBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.control),
+                              borderSide:
+                                  const BorderSide(color: AppColor.divider),
+                            ),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.control),
+                              borderSide:
+                                  const BorderSide(color: AppColor.danger),
+                            ),
+                            focusedErrorBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.control),
+                              borderSide: const BorderSide(
+                                color: AppColor.danger,
+                                width: 2,
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: AppSpace.lg),
                         _V7Field(
