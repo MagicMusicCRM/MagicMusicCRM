@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -30,6 +31,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
   final Set<String> _pendingRoleProfileIds = {};
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
+  Timer? _realtimeDebounce;
 
   static const _availableRoles = [
     'client',
@@ -81,6 +83,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
 
   @override
   void dispose() {
+    _realtimeDebounce?.cancel();
     _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -404,6 +407,19 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Realtime: refresh the user/roles list when another staff member changes a
+    // user (role/profile). Skip while loading or while a role update is in
+    // flight — those refetch/patch themselves on completion.
+    ref.listen(crmRealtimeProvider, (prev, next) {
+      final event = next.value;
+      if (event == null || event.entity != 'user' || !mounted) return;
+      if (_isLoading || _pendingRoleProfileIds.isNotEmpty) return;
+      _realtimeDebounce?.cancel();
+      _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted || _isLoading || _pendingRoleProfileIds.isNotEmpty) return;
+        _loadProfiles();
+      });
+    });
     final filtered = _filteredProfiles;
     // A1: role editing is Управляющий + Администратор системы only.
     // Администратор (`admin`) is intentionally excluded (manager > admin).

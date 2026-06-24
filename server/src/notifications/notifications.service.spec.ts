@@ -4,6 +4,7 @@ import { NotificationTokenCrypto } from './notification-token-crypto.service';
 import { NotificationWorker } from './notification-worker.service';
 import { NotificationsPolicy } from './notifications.policy';
 import { NotificationsService } from './notifications.service';
+import { RealtimeBus } from '../realtime/realtime-bus';
 
 describe('NotificationsService', () => {
   const admin = { userId: 'admin-a', role: 'admin' as const };
@@ -29,7 +30,8 @@ describe('NotificationsService', () => {
       audit as unknown as AuditService,
       new NotificationsPolicy(),
       worker as unknown as NotificationWorker,
-      tokenCrypto as unknown as NotificationTokenCrypto
+      tokenCrypto as unknown as NotificationTokenCrypto,
+      { emitCrmChanged: () => undefined } as unknown as RealtimeBus
     );
     return { service, database, audit, worker, tokenCrypto };
   }

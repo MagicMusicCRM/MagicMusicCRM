@@ -86,6 +86,30 @@ void main() {
       });
     });
 
+    test('joinChannel emits a channel room.join for announcements delivery', () {
+      final transport = _FakeTransport();
+      final connection = MagicRealtimeConnection(transport);
+
+      connection.joinChannel('channel-a');
+
+      expect(transport.emits.single, {
+        'event': 'room.join',
+        'payload': {'roomType': 'channel', 'roomId': 'channel-a'},
+      });
+    });
+
+    test('onConnect fires on every (re)connect so rooms can be re-joined', () {
+      final transport = _FakeTransport();
+      final connection = MagicRealtimeConnection(transport);
+      var connects = 0;
+
+      connection.onConnect(() => connects++);
+      transport.fire('connect', null);
+      transport.fire('connect', null);
+
+      expect(connects, 2);
+    });
+
     test('maps socket payloads to string-keyed event maps', () {
       final transport = _FakeTransport();
       final connection = MagicRealtimeConnection(transport);

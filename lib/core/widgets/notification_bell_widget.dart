@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
@@ -18,6 +21,9 @@ class _NotificationBellWidgetState
   List<Map<String, dynamic>> _notifications = [];
   bool _isLoading = false;
 
+  // ── Realtime invalidation (crm.changed) ───────────────────────────────────
+  Timer? _realtimeDebounce;
+
   /// Lets the open sheet rebuild its body when the underlying list changes,
   /// since the data/state lives on this parent widget, not in the sheet.
   VoidCallback? _sheetRefresh;
@@ -29,6 +35,12 @@ class _NotificationBellWidgetState
   void initState() {
     super.initState();
     _loadNotifications();
+  }
+
+  @override
+  void dispose() {
+    _realtimeDebounce?.cancel();
+    super.dispose();
   }
 
   void _applyState(VoidCallback fn) {
@@ -119,6 +131,18 @@ class _NotificationBellWidgetState
 
   @override
   Widget build(BuildContext context) {
+    // Realtime: reload notifications when a new one arrives in the user's own
+    // room (recipient-scoped crm.changed → works for non-staff too).
+    ref.listen(crmRealtimeProvider, (prev, next) {
+      final event = next.value;
+      if (event == null || event.entity != 'notification' || !mounted) return;
+      if (_isLoading) return;
+      _realtimeDebounce?.cancel();
+      _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted || _isLoading) return;
+        _loadNotifications();
+      });
+    });
     return IconButton(
       tooltip: 'Уведомления',
       icon: Stack(

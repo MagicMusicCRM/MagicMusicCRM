@@ -54,4 +54,64 @@ describe('MessengerPolicy', () => {
       )
     ).not.toThrow();
   });
+
+  it('authorizes a channel realtime room join when the actor can read it', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{ id: 'channel-a', canRead: true, canWrite: false }]
+    });
+
+    await expect(
+      policy.canJoinRealtimeRoom(
+        { userId: 'client-a', role: 'client' },
+        'channel',
+        'channel-a'
+      )
+    ).resolves.toBeUndefined();
+  });
+
+  it('denies a channel realtime room join when the actor cannot read it', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{ id: 'channel-a', canRead: false, canWrite: false }]
+    });
+
+    await expect(
+      policy.canJoinRealtimeRoom(
+        { userId: 'client-a', role: 'client' },
+        'channel',
+        'channel-a'
+      )
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('rejects realtime room joins for unknown room types', async () => {
+    await expect(
+      policy.canJoinRealtimeRoom(
+        { userId: 'client-a', role: 'client' },
+        'bogus',
+        'whatever'
+      )
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('hides the announcements composer from client/teacher (no channel write)', () => {
+    for (const role of ['client', 'teacher'] as const) {
+      expect(() =>
+        policy.assertCanWriteChannel(
+          { userId: 'u', role },
+          { id: 'announcements', canRead: true, canWrite: false }
+        )
+      ).toThrow(ForbiddenException);
+    }
+  });
+
+  it('allows admin/manager/system_admin to write the announcements channel', () => {
+    for (const role of ['admin', 'manager', 'system_admin'] as const) {
+      expect(() =>
+        policy.assertCanWriteChannel(
+          { userId: 'u', role },
+          { id: 'announcements', canRead: true, canWrite: false }
+        )
+      ).not.toThrow();
+    }
+  });
 });

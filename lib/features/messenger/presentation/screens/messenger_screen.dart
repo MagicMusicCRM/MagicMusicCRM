@@ -103,6 +103,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   StateSetter? _pinnedDialogSetState;
   MagicRealtimeConnection? _realtimeConnection;
   String? _joinedRealtimeChatId;
+  // Broadcast channel rooms (e.g. Объявления) we keep subscribed so posts arrive
+  // live even when the user is not viewing the channel. Re-joined on reconnect.
+  final Set<String> _joinedChannelIds = {};
+  Timer? _chatListReloadTimer;
   String? _currentUserId;
 
   bool get _isAdminRole =>
@@ -247,6 +251,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   @override
   void dispose() {
     _typingStopTimer?.cancel();
+    _chatListReloadTimer?.cancel();
     _leaveTypingChannel();
     _realtimeConnection?.dispose();
     super.dispose();
@@ -483,6 +488,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         }
       });
       _checkDeepLink();
+      // Subscribe to any channels (Объявления) discovered in this list refresh.
+      _joinAnnouncementChannels();
     }
   }
 
@@ -593,9 +600,52 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       connection.onTypingStart(_handleRealtimeTypingStart);
       connection.onTypingStop(_handleRealtimeTypingStop);
       connection.onPresenceUpdated(_handleRealtimePresenceUpdated);
+      // Shared settings (e.g. administration chat avatar) changing live.
+      connection.onCrmChanged(_handleRealtimeCrmChanged);
+      // Restore every needed subscription after a reconnect (Socket.IO only keeps
+      // the server-side user/crm rooms; chat/channel rooms must be re-joined).
+      connection.onConnect(_onRealtimeReconnected);
+
+      // Subscribe to broadcast channels (Объявления) so posts arrive live even
+      // when the channel is not the active conversation.
+      _joinAnnouncementChannels();
     } catch (e) {
       _logMessenger('MessengerScreen: Error connecting v3 realtime: $e');
     }
+  }
+
+  /// Re-join all rooms after a (re)connect. Idempotent — safe on first connect.
+  void _onRealtimeReconnected() {
+    final connection = _realtimeConnection;
+    if (connection == null) return;
+    if (_userId.isNotEmpty) connection.joinUserRoom(_userId);
+    final activeChat = _joinedRealtimeChatId;
+    if (activeChat != null) connection.joinChat(activeChat);
+    for (final channelId in _joinedChannelIds) {
+      connection.joinChannel(channelId);
+    }
+    _joinAnnouncementChannels();
+  }
+
+  /// Join (and remember) every channel room present in the current chat list.
+  void _joinAnnouncementChannels() {
+    final connection = _realtimeConnection;
+    if (connection == null) return;
+    for (final item in _chatItems) {
+      final type = (item['_item_type'] ?? item['item_type'] ?? '').toString();
+      if (type != 'channel') continue;
+      final id = item['id']?.toString();
+      if (id == null || id.isEmpty) continue;
+      connection.joinChannel(id);
+      _joinedChannelIds.add(id);
+    }
+  }
+
+  void _scheduleChatListReload() {
+    _chatListReloadTimer?.cancel();
+    _chatListReloadTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) _loadChatList();
+    });
   }
 
   void _handleRealtimeMessageCreated(Map<String, dynamic> payload) {
@@ -687,7 +737,42 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       return;
     }
 
-    _loadChatList();
+    // Enriched fan-out: a message landed in a chat we are not actively viewing.
+    // Patch the list item (last message + unread) in place when we already know
+    // the chat; only a brand-new conversation triggers a (debounced) reload.
+    final lastMessageId = payload['lastMessageId']?.toString();
+    if (chatId != null && lastMessageId != null) {
+      final known = _chatItems.any((c) => c['id']?.toString() == chatId);
+      if (!known) {
+        _scheduleChatListReload();
+        return;
+      }
+      final senderId = payload['senderId']?.toString();
+      _updateChatItemLastMessage({
+        'chat_id': chatId,
+        'content': payload['lastMessage'],
+        'created_at': payload['lastMessageAt'],
+        'sender_id': senderId,
+      });
+      if (chatId != _selectedChatId && senderId != _userId) {
+        setState(
+          () => _unreadCounts[chatId] = (_unreadCounts[chatId] ?? 0) + 1,
+        );
+      }
+      return;
+    }
+
+    // Bare chat.updated (e.g. a group change). Coalesce bursts into one reload.
+    _scheduleChatListReload();
+  }
+
+  /// Shared-setting change broadcast to every socket. Currently only the
+  /// administration chat avatar affects this screen — refetch the list (which
+  /// reloads the avatar) when it changes.
+  void _handleRealtimeCrmChanged(Map<String, dynamic> payload) {
+    if (!mounted) return;
+    if (payload['entity']?.toString() != 'setting') return;
+    _scheduleChatListReload();
   }
 
   void _handleRealtimeTypingStart(Map<String, dynamic> payload) {
@@ -1243,9 +1328,16 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     });
 
     _loadMessages();
-    _joinTypingChannel(id);
-    _joinPresenceChannel(id);
-    _joinReactionsChannel(id);
+    if (type == 'channel') {
+      // Channels use a dedicated channel room; typing/presence/reactions do not
+      // apply. Keep it subscribed (don't leave) so posts keep arriving live.
+      _realtimeConnection?.joinChannel(id);
+      _joinedChannelIds.add(id);
+    } else {
+      _joinTypingChannel(id);
+      _joinPresenceChannel(id);
+      _joinReactionsChannel(id);
+    }
     _fetchPinnedMessages();
   }
 

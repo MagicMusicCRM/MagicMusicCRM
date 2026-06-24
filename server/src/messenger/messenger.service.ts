@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { AuditService } from "../audit/audit.service";
@@ -117,7 +119,12 @@ interface ReactionRow {
 }
 
 @Injectable()
-export class MessengerService {
+export class MessengerService implements OnModuleInit {
+  private readonly logger = new Logger(MessengerService.name);
+
+  /** Stable identity of the default system "Объявления" channel. */
+  static readonly announcementsSlug = "announcements";
+
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
@@ -125,6 +132,87 @@ export class MessengerService {
     private readonly realtime: RealtimeGateway,
     private readonly crm: CrmService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    // Self-heal the durable default channels on boot. Idempotent and best-effort
+    // (migration 0042 already seeds them; this covers fresh/partial databases).
+    try {
+      await this.ensureDefaultChannels();
+    } catch (err) {
+      this.logger.warn(`ensureDefaultChannels failed: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Idempotently ensure the default system "Объявления" channel exists with the
+   * correct role permissions (read: all roles; write: admin/manager/system_admin).
+   * Safe to call repeatedly — never creates a duplicate channel.
+   */
+  async ensureDefaultChannels(): Promise<void> {
+    await this.database.transaction(async (client) => {
+      // Adopt a pre-existing "Объявления" channel (created before the system-slug
+      // contract) instead of creating a duplicate.
+      await client.query(
+        `
+          update app.channels
+          set slug = $1, is_system = true, updated_at = now()
+          where id = (
+            select id from app.channels
+            where title = 'Объявления' and slug is null and deleted_at is null
+            order by created_at asc
+            limit 1
+          )
+          and not exists (
+            select 1 from app.channels where slug = $1 and deleted_at is null
+          )
+        `,
+        [MessengerService.announcementsSlug],
+      );
+
+      const existing = await client.query<{ id: string }>(
+        `select id from app.channels where slug = $1 and deleted_at is null limit 1`,
+        [MessengerService.announcementsSlug],
+      );
+      let channelId = existing.rows[0]?.id;
+      if (!channelId) {
+        const inserted = await client.query<{ id: string }>(
+          `
+            insert into app.channels (title, description, slug, is_system)
+            values ('Объявления', 'Школьные объявления', $1, true)
+            returning id
+          `,
+          [MessengerService.announcementsSlug],
+        );
+        channelId = inserted.rows[0].id;
+      }
+
+      const permissions: Array<{
+        role: string;
+        canRead: boolean;
+        canWrite: boolean;
+      }> = [
+        { role: "client", canRead: true, canWrite: false },
+        { role: "teacher", canRead: true, canWrite: false },
+        { role: "admin", canRead: true, canWrite: true },
+        { role: "manager", canRead: true, canWrite: true },
+        { role: "system_admin", canRead: true, canWrite: true },
+      ];
+      for (const permission of permissions) {
+        await client.query(
+          `
+            insert into app.channel_permissions (channel_id, role, can_read, can_write)
+            select $1, $2::app.user_role, $3, $4
+            where not exists (
+              select 1 from app.channel_permissions cp
+              where cp.channel_id = $1 and cp.user_id is null
+                and cp.role = $2::app.user_role
+            )
+          `,
+          [channelId, permission.role, permission.canRead, permission.canWrite],
+        );
+      }
+    });
+  }
 
   async listChats(actor: ActorContext, query: MessengerListQuery) {
     const limit = Math.min(query.limit ?? 50, 100);
@@ -316,6 +404,7 @@ export class MessengerService {
 
     const payload = this.toMessageDto(message);
     this.realtime.publishChatEvent(chatId, "message.created", payload);
+    await this.fanoutChatListUpdate(chat, chatId, payload);
     if (chat.type === "administration" && !isStaffRole(actor.role)) {
       void this.crm.autoCreateLeadFromChat(actor, actor.userId).catch(() => undefined);
     }
@@ -905,8 +994,57 @@ export class MessengerService {
       entityId: channelId,
       metadata: { postId: post.id },
     });
-    this.realtime.publishChatEvent(channelId, "channel.post_created", post);
+    this.realtime.publishChannelEvent(channelId, "channel.post_created", post);
     return post;
+  }
+
+  /**
+   * After a chat message is written, push a lightweight `chat.updated` hint to
+   * every member's user room (so chat lists/badges refresh even when the member
+   * is not inside the chat room) and, for administration chats, to the staff
+   * `admin-inbox` surface so brand-new user→staff conversations appear live.
+   * Best-effort: realtime failures never break the underlying write.
+   */
+  private async fanoutChatListUpdate(
+    chat: { type: string },
+    chatId: string,
+    message: {
+      id: string;
+      content: string | null;
+      createdAt: Date | string;
+      senderId: string | null;
+    },
+  ): Promise<void> {
+    try {
+      // Carry a lightweight last-message preview so recipients can patch their
+      // chat list in place (bump order + last message + unread) without a full
+      // refetch. Brand-new conversations (chat not yet in the list) still trigger
+      // a scoped reload on the client.
+      const preview = {
+        id: chatId,
+        lastMessageId: message.id,
+        lastMessage: message.content,
+        lastMessageAt: message.createdAt,
+        senderId: message.senderId,
+      };
+      const memberIds = await this.getChatMemberUserIds(chatId);
+      for (const userId of memberIds) {
+        this.realtime.publishUserEvent(userId, "chat.updated", preview);
+      }
+      if (chat.type === "administration") {
+        this.realtime.publishAdminInboxEvent("chat.updated", preview);
+      }
+    } catch (err) {
+      this.logger.warn(`fanoutChatListUpdate failed: ${String(err)}`);
+    }
+  }
+
+  private async getChatMemberUserIds(chatId: string): Promise<string[]> {
+    const result = await this.database.query<{ user_id: string }>(
+      `select user_id from app.chat_members where chat_id = $1 and left_at is null`,
+      [chatId],
+    );
+    return (result?.rows ?? []).map((row) => row.user_id);
   }
 
   private async createAdministrationChat(actor: ActorContext) {

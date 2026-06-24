@@ -40,6 +40,9 @@ describe("MessengerService", () => {
     } as unknown as MessengerPolicy;
     const realtime = {
       publishChatEvent: jest.fn(),
+      publishChannelEvent: jest.fn(),
+      publishUserEvent: jest.fn(),
+      publishAdminInboxEvent: jest.fn(),
       ...overrides?.realtime,
     } as unknown as RealtimeGateway;
     const crm = {
@@ -98,6 +101,7 @@ describe("MessengerService", () => {
           return result;
         },
       ),
+      query: jest.fn().mockResolvedValue({ rows: [] }),
     } as unknown as DatabaseService;
     const policy = {
       getChatAccess: jest.fn().mockResolvedValue({
@@ -110,6 +114,8 @@ describe("MessengerService", () => {
     } as unknown as MessengerPolicy;
     const realtime = {
       publishChatEvent: jest.fn(() => order.push("publish")),
+      publishUserEvent: jest.fn(),
+      publishAdminInboxEvent: jest.fn(),
     } as unknown as RealtimeGateway;
 
     const service = new MessengerService(
@@ -801,5 +807,174 @@ describe("MessengerService", () => {
     await service.sendMessage(clientActor, directChatId, { content: "hi" } as never);
 
     expect(crm.autoCreateLeadFromChat).not.toHaveBeenCalled();
+  });
+
+  it("seeds the default Объявления channel and role permissions when missing", async () => {
+    type MockClient = { query: jest.Mock };
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({ rows: [] }) // adopt-by-title update -> none
+        .mockResolvedValueOnce({ rows: [] }) // lookup by slug -> none
+        .mockResolvedValueOnce({ rows: [{ id: "channel-announcements" }] }) // insert channel
+        .mockResolvedValue({ rows: [] }), // 5 permission guards
+    };
+    const { service } = createService({
+      database: {
+        transaction: jest.fn(
+          async (work: (c: MockClient) => Promise<unknown>) => work(client),
+        ) as never,
+      },
+    });
+
+    await service.ensureDefaultChannels();
+
+    // 1 adopt update + 1 slug lookup + 1 channel insert + 5 permission inserts.
+    expect(client.query).toHaveBeenCalledTimes(8);
+    expect(client.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("insert into app.channels"),
+      ["announcements"],
+    );
+    const roles = client.query.mock.calls.slice(3).map((call) => call[1][1]);
+    expect(roles).toEqual([
+      "client",
+      "teacher",
+      "admin",
+      "manager",
+      "system_admin",
+    ]);
+  });
+
+  it("does not create a duplicate Объявления channel when one already exists (idempotent)", async () => {
+    type MockClient = { query: jest.Mock };
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({ rows: [] }) // adopt-by-title update -> none
+        .mockResolvedValueOnce({ rows: [{ id: "channel-existing" }] }) // slug lookup -> found
+        .mockResolvedValue({ rows: [] }),
+    };
+    const { service } = createService({
+      database: {
+        transaction: jest.fn(
+          async (work: (c: MockClient) => Promise<unknown>) => work(client),
+        ) as never,
+      },
+    });
+
+    await service.ensureDefaultChannels();
+
+    const sqls = client.query.mock.calls.map((call) => call[0] as string);
+    expect(sqls.some((sql) => sql.includes("insert into app.channels"))).toBe(
+      false,
+    );
+    // 1 adopt update + 1 lookup + 5 permission guards, no channel insert.
+    expect(client.query).toHaveBeenCalledTimes(7);
+  });
+
+  it("publishes channel.post_created to the channel room, never a chat room", async () => {
+    const { service, realtime } = createService({
+      database: {
+        query: jest.fn().mockResolvedValueOnce({
+          rows: [
+            {
+              id: "post-a",
+              channel_id: "channel-a",
+              author_id: "manager-a",
+              content: "Объявление",
+              attachment_file_id: null,
+              published_at: new Date("2026-06-20T10:00:00Z"),
+              updated_at: new Date("2026-06-20T10:00:00Z"),
+            },
+          ],
+        }),
+      },
+      policy: {
+        getChannelAccess: jest
+          .fn()
+          .mockResolvedValue({ id: "channel-a", canRead: true, canWrite: true }),
+        assertCanWriteChannel: jest.fn(),
+      },
+    });
+
+    const post = await service.createChannelPost(
+      { userId: "manager-a", role: "manager" },
+      "channel-a",
+      { content: "Объявление" } as never,
+    );
+
+    expect(post.id).toBe("post-a");
+    expect(realtime.publishChannelEvent).toHaveBeenCalledWith(
+      "channel-a",
+      "channel.post_created",
+      expect.objectContaining({ id: "post-a" }),
+    );
+    expect(realtime.publishChatEvent).not.toHaveBeenCalled();
+  });
+
+  it("fans out chat.updated to the admin inbox and member rooms for administration messages", async () => {
+    const adminChatId = "chat-admin-a";
+    type MockClient = { query: jest.Mock };
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "msg-1",
+              chat_id: adminChatId,
+              sender_id: "client-a",
+              content: "Здравствуйте",
+              message_type: "text",
+              attachment_file_id: null,
+              reply_to_id: null,
+              forwarded_from_id: null,
+              pinned_by: null,
+              pinned_at: null,
+              created_at: new Date("2026-06-20T10:00:00Z"),
+              updated_at: new Date("2026-06-20T10:00:00Z"),
+              deleted_at: null,
+              sender_email: null,
+              sender_first_name: null,
+              sender_last_name: null,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    const { service, realtime } = createService({
+      database: {
+        transaction: jest.fn(
+          async (work: (c: MockClient) => Promise<unknown>) => work(client),
+        ) as never,
+        query: jest.fn().mockResolvedValue({ rows: [{ user_id: "client-a" }] }),
+      },
+      policy: {
+        getChatAccess: jest.fn().mockResolvedValue({
+          id: adminChatId,
+          type: "administration",
+          memberUserId: "client-a",
+          memberRole: "member",
+        }),
+        assertCanWriteChat: jest.fn(),
+      },
+    });
+
+    await service.sendMessage(
+      { userId: "client-a", role: "client" },
+      adminChatId,
+      { content: "Здравствуйте" } as never,
+    );
+
+    expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+      "client-a",
+      "chat.updated",
+      expect.objectContaining({ id: adminChatId, lastMessageId: "msg-1" }),
+    );
+    expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+      "chat.updated",
+      expect.objectContaining({ id: adminChatId, lastMessageId: "msg-1" }),
+    );
   });
 });

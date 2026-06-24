@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
+import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmCustomFieldDefinitionDto } from "./dto/update-crm-custom-fields.dto";
 import { SettingsService } from "./settings.service";
 
@@ -10,11 +11,16 @@ describe("SettingsService", () => {
   const createService = (rows: Record<string, unknown>[] = []) => {
     const query = jest.fn().mockResolvedValue({ rows });
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const realtime = {
+      emitSettingChanged: jest.fn(),
+      emitCrmChanged: jest.fn(),
+    };
     const service = new SettingsService(
       { query } as unknown as DatabaseService,
       audit as unknown as AuditService,
+      realtime as unknown as RealtimeBus,
     );
-    return { service, query, audit };
+    return { service, query, audit, realtime };
   };
 
   it("returns admin chat avatar setting for authenticated users", async () => {
@@ -37,7 +43,7 @@ describe("SettingsService", () => {
   });
 
   it("updates admin chat avatar only for admins and records audit", async () => {
-    const { service, query, audit } = createService([
+    const { service, query, audit, realtime } = createService([
       {
         key: "admin_chat_avatar_url",
         value_text: "https://cdn.example.com/avatar.png",
@@ -68,6 +74,9 @@ describe("SettingsService", () => {
         entityId: "admin_chat_avatar_url",
         metadata: { cleared: false },
       }),
+    );
+    expect(realtime.emitSettingChanged).toHaveBeenCalledWith(
+      "admin_chat_avatar_url",
     );
   });
 

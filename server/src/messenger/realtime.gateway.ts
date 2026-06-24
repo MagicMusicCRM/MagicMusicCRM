@@ -12,7 +12,7 @@ import {
   WebSocketServer
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { ActorContext, UserRole } from '../common/security/actor-context';
+import { ActorContext, UserRole, isStaffRole } from '../common/security/actor-context';
 import { RealtimeBus } from '../realtime/realtime-bus';
 import { MessengerPolicy } from './messenger.policy';
 import { JoinRoomPayload, PresencePayload, TypingPayload } from './dto/realtime-events.dto';
@@ -74,6 +74,8 @@ type RealtimeSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<
 export class RealtimeGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
 {
+  static readonly adminInboxRoom = 'admin-inbox';
+
   @WebSocketServer()
   private server?: Server;
 
@@ -116,6 +118,11 @@ export class RealtimeGateway
       if (payload.role !== 'client') {
         await socket.join(RealtimeBus.crmRoom);
       }
+      // Admin/manager/system_admin receive administration inbox fan-out so new
+      // user→staff conversations and messages surface without manual refresh.
+      if (isStaffRole(payload.role)) {
+        await socket.join(RealtimeGateway.adminInboxRoom);
+      }
       this.logger.log(`Realtime connected user=${payload.sub}`);
     } catch {
       socket.disconnect(true);
@@ -136,7 +143,12 @@ export class RealtimeGateway
     const actor = this.requireActor(socket);
     this.assertRate(socket, 'room.join', 20, 60_000);
     await this.policy.canJoinRealtimeRoom(actor, payload.roomType, payload.roomId);
-    const room = payload.roomType === 'chat' ? this.chatRoom(payload.roomId) : this.userRoom(payload.roomId);
+    const room =
+      payload.roomType === 'chat'
+        ? this.chatRoom(payload.roomId)
+        : payload.roomType === 'channel'
+          ? this.channelRoom(payload.roomId)
+          : this.userRoom(payload.roomId);
     await socket.join(room);
     socket.data.rooms?.add(room);
     return { ok: true, room };
@@ -147,9 +159,12 @@ export class RealtimeGateway
     @ConnectedSocket() socket: RealtimeSocket,
     @MessageBody() payload: { roomId: string }
   ) {
-    const room = payload.roomId.startsWith('chat:') || payload.roomId.startsWith('user:')
-      ? payload.roomId
-      : this.chatRoom(payload.roomId);
+    const room =
+      payload.roomId.startsWith('chat:') ||
+      payload.roomId.startsWith('user:') ||
+      payload.roomId.startsWith('channel:')
+        ? payload.roomId
+        : this.chatRoom(payload.roomId);
     await socket.leave(room);
     socket.data.rooms?.delete(room);
     return { ok: true };
@@ -201,8 +216,17 @@ export class RealtimeGateway
     this.server?.to(this.chatRoom(chatId)).emit(event, payload);
   }
 
+  publishChannelEvent(channelId: string, event: string, payload: unknown): void {
+    this.server?.to(this.channelRoom(channelId)).emit(event, payload);
+  }
+
   publishUserEvent(userId: string, event: string, payload: unknown): void {
     this.server?.to(this.userRoom(userId)).emit(event, payload);
+  }
+
+  /** Fan-out to every connected staff socket (administration inbox surface). */
+  publishAdminInboxEvent(event: string, payload: unknown): void {
+    this.server?.to(RealtimeGateway.adminInboxRoom).emit(event, payload);
   }
 
   private publishPresence(userId: string, status: string, rooms?: Set<string>): void {
@@ -252,6 +276,10 @@ export class RealtimeGateway
 
   private chatRoom(chatId: string): string {
     return `chat:${chatId}`;
+  }
+
+  private channelRoom(channelId: string): string {
+    return `channel:${channelId}`;
   }
 
   private userRoom(userId: string): string {

@@ -19,6 +19,17 @@ interface MessageResponse {
   content: string | null;
 }
 
+interface ChannelResponse {
+  id: string;
+  title: string;
+}
+
+interface ChannelPostResponse {
+  id: string;
+  channelId: string;
+  content: string;
+}
+
 const apiBaseUrl = normalizeBaseUrl(
   process.env.REALTIME_SMOKE_API_BASE_URL ?? "https://api.phantom-net.ru/api",
 );
@@ -29,6 +40,7 @@ const email =
   `realtime-smoke-${Date.now()}@example.com`;
 
 async function main() {
+  const steps: Record<string, unknown> = {};
   await request("GET", "/health");
 
   if (!process.env.REALTIME_SMOKE_EMAIL) {
@@ -53,13 +65,50 @@ async function main() {
     accessToken,
   );
 
+  // The default "Объявления" channel must be visible to a plain client.
+  const channels = await request<{ items: ChannelResponse[] }>(
+    "GET",
+    "/messenger/channels",
+    undefined,
+    accessToken,
+  );
+  const announcements = channels.items.find((c) => c.title === "Объявления");
+  if (!announcements) {
+    throw new Error('Default "Объявления" channel not visible to client.');
+  }
+  steps.announcementsChannelId = announcements.id;
+
   const socket = await connectRealtime(accessToken);
+
+  // Optional staff session (no secrets committed): enables the full
+  // staff<->client + announcements-post scenarios when provided.
+  const staffEmail = process.env.REALTIME_SMOKE_STAFF_EMAIL;
+  const staffPassword = process.env.REALTIME_SMOKE_STAFF_PASSWORD;
+  let staffSocket: Socket | undefined;
+  let staffToken: string | undefined;
+  if (staffEmail && staffPassword) {
+    const staffLogin = await request<AuthResponse>("POST", "/auth/login", {
+      email: staffEmail,
+      password: staffPassword,
+    });
+    staffToken = staffLogin.session?.accessToken;
+    if (!staffToken) throw new Error("Staff login did not return a token.");
+    staffSocket = await connectRealtime(staffToken);
+  }
+
   try {
+    // ── Client joins its own administration chat + announcements channel. ──
     await emitWithAck(socket, "room.join", {
       roomType: "chat",
       roomId: chat.id,
     });
+    const joinAck = await emitWithAck(socket, "room.join", {
+      roomType: "channel",
+      roomId: announcements.id,
+    });
+    steps.clientJoinedAnnouncements = joinAck;
 
+    // ── Client -> (administration) self echo (baseline). ──
     const content = `realtime-smoke-${Date.now()}`;
     const eventPromise = waitForMessageCreated(socket, chat.id, content);
     const sent = await request<MessageResponse>(
@@ -69,6 +118,73 @@ async function main() {
       accessToken,
     );
     const event = await eventPromise;
+    steps.adminEcho = { messageId: sent.id, eventMessageId: event.id };
+
+    // ── Client cannot write the announcements channel (expect 403). ──
+    steps.announcementsClientForbidden = await expectForbidden(
+      "POST",
+      `/messenger/channels/${announcements.id}/posts`,
+      { content: "client must be blocked" },
+      accessToken,
+    );
+
+    // ── Staff-dependent scenarios. ──
+    if (staffSocket && staffToken) {
+      // Staff sees the administration inbox surface; join the conversation.
+      await emitWithAck(staffSocket, "room.join", {
+        roomType: "chat",
+        roomId: chat.id,
+      });
+
+      // Client -> staff: staff receives message.created without refresh.
+      const toStaff = `to-staff-${Date.now()}`;
+      const staffRecv = waitForEvent<MessageResponse>(
+        staffSocket,
+        "message.created",
+        (p) => p.chatId === chat.id && p.content === toStaff,
+      );
+      await request(
+        "POST",
+        `/messenger/chats/${chat.id}/messages`,
+        { content: toStaff, messageType: "text" },
+        accessToken,
+      );
+      steps.clientToStaff = await staffRecv;
+
+      // Staff -> client: client receives the reply without refresh.
+      const toClient = `to-client-${Date.now()}`;
+      const clientRecv = waitForEvent<MessageResponse>(
+        socket,
+        "message.created",
+        (p) => p.chatId === chat.id && p.content === toClient,
+      );
+      await request(
+        "POST",
+        `/messenger/chats/${chat.id}/messages`,
+        { content: toClient, messageType: "text" },
+        staffToken,
+      );
+      steps.staffToClient = await clientRecv;
+
+      // Staff posts to announcements: client receives channel.post_created.
+      const postContent = `announcement-${Date.now()}`;
+      const postRecv = waitForEvent<ChannelPostResponse>(
+        socket,
+        "channel.post_created",
+        (p) => p.channelId === announcements.id && p.content === postContent,
+      );
+      const post = await request<ChannelPostResponse>(
+        "POST",
+        `/messenger/channels/${announcements.id}/posts`,
+        { content: postContent },
+        staffToken,
+      );
+      steps.announcementPostId = post.id;
+      steps.clientReceivedPost = await postRecv;
+    } else {
+      steps.staffScenarios =
+        "skipped (set REALTIME_SMOKE_STAFF_EMAIL/REALTIME_SMOKE_STAFF_PASSWORD to run)";
+    }
 
     console.log(
       JSON.stringify({
@@ -76,12 +192,12 @@ async function main() {
         apiBaseUrl,
         userId: login.user.id,
         chatId: chat.id,
-        messageId: sent.id,
-        eventMessageId: event.id,
+        ...steps,
       }),
     );
   } finally {
     socket.disconnect();
+    staffSocket?.disconnect();
   }
 }
 
@@ -160,17 +276,47 @@ function waitForMessageCreated(
   chatId: string,
   content: string,
 ): Promise<MessageResponse> {
+  return waitForEvent<MessageResponse>(
+    socket,
+    "message.created",
+    (payload) => payload.chatId === chatId && payload.content === content,
+  );
+}
+
+function waitForEvent<T>(
+  socket: Socket,
+  event: string,
+  predicate: (payload: T) => boolean,
+  timeoutMs = 15_000,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error("message.created event timed out.")),
-      15_000,
+      () => reject(new Error(`${event} event timed out.`)),
+      timeoutMs,
     );
-    socket.on("message.created", (payload: MessageResponse) => {
-      if (payload.chatId !== chatId || payload.content !== content) return;
+    socket.on(event, (payload: T) => {
+      if (!predicate(payload)) return;
       clearTimeout(timer);
       resolve(payload);
     });
   });
+}
+
+/** Asserts a write is rejected with HTTP 403 (RBAC). Returns true on success. */
+async function expectForbidden(
+  method: string,
+  path: string,
+  body: unknown,
+  accessToken: string,
+): Promise<true> {
+  try {
+    await request(method, path, body, accessToken);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("HTTP 403")) return true;
+    throw new Error(`Expected HTTP 403 for ${method} ${path}, got: ${message}`);
+  }
+  throw new Error(`Expected HTTP 403 for ${method} ${path}, but it succeeded.`);
 }
 
 function normalizeBaseUrl(value: string): string {

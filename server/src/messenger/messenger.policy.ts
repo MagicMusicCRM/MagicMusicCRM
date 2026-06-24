@@ -101,6 +101,13 @@ export class MessengerPolicy {
       throw new ForbiddenException('Недостаточно прав для realtime-комнаты.');
     }
 
+    if (roomType === 'channel') {
+      const channel = await this.getChannelAccess(actor, roomId);
+      if (!channel) throw new NotFoundException('Канал не найден.');
+      this.assertCanReadChannel(channel);
+      return;
+    }
+
     if (roomType !== 'chat') {
       throw new ForbiddenException('Недостаточно прав для realtime-комнаты.');
     }

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -41,6 +42,9 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   Map<String, dynamic>? _financeMonthly;
   bool _financeMonthlyError = false;
 
+  // ── Realtime invalidation (crm.changed) ───────────────────────────────────
+  Timer? _realtimeDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +67,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
 
   @override
   void dispose() {
+    _realtimeDebounce?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -174,6 +179,23 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
 
   @override
   Widget build(BuildContext context) {
+    // Realtime: refresh the current report when another staff member changes a
+    // payment, lesson, or expense. Reports are heavy → longer (800ms) debounce.
+    ref.listen(crmRealtimeProvider, (prev, next) {
+      final event = next.value;
+      if (event == null || !mounted) return;
+      if (event.entity != 'payment' &&
+          event.entity != 'lesson' &&
+          event.entity != 'expense') {
+        return;
+      }
+      if (_loading) return;
+      _realtimeDebounce?.cancel();
+      _realtimeDebounce = Timer(const Duration(milliseconds: 800), () {
+        if (!mounted || _loading) return;
+        _loadReports();
+      });
+    });
     if (_loading) {
       return const Center(
         child: CircularProgressIndicator(color: AppColor.gold),
