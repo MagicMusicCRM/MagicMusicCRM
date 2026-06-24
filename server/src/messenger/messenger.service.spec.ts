@@ -1100,6 +1100,56 @@ describe("MessengerService", () => {
     expect(item.archived).toBe(false);
   });
 
+  it("listChats: soft-deleted assignee yields assignedTo.name=null but preserves assignedTo.id", async () => {
+    // Simulates a row where the assignee user/profile join yielded null (deleted_at gated)
+    // so assigned_first_name and assigned_last_name are null, but assigned_to_user_id is still
+    // populated from the chats table column. Locks in the degraded-state DTO behavior.
+    const staffActor = { userId: "manager-x", role: "manager" as const };
+    const rowWithDeletedAssignee = {
+      id: "chat-admin-2",
+      type: "administration",
+      title: "Администрация",
+      created_by: "client-2",
+      last_message_id: null,
+      last_message_content: null,
+      last_message_created_at: null,
+      unread_count: "0",
+      is_muted: false,
+      partner_user_id: null,
+      partner_email: null,
+      partner_first_name: null,
+      partner_last_name: null,
+      partner_avatar_file_id: null,
+      created_at: new Date("2026-06-25T10:00:00Z"),
+      updated_at: new Date("2026-06-25T10:00:00Z"),
+      owner_first_name: "Иван",
+      owner_last_name: "Петров",
+      // assigned_to_user_id comes from chats column (always present)
+      assigned_to_user_id: "asg-1",
+      // joined profile columns are null because asg.deleted_at is not null → join excluded
+      assigned_first_name: null,
+      assigned_last_name: null,
+      folder: "leads",
+      archived_at: null,
+    };
+
+    const { service } = createService({
+      database: {
+        query: jest.fn().mockResolvedValueOnce({ rows: [rowWithDeletedAssignee] }),
+      },
+    });
+
+    const result = await service.listChats(staffActor, {});
+
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0];
+    // The assignment id is still present (from chats.assigned_to_user_id)
+    expect(item.assignedTo).not.toBeNull();
+    expect(item.assignedTo!.id).toBe("asg-1");
+    // The name must be null/falsy — the departed staff's real name must NOT surface
+    expect(item.assignedTo!.name).toBeNull();
+  });
+
   describe("assignChat / unassignChat", () => {
     const staffActor = { userId: "staff-a", role: "admin" as const };
     const managerActor = { userId: "manager-a", role: "manager" as const };

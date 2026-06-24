@@ -314,8 +314,8 @@ export class MessengerService implements OnModuleInit {
         left join app.profiles partner_p on partner_p.user_id = partner_u.id and partner_p.deleted_at is null
         left join app.users ow on ow.id = c.owner_user_id and ow.deleted_at is null
         left join app.profiles owp on owp.user_id = ow.id and owp.deleted_at is null
-        left join app.users asg on asg.id = c.assigned_to_user_id
-        left join app.profiles asgp on asgp.user_id = asg.id
+        left join app.users asg on asg.id = c.assigned_to_user_id and asg.deleted_at is null
+        left join app.profiles asgp on asgp.user_id = asg.id and asgp.deleted_at is null
         left join app.chat_inbox_state ist on ist.chat_id = c.id and ist.staff_user_id = $2
         where c.deleted_at is null
           and ($3::timestamptz is null or c.updated_at < $3)
