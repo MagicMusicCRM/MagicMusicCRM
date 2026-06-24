@@ -547,6 +547,111 @@ void main() {
       expect(adapter.requests[2].body['content'], 'Пост');
     });
 
+    test('assignChat self-claim posts to assign with empty body', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/messenger/chats/c1/assign',
+          statusCode: 200,
+          body: {'id': 'c1', 'type': 'administration'},
+        ),
+      ]);
+      final svc = MagicMessengerService(_client(adapter));
+      await svc.assignChat('c1');
+      final req = adapter.requests.single;
+      expect(req.method, 'POST');
+      expect(req.body['userId'], isNull);
+    });
+
+    test('assignChat with userId posts the target', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/messenger/chats/c1/assign',
+          statusCode: 200,
+          body: {'id': 'c1'},
+        ),
+      ]);
+      final svc = MagicMessengerService(_client(adapter));
+      await svc.assignChat('c1', userId: 'staff-9');
+      expect(adapter.requests.single.body['userId'], 'staff-9');
+    });
+
+    test('archiveChat / unarchiveChat / unassignChat hit the right routes',
+        () async {
+      // _FakeAdapter.fetch already asserts options.uri.path == response.path,
+      // so providing them in order is sufficient to verify routing.
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/messenger/chats/c1/archive',
+          statusCode: 200,
+          body: {'id': 'c1'},
+        ),
+        _FakeResponse(
+          path: '/messenger/chats/c1/unarchive',
+          statusCode: 200,
+          body: {'id': 'c1'},
+        ),
+        _FakeResponse(
+          path: '/messenger/chats/c1/unassign',
+          statusCode: 200,
+          body: {'id': 'c1'},
+        ),
+      ]);
+      final svc = MagicMessengerService(_client(adapter));
+      await svc.archiveChat('c1');
+      await svc.unarchiveChat('c1');
+      await svc.unassignChat('c1');
+      expect(adapter.requests.length, 3);
+      expect(
+        adapter.requests.every((r) => r.method == 'POST'),
+        isTrue,
+      );
+    });
+
+    test('leaveGroup posts to groups/:id/leave', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/messenger/groups/g1/leave',
+          statusCode: 200,
+          body: {'success': true},
+        ),
+      ]);
+      final svc = MagicMessengerService(_client(adapter));
+      await svc.leaveGroup('g1');
+      expect(adapter.requests.single.method, 'POST');
+    });
+
+    test('_legacyChat surfaces folder, assignedTo, archived, ownerName',
+        () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/messenger/chats',
+          statusCode: 200,
+          body: {
+            'items': [
+              {
+                'id': 'c1',
+                'type': 'administration',
+                'title': 'Администрация',
+                'unreadCount': 2,
+                'isMuted': false,
+                'ownerName': 'Иван Петров',
+                'folder': 'students',
+                'archived': false,
+                'assignedTo': {'id': 'staff-9', 'name': 'Анна'},
+              },
+            ],
+          },
+        ),
+      ]);
+      final svc = MagicMessengerService(_client(adapter));
+      final chats = await svc.listChats();
+      final c = chats.single;
+      expect(c['folder'], 'students');
+      expect(c['archived'], false);
+      expect(c['owner_name'], 'Иван Петров');
+      expect((c['assigned_to'] as Map)['name'], 'Анна');
+    });
+
     test('reads channel access and permission rules through v3 API', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

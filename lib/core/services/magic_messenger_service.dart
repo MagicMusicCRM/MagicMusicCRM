@@ -72,6 +72,37 @@ class MagicMessengerService {
     return _legacyChat(response);
   }
 
+  Future<Map<String, dynamic>> assignChat(String chatId, {String? userId}) async {
+    final data = <String, dynamic>{};
+    if (userId != null) data['userId'] = userId;
+    final response = await _api.post<Map<String, dynamic>>(
+      '/messenger/chats/$chatId/assign', data: data);
+    return _legacyChat(response);
+  }
+
+  Future<Map<String, dynamic>> unassignChat(String chatId) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/messenger/chats/$chatId/unassign', data: <String, dynamic>{});
+    return _legacyChat(response);
+  }
+
+  Future<Map<String, dynamic>> archiveChat(String chatId) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/messenger/chats/$chatId/archive', data: <String, dynamic>{});
+    return _legacyChat(response);
+  }
+
+  Future<Map<String, dynamic>> unarchiveChat(String chatId) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/messenger/chats/$chatId/unarchive', data: <String, dynamic>{});
+    return _legacyChat(response);
+  }
+
+  Future<void> leaveGroup(String chatId) async {
+    await _api.post<Map<String, dynamic>>(
+      '/messenger/groups/$chatId/leave', data: <String, dynamic>{});
+  }
+
   Future<List<Map<String, dynamic>>> listChatMembers(String chatId) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/messenger/chats/$chatId/members',
@@ -339,6 +370,10 @@ class MagicMessengerService {
               'created_at': lastCreatedAt,
             },
       '_last_message_time': lastCreatedAt,
+      'folder': item['folder'],
+      'assigned_to': item['assignedTo'],
+      'archived': item['archived'] == true,
+      'owner_name': item['ownerName'],
     };
   }
 
