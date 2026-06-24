@@ -248,6 +248,91 @@ describe("AuthService", () => {
     );
   });
 
+  it("bypasses the forced OTP for allow-listed test accounts", async () => {
+    const previous = process.env.AUTH_OTP_BYPASS_EMAILS;
+    process.env.AUTH_OTP_BYPASS_EMAILS = "admin@example.com, other@example.com";
+    try {
+      const passwordHash = await passwordService.hash("strong-password-123");
+      query
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // login rate-limit
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "admin-a",
+              email: "admin@example.com",
+              password_hash: passwordHash,
+              role: "admin",
+              email_verified_at: new Date(),
+              email_otp_2fa_enabled: false,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [] }); // is_app_account touch-up
+
+      const result = await service.login({
+        email: "ADMIN@example.com", // case-insensitive match
+        password: "strong-password-123",
+      });
+
+      expect(result.emailOtpRequired).toBeUndefined();
+      expect(result.session?.refreshToken).toBe("refresh-token");
+      expect(sessions.issueForUser).toHaveBeenCalled();
+      // No OTP challenge was created or emailed.
+      expect(notifications.sendEmail).not.toHaveBeenCalled();
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "auth.login_otp_bypassed" }),
+      );
+      expect(audit.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: "auth.login_email_otp_required" }),
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AUTH_OTP_BYPASS_EMAILS;
+      } else {
+        process.env.AUTH_OTP_BYPASS_EMAILS = previous;
+      }
+    }
+  });
+
+  it("still forces OTP for privileged roles not on the bypass list", async () => {
+    const previous = process.env.AUTH_OTP_BYPASS_EMAILS;
+    process.env.AUTH_OTP_BYPASS_EMAILS = "someone-else@example.com";
+    try {
+      const passwordHash = await passwordService.hash("strong-password-123");
+      query
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "manager-a",
+              email: "manager@example.com",
+              password_hash: passwordHash,
+              role: "manager",
+              email_verified_at: new Date(),
+              email_otp_2fa_enabled: false,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] });
+
+      const result = await service.login({
+        email: "manager@example.com",
+        password: "strong-password-123",
+      });
+
+      expect(result.emailOtpRequired).toBe(true);
+      expect(result.session).toBeUndefined();
+      expect(sessions.issueForUser).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AUTH_OTP_BYPASS_EMAILS;
+      } else {
+        process.env.AUTH_OTP_BYPASS_EMAILS = previous;
+      }
+    }
+  });
+
   it("rate limits repeated login failures before password verification", async () => {
     query.mockResolvedValueOnce({ rows: [{ count: "10" }] });
 

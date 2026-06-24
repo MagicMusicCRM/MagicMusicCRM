@@ -217,7 +217,15 @@ export class AuthService {
     // MFA обязательна для привилегированных ролей (Администратор/Управляющий/
     // Администратор системы) независимо от пользовательского флага (KVA-218):
     // компрометация одного пароля не должна давать полный доступ.
-    if (user.email_otp_2fa_enabled || isManagerOrAdminRole(user.role)) {
+    //
+    // Исключение — заранее заданный список тестовых аккаунтов
+    // (AUTH_OTP_BYPASS_EMAILS): их почта не существует, поэтому код подтверждения
+    // доставить невозможно. Пароль и подтверждение почты у них по-прежнему
+    // проверяются, а сам обход фиксируется в аудите. Список временный — эти
+    // небезопасные аккаунты удаляются после этапа тестирования.
+    const otpRequired =
+      Boolean(user.email_otp_2fa_enabled) || isManagerOrAdminRole(user.role);
+    if (otpRequired && !this.isOtpBypassed(email)) {
       await this.createOtpChallenge(user, email);
       await this.audit.record({
         actor: { userId: user.id, role: user.role },
@@ -227,6 +235,16 @@ export class AuthService {
         metadata: { emailHash },
       });
       return { user: this.toResponse(user), emailOtpRequired: true };
+    }
+
+    if (otpRequired) {
+      await this.audit.record({
+        actor: { userId: user.id, role: user.role },
+        action: "auth.login_otp_bypassed",
+        entityType: "user",
+        entityId: user.id,
+        metadata: { emailHash },
+      });
     }
 
     return {
@@ -602,6 +620,21 @@ export class AuthService {
 
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
+  }
+
+  // Test-only OTP bypass: emails in AUTH_OTP_BYPASS_EMAILS (comma-separated) skip
+  // the forced email-OTP step because their addresses don't exist and the code
+  // can't be delivered. Password + email verification are still enforced; the
+  // bypass is audited. Temporary — these throwaway accounts are deleted after
+  // the test phase, after which the env var is removed.
+  private isOtpBypassed(email: string): boolean {
+    const raw = process.env.AUTH_OTP_BYPASS_EMAILS;
+    if (!raw) return false;
+    return raw
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter((entry) => entry.length > 0)
+      .includes(email.toLowerCase());
   }
 
   private emailHash(email: string): string {

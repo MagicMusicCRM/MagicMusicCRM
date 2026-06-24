@@ -23,7 +23,6 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<_MonthData> _monthlyData = [];
-  List<Map<String, dynamic>> _teacherRevenue = [];
   bool _loading = true;
   Object? _loadError;
   Map<String, dynamic> _summary = {};
@@ -103,9 +102,6 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
 
       setState(() {
         _monthlyData = monthList;
-        _teacherRevenue = (report['teachers'] as List? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .toList();
         _summary = {
           'attendance': summary['attendance'] ?? 0.0,
           'revenue': summary['revenue'] ?? 0,
@@ -496,10 +492,6 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             ),
             const SizedBox(height: 24),
 
-            // Teacher Revenue Breakdown
-            _buildTeacherRevenueBreakdown(),
-            const SizedBox(height: 24),
-
             // Monthly table
             const Text(
               'Детализация',
@@ -875,75 +867,6 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     );
   }
 
-  Widget _buildTeacherRevenueBreakdown() {
-    final sortedTeachers = List<Map<String, dynamic>>.from(_teacherRevenue)
-      ..sort((a, b) {
-        final ar = double.tryParse('${a['revenue']}') ?? 0;
-        final br = double.tryParse('${b['revenue']}') ?? 0;
-        return br.compareTo(ar);
-      });
-
-    final fmt = NumberFormat('#,##0', 'ru');
-
-    if (sortedTeachers.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Выручка по учителям',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant.withAlpha(90),
-            ),
-          ),
-          child: ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: sortedTeachers.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (ctx, i) {
-              final e = sortedTeachers[i];
-              final name = e['name']?.toString() ?? '—';
-              final revenue = double.tryParse('${e['revenue']}') ?? 0;
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppColor.goldSoft,
-                  radius: 16,
-                  child: const Icon(
-                    Icons.person_outline_rounded,
-                    size: 16,
-                    color: AppColor.gold,
-                  ),
-                ),
-                title: Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                trailing: Text(
-                  '${fmt.format(revenue)} ₽',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColor.success,
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _ReportsError extends StatelessWidget {

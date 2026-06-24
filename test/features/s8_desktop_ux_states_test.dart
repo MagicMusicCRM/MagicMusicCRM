@@ -50,8 +50,8 @@ void main() {
       // Like the v7 prototype, an empty period shows an EMPTY calendar (weekday
       // headers + cells), never a "занятий нет" text card that replaces the grid.
       expect(find.text('На выбранный период занятий нет'), findsNothing);
-      expect(find.text('ПН'), findsOneWidget);
-      expect(find.text('ВС'), findsOneWidget);
+      expect(find.text('Пн'), findsOneWidget);
+      expect(find.text('Вс'), findsOneWidget);
     });
 
     testWidgets('T8.1 schedule shows an error state with retry on failure', (

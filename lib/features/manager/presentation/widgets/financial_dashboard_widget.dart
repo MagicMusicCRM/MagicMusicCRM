@@ -306,7 +306,6 @@ class _FinancialDashboardWidgetState
   }
 
   Widget _buildTeacherEfficiencyCard() {
-    final fmt = NumberFormat('#,##0', 'ru');
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -336,7 +335,7 @@ class _FinancialDashboardWidgetState
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           Text(
-                            '${t['completed']} зан.',
+                            '${t['completed']} зан. за период',
                             style: TextStyle(
                               fontSize: 12,
                               color: Theme.of(
@@ -347,11 +346,13 @@ class _FinancialDashboardWidgetState
                         ],
                       ),
                     ),
+                    // Money intentionally dropped here (E2) — teacher load is
+                    // shown as the number of completed lessons for the period.
                     Text(
-                      '${fmt.format(t['revenue'])} ₽',
+                      '${t['completed']}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w800,
-                        color: AppTheme.success,
+                        color: AppTheme.primaryGold,
                       ),
                     ),
                   ],
