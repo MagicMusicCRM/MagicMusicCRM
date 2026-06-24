@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -10,7 +11,6 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
-import 'package:go_router/go_router.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -563,7 +563,11 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                                 ? () async {
                                     final id = student['id']?.toString();
                                     if (id == null || id.isEmpty) return;
-                                    await context.push('/student/$id');
+                                    await showClientCard(
+                                      context,
+                                      entityType: 'student',
+                                      entityId: id,
+                                    );
                                     _loadPayments();
                                   }
                                 : null,

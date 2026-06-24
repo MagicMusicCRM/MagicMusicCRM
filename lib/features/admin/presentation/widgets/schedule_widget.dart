@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 import 'create_lesson_dialog.dart';
+import 'schedule_day_canvas.dart';
 
 // ── Color palette for rooms / teachers ──────────────────────────────────────
 // Muted, token-aligned palette (gold + status hues, no neon) so room dots read
@@ -27,7 +28,7 @@ const List<Color> _roomColors = [
 ];
 
 // ── Enums ───────────────────────────────────────────────────────────────────
-enum _ScheduleView { month, day }
+enum _ScheduleView { year, month, day }
 
 enum _DayViewMode { byRoom, byTeacher }
 
@@ -64,7 +65,7 @@ const _monthNamesNominative = [
   'Декабрь',
 ];
 
-const _weekDays = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
+const _weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Main Widget
@@ -107,6 +108,15 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Map<String, Map<String, dynamic>> _monthDaySummary = {};
   bool _availabilityLoading = false;
 
+  // ── Year view (KVA-195) ─────────────────────────────────────────────────────
+  // Per-month aggregate for the selected year, derived from the lightweight
+  // whole-year `getScheduleMonthSummary` (per-day counts) so the year overview
+  // shows real load without fetching every lesson. Keyed by month 1..12.
+  int _displayedYear = DateTime.now().year;
+  Map<int, ({int count, int activeDays})> _yearMonths = {};
+  bool _yearLoading = false;
+  int? _yearLoadedFor; // (year ^ branch) guard so we fetch once per year/branch
+
   // UI state
   String? _selectedBranchId;
   _ScheduleView _currentView = _ScheduleView.month;
@@ -118,38 +128,18 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   );
   String? _selectedTeacherId;
 
-  // Day (by-room) grid scroll: auto-scrolls to the earliest lesson once per
-  // selected day so evening lessons aren't hidden below the 06:00 fold.
-  final ScrollController _dayGridController = ScrollController();
-  DateTime? _dayGridScrolledFor;
-
   // ── Focus-on-lesson (Phase 5) ───────────────────────────────────────────────
   // When the «Карточка клиента» taps a lesson, [scheduleNavigationProvider]
-  // carries the day + lesson id here. We switch to that day's day view, scroll
-  // the by-room grid to the lesson and render a transient gold pulse on it.
-  // The id is matched against the fetched day lessons by `id` (no UTC recompute).
+  // carries the day + lesson id here. We switch to that day's day view and
+  // render a transient gold pulse on the matched lesson (by `id`). The day
+  // canvas owns its own scroll, so no scroll controller lives here anymore.
   String? _highlightLessonId;
-  // One-shot guard so the highlight scroll only fires once per focus request.
-  String? _highlightScrolledFor;
   // Auto-clears the gold highlight a few seconds after it lands.
   Timer? _highlightClearTimer;
 
-  // ── Drag-to-move (P2-2 / KVA-195) ──────────────────────────────────────────
-  // Key on the scrollable grid body so a drop's global offset can be converted
-  // to a grid-local offset (→ target hour/minute). Each room column carries an
-  // index in its DragTarget data so the drop column → target room is known
-  // without geometry math.
-  final GlobalKey _dayGridBodyKey = GlobalKey();
-  // True while a lesson block is being dragged, so the body suppresses the
-  // one-shot auto-scroll (it would yank the grid out from under the finger).
-  bool _isDraggingLesson = false;
-  // Guards against overlapping move requests (double-drop / refetch in flight).
+  // Guards against overlapping move/resize requests (double-drop / refetch in
+  // flight); also drives the optimistic in-place patch + rollback (KVA-195).
   bool _movingLesson = false;
-
-  // Tap / long-press-drag booking selection on empty day-grid cells (KVA-195).
-  String? _selRoomId;
-  double? _selStartY;
-  double? _selEndY;
 
   // Debounce for realtime refetches: a burst of lesson events from other staff
   // would otherwise trigger one full refetch each. Coalesce them into a single
@@ -174,7 +164,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   void dispose() {
     _realtimeDebounce?.cancel();
     _highlightClearTimer?.cancel();
-    _dayGridController.dispose();
     super.dispose();
   }
 
@@ -368,6 +357,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       // cap (e.g. today mid-month).
       if (_currentView == _ScheduleView.day) {
         _fetchDayLessons(_selectedDate);
+      } else if (_currentView == _ScheduleView.year) {
+        _fetchYearSummary();
       }
     } catch (e) {
       debugPrint('Error fetching schedule: $e');
@@ -567,6 +558,70 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       );
     });
     _fetchAll();
+  }
+
+  void _prevYear() {
+    setState(() => _displayedYear -= 1);
+    _fetchYearSummary();
+  }
+
+  void _nextYear() {
+    setState(() => _displayedYear += 1);
+    _fetchYearSummary();
+  }
+
+  // Opening a month from the year overview drops the user into that month.
+  void _onYearMonthTap(int month) {
+    setState(() {
+      _clearHighlight();
+      _displayedMonth = DateTime(_displayedYear, month);
+      _selectedDate = DateTime(_displayedYear, month, 1);
+      _currentView = _ScheduleView.month;
+    });
+    _fetchAll();
+  }
+
+  // Whole-year per-month aggregate from the lightweight day-level month-summary
+  // (one HTTP call, ≈365 small rows). Counts/active-days are SERVER-derived; we
+  // never invent conflict numbers the summary endpoint doesn't return.
+  Future<void> _fetchYearSummary() async {
+    final branchId = _selectedBranchId;
+    final guard = _displayedYear * 31 + (branchId?.hashCode ?? 0) % 31;
+    if (_yearLoadedFor == guard && _yearMonths.isNotEmpty) return;
+    setState(() => _yearLoading = true);
+    try {
+      final from = DateTime.utc(_displayedYear, 1, 1).toIso8601String();
+      final to = DateTime.utc(_displayedYear + 1, 1, 1).toIso8601String();
+      final summary = await ref
+          .read(magicCrmServiceProvider)
+          .getScheduleMonthSummary(from: from, to: to, branchId: branchId);
+      final months = <int, ({int count, int activeDays})>{};
+      for (final item in summary) {
+        final day = item['day']?.toString();
+        if (day == null) continue;
+        final parts = day.split('-');
+        if (parts.length < 2) continue;
+        final m = int.tryParse(parts[1]);
+        if (m == null) continue;
+        final c = item['count'] is int
+            ? item['count'] as int
+            : int.tryParse('${item['count']}') ?? 0;
+        final cur = months[m] ?? (count: 0, activeDays: 0);
+        months[m] = (
+          count: cur.count + c,
+          activeDays: cur.activeDays + (c > 0 ? 1 : 0),
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _yearMonths = months;
+        _yearLoading = false;
+        _yearLoadedFor = guard;
+      });
+    } catch (e) {
+      debugPrint('Error fetching year summary: $e');
+      if (mounted) setState(() => _yearLoading = false);
+    }
   }
 
   void _prevDay() {
@@ -810,12 +865,15 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
       if (event == null || event.entity != 'lesson' || !mounted) return;
-      if (_isLoading) return;
+      // Don't refetch while loading or while an optimistic move/resize is in
+      // flight — a mid-flight reload would clobber the in-place patch (the move
+      // refetches itself on completion).
+      if (_isLoading || _movingLesson) return;
       // Debounce: coalesce a burst of lesson events into one refetch so we don't
       // fire a full reload per event.
       _realtimeDebounce?.cancel();
       _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
-        if (!mounted || _isLoading) return;
+        if (!mounted || _isLoading || _movingLesson) return;
         if (_currentView == _ScheduleView.day) {
           _fetchDayLessons(_selectedDate);
         } else {
@@ -852,13 +910,16 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                   )
                 : null,
           ),
+          if (!firstLoad) _buildViewSwitcher(),
           if (!firstLoad) ...[
             _buildBranchSelector(),
             if (_currentView == _ScheduleView.day) _buildDayViewModeToggle(),
           ],
           _buildDateNavigation(),
-          if (!firstLoad && _currentView == _ScheduleView.day)
+          if (!firstLoad && _currentView == _ScheduleView.day) ...[
+            _buildDayLegend(),
             _buildAvailabilitySummary(),
+          ],
           Expanded(child: _buildScheduleContent()),
         ],
       ),
@@ -890,36 +951,31 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     if (_loadError != null && !_hasLoadedOnce) {
       return _ScheduleError(error: _loadError, onRetry: _fetchAll);
     }
-    return _currentView == _ScheduleView.month
-        ? _buildMonthView()
-        : _buildDayView();
+    return switch (_currentView) {
+      _ScheduleView.year => _buildYearView(),
+      _ScheduleView.month => _buildMonthView(),
+      _ScheduleView.day => _buildDayView(),
+    };
   }
 
   // ── Header ────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
-    final title = _currentView == _ScheduleView.month
-        ? '${_monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}'
-        : 'Расписание';
+    final title = switch (_currentView) {
+      _ScheduleView.year => 'Расписание / $_displayedYear',
+      _ScheduleView.month =>
+        '${_monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}',
+      _ScheduleView.day => 'Расписание / День',
+    };
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
       child: Row(
         children: [
-          if (_currentView == _ScheduleView.day)
-            IconButton(
-              icon: Icon(
-                Icons.arrow_back_rounded,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-              onPressed: () => setState(() {
-                _clearHighlight();
-                _currentView = _ScheduleView.month;
-              }),
-              tooltip: 'Назад к месяцу',
-            ),
           Expanded(
             child: Text(
               title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurface,
                 fontSize: 22,
@@ -956,6 +1012,75 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         ],
       ),
     );
+  }
+
+  // ── Год / Месяц / День segmented control (primary navigation) ──────────────
+  Widget _buildViewSwitcher() {
+    Widget seg(String label, _ScheduleView view) {
+      final active = _currentView == view;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _switchView(view),
+          child: AnimatedContainer(
+            duration: AppMotion.fast,
+            curve: AppMotion.ease,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: active ? AppColor.gold : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: active
+                    ? AppColor.onGold
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 4),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppRadius.control + 4),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(28),
+          ),
+        ),
+        child: Row(
+          children: [
+            seg('Год', _ScheduleView.year),
+            const SizedBox(width: 4),
+            seg('Месяц', _ScheduleView.month),
+            const SizedBox(width: 4),
+            seg('День', _ScheduleView.day),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _switchView(_ScheduleView view) {
+    if (_currentView == view) return;
+    setState(() {
+      _clearHighlight();
+      _currentView = view;
+    });
+    if (view == _ScheduleView.year) {
+      _fetchYearSummary();
+    } else if (view == _ScheduleView.day) {
+      _fetchAvailabilityForSelectedDay();
+      _fetchDayLessons(_selectedDate);
+    }
   }
 
   // ── Branch selector pills ─────────────────────────────────────────────────
@@ -1187,7 +1312,11 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     String dateLabel;
     VoidCallback onPrev, onNext;
 
-    if (_currentView == _ScheduleView.month) {
+    if (_currentView == _ScheduleView.year) {
+      dateLabel = '$_displayedYear';
+      onPrev = _prevYear;
+      onNext = _nextYear;
+    } else if (_currentView == _ScheduleView.month) {
       dateLabel =
           '${_monthNamesGenitive[_displayedMonth.month].toLowerCase()} ${_displayedMonth.year}';
       onPrev = _prevMonth;
@@ -1375,24 +1504,29 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final month = _displayedMonth.month;
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
-    // Weekday: 1=Mon, 7=Sun. We start Monday.
-    final startWeekday = firstDay.weekday; // 1-based, Mon=1
+    final startWeekday = firstDay.weekday; // 1=Mon..7=Sun
     final prevDays = startWeekday - 1;
-
-    // Previous month fill
     final prevMonthLastDay = DateTime(year, month, 0).day;
     final totalSlots = prevDays + daysInMonth;
     final rows = (totalSlots / 7).ceil();
-
     final now = DateTime.now();
 
-    return Column(
+    // Focal day for the side summary: the selected day if it's in this month,
+    // else today (if today is this month), else the 1st.
+    DateTime focal;
+    if (_selectedDate.year == year && _selectedDate.month == month) {
+      focal = _selectedDate;
+    } else if (now.year == year && now.month == month) {
+      focal = DateTime(year, month, now.day);
+    } else {
+      focal = DateTime(year, month, 1);
+    }
+
+    final calendar = Column(
       children: [
-        // Month calendar is always rendered (empty cells when there are no
-        // lessons), matching the v7 prototype — no text hint over the grid.
-        // Weekday headers
+        // Weekday headers.
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Row(
             children: _weekDays
                 .map(
@@ -1405,7 +1539,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                             context,
                           ).colorScheme.onSurfaceVariant.withAlpha(180),
                           fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -1414,11 +1548,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 .toList(),
           ),
         ),
-        SizedBox(height: 4),
-        // Calendar grid
+        const SizedBox(height: 6),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Column(
               children: List.generate(rows, (row) {
                 return Expanded(
@@ -1426,9 +1559,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     children: List.generate(7, (col) {
                       final index = row * 7 + col;
                       if (index < prevDays) {
-                        // Previous month
                         final day = prevMonthLastDay - prevDays + 1 + index;
-                        return _buildMonthCell(
+                        return _buildMonthCellRich(
                           day,
                           isCurrentMonth: false,
                           date: null,
@@ -1436,20 +1568,17 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                       }
                       final dayNum = index - prevDays + 1;
                       if (dayNum > daysInMonth) {
-                        // Next month
-                        final nextDay = dayNum - daysInMonth;
-                        return _buildMonthCell(
-                          nextDay,
+                        return _buildMonthCellRich(
+                          dayNum - daysInMonth,
                           isCurrentMonth: false,
                           date: null,
                         );
                       }
                       final date = DateTime(year, month, dayNum);
-                      final isToday =
-                          date.year == now.year &&
+                      final isToday = date.year == now.year &&
                           date.month == now.month &&
                           date.day == now.day;
-                      return _buildMonthCell(
+                      return _buildMonthCellRich(
                         dayNum,
                         isCurrentMonth: true,
                         date: date,
@@ -1462,119 +1591,231 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             ),
           ),
         ),
-        // Room legend
-        _buildRoomLegend(),
+      ],
+    );
+
+    return Column(
+      children: [
+        _buildMonthLegend(),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, c) {
+              final wide = c.maxWidth >= 760 && c.maxHeight >= 420;
+              if (!wide) return calendar;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: calendar),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 260,
+                    child: _buildMonthSidePanel(focal),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildMonthCell(
+  Widget _buildMonthLegend() {
+    Widget chip(Color c, String label) {
+      return Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: c.withAlpha(22),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: c.withAlpha(70)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  chip(AppColor.actionBlue, 'Обычные'),
+                  chip(AppColor.success, 'Пробные'),
+                  chip(AppColor.warning, 'Пиковая'),
+                  chip(AppColor.danger, 'Конфликт'),
+                ],
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: _goToToday,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColor.goldLine),
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+              child: const Text(
+                'Сегодня',
+                style: TextStyle(
+                  color: AppColor.gold,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonthCellRich(
     int day, {
     required bool isCurrentMonth,
     DateTime? date,
     bool isToday = false,
   }) {
-    // Prefer the lightweight whole-month aggregate; fall back to the detailed
-    // (but limited) lesson list when no summary is available for the day.
-    final summary = date != null
-        ? _monthDaySummary[_dateOnly(date)]
-        : null;
-    final List<String> summaryRoomIds = summary != null
-        ? (summary['room_ids'] as List?)?.map((e) => e.toString()).toList() ??
-              const <String>[]
-        : const <String>[];
-    final lessons = date != null && summary == null
-        ? _lessonsForDate(date)
-        : <Map<String, dynamic>>[];
+    final cs = Theme.of(context).colorScheme;
+    final summary = date != null ? _monthDaySummary[_dateOnly(date)] : null;
+    final lessons = date != null ? _lessonsForDate(date) : const [];
     final count = summary != null
         ? (summary['count'] as int? ?? 0)
         : lessons.length;
+    final isSelected = date != null &&
+        _selectedDate.year == date.year &&
+        _selectedDate.month == date.month &&
+        _selectedDate.day == date.day;
 
-    // Gather unique room colors for dots
-    final dotColors = <Color>[];
-    final dotRoomIds = summary != null
-        ? summaryRoomIds
-        : lessons.map((l) => l['room_id']?.toString() ?? '').toList();
-    for (final rid in dotRoomIds) {
-      final c = rid.isNotEmpty
-          ? (_roomColorMap[rid] ??
-                Theme.of(context).colorScheme.onSurfaceVariant)
-          : Theme.of(context).colorScheme.onSurfaceVariant;
-      if (!dotColors.contains(c)) dotColors.add(c);
-      if (dotColors.length >= 6) break; // max 6 dots
-    }
+    // Up to two preview chips from the in-memory (capped) matrix; the count
+    // badge stays authoritative for the full-day total.
+    final sorted = [...lessons];
+    sorted.sort((a, b) {
+      final ta = _parseLessonTime(a);
+      final tb = _parseLessonTime(b);
+      if (ta == null || tb == null) return 0;
+      return ta.compareTo(tb);
+    });
 
     return Expanded(
       child: GestureDetector(
         onTap: date != null ? () => _onMonthDayTap(date) : null,
         child: Container(
           margin: const EdgeInsets.all(2),
+          padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
           decoration: BoxDecoration(
             color: isCurrentMonth
-                ? Theme.of(context).colorScheme.surface.withAlpha(120)
+                ? cs.surface.withAlpha(isSelected ? 220 : 120)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
-            border: isToday
-                ? Border.all(color: AppColor.gold, width: 1.5)
-                : null,
+            border: Border.all(
+              color: isToday
+                  ? AppColor.gold
+                  : isSelected
+                  ? AppColor.goldLine
+                  : cs.onSurfaceVariant.withAlpha(14),
+              width: isToday ? 1.5 : 1,
+            ),
           ),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Day number
-              Container(
-                width: 28,
-                height: 28,
-                alignment: Alignment.center,
-                decoration: isToday
-                    ? BoxDecoration(
-                        color: AppColor.gold,
-                        borderRadius: BorderRadius.circular(8),
-                      )
-                    : null,
-                child: Text(
-                  '$day',
-                  style: TextStyle(
-                    color: isToday
-                        ? Colors.white
-                        : isCurrentMonth
-                        ? Theme.of(context).colorScheme.onSurface
-                        : Theme.of(
-                            context,
-                          ).colorScheme.onSurfaceVariant.withAlpha(80),
-                    fontSize: 14,
-                    fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+              Row(
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: isToday
+                        ? BoxDecoration(
+                            color: AppColor.gold,
+                            borderRadius: BorderRadius.circular(7),
+                          )
+                        : null,
+                    child: Text(
+                      '$day',
+                      style: TextStyle(
+                        color: isToday
+                            ? Colors.white
+                            : isCurrentMonth
+                            ? AppColor.text
+                            : cs.onSurfaceVariant.withAlpha(90),
+                        fontSize: 13,
+                        fontWeight:
+                            isToday ? FontWeight.w700 : FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
+                  const Spacer(),
+                  if (isCurrentMonth && count > 0)
+                    Text(
+                      '$count',
+                      style: TextStyle(
+                        color: count >= 9 ? AppColor.warning : AppColor.gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                ],
               ),
-              if (isCurrentMonth && dotColors.isNotEmpty) ...[
-                SizedBox(height: 3),
-                // Colored dots
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: dotColors
-                      .take(6)
-                      .map(
-                        (c) => Container(
-                          width: 6,
-                          height: 6,
-                          margin: const EdgeInsets.symmetric(horizontal: 1),
-                          decoration: BoxDecoration(
-                            color: c,
-                            shape: BoxShape.circle,
+              if (isCurrentMonth) ...[
+                const SizedBox(height: 3),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final l in sorted.take(2))
+                          _monthChip(l),
+                        if (count > sorted.take(2).length)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 1, left: 2),
+                            child: Text(
+                              '+${count - sorted.take(2).length} ${_pluralRu(count - sorted.take(2).length, 'занятие', 'занятия', 'занятий')}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: cs.onSurfaceVariant.withAlpha(170),
+                                fontSize: 9,
+                              ),
+                            ),
+                          )
+                        else if (count == 0 && sorted.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 1, left: 2),
+                            child: Text(
+                              'нет занятий',
+                              style: TextStyle(
+                                color: cs.onSurfaceVariant.withAlpha(110),
+                                fontSize: 9,
+                              ),
+                            ),
                           ),
-                        ),
-                      )
-                      .toList(),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  '$count зан.',
-                  style: TextStyle(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurfaceVariant.withAlpha(180),
-                    fontSize: 9,
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -1585,41 +1826,414 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     );
   }
 
-  Widget _buildRoomLegend() {
-    final rooms = _filteredRooms;
-    if (rooms.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 6,
-        children: rooms.map((r) {
-          final rid = r['id'].toString();
-          final color =
-              _roomColorMap[rid] ??
-              Theme.of(context).colorScheme.onSurfaceVariant;
-          return Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              ),
-              SizedBox(width: 4),
-              Text(
-                r['name']?.toString() ?? '',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          );
-        }).toList(),
+  Widget _monthChip(Map<String, dynamic> lesson) {
+    final cs = Theme.of(context).colorScheme;
+    final start = _parseLessonTime(lesson);
+    final conflicts = _conflictTypes(lesson['conflict_types']);
+    final color = conflicts.isNotEmpty
+        ? AppColor.danger
+        : lesson['is_trial'] == true
+        ? AppColor.success
+        : AppColor.actionBlue;
+    final time = start == null
+        ? ''
+        : '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} ';
+    final name =
+        _studentNames[lesson['student_id']?.toString()] ??
+        lesson['group_name']?.toString() ??
+        'Занятие';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withAlpha(28),
+        borderRadius: BorderRadius.circular(4),
+        border: Border(left: BorderSide(color: color, width: 2)),
+      ),
+      child: Text(
+        '$time$name',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: cs.onSurface, fontSize: 9.5),
       ),
     );
+  }
+
+  Widget _buildMonthSidePanel(DateTime focal) {
+    final cs = Theme.of(context).colorScheme;
+    final lessons = _lessonsForDate(focal);
+    final summary = _monthDaySummary[_dateOnly(focal)];
+    final count = summary != null
+        ? (summary['count'] as int? ?? 0)
+        : lessons.length;
+    final trials = lessons.where((l) => l['is_trial'] == true).length;
+    final conflicts = lessons
+        .where((l) => _conflictTypes(l['conflict_types']).isNotEmpty)
+        .length;
+
+    Widget stat(String value, String label, Color color) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cs.surface.withAlpha(120),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: cs.onSurfaceVariant.withAlpha(20)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surface.withAlpha(90),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: cs.onSurfaceVariant.withAlpha(24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${focal.day} ${_monthNamesGenitive[focal.month]}',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  stat('$count', 'занятий в выбранном дне', AppColor.gold),
+                  stat(
+                    '$conflicts',
+                    'конфликтов комнаты/педагога',
+                    conflicts > 0 ? AppColor.danger : AppColor.text,
+                  ),
+                  stat(
+                    '$trials',
+                    'пробных уроков',
+                    trials > 0 ? AppColor.success : AppColor.text,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 44,
+            child: Material(
+              color: AppColor.gold,
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                onTap: () => _onMonthDayTap(focal),
+                child: const Center(
+                  child: Text(
+                    'Открыть день',
+                    style: TextStyle(
+                      color: AppColor.onGold,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  YEAR VIEW
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildYearView() {
+    if (_yearLoading && _yearMonths.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: ScheduleSkeleton(rows: 4, columns: 3),
+      );
+    }
+    final now = DateTime.now();
+    final maxCount = _yearMonths.values.fold<int>(
+      0,
+      (m, v) => v.count > m ? v.count : m,
+    );
+    final totalLessons = _yearMonths.values.fold<int>(
+      0,
+      (s, v) => s + v.count,
+    );
+    final activeMonths = _yearMonths.values.where((v) => v.count > 0).length;
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        final wide = c.maxWidth >= 760 && c.maxHeight >= 360;
+        final cols = c.maxWidth >= 1040
+            ? 4
+            : c.maxWidth >= 520
+            ? 3
+            : 2;
+        final grid = GridView.count(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+          crossAxisCount: cols,
+          childAspectRatio: 1.18,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          children: [
+            for (int m = 1; m <= 12; m++)
+              _buildYearCard(
+                m,
+                maxCount,
+                selected: _displayedMonth.year == _displayedYear &&
+                    _displayedMonth.month == m,
+                isCurrent: now.year == _displayedYear && now.month == m,
+              ),
+          ],
+        );
+        if (!wide) return grid;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: grid),
+            SizedBox(
+              width: 260,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 4, 12, 16),
+                child: _buildYearSummaryPanel(totalLessons, activeMonths),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildYearCard(
+    int month,
+    int maxCount, {
+    required bool selected,
+    required bool isCurrent,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final data = _yearMonths[month] ?? (count: 0, activeDays: 0);
+    final intensity = maxCount == 0 ? 0.0 : data.count / maxCount;
+    final loadColor = intensity > 0.85
+        ? AppColor.warning
+        : intensity > 0
+        ? AppColor.success
+        : cs.onSurfaceVariant;
+
+    // 24-cell density heatmap (≈ working days), brightness ~ month load.
+    final heat = List<Widget>.generate(24, (i) {
+      final on = data.activeDays > 0 && i < (data.activeDays * 24 / 31).round();
+      return Expanded(
+        child: Container(
+          margin: const EdgeInsets.all(1),
+          decoration: BoxDecoration(
+            color: on
+                ? loadColor.withAlpha((40 + intensity * 150).round())
+                : cs.onSurfaceVariant.withAlpha(18),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      );
+    });
+
+    return GestureDetector(
+      onTap: () => _onYearMonthTap(month),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cs.surface.withAlpha(selected ? 220 : 120),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: selected
+                ? AppColor.gold
+                : isCurrent
+                ? AppColor.goldLine
+                : cs.onSurfaceVariant.withAlpha(20),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _monthNamesNominative[month],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColor.goldSoft,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border: Border.all(color: AppColor.goldLine),
+                  ),
+                  child: Text(
+                    '${data.count}',
+                    style: const TextStyle(
+                      color: AppColor.gold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: Column(
+                children: [
+                  for (int r = 0; r < 3; r++)
+                    Expanded(
+                      child: Row(children: heat.sublist(r * 8, r * 8 + 8)),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    '${data.activeDays} ${_pluralRu(data.activeDays, 'активный день', 'активных дня', 'активных дней')}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: cs.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                if (intensity > 0.85)
+                  const Text(
+                    'пик',
+                    style: TextStyle(
+                      color: AppColor.warning,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                else if (selected)
+                  const Text(
+                    'выбран',
+                    style: TextStyle(
+                      color: AppColor.gold,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildYearSummaryPanel(int totalLessons, int activeMonths) {
+    final cs = Theme.of(context).colorScheme;
+    Widget stat(String value, String label) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cs.surface.withAlpha(120),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: cs.onSurfaceVariant.withAlpha(20)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: const TextStyle(
+                color: AppColor.text,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surface.withAlpha(90),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: cs.onSurfaceVariant.withAlpha(24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Сводка $_displayedYear',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          stat('$totalLessons', 'занятий за год'),
+          stat('$activeMonths', 'месяцев с занятиями'),
+          if (_yearLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation(AppColor.gold),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _pluralRu(int n, String one, String few, String many) {
+    final mod10 = n % 10;
+    final mod100 = n % 100;
+    if (mod10 == 1 && mod100 != 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+    return many;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1632,24 +2246,20 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     return _buildDayViewByRoom();
   }
 
-  // ── Day view by Rooms ─────────────────────────────────────────────────────
+  // ── Day view by Rooms (2-axis canvas — KVA-195) ────────────────────────────
   Widget _buildDayViewByRoom() {
     final rooms = _filteredRooms;
     final dayLessons = _lessonsForDate(_selectedDate);
 
-    // Lessons whose room is NOT among the rendered room columns (no room_id, or
-    // a room missing from the loaded list / a different branch). Without a home
-    // column these would be silently dropped — the manager would see an empty
-    // grid even though занятия exist. We surface them in a «Без аудитории»
-    // column so every lesson for the day is visible (KVA-166).
+    // Lessons whose room is NOT among the rendered room columns (no room_id, a
+    // room missing from the loaded list, or a different branch) get a synthetic
+    // «Без аудитории» column so every lesson stays visible (KVA-166).
     final renderedRoomIds = rooms.map((r) => r['id'].toString()).toSet();
     final unassignedLessons = dayLessons.where((l) {
       final rid = l['room_id']?.toString();
       return rid == null || rid.isEmpty || !renderedRoomIds.contains(rid);
     }).toList();
 
-    // No rooms at all for the branch: still show any day lessons (e.g. trials
-    // with no room) instead of a dead-end message that hides real занятия.
     if (rooms.isEmpty && unassignedLessons.isEmpty) {
       return Center(
         child: Text(
@@ -1661,440 +2271,141 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       );
     }
 
-    const startHour = 6;
-    const endHour = 23;
-    const hourHeight = 60.0;
-    const headerHeight = 50.0;
-
-    _scheduleDayGridAutoScroll(dayLessons, startHour, hourHeight);
-    // After the day's lessons are present, scroll to the focused lesson (if any)
-    // — this runs after the auto-scroll so the highlight wins when both apply.
-    _scheduleHighlightScroll(dayLessons, startHour, hourHeight);
-
-    // Like the v7 prototype, the calendar grid is ALWAYS rendered: rooms stay as
-    // columns and the time rows render empty when the day has no lessons. We do
-    // NOT swap the grid for a text hint — an empty day is an empty grid you can
-    // still tap to book, not a dead-end message.
-
-    final unassignedColor = Theme.of(context).colorScheme.onSurfaceVariant;
     final cs = Theme.of(context).colorScheme;
 
-    return Column(
-      children: [
-        // ── Room headers (PINNED / sticky — P2-1) ──────────────────────────
-        // This row lives OUTSIDE the scrollable grid body below, so the
-        // room/availability columns stay fixed while the time grid scrolls
-        // under them. The opaque surface + hairline divider make the pinned
-        // header read as a sticky bar once rows scroll beneath it. Column
-        // widths (52px gutter + Expanded rooms) mirror the body exactly so
-        // headers stay aligned with their columns.
-        Material(
-          color: cs.surface,
-          child: SizedBox(
-            height: headerHeight,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: cs.onSurfaceVariant.withAlpha(24),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  SizedBox(width: 52), // time column (matches sticky gutter)
-              ...rooms.map((r) {
-                final rid = r['id'].toString();
-                final color =
-                    _roomColorMap[rid] ??
-                    Theme.of(context).colorScheme.onSurfaceVariant;
-                final availability = _availabilityForRoom(rid);
-                // Only a real scheduling conflict (overlap / branch mismatch)
-                // should red-flag a room. A room that is merely occupied by a
-                // lesson (is_available == false) is normal — flagging that as
-                // danger painted every working room red.
-                final roomConflicts = _conflictTypes(
-                  availability?['conflict_types'],
-                );
-                return Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 6,
-                      horizontal: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withAlpha(30),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: roomConflicts.isEmpty
-                            ? color.withAlpha(50)
-                            : AppColor.danger,
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (roomConflicts.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Tooltip(
-                                  message: roomConflicts
-                                      .map(_conflictLabel)
-                                      .join(', '),
-                                  child: const Icon(
-                                    Icons.warning_amber_rounded,
-                                    size: 13,
-                                    color: AppColor.danger,
-                                  ),
-                                ),
-                              ),
-                            Flexible(
-                              child: Text(
-                                r['name']?.toString() ?? '',
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-              if (unassignedLessons.isNotEmpty)
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 6,
-                      horizontal: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: unassignedColor.withAlpha(20),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: unassignedColor.withAlpha(50)),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'Без аудитории',
-                        style: TextStyle(
-                          color: unassignedColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ),
-                ],
-              ),
-            ),
-          ),
+    // Columns: one per room (+ the unassigned bucket when needed). A room turns
+    // red only on a real backend-derived conflict, never just because it's busy.
+    final columns = <ScheduleColumn>[
+      for (final r in rooms)
+        ScheduleColumn(
+          id: r['id'].toString(),
+          name: r['name']?.toString() ?? 'Аудитория',
+          color: _roomColorMap[r['id'].toString()] ?? cs.onSurfaceVariant,
+          hasConflict: _conflictTypes(
+            _availabilityForRoom(r['id'].toString())?['conflict_types'],
+          ).isNotEmpty,
         ),
-
-        // ── Time grid + lesson cards (SCROLLABLE body) ─────────────────────
-        // The sticky gutter (left) and room columns share this single vertical
-        // scroll controller, so hour labels stay glued to their rows as the
-        // body scrolls under the pinned header above (P2-1).
-        Expanded(
-          child: SingleChildScrollView(
-            controller: _dayGridController,
-            child: SizedBox(
-              key: _dayGridBodyKey,
-              height: (endHour - startHour) * hourHeight,
-              child: Row(
-                children: [
-                  // Time axis (sticky gutter — scrolls with rows, fixed width)
-                  SizedBox(
-                    width: 52,
-                    child: Stack(
-                      children: List.generate(endHour - startHour, (i) {
-                        return Positioned(
-                          top: i * hourHeight,
-                          left: 0,
-                          right: 0,
-                          child: SizedBox(
-                            height: hourHeight,
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 0, right: 8),
-                              child: Text(
-                                '${(startHour + i).toString().padLeft(2, '0')}:00',
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant.withAlpha(150),
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                  // Room columns (each a DragTarget so a lesson block can be
-                  // dropped onto a new room/time slot — P2-2).
-                  ...rooms.map((r) {
-                    final rid = r['id'].toString();
-                    final color =
-                        _roomColorMap[rid] ??
-                        Theme.of(context).colorScheme.onSurfaceVariant;
-                    final roomLessons = dayLessons
-                        .where((l) => l['room_id']?.toString() == rid)
-                        .toList();
-
-                    return Expanded(
-                      child: DragTarget<Map<String, dynamic>>(
-                        onWillAcceptWithDetails: (_) => !_movingLesson,
-                        onAcceptWithDetails: (details) => _onLessonDropped(
-                          lesson: details.data,
-                          globalDropOffset: details.offset,
-                          targetRoomId: rid,
-                          startHour: startHour,
-                          endHour: endHour,
-                          hourHeight: hourHeight,
-                        ),
-                        builder: (context, candidate, rejected) {
-                          final isHovering = candidate.isNotEmpty;
-                          return GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTapUp: (d) => _onSlotTap(
-                              rid,
-                              d.localPosition.dy,
-                              startHour,
-                              endHour,
-                              hourHeight,
-                            ),
-                            onLongPressStart: (d) =>
-                                _onSlotSelectStart(rid, d.localPosition.dy),
-                            onLongPressMoveUpdate: (d) =>
-                                _onSlotSelectUpdate(d.localPosition.dy),
-                            onLongPressEnd: (_) =>
-                                _onSlotSelectEnd(startHour, endHour, hourHeight),
-                            child: Stack(
-                            children: [
-                              // Booking selection overlay (tap / long-press-drag).
-                              if (_selRoomId == rid &&
-                                  _selStartY != null &&
-                                  _selEndY != null)
-                                Positioned(
-                                  left: 2,
-                                  right: 2,
-                                  top: _selStartY! < _selEndY!
-                                      ? _selStartY!
-                                      : _selEndY!,
-                                  height: (_selStartY! - _selEndY!)
-                                      .abs()
-                                      .clamp(10.0, 2000.0),
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: AppColor.goldSoft,
-                                      border:
-                                          Border.all(color: AppColor.goldLine),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                  ),
-                                ),
-                              // Drop highlight while a block hovers this column.
-                              if (isHovering)
-                                Positioned.fill(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: AppColor.goldSoft,
-                                      border: Border.all(
-                                        color: AppColor.goldLine,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              // Grid lines
-                              ...List.generate(endHour - startHour, (i) {
-                                return Positioned(
-                                  top: i * hourHeight,
-                                  left: 0,
-                                  right: 0,
-                                  child: Container(
-                                    height: hourHeight,
-                                    decoration: BoxDecoration(
-                                      border: Border(
-                                        top: BorderSide(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant
-                                              .withAlpha(20),
-                                          width: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }),
-                              // Affordance: an empty room column invites booking
-                              // (the tap/long-press gesture is otherwise invisible).
-                              if (roomLessons.isEmpty)
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    child: Center(
-                                      child: Text(
-                                        'Нажмите,\nчтобы назначить',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          height: 1.3,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant
-                                              .withAlpha(90),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              // Lesson cards
-                              ...roomLessons.map(
-                                (l) => _buildDayLessonCard(
-                                  l,
-                                  startHour,
-                                  hourHeight,
-                                  color,
-                                ),
-                              ),
-                            ],
-                          ),
-                          );
-                        },
-                      ),
-                    );
-                  }),
-                  // «Без аудитории» column — lessons with no/unknown room so they
-                  // are never silently dropped from the day grid (KVA-166).
-                  // Also a DragTarget: dropping here moves the lesson off any
-                  // room (roomId cleared) while still re-timing it (P2-2).
-                  if (unassignedLessons.isNotEmpty)
-                    Expanded(
-                      child: DragTarget<Map<String, dynamic>>(
-                        onWillAcceptWithDetails: (_) => !_movingLesson,
-                        onAcceptWithDetails: (details) => _onLessonDropped(
-                          lesson: details.data,
-                          globalDropOffset: details.offset,
-                          targetRoomId: '',
-                          startHour: startHour,
-                          endHour: endHour,
-                          hourHeight: hourHeight,
-                        ),
-                        builder: (context, candidate, rejected) {
-                          final isHovering = candidate.isNotEmpty;
-                          return Stack(
-                            children: [
-                              if (isHovering)
-                                Positioned.fill(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: AppColor.goldSoft,
-                                      border: Border.all(
-                                        color: AppColor.goldLine,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ...List.generate(endHour - startHour, (i) {
-                                return Positioned(
-                                  top: i * hourHeight,
-                                  left: 0,
-                                  right: 0,
-                                  child: Container(
-                                    height: hourHeight,
-                                    decoration: BoxDecoration(
-                                      border: Border(
-                                        top: BorderSide(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant
-                                              .withAlpha(20),
-                                          width: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }),
-                              ...unassignedLessons.map(
-                                (l) => _buildDayLessonCard(
-                                  l,
-                                  startHour,
-                                  hourHeight,
-                                  unassignedColor,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+      if (unassignedLessons.isNotEmpty)
+        ScheduleColumn(
+          id: kUnassignedColumnId,
+          name: 'Без аудитории',
+          color: cs.onSurfaceVariant,
+          isUnassigned: true,
         ),
-      ],
+    ];
+
+    // Entries: branch-local positioned lesson blocks for the canvas.
+    final entries = <ScheduleEntry>[];
+    for (final l in dayLessons) {
+      final start = _parseLessonTime(l);
+      if (start == null) continue;
+      final rid = l['room_id']?.toString();
+      final columnId =
+          (rid == null || rid.isEmpty || !renderedRoomIds.contains(rid))
+          ? kUnassignedColumnId
+          : rid;
+      final status = l['status']?.toString();
+      final teacher = _teacherNames[l['teacher_id']?.toString()] ?? '';
+      final group = l['group_name']?.toString();
+      final student = _studentNames[l['student_id']?.toString()] ?? '';
+      final title = (group != null && group.isNotEmpty)
+          ? group
+          : (student.isNotEmpty ? student : 'Занятие');
+      entries.add(
+        ScheduleEntry(
+          lesson: l,
+          id: l['id']?.toString() ?? '',
+          columnId: columnId,
+          startLocal: start,
+          durationMinutes: _durationMinutes(l),
+          title: title,
+          subtitle: teacher,
+          isTrial: l['is_trial'] == true,
+          conflicts: _conflictTypes(l['conflict_types']),
+          movable: l['id'] != null &&
+              status != 'cancelled' &&
+              status != 'completed' &&
+              status != 'done',
+          highlighted: _highlightLessonId != null &&
+              l['id']?.toString() == _highlightLessonId,
+        ),
+      );
+    }
+
+    return ScheduleDayCanvas(
+      key: ValueKey(
+        'day-${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}'
+        '-${_selectedBranchId ?? ''}-${columns.length}',
+      ),
+      date: DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      ),
+      columns: columns,
+      entries: entries,
+      onCreateSlot: _openQuickCreate,
+      onMove: _moveLessonOptimistic,
+      onResize: _resizeLesson,
+      onOpenLesson: _showLessonDetails,
     );
   }
 
-  // Auto-scrolls the day grid to the earliest lesson once per selected day, so
-  // afternoon/evening lessons aren't hidden below the 06:00 fold (the grid
-  // starts at 06:00 but most lessons are later — the visible top looked empty).
-  void _scheduleDayGridAutoScroll(
-    List<Map<String, dynamic>> dayLessons,
-    int startHour,
-    double hourHeight,
-  ) {
-    if (dayLessons.isEmpty) return;
-    if (_dayGridScrolledFor == _selectedDate) return;
-    // Don't yank the grid while a block is mid-drag (P2-2).
-    if (_isDraggingLesson) return;
-
-    double? earliestTop;
-    for (final l in dayLessons) {
-      final s = _parseLessonTime(l);
-      if (s == null) continue;
-      final top = ((s.hour - startHour) + s.minute / 60.0) * hourHeight;
-      earliestTop = earliestTop == null
-          ? top
-          : (top < earliestTop ? top : earliestTop);
+  // Interaction legend above the day grid: all the rules live here, not on every
+  // cell (owner rule «инструкции в легенду, не поверх ячеек»).
+  Widget _buildDayLegend() {
+    Widget chip(Color c, String label) {
+      return Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: c.withAlpha(22),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: c.withAlpha(70)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
     }
-    if (earliestTop == null) return;
-    final target = earliestTop - 16; // keep a little context above the lesson
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_dayGridController.hasClients) return;
-      _dayGridScrolledFor = _selectedDate;
-      final max = _dayGridController.position.maxScrollExtent;
-      _dayGridController.jumpTo(target.clamp(0.0, max));
-    });
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            chip(AppColor.transferCyan, 'Тянуть вниз — выбрать часы'),
+            chip(AppColor.actionBlue, 'Перетащить — время / комната'),
+            chip(AppColor.gold, 'Край (наведи) — растянуть'),
+            chip(AppColor.danger, 'Конфликт'),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Focus-on-lesson (Phase 5) ───────────────────────────────────────────────
-  // Applies a [ScheduleFocusState] from the client card: switch the calendar to
-  // the lesson's day, flip to day view, remember the highlight id and reset the
-  // one-shot guards so the highlight scroll/pulse re-fires. We then backfill the
-  // day's lessons (the month matrix is capped) and clear the navigation request
-  // so re-entering the same lesson works. The lesson is matched by id later in
-  // the day's fetched data — we never recompute UTC offsets here.
+  // Applies a [ScheduleFocusState] from the client card: switch to the lesson's
+  // day-view, remember the highlight id (matched by `id` in the day's data) and
+  // backfill the day. The canvas renders the gold pulse; we arm a timer to clear
+  // it. We then consume the navigation request so re-tapping re-fires focus.
   void _applyScheduleFocus(ScheduleFocusState focus) {
     final date = focus.focusDate;
     final day = DateTime(date.year, date.month, date.day);
@@ -2104,65 +2415,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       _displayedMonth = DateTime(day.year, day.month);
       _currentView = _ScheduleView.day;
       _highlightLessonId = focus.highlightLessonId;
-      // Reset both one-shot guards so the grid re-scrolls for this focus.
-      _dayGridScrolledFor = null;
-      _highlightScrolledFor = null;
     });
     _fetchAvailabilityForSelectedDay();
     _fetchDayLessons(day);
-    // Consume the request so a later re-tap of the same lesson re-triggers focus.
+    _armHighlightClear();
     ref.read(scheduleNavigationProvider.notifier).clear();
   }
 
-  // Scrolls the by-room day grid to the highlighted lesson (matched by id in the
-  // current day's lessons) using the same top-offset math as the auto-scroll.
-  // Best-effort: guards `hasClients`, clamps to maxScrollExtent, and no-ops when
-  // the lesson isn't found (the day is still focused, just without a scroll).
-  void _scheduleHighlightScroll(
-    List<Map<String, dynamic>> dayLessons,
-    int startHour,
-    double hourHeight,
-  ) {
-    final id = _highlightLessonId;
-    if (id == null) return;
-    if (_highlightScrolledFor == id) return;
-    if (_isDraggingLesson) return;
-
-    Map<String, dynamic>? target;
-    for (final l in dayLessons) {
-      if (l['id']?.toString() == id) {
-        target = l;
-        break;
-      }
-    }
-    // Lesson not in this day's data: still focused on the day, just no scroll.
-    if (target == null) {
-      _highlightScrolledFor = id;
-      _armHighlightClear();
-      return;
-    }
-    final start = _parseLessonTime(target);
-    if (start == null) {
-      _highlightScrolledFor = id;
-      _armHighlightClear();
-      return;
-    }
-    final top = ((start.hour - startHour) + start.minute / 60.0) * hourHeight;
-    final scrollTarget = top - 16; // keep a little context above the lesson
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _highlightScrolledFor = id;
-      if (_dayGridController.hasClients) {
-        final max = _dayGridController.position.maxScrollExtent;
-        _dayGridController.jumpTo(scrollTarget.clamp(0.0, max));
-      }
-      _armHighlightClear();
-    });
-  }
-
-  // Clears the gold highlight a few seconds after it lands (and the consumed
-  // navigation state is already cleared in _applyScheduleFocus).
   void _armHighlightClear() {
     _highlightClearTimer?.cancel();
     _highlightClearTimer = Timer(const Duration(seconds: 4), () {
@@ -2177,366 +2436,98 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     if (_highlightLessonId == null) return;
     _highlightClearTimer?.cancel();
     _highlightLessonId = null;
-    _highlightScrolledFor = null;
   }
 
-  Widget _buildDayLessonCard(
-    Map<String, dynamic> lesson,
-    int startHour,
-    double hourHeight,
-    Color roomColor,
-  ) {
-    final start = _parseLessonTime(lesson);
-    if (start == null) return const SizedBox.shrink();
-
-    final duration = _durationMinutes(lesson);
-    final end = start.add(Duration(minutes: duration));
-
-    final topOffset =
-        ((start.hour - startHour) + start.minute / 60.0) * hourHeight;
-    final height = (duration / 60.0) * hourHeight;
-
-    final teacherName = _teacherNames[lesson['teacher_id']?.toString()] ?? '';
-    final studentName = _studentNames[lesson['student_id']?.toString()] ?? '';
-    final conflicts = _conflictTypes(lesson['conflict_types']);
-
-    final timeStr =
-        '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – '
-        '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
-
-    final clampedHeight = height.clamp(24.0, double.infinity);
-
-    // Transient focus highlight: the lesson the client card asked us to open.
-    final highlighted =
-        _highlightLessonId != null &&
-        lesson['id']?.toString() == _highlightLessonId;
-
-    // The visual card body, reused for the in-grid block, the drag feedback,
-    // and the dimmed placeholder left behind while dragging (P2-2). When
-    // highlighted it gains a gold all-round border + soft gold wash so the
-    // focused lesson reads at a glance.
-    final cardBody = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-      decoration: BoxDecoration(
-        color: highlighted
-            ? AppColor.goldSoft
-            : conflicts.isEmpty
-            ? roomColor.withAlpha(40)
-            : AppColor.danger.withAlpha(32),
-        borderRadius: BorderRadius.circular(6),
-        border: highlighted
-            ? Border.all(color: AppColor.gold, width: 2)
-            : Border(
-                left: BorderSide(
-                  color: conflicts.isEmpty ? roomColor : AppColor.danger,
-                  width: 3,
-                ),
-                right: conflicts.isEmpty
-                    ? BorderSide.none
-                    : const BorderSide(color: AppColor.danger, width: 1),
-              ),
-        boxShadow: highlighted
-            ? [
-                BoxShadow(
-                  color: AppColor.gold.withAlpha(90),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  timeStr,
-                  style: TextStyle(
-                    color: conflicts.isEmpty ? roomColor : AppColor.danger,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                ),
-              ),
-              if (conflicts.isNotEmpty)
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  color: AppColor.danger,
-                  size: 12,
-                ),
-            ],
-          ),
-          if (height > 30)
-            Text(
-              studentName,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          if (height > 44)
-            Text(
-              teacherName,
-              style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurfaceVariant.withAlpha(180),
-                fontSize: 9,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-        ],
-      ),
-    );
-
-    final tappable = GestureDetector(
-      onTap: () => _showLessonDetails(lesson),
-      child: cardBody,
-    );
-
-    // Only re-schedulable lessons are draggable: a cancelled/completed block
-    // must not be silently re-timed. Tap-to-open detail is unchanged for all.
-    final status = lesson['status']?.toString();
-    final movable =
-        lesson['id'] != null &&
-        status != 'cancelled' &&
-        status != 'completed' &&
-        status != 'done';
-
-    if (!movable) {
-      return Positioned(
-        top: topOffset,
-        left: 2,
-        right: 2,
-        height: clampedHeight,
-        child: tappable,
-      );
-    }
-
-    return Positioned(
-      top: topOffset,
-      left: 2,
-      right: 2,
-      height: clampedHeight,
-      child: LongPressDraggable<Map<String, dynamic>>(
-        data: lesson,
-        onDragStarted: () {
-          if (!_isDraggingLesson) {
-            setState(() => _isDraggingLesson = true);
-          }
-        },
-        onDragEnd: (_) {
-          if (mounted && _isDraggingLesson) {
-            setState(() => _isDraggingLesson = false);
-          }
-        },
-        // The dragged proxy: a slightly opaque copy sized to the source block.
-        feedback: Material(
-          color: Colors.transparent,
-          child: Opacity(
-            opacity: 0.9,
-            child: SizedBox(
-              width: 120,
-              height: clampedHeight,
-              child: cardBody,
-            ),
-          ),
-        ),
-        childWhenDragging: Opacity(opacity: 0.3, child: tappable),
-        child: tappable,
-      ),
-    );
-  }
-
-  // ── Drag-to-move drop handler (P2-2 / KVA-195) ──────────────────────────────
-  // Converts the drop's global offset into a grid-local Y → target hour/minute
-  // (snapped to 5 min, clamped to the visible [startHour, endHour) window), then
-  // routes the move through the SAME update path the widget already uses
-  // (`magicCrmServiceProvider.updateLesson` with a new `scheduledAt` + `roomId`).
-  // It does NOT invent any endpoint: after the update we re-run `_fetchAll`,
-  // whose `getScheduleMatrix` call recomputes conflicts server-side (the existing
-  // conflict check), and any returned `conflict_types` are surfaced to the user.
-  // ── Tap / drag-to-book on empty grid cells (KVA-195) ───────────────────────
-  // Convert a vertical offset inside a day-grid room column to a 15-min-snapped
-  // DateTime on the selected day.
-  DateTime _slotDateTime(
-    double localY,
-    int startHour,
-    int endHour,
-    double hourHeight,
-  ) {
-    final raw = startHour * 60 + (localY / hourHeight) * 60.0;
-    var minutes = (raw / 15).round() * 15;
-    minutes = minutes.clamp(startHour * 60, endHour * 60 - 15);
-    return DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      minutes ~/ 60,
-      minutes % 60,
-    );
-  }
-
-  void _onSlotTap(
-    String roomId,
-    double localY,
-    int startHour,
-    int endHour,
-    double hourHeight,
-  ) {
-    _openCreateForSlot(
-      roomId,
-      _slotDateTime(localY, startHour, endHour, hourHeight),
-      60,
-    );
-  }
-
-  void _onSlotSelectStart(String roomId, double localY) {
-    setState(() {
-      _selRoomId = roomId;
-      _selStartY = localY;
-      _selEndY = localY;
-    });
-  }
-
-  void _onSlotSelectUpdate(double localY) {
-    if (_selRoomId == null) return;
-    setState(() => _selEndY = localY);
-  }
-
-  void _onSlotSelectEnd(int startHour, int endHour, double hourHeight) {
-    final roomId = _selRoomId;
-    final a = _selStartY;
-    final b = _selEndY;
-    setState(() {
-      _selRoomId = null;
-      _selStartY = null;
-      _selEndY = null;
-    });
-    if (roomId == null || a == null || b == null) return;
-    final start = _slotDateTime(a < b ? a : b, startHour, endHour, hourHeight);
-    final end = _slotDateTime(a < b ? b : a, startHour, endHour, hourHeight);
-    var duration = end.difference(start).inMinutes;
-    if (duration < 30) duration = 60; // a near-tap behaves like one slot
-    _openCreateForSlot(roomId, start, duration);
-  }
-
-  Future<void> _openCreateForSlot(
-    String roomId,
-    DateTime start,
+  // ── Create from the grid (tap = 1h, vertical-select = span) ────────────────
+  // Consolidated to the ONE create window — the full [CreateLessonDialog],
+  // pre-filled with the picked room/time/duration. (Previously a separate compact
+  // "quick" sheet existed too; having three near-identical lesson windows was
+  // confusing, so the grid now opens the same dialog the «+» button uses.)
+  Future<void> _openQuickCreate(
+    String columnId,
+    DateTime startLocal,
     int durationMinutes,
   ) async {
+    final roomId =
+        (columnId == kUnassignedColumnId || columnId.isEmpty) ? null : columnId;
     final created = await CreateLessonDialog.show(
       context,
-      initialDate: start,
-      initialRoomId: roomId.isEmpty ? null : roomId,
+      initialDate: startLocal,
+      initialRoomId: roomId,
       initialBranchId: _selectedBranchId,
       initialDurationMinutes: durationMinutes,
     );
     if (created == true && mounted) {
-      if (_currentView == _ScheduleView.day) {
-        _fetchDayLessons(_selectedDate);
-      } else {
-        _fetchAll();
-      }
+      _fetchDayLessons(_selectedDate);
     }
   }
 
-  void _onLessonDropped({
-    required Map<String, dynamic> lesson,
-    required Offset globalDropOffset,
-    required String targetRoomId,
-    required int startHour,
-    required int endHour,
-    required double hourHeight,
-  }) {
-    final bodyContext = _dayGridBodyKey.currentContext;
-    final box = bodyContext?.findRenderObject() as RenderBox?;
-    if (box == null) return;
-
-    // Local Y inside the (scrolled) grid body → minutes from startHour.
-    final localY = box.globalToLocal(globalDropOffset).dy;
-    final rawMinutes = (localY / hourHeight) * 60.0;
-    // Snap to 5-minute steps for a tidy slot.
-    var snapped = (rawMinutes / 5).round() * 5;
-
-    final duration = _durationMinutes(lesson);
-    final maxStartMinutes = (endHour - startHour) * 60 - duration;
-    if (snapped < 0) snapped = 0;
-    if (maxStartMinutes >= 0 && snapped > maxStartMinutes) {
-      snapped = maxStartMinutes;
-    }
-
-    final newHour = startHour + (snapped ~/ 60);
-    final newMinute = snapped % 60;
-
-    final currentStart = _parseLessonTime(lesson);
-    final currentRoomId = lesson['room_id']?.toString() ?? '';
-    if (currentStart != null &&
-        currentStart.hour == newHour &&
-        currentStart.minute == newMinute &&
-        currentRoomId == targetRoomId) {
-      return; // No-op drop (same slot) — skip the round-trip.
-    }
-
-    // Build the new instant directly in UTC space — the exact inverse of
-    // `_parseLessonTime` (which does `dbTimeUtc.add(branchOffset)`), so we
-    // subtract the branch offset from the chosen branch-local wall-clock. Using
-    // `DateTime.utc` (not local `DateTime`) avoids double-applying the device's
-    // own timezone.
-    final branchLocalUtc = DateTime.utc(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      newHour,
-      newMinute,
-    );
-    final utcStart =
-        branchLocalUtc.subtract(Duration(minutes: _offsetForLesson(lesson)));
-
-    _moveLesson(
-      lesson: lesson,
-      newScheduledAtUtcIso: utcStart.toIso8601String(),
-      newRoomId: targetRoomId,
-    );
-  }
-
-  Future<void> _moveLesson({
-    required Map<String, dynamic> lesson,
-    required String newScheduledAtUtcIso,
-    required String newRoomId,
-  }) async {
+  // ── Optimistic move + rollback + undo (KVA-195) ────────────────────────────
+  // Vertical drop → new time; horizontal drop → new room. The block jumps to the
+  // new slot immediately (the rest of the grid stays put), then the move commits
+  // via the SAME `updateLesson` PATCH the app already used. On error we roll the
+  // block back; on success a short «Отменить» snackbar reverts it.
+  Future<void> _moveLessonOptimistic(
+    Map<String, dynamic> lesson,
+    DateTime newStartLocal,
+    String newColumnId,
+  ) async {
     final lessonId = lesson['id']?.toString();
     if (lessonId == null || _movingLesson) return;
-    setState(() => _movingLesson = true);
 
-    final currentRoomId = lesson['room_id']?.toString() ?? '';
-    // Only send roomId when it actually changed AND we're targeting a real room
-    // (empty target = «Без аудитории»; we leave room unchanged there rather than
-    // guessing a clear-room payload the existing API may not model).
-    final roomChanged = newRoomId.isNotEmpty && newRoomId != currentRoomId;
+    final targetRoomId =
+        (newColumnId == kUnassignedColumnId || newColumnId.isEmpty)
+        ? null
+        : newColumnId;
+    final currentRoomId = lesson['room_id']?.toString();
+    final currentStart = _parseLessonTime(lesson);
+
+    // No-op drop (same room + same minute) → skip the round-trip.
+    if (currentStart != null &&
+        currentStart.hour == newStartLocal.hour &&
+        currentStart.minute == newStartLocal.minute &&
+        (targetRoomId ?? '') == (currentRoomId ?? '')) {
+      return;
+    }
+
+    final offset = _offsetForLesson(lesson);
+    final utc = DateTime.utc(
+      newStartLocal.year,
+      newStartLocal.month,
+      newStartLocal.day,
+      newStartLocal.hour,
+      newStartLocal.minute,
+    ).subtract(Duration(minutes: offset));
+    final newScheduledAtIso = utc.toIso8601String();
+
+    // Snapshot for rollback / undo BEFORE the in-place patch.
+    final prevScheduledAt = lesson['scheduled_at'];
+    final prevRoomId = lesson['room_id'];
+    final prevConflicts = lesson['conflict_types'];
+    final roomChanged = targetRoomId != null && targetRoomId != currentRoomId;
+
+    setState(() {
+      _movingLesson = true;
+      lesson['scheduled_at'] = newScheduledAtIso;
+      // Drop the stale conflict flag immediately — the slot changed, so the old
+      // verdict no longer applies. The refetch below re-derives it server-side
+      // and re-flags only if the new slot genuinely conflicts.
+      lesson['conflict_types'] = const <String>[];
+      if (roomChanged) {
+        lesson['room_id'] = targetRoomId;
+        lesson['room_name'] = _roomNames[targetRoomId];
+      }
+    });
 
     try {
       await ref.read(magicCrmServiceProvider).updateLesson(
             lessonId,
-            scheduledAt: newScheduledAtUtcIso,
-            roomId: roomChanged ? newRoomId : null,
+            scheduledAt: newScheduledAtIso,
+            roomId: roomChanged ? targetRoomId : null,
           );
-      // Re-fetch so the matrix (existing server-side conflict check) reruns and
-      // the grid reflects the new slot. Reset the per-day auto-scroll guard so
-      // the moved block stays visible.
-      _dayGridScrolledFor = null;
-      if (mounted) await _fetchAll();
       if (!mounted) return;
-
-      // Surface any conflict the matrix flagged on the moved lesson.
+      await _fetchDayLessons(_selectedDate); // server re-derives conflicts
+      if (!mounted) return;
       final moved = _lessons.firstWhere(
         (l) => l['id']?.toString() == lessonId,
         orElse: () => const <String, dynamic>{},
@@ -2545,10 +2536,15 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (conflicts.isNotEmpty) {
         MagicToast.show(
           context,
-          'Занятие перенесено, но есть конфликт',
+          'Перенесено, но есть конфликт',
           detail: conflicts.map(_conflictLabel).join(', '),
           type: MagicToastType.danger,
         );
+      } else if (prevRoomId != null || !roomChanged) {
+        // Undo restores time + room. Clearing a room back to «Без аудитории»
+        // isn't expressible via the PATCH contract, so only offer undo when the
+        // previous room is reversible (a real room, or the room didn't change).
+        _showUndoableMove(lessonId, prevScheduledAt, prevRoomId);
       } else {
         MagicToast.show(
           context,
@@ -2557,13 +2553,132 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         );
       }
     } catch (e) {
+      if (mounted) {
+        setState(() {
+          lesson['scheduled_at'] = prevScheduledAt;
+          lesson['room_id'] = prevRoomId;
+          lesson['room_name'] =
+              prevRoomId == null ? null : _roomNames[prevRoomId.toString()];
+          lesson['conflict_types'] = prevConflicts;
+        });
+        MagicToast.show(
+          context,
+          'Не удалось перенести занятие',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _movingLesson = false);
+    }
+  }
+
+  void _showUndoableMove(
+    String lessonId,
+    dynamic prevScheduledAt,
+    dynamic prevRoomId,
+  ) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Занятие перенесено'),
+        backgroundColor: AppColor.success,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Отменить',
+          textColor: Colors.white,
+          onPressed: () => _undoMove(lessonId, prevScheduledAt, prevRoomId),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _undoMove(
+    String lessonId,
+    dynamic prevScheduledAt,
+    dynamic prevRoomId,
+  ) async {
+    if (prevScheduledAt == null) return;
+    try {
+      await ref.read(magicCrmServiceProvider).updateLesson(
+            lessonId,
+            scheduledAt: prevScheduledAt.toString(),
+            roomId: prevRoomId?.toString(),
+          );
+      if (mounted) await _fetchDayLessons(_selectedDate);
+    } catch (e) {
       if (!mounted) return;
       MagicToast.show(
         context,
-        'Не удалось перенести занятие',
+        'Не удалось отменить перенос',
         detail: '$e',
         type: MagicToastType.danger,
       );
+    }
+  }
+
+  // ── Resize via hover/focus edge handles (KVA-195) ──────────────────────────
+  // Top handle moves the start, bottom handle moves the end. Committed on release
+  // through the existing `updateLesson` PATCH — never opens the editor.
+  Future<void> _resizeLesson(
+    Map<String, dynamic> lesson,
+    DateTime newStartLocal,
+    int newDurationMinutes,
+  ) async {
+    final lessonId = lesson['id']?.toString();
+    if (lessonId == null || _movingLesson) return;
+
+    final offset = _offsetForLesson(lesson);
+    final utc = DateTime.utc(
+      newStartLocal.year,
+      newStartLocal.month,
+      newStartLocal.day,
+      newStartLocal.hour,
+      newStartLocal.minute,
+    ).subtract(Duration(minutes: offset));
+    final newScheduledAtIso = utc.toIso8601String();
+
+    final prevScheduledAt = lesson['scheduled_at'];
+    final prevDuration = lesson['duration_minutes'];
+    final prevConflicts = lesson['conflict_types'];
+
+    setState(() {
+      _movingLesson = true;
+      lesson['scheduled_at'] = newScheduledAtIso;
+      lesson['duration_minutes'] = newDurationMinutes;
+      lesson['conflict_types'] = const <String>[];
+    });
+
+    try {
+      await ref.read(magicCrmServiceProvider).updateLesson(
+            lessonId,
+            scheduledAt: newScheduledAtIso,
+            durationMinutes: newDurationMinutes,
+          );
+      if (!mounted) return;
+      await _fetchDayLessons(_selectedDate);
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Длительность обновлена',
+        type: MagicToastType.success,
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          lesson['scheduled_at'] = prevScheduledAt;
+          lesson['duration_minutes'] = prevDuration;
+          lesson['conflict_types'] = prevConflicts;
+        });
+        MagicToast.show(
+          context,
+          'Не удалось изменить длительность',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
     } finally {
       if (mounted) setState(() => _movingLesson = false);
     }

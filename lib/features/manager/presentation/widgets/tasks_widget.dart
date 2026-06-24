@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -1039,7 +1040,11 @@ class _TaskCard extends StatelessWidget {
     if (entityId == null) return null;
     switch (task['entity_type']) {
       case 'student':
-        return () => context.push('/student/$entityId');
+        return () => showClientCard(
+          context,
+          entityType: 'student',
+          entityId: entityId,
+        );
       case 'lead':
         return () => context.push('/leads/$entityId');
       case 'lesson':

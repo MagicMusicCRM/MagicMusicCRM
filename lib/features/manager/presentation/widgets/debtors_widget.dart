@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -112,7 +112,11 @@ class _DebtorsWidgetState extends ConsumerState<DebtorsWidget> {
       builder: (sheetContext) => _DebtorDetailSheet(
         debtor: debtor,
         detailFuture: detailFuture,
-        onOpenStudent: () => context.push('/admin/student/$studentId'),
+        onOpenStudent: () => showClientCard(
+          context,
+          entityType: 'student',
+          entityId: studentId,
+        ),
         onAddPayment: () async {
           final result = await TopUpDialog.show(
             sheetContext,

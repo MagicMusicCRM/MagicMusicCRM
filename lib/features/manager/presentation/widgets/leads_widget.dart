@@ -46,8 +46,10 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   List<Map<String, dynamic>> _disciplines = [];
   List<Map<String, dynamic>> _levels = [];
   List<Map<String, dynamic>> _categories = [];
-  List<LeadFilterPreset> _presets = [];
   LeadBoardFilters _filters = const LeadBoardFilters();
+  // Desktop: the secondary filters drop down as an inline panel below the
+  // «Фильтры» button. On phones they still open in the side drawer.
+  bool _filtersOpen = false;
   Timer? _searchDebounce;
   // D1 real-time search: the live (un-debounced) query typed into the toolbar
   // field. Used to client-side filter the already-loaded cards instantly while
@@ -61,7 +63,6 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   final Set<String> _pendingLeadIds = {};
   final Map<String, List<Map<String, dynamic>>> _extraLeadsByStatus = {};
   final Set<String> _loadedExtraLeadIds = {};
-  bool _presetsLoading = false;
   bool _hasLoadedMore = false;
   bool _loadingMore = false;
   String? _nextCursor;
@@ -86,7 +87,6 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     super.initState();
     _loadStatuses();
     _loadFilterMetadata();
-    _loadPresets();
   }
 
   @override
@@ -218,20 +218,6 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
         .where((value) => value.isNotEmpty)
         .map((value) => {'id': value, 'name': value})
         .toList();
-  }
-
-  Future<void> _loadPresets() async {
-    setState(() => _presetsLoading = true);
-    try {
-      final presets = await ref.read(leadFilterPresetStoreProvider).load();
-      if (!mounted) return;
-      setState(() {
-        _presets = presets;
-        _presetsLoading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _presetsLoading = false);
-    }
   }
 
   void _setFilters(LeadBoardFilters filters) {
@@ -652,92 +638,6 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     );
   }
 
-  Future<void> _saveCurrentPreset() async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Сохранить пресет'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Название пресета'),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            icon: const Icon(Icons.bookmark_add_rounded),
-            label: const Text('Сохранить'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-
-    final normalized = name?.trim();
-    if (normalized == null || normalized.isEmpty) return;
-
-    final currentFilters = _filters.copyWith(q: _searchCtrl.text.trim());
-    final next =
-        _presets
-            .where(
-              (preset) => preset.name.toLowerCase() != normalized.toLowerCase(),
-            )
-            .toList()
-          ..add(LeadFilterPreset(name: normalized, filters: currentFilters));
-    await ref.read(leadFilterPresetStoreProvider).save(next);
-    if (!mounted) return;
-    setState(() => _presets = next);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Пресет сохранён')));
-  }
-
-  Future<void> _deletePreset(int index) async {
-    if (index < 0 || index >= _presets.length) return;
-    final confirmed = await _confirmDelete(
-      title: 'Удалить пресет?',
-      body: 'Сохраненный набор фильтров будет удален.',
-    );
-    if (!confirmed) return;
-    final next = List<LeadFilterPreset>.from(_presets)..removeAt(index);
-    await ref.read(leadFilterPresetStoreProvider).save(next);
-    if (!mounted) return;
-    setState(() => _presets = next);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Пресет удалён')));
-  }
-
-  void _applyPreset(int index) {
-    if (index < 0 || index >= _presets.length) return;
-    final preset = _presets[index];
-    _searchDebounce?.cancel();
-    _searchCtrl.text = preset.filters.q;
-    _liveQuery = preset.filters.q;
-    _searchInFlight = false;
-    _setFilters(preset.filters);
-  }
-
-  void _handlePresetMenu(String value) {
-    final parts = value.split(':');
-    if (parts.length != 2) return;
-    final index = int.tryParse(parts[1]);
-    if (index == null) return;
-    if (parts[0] == 'apply') {
-      _applyPreset(index);
-    } else if (parts[0] == 'delete') {
-      _deletePreset(index);
-    }
-  }
-
   /// Number of *secondary* filters currently active (everything the drawer
   /// holds). The inline quick-search [LeadBoardFilters.q] is intentionally
   /// excluded — it lives in the persistent toolbar field, not the drawer.
@@ -751,6 +651,117 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     if (_filters.level.isNotEmpty) count++;
     if (_filters.category.isNotEmpty) count++;
     return count;
+  }
+
+  void _onFiltersPressed() {
+    // Desktop → inline dropdown panel below the button; phone → side drawer.
+    if (MediaQuery.sizeOf(context).width >= 720) {
+      setState(() => _filtersOpen = !_filtersOpen);
+    } else {
+      _openFiltersDrawer();
+    }
+  }
+
+  // Desktop inline filters: drops BELOW the «Фильтры» button (not a side drawer),
+  // controls wrap onto multiple rows (never one long horizontal strip), and each
+  // edit applies live through the same [_setFilters] path the drawer used.
+  Widget _buildInlineFilterPanel() {
+    Widget quickChip(String value, String chipLabel) => ChoiceChip(
+      label: Text(chipLabel),
+      selected: _filters.quick == value,
+      onSelected: (_) => _setFilters(_filters.copyWith(quick: value)),
+    );
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColor.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColor.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              quickChip('all', 'Все'),
+              quickChip('active', 'В работе'),
+              quickChip('deferred', 'Отложенные'),
+              quickChip('processed', 'Обработанные'),
+              FilterChip(
+                label: const Text('Есть задачи'),
+                selected: _filters.openTasks,
+                onSelected: (v) => _setFilters(_filters.copyWith(openTasks: v)),
+              ),
+              _filterDropdown(
+                width: 200,
+                label: 'Филиал',
+                value: _filters.branchId,
+                options: _branches,
+                onChanged: (v) =>
+                    _setFilters(_filters.copyWith(branchId: v ?? '')),
+              ),
+              _filterDropdown(
+                width: 200,
+                label: 'Статус',
+                value: _filters.statusId,
+                options: _activeStatuses
+                    .map((s) => {'id': s.$1, 'name': s.$2})
+                    .toList(),
+                onChanged: (v) =>
+                    _setFilters(_filters.copyWith(statusId: v ?? '')),
+              ),
+              _filterDropdown(
+                width: 200,
+                label: 'Направление',
+                value: _filters.discipline,
+                options: _disciplines,
+                valueField: 'name',
+                onChanged: (v) =>
+                    _setFilters(_filters.copyWith(discipline: v ?? '')),
+              ),
+              _filterDropdown(
+                width: 200,
+                label: 'Уровень',
+                value: _filters.level,
+                options: _levels,
+                valueField: 'name',
+                onChanged: (v) =>
+                    _setFilters(_filters.copyWith(level: v ?? '')),
+              ),
+              _filterDropdown(
+                width: 200,
+                label: 'Категория',
+                value: _filters.category,
+                options: _categories,
+                valueField: 'name',
+                onChanged: (v) =>
+                    _setFilters(_filters.copyWith(category: v ?? '')),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: () =>
+                    _setFilters(LeadBoardFilters(q: _searchCtrl.text.trim())),
+                icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                label: const Text('Сбросить'),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => setState(() => _filtersOpen = false),
+                child: const Text('Свернуть'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   /// Opens the secondary filters in a v7 right-side slide-out drawer.
@@ -1020,63 +1031,13 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
                 const SizedBox(width: 8),
                 _FiltersButton(
                   activeCount: _activeFilterCount,
-                  onPressed: _openFiltersDrawer,
+                  onPressed: _onFiltersPressed,
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _saveCurrentPreset,
-                  icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-                  label: const Text('Сохранить пресет'),
-                ),
-                if (_presets.isNotEmpty || _presetsLoading)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: PopupMenuButton<String>(
-                      tooltip: 'Пресеты',
-                      enabled: !_presetsLoading,
-                      icon: _presetsLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.bookmarks_outlined),
-                      onSelected: _handlePresetMenu,
-                      itemBuilder: (_) => <PopupMenuEntry<String>>[
-                        ...List.generate(
-                          _presets.length,
-                          (index) => PopupMenuItem<String>(
-                            value: 'apply:$index',
-                            child: SizedBox(
-                              width: 220,
-                              child: Text(
-                                _presets[index].name,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                        ...List.generate(
-                          _presets.length,
-                          (index) => PopupMenuItem<String>(
-                            value: 'delete:$index',
-                            child: SizedBox(
-                              width: 220,
-                              child: Text(
-                                'Удалить: ${_presets[index].name}',
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: AppColor.danger),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ),
+          if (_filtersOpen && MediaQuery.sizeOf(context).width >= 720)
+            _buildInlineFilterPanel(),
           // D1: a small inline progress hint shown only while the debounced
           // server refetch for the current query is in flight. It never
           // replaces the board, so the previous results stay visible.
@@ -1465,7 +1426,7 @@ class _KanbanColumnState extends State<_KanbanColumn> {
             border: Border.all(
               color: hovering
                   ? widget.status.$3
-                  : Theme.of(context).colorScheme.outlineVariant,
+                  : widget.status.$3.withAlpha(45),
               width: hovering ? 1.5 : 1,
             ),
           ),
@@ -1502,7 +1463,7 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                         color: Theme.of(context).colorScheme.surface,
                         borderRadius: BorderRadius.circular(AppRadius.chip),
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant,
+                          color: widget.status.$3.withAlpha(70),
                           width: 1,
                         ),
                       ),
@@ -1714,12 +1675,11 @@ class _LeadCard extends ConsumerWidget {
     return LongPressDraggable<String>(
       data: id,
       maxSimultaneousDrags: isPending ? 0 : null,
-      // Platform-standard long-press (~500ms). A shorter delay (was 180ms) let an
-      // ordinary desktop mouse click that lingers past the threshold start a drag
-      // with no movement, so clicking a card silently moved the lead to another
-      // column. The full long-press cleanly separates a click (tap → open) from a
-      // deliberate drag, on both mouse and touch, without stealing column scroll.
-      delay: const Duration(milliseconds: 500),
+      // Snappier than the platform 500ms long-press, but still long enough that a
+      // normal click (tap → open) doesn't linger past the threshold and silently
+      // move the lead (a 180ms delay mis-fired that way). 250ms reads as instant
+      // while keeping click vs. deliberate-drag cleanly separated on mouse+touch.
+      delay: const Duration(milliseconds: 250),
       hapticFeedbackOnStart: true,
       onDragUpdate: (details) => onDragUpdate(details.globalPosition),
       onDragEnd: (_) => onDragEnd(),

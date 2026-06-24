@@ -30,6 +30,10 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   final _boardScrollController = ScrollController();
   List<Map<String, dynamic>> _branches = [];
   String? _selectedBranchId;
+  // Live client-side search across the loaded student cards (B6: parity with the
+  // Лиды board search). Lowercased; empty == no filter.
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
   bool _branchesLoaded = false;
   String? _branchLoadError;
 
@@ -61,6 +65,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   void dispose() {
     _autoScrollTimer?.cancel();
     _boardScrollController.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -340,7 +345,32 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
                 },
               ),
             ),
-          const Spacer(),
+          const SizedBox(width: 12),
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 280),
+              child: TextField(
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                  hintText: 'Имя или телефон',
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() => _query = '');
+                          },
+                        ),
+                ),
+                onChanged: (v) =>
+                    setState(() => _query = v.trim().toLowerCase()),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           IconButton(
             tooltip: 'Обновить',
             icon: const Icon(Icons.refresh_rounded),
@@ -349,6 +379,15 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
         ],
       ),
     );
+  }
+
+  bool _matchesQuery(Map<String, dynamic> s) {
+    if (_query.isEmpty) return true;
+    final hay = [s['name'], s['first_name'], s['last_name'], s['phone']]
+        .whereType<Object>()
+        .map((e) => e.toString().toLowerCase())
+        .join(' ');
+    return hay.contains(_query);
   }
 
   @override
@@ -526,7 +565,18 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
       ),
       data: (columns) {
         final data = _applyOptimistic(columns);
-        final total = data.fold<int>(
+        final filtered = _query.isEmpty
+            ? data
+            : data
+                .map(
+                  (c) => _StatusColumnData(
+                    status: c.status,
+                    name: c.name,
+                    students: c.students.where(_matchesQuery).toList(),
+                  ),
+                )
+                .toList();
+        final total = filtered.fold<int>(
           0,
           (sum, c) => sum + c.students.length,
         );
@@ -564,7 +614,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: data.map((column) {
+              children: filtered.map((column) {
                 final col = _StatusColumn(
                   column: column,
                   pendingStudentIds: _pendingStudentIds,
@@ -664,7 +714,7 @@ class _StatusColumn extends StatelessWidget {
             border: Border.all(
               color: hovering
                   ? AppTheme.primaryGold
-                  : Theme.of(context).colorScheme.outlineVariant,
+                  : AppTheme.primaryGold.withAlpha(45),
               width: hovering ? 1.5 : 1,
             ),
           ),
@@ -700,7 +750,7 @@ class _StatusColumn extends StatelessWidget {
                         color: Theme.of(context).colorScheme.surface,
                         borderRadius: BorderRadius.circular(AppRadius.chip),
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant,
+                          color: AppTheme.primaryGold.withAlpha(70),
                           width: 1,
                         ),
                       ),
@@ -845,9 +895,9 @@ class _StudentCard extends StatelessWidget {
     return LongPressDraggable<Map<String, dynamic>>(
       data: student,
       maxSimultaneousDrags: isPending ? 0 : null,
-      // Platform-standard long-press (~500ms) cleanly separates a click
-      // (tap → open the student) from a deliberate drag.
-      delay: const Duration(milliseconds: 500),
+      // Snappier than the platform 500ms long-press while still separating a
+      // click (tap → open) from a deliberate drag on mouse and touch.
+      delay: const Duration(milliseconds: 250),
       hapticFeedbackOnStart: true,
       onDragUpdate: (details) => onDragUpdate(details.globalPosition),
       onDragEnd: (_) => onDragEnd(),
