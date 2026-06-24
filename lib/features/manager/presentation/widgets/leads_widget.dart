@@ -17,6 +17,8 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
+import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
 import 'manage_statuses_dialog.dart';
 
 class LeadsWidget extends ConsumerStatefulWidget {
@@ -1161,6 +1163,9 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context); // D5: required by AutomaticKeepAliveClientMixin.
+    // Rebuild when the transfer flow hides a converted lead (optimistic) so the
+    // dragged card leaves the funnel the instant the drop completes.
+    ref.watch(leadTransferControllerProvider);
     // Realtime: refresh when another staff member changes a lead.
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
@@ -1246,6 +1251,11 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     // loaded cards so the result updates on this frame (server confirms later).
     final query = _liveQuery;
 
+    // Leads optimistically removed by a completed transfer (kept here so the
+    // converted card disappears at once and «Отменить» can restore it).
+    final transferHidden =
+        ref.read(leadTransferControllerProvider).hiddenLeadIds;
+
     // D1: pre-compute the per-column leads so we can detect a wholly empty
     // result (after the client-side filter) and show «Ничего не найдено».
     final columnData = <(StatusRecord, List<Map<String, dynamic>>, int)>[];
@@ -1261,6 +1271,9 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
           .followedBy(extraLeads)
           .where(
             (lead) => !_hiddenLeadIds.contains(lead['id']?.toString()),
+          )
+          .where(
+            (lead) => !transferHidden.contains(lead['id']?.toString()),
           )
           .where((lead) => _matchesLiveQuery(lead, query))
           .map((lead) {
@@ -1688,6 +1701,16 @@ class _LeadCard extends ConsumerWidget {
     final discipline = customData['discipline']?.toString() ?? '';
     final level = customData['level']?.toString() ?? '';
 
+    final transfer = ref.read(leadTransferControllerProvider);
+    // True while THIS card is the one carried by the transfer drag — the card
+    // stays mounted (so the Draggable survives) but renders as a faded source
+    // placeholder.
+    final beingTransferred = ref.watch(
+      leadTransferControllerProvider.select(
+        (c) => c.isActive && c.leadId == id,
+      ),
+    );
+
     return LongPressDraggable<String>(
       data: id,
       maxSimultaneousDrags: isPending ? 0 : null,
@@ -1785,7 +1808,7 @@ class _LeadCard extends ConsumerWidget {
         ),
       ),
       child: Opacity(
-        opacity: isPending ? 0.62 : 1,
+        opacity: beingTransferred ? 0.4 : (isPending ? 0.62 : 1),
         child: AbsorbPointer(
           absorbing: isPending,
           child: GestureDetector(
@@ -1796,8 +1819,10 @@ class _LeadCard extends ConsumerWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppRadius.control),
                 side: BorderSide(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  width: 1,
+                  color: beingTransferred
+                      ? AppColor.transferCyan
+                      : Theme.of(context).colorScheme.outlineVariant,
+                  width: beingTransferred ? 1.4 : 1,
                 ),
               ),
               child: Padding(
@@ -1808,6 +1833,8 @@ class _LeadCard extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        if (linkedStudentId.isEmpty)
+                          _LeadDragHandle(lead: lead, controller: transfer),
                         Expanded(
                           child: Text(
                             displayName,
@@ -2333,6 +2360,61 @@ class _LeadCard extends ConsumerWidget {
       }
       onRefresh();
     }
+  }
+}
+
+/// Visible drag affordance that starts the Лид → Ученик transfer flow.
+///
+/// A plain [Draggable] (immediate, movement-threshold) so a normal desktop
+/// mouse drag works without a long press — and crucially its `feedback` ghost is
+/// pointer-routed, so the card stays "in hand" even after the host switches the
+/// segment to Ученики mid-drag. The hover/timer/branch/column logic all run in
+/// [LeadTransferController] fed by `onDragUpdate`.
+class _LeadDragHandle extends StatelessWidget {
+  final Map<String, dynamic> lead;
+  final LeadTransferController controller;
+
+  const _LeadDragHandle({required this.lead, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final id = lead['id']?.toString() ?? '';
+    return Draggable<String>(
+      data: id,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      onDragStarted: () => controller.startFromLead(lead),
+      onDragUpdate: (d) => controller.updatePointer(d.globalPosition),
+      // No DragTarget is used, so both callbacks fire — endDrag is idempotent.
+      onDragEnd: (_) => controller.endDrag(),
+      onDraggableCanceled: (_, _) => controller.endDrag(),
+      feedback: TransferGhostCard(controller: controller, lead: lead),
+      childWhenDragging: const _HandleIcon(faded: true),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Tooltip(
+          message: 'Перетащите в «Ученики»',
+          child: const _HandleIcon(),
+        ),
+      ),
+    );
+  }
+}
+
+class _HandleIcon extends StatelessWidget {
+  final bool faded;
+  const _HandleIcon({this.faded = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 26,
+      height: 32,
+      child: Icon(
+        Icons.drag_indicator_rounded,
+        size: 18,
+        color: AppColor.transferCyan.withValues(alpha: faded ? 0.3 : 0.9),
+      ),
+    );
   }
 }
 

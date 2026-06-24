@@ -121,6 +121,7 @@ class MagicCrmService {
     bool? linkedUser,
     bool? noEmail,
     bool? noOpenTasks,
+    bool? noBranch,
     int limit = 50,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
@@ -143,6 +144,7 @@ class MagicCrmService {
     if (linkedUser != null) queryParameters['linkedUser'] = linkedUser;
     if (noEmail != null) queryParameters['noEmail'] = noEmail;
     if (noOpenTasks != null) queryParameters['noOpenTasks'] = noOpenTasks;
+    if (noBranch != null) queryParameters['noBranch'] = noBranch;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/students/search',
@@ -260,6 +262,11 @@ class MagicCrmService {
       data: data,
     );
     return _legacyStudent(response);
+  }
+
+  /// Soft-delete a student. Used to truly undo a Лид→Ученик drag conversion.
+  Future<void> deleteStudent(String id) async {
+    await _api.delete<Map<String, dynamic>>('/crm/students/$id');
   }
 
   Future<List<Map<String, dynamic>>> listTeachers({

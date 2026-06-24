@@ -3,45 +3,54 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
-/// Golden-locks the v7 design tokens against the owner-approved prototype
-/// `docs/prototypes/crm-redesign-v7.html` `:root` (migration plan §0 / §5a).
+/// Golden-locks the v7 design tokens against the owner-approved palette.
 /// If a value here drifts from the prototype, this test must be the deliberate
 /// place it changes.
 void main() {
   group('AppColor — v7 :root palette', () {
     test('core surfaces + text', () {
-      expect(AppColor.bg, const Color(0xFF101012)); // --bg
-      expect(AppColor.surface, const Color(0xFF1A1A1D)); // --surface
-      expect(AppColor.sidebar, const Color(0xFF151518)); // --sidebar
-      expect(AppColor.input, const Color(0xFF242427)); // --input
-      expect(AppColor.divider, const Color(0xFF2A2A2D)); // --divider
-      expect(AppColor.text, const Color(0xFFFFFFFF)); // --text
-      expect(AppColor.text2, const Color(0xFFA1A1AA)); // --text-2
+      expect(AppColor.bg, const Color(0xFF101114)); // --bg
+      expect(AppColor.surface, const Color(0xFF181B20)); // --surface
+      expect(AppColor.sidebar, const Color(0xFF14161A)); // --sidebar
+      expect(AppColor.input, const Color(0xFF20242B)); // --input
+      expect(AppColor.divider, const Color(0xFF313741)); // --divider
+      expect(AppColor.text, const Color(0xFFF1F3F5)); // --text
+      expect(AppColor.text2, const Color(0xFFAAB2BF)); // --text-2
     });
 
     test('brand gold + derived tokens', () {
-      expect(AppColor.gold, const Color(0xFFC5A059)); // --gold
-      expect(AppColor.gold2, const Color(0xFFBFA37E)); // --gold-2
-      expect(AppColor.goldSoft, const Color(0x24C5A059)); // rgba(.,.,.,.14)
-      expect(AppColor.goldLine, const Color(0x57C5A059)); // rgba(.,.,.,.34)
+      expect(AppColor.gold, const Color(0xFFC9A85E)); // --gold
+      expect(AppColor.gold2, const Color(0xFFD6B778)); // --gold-2
+      expect(AppColor.goldSoft, const Color(0x24C9A85E)); // rgba(.,.,.,.14)
+      expect(AppColor.goldLine, const Color(0x57C9A85E)); // rgba(.,.,.,.34)
       expect(AppColor.onGold, const Color(0xFF1A1408)); // .btn-primary color
     });
 
+    test('work accents', () {
+      expect(AppColor.actionBlue, const Color(0xFF3B82F6));
+      expect(AppColor.transferCyan, const Color(0xFF14B8A6));
+      expect(AppColor.infoViolet, const Color(0xFF8B5CF6));
+    });
+
     test('status colors', () {
-      expect(AppColor.success, const Color(0xFF10B981)); // --success
-      expect(AppColor.danger, const Color(0xFFE53935)); // --danger (v7)
+      expect(AppColor.success, const Color(0xFF22C55E)); // --success
+      expect(AppColor.warning, const Color(0xFFF59E0B)); // --warning
+      expect(AppColor.danger, const Color(0xFFEF4444)); // --danger
     });
 
     test('overlay chrome (toast / pop-menu / sheet / skeleton / scrim)', () {
-      expect(AppColor.overlay, const Color(0xFF202024)); // .toast/.popmenu bg
-      expect(AppColor.menuItemText, const Color(0xFFE6E6EA)); // .pm-item
-      expect(AppColor.menuItemHover, const Color(0xFF2A2A30)); // .pm-item:hover
-      expect(AppColor.menuDanger, const Color(0xFFF08581)); // .pm-item.danger
-      expect(AppColor.dangerSoft, const Color(0x1AE53935)); // danger hover
-      expect(AppColor.scrim, const Color(0x9908080A)); // .sheet-scrim
-      expect(AppColor.sheetGrab, const Color(0xFF3A3A40)); // .sheet-grab
-      expect(AppColor.skeletonBase, const Color(0xFF1D1D21)); // .skel
-      expect(AppColor.skeletonHighlight, const Color(0x0FFFFFFF)); // .skel::after
+      expect(AppColor.overlay, const Color(0xFF20242B)); // .toast/.popmenu bg
+      expect(AppColor.menuItemText, const Color(0xFFE8EAED)); // .pm-item
+      expect(AppColor.menuItemHover, const Color(0xFF252A31)); // .pm-item:hover
+      expect(AppColor.menuDanger, const Color(0xFFFCA5A5)); // .pm-item.danger
+      expect(AppColor.dangerSoft, const Color(0x24EF4444)); // danger hover
+      expect(AppColor.scrim, const Color(0x990A0B0D)); // .sheet-scrim
+      expect(AppColor.sheetGrab, const Color(0xFF3A414C)); // .sheet-grab
+      expect(AppColor.skeletonBase, const Color(0xFF20242B)); // .skel
+      expect(
+        AppColor.skeletonHighlight,
+        const Color(0x0FFFFFFF),
+      ); // .skel::after
     });
   });
 
@@ -77,6 +86,15 @@ void main() {
       expect(AppTheme.light.colorScheme.error, AppColor.danger);
     });
 
+    test(
+      'primary actions use action blue while navigation keeps brand gold',
+      () {
+        expect(AppTheme.dark.colorScheme.primary, AppColor.gold);
+        expect(AppTheme.dark.colorScheme.secondary, AppColor.actionBlue);
+        expect(AppTheme.dark.colorScheme.tertiary, AppColor.transferCyan);
+      },
+    );
+
     test('card radius tracks --r-card (14)', () {
       final darkShape = AppTheme.dark.cardTheme.shape;
       expect(darkShape, isA<RoundedRectangleBorder>());
@@ -86,8 +104,7 @@ void main() {
       );
     });
 
-    test('legacy AppTheme.danger alias is unchanged (back-compat)', () {
-      // Existing screens/tests depend on the legacy alias staying #EF4444.
+    test('legacy AppTheme.danger alias stays red semantic token', () {
       expect(AppTheme.danger, const Color(0xFFEF4444));
     });
   });

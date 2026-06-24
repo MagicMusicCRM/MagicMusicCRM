@@ -12,9 +12,15 @@ final branchDisciplinesProvider =
   return ref.watch(magicCrmServiceProvider).listBranchDisciplines(branchId);
 });
 
-/// The Ученики board for a branch: STATUS columns (Активные / Неактивные /
-/// Прочие) + grouped students. Mirrors how the Leads board is organised so the
-/// board can act as a status-based draggable kanban.
+/// Sentinel branch id for the «Без филиала» board — students with no branch.
+/// Must equal `kNoBranchValue` in the transfer controller (both `__none__`).
+const String kNoBranchBoardId = '__none__';
+
+/// The Ученики board for a branch: STATUS columns (Пробные / Активные / Пауза /
+/// Неактивные / Прочие) + grouped students. Mirrors how the Leads board is
+/// organised so the board can act as a status-based draggable kanban.
+///
+/// Pass [kNoBranchBoardId] to load students that have no branch at all.
 final studentBoardProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((
   ref,
@@ -22,7 +28,9 @@ final studentBoardProvider =
 ) async {
   final service = ref.watch(magicCrmServiceProvider);
   // TODO: добавить серверную пагинацию/board-эндпоинт, если ветка превышает этот лимит.
-  final search = await service.searchStudents(branchId: branchId, limit: 500);
+  final search = branchId == kNoBranchBoardId
+      ? await service.searchStudents(noBranch: true, limit: 500)
+      : await service.searchStudents(branchId: branchId, limit: 500);
   final students =
       (search['items'] as List? ?? const []).whereType<Map<String, dynamic>>().toList();
   return groupStudentsByStatus(students);
@@ -30,9 +38,12 @@ final studentBoardProvider =
 
 /// The student statuses that act as the board's draggable columns.
 /// `key` is the value sent to the backend (`status`), `name` is the Russian
-/// column title.
+/// column title. Backend stores `status` as free text, so these are the canonical
+/// set the UI writes (drop into a column → that status).
 const List<({String key, String name})> studentStatusColumns = [
+  (key: 'trial', name: 'Пробные'),
   (key: 'active', name: 'Активные'),
+  (key: 'paused', name: 'Пауза'),
   (key: 'inactive', name: 'Неактивные'),
 ];
 
