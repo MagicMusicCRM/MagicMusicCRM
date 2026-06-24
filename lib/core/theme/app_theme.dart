@@ -22,9 +22,10 @@ class AppTheme {
     return ThemeData.dark(useMaterial3: true).copyWith(
       colorScheme: ColorScheme.dark(
         primary: TelegramColors.brandGold,
-        secondary: TelegramColors.brandGoldLight,
+        secondary: AppColor.actionBlue,
+        tertiary: AppColor.transferCyan,
         surface: TelegramColors.darkSurface,
-        onPrimary: Colors.white,
+        onPrimary: AppColor.onGold,
         onSecondary: Colors.white,
         onSurface: TelegramColors.darkTextPrimary,
         error: AppColor.danger,
@@ -60,33 +61,42 @@ class AppTheme {
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: TelegramColors.darkSurface,
-        selectedItemColor: TelegramColors.accent,
+        selectedItemColor: TelegramColors.brandGold,
         unselectedItemColor: TelegramColors.darkTextSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: TelegramColors.darkSurface,
-        indicatorColor: TelegramColors.accent.withAlpha(30),
+        indicatorColor: TelegramColors.brandGold.withAlpha(34),
         elevation: 0,
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: TelegramColors.accent);
+            return const IconThemeData(color: TelegramColors.brandGold);
           }
           return const IconThemeData(color: TelegramColors.darkTextSecondary);
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const TextStyle(color: TelegramColors.accent, fontWeight: FontWeight.w600, fontSize: 12);
+            return const TextStyle(
+              color: TelegramColors.brandGold,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            );
           }
-          return const TextStyle(color: TelegramColors.darkTextSecondary, fontSize: 12);
+          return const TextStyle(
+            color: TelegramColors.darkTextSecondary,
+            fontSize: 12,
+          );
         }),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: TelegramColors.darkInputBg,
         labelStyle: const TextStyle(color: TelegramColors.darkTextSecondary),
-        hintStyle: TextStyle(color: TelegramColors.darkTextSecondary.withAlpha(130)),
+        hintStyle: TextStyle(
+          color: TelegramColors.darkTextSecondary.withAlpha(130),
+        ),
         prefixIconColor: TelegramColors.darkTextSecondary,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
@@ -94,23 +104,28 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: TelegramColors.accent, width: 1.5),
+          borderSide: const BorderSide(color: AppColor.actionBlue, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 10,
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: TelegramColors.accent,
+          backgroundColor: AppColor.actionBlue,
           foregroundColor: Colors.white,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: TelegramColors.accent,
+          foregroundColor: AppColor.actionBlue,
           elevation: 0,
         ),
       ),
@@ -120,27 +135,50 @@ class AppTheme {
         space: 0,
       ),
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w700),
-        headlineMedium: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w700),
-        headlineSmall: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w600),
-        titleLarge: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w600),
-        titleMedium: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w500),
-        titleSmall: TextStyle(color: TelegramColors.darkTextSecondary, fontWeight: FontWeight.w500),
+        headlineLarge: TextStyle(
+          color: TelegramColors.darkTextPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+        headlineMedium: TextStyle(
+          color: TelegramColors.darkTextPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+        headlineSmall: TextStyle(
+          color: TelegramColors.darkTextPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+        titleLarge: TextStyle(
+          color: TelegramColors.darkTextPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+        titleMedium: TextStyle(
+          color: TelegramColors.darkTextPrimary,
+          fontWeight: FontWeight.w500,
+        ),
+        titleSmall: TextStyle(
+          color: TelegramColors.darkTextSecondary,
+          fontWeight: FontWeight.w500,
+        ),
         bodyLarge: TextStyle(color: TelegramColors.darkTextPrimary),
         bodyMedium: TextStyle(color: TelegramColors.darkTextPrimary),
         bodySmall: TextStyle(color: TelegramColors.darkTextSecondary),
-        labelLarge: TextStyle(color: TelegramColors.darkTextPrimary, fontWeight: FontWeight.w600),
+        labelLarge: TextStyle(
+          color: TelegramColors.darkTextPrimary,
+          fontWeight: FontWeight.w600,
+        ),
         labelMedium: TextStyle(color: TelegramColors.darkTextSecondary),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: TelegramColors.darkSurface,
-        contentTextStyle: const TextStyle(color: TelegramColors.darkTextPrimary),
+        contentTextStyle: const TextStyle(
+          color: TelegramColors.darkTextPrimary,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         behavior: SnackBarBehavior.floating,
         elevation: 0,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: TelegramColors.accent,
+        backgroundColor: AppColor.actionBlue,
         foregroundColor: Colors.white,
         shape: CircleBorder(),
         elevation: 0,
@@ -167,9 +205,10 @@ class AppTheme {
     return ThemeData.light(useMaterial3: true).copyWith(
       colorScheme: ColorScheme.light(
         primary: TelegramColors.brandGold,
-        secondary: TelegramColors.brandGoldLight,
+        secondary: AppColor.actionBlue,
+        tertiary: AppColor.transferCyan,
         surface: TelegramColors.lightSurface,
-        onPrimary: Colors.white,
+        onPrimary: AppColor.onGold,
         onSecondary: Colors.white,
         onSurface: TelegramColors.lightTextPrimary,
         error: AppColor.danger,
@@ -199,7 +238,9 @@ class AppTheme {
         filled: true,
         fillColor: TelegramColors.lightInputBg,
         labelStyle: const TextStyle(color: TelegramColors.lightTextSecondary),
-        hintStyle: TextStyle(color: TelegramColors.lightTextSecondary.withAlpha(130)),
+        hintStyle: TextStyle(
+          color: TelegramColors.lightTextSecondary.withAlpha(130),
+        ),
         prefixIconColor: TelegramColors.lightTextSecondary,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
@@ -207,19 +248,24 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: TelegramColors.accent, width: 1.5),
+          borderSide: const BorderSide(color: AppColor.actionBlue, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 10,
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: TelegramColors.accent,
+          backgroundColor: AppColor.actionBlue,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: TelegramColors.accent),
+        style: TextButton.styleFrom(foregroundColor: AppColor.actionBlue),
       ),
       dividerTheme: const DividerThemeData(
         color: TelegramColors.lightDivider,
@@ -227,26 +273,49 @@ class AppTheme {
         space: 0,
       ),
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w700),
-        headlineMedium: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w700),
-        headlineSmall: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w600),
-        titleLarge: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w600),
-        titleMedium: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w500),
-        titleSmall: TextStyle(color: TelegramColors.lightTextSecondary, fontWeight: FontWeight.w500),
+        headlineLarge: TextStyle(
+          color: TelegramColors.lightTextPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+        headlineMedium: TextStyle(
+          color: TelegramColors.lightTextPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+        headlineSmall: TextStyle(
+          color: TelegramColors.lightTextPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+        titleLarge: TextStyle(
+          color: TelegramColors.lightTextPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+        titleMedium: TextStyle(
+          color: TelegramColors.lightTextPrimary,
+          fontWeight: FontWeight.w500,
+        ),
+        titleSmall: TextStyle(
+          color: TelegramColors.lightTextSecondary,
+          fontWeight: FontWeight.w500,
+        ),
         bodyLarge: TextStyle(color: TelegramColors.lightTextPrimary),
         bodyMedium: TextStyle(color: TelegramColors.lightTextPrimary),
         bodySmall: TextStyle(color: TelegramColors.lightTextSecondary),
-        labelLarge: TextStyle(color: TelegramColors.lightTextPrimary, fontWeight: FontWeight.w600),
+        labelLarge: TextStyle(
+          color: TelegramColors.lightTextPrimary,
+          fontWeight: FontWeight.w600,
+        ),
         labelMedium: TextStyle(color: TelegramColors.lightTextSecondary),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: TelegramColors.lightBg,
-        contentTextStyle: const TextStyle(color: TelegramColors.lightTextPrimary),
+        contentTextStyle: const TextStyle(
+          color: TelegramColors.lightTextPrimary,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         behavior: SnackBarBehavior.floating,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: TelegramColors.accent,
+        backgroundColor: AppColor.actionBlue,
         foregroundColor: Colors.white,
         shape: CircleBorder(),
       ),
@@ -267,7 +336,11 @@ class AppTheme {
 /// A scroll behavior that removes the glow effect.
 class NoGlowScrollBehavior extends ScrollBehavior {
   @override
-  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
     return child;
   }
 }
