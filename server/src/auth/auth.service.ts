@@ -112,16 +112,18 @@ export class AuthService {
 
     const user = created.rows[0];
     const [firstName, lastName] = this.splitFullName(dto.fullName);
+    const phone = this.normalizePhone(dto.phone);
     await this.database.query(
       `
-        insert into app.profiles (user_id, first_name, last_name)
-        values ($1, $2, $3)
+        insert into app.profiles (user_id, first_name, last_name, phone)
+        values ($1, $2, $3, $4)
         on conflict (user_id) do update
         set first_name = excluded.first_name,
             last_name = excluded.last_name,
+            phone = coalesce(excluded.phone, app.profiles.phone),
             updated_at = now()
       `,
-      [user.id, firstName, lastName],
+      [user.id, firstName, lastName, phone],
     );
 
     await this.createEmailVerificationChallenge(user.id, email);
@@ -620,6 +622,13 @@ export class AuthService {
 
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
+  }
+
+  private normalizePhone(phone?: string | null): string | null {
+    const digits = (phone ?? "").replace(/\D/g, "");
+    if (!digits) return null;
+    if (digits.length === 11 && digits.startsWith("8")) return `7${digits.slice(1)}`;
+    return digits;
   }
 
   // Test-only OTP bypass: emails in AUTH_OTP_BYPASS_EMAILS (comma-separated) skip
