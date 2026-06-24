@@ -5622,6 +5622,35 @@ export class CrmService {
     return this.toLeadDto(lead);
   }
 
+  // Soft-delete a student (mirrors deleteLead). Enables a real undo of the
+  // Лид→Ученик drag conversion: «Отменить» removes the just-created student.
+  async deleteStudent(actor: ActorContext, studentId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const result = await this.database.query<{ id: string }>(
+      `
+        update app.students
+        set deleted_at = now(), updated_at = now()
+        where id = $1 and deleted_at is null
+        returning id
+      `,
+      [studentId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("Ученик не найден.");
+    await this.audit.record({
+      actor,
+      action: "crm.student_deleted",
+      entityType: "student",
+      entityId: row.id,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "student",
+      action: "deleted",
+      id: row.id,
+    });
+    return { success: true };
+  }
+
   async deleteLead(actor: ActorContext, leadId: string) {
     this.policy.assertCanWriteCrm(actor);
     const result = await this.database.query<{ id: string }>(
@@ -5702,6 +5731,11 @@ export class CrmService {
       filters.push(
         `${this.branchIdExpr('s')} = ${p}::text`,
       );
+    }
+    // «Без филиала» board: students with no branch on the FK column nor any
+    // legacy custom_data branch key. Mutually exclusive with branchId in practice.
+    if (query.noBranch) {
+      filters.push(`${this.branchIdExpr('s')} is null`);
     }
     if (query.groupId) {
       filters.push(`

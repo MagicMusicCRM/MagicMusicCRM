@@ -68,6 +68,13 @@ export class StudentSearchQuery {
   @IsBoolean()
   noOpenTasks?: boolean;
 
+  // Board filter for the «Без филиала» column: students with no branch at all
+  // (neither the branch_id FK nor a legacy custom_data branch key).
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  noBranch?: boolean;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

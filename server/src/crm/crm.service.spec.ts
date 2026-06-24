@@ -3632,6 +3632,43 @@ describe("CrmService", () => {
     );
   });
 
+  it("soft deletes students through CRM write policy (real undo)", async () => {
+    const { service, query, audit, policy } = createService([
+      { id: "student-a" },
+    ]);
+
+    await expect(service.deleteStudent(actor, "student-a")).resolves.toEqual({
+      success: true,
+    });
+
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][1]).toEqual(["student-a"]);
+    expect(String(query.mock.calls[0][0])).toContain("update app.students");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.student_deleted",
+        entityType: "student",
+        entityId: "student-a",
+      }),
+    );
+  });
+
+  it("deleteStudent throws when the student does not exist", async () => {
+    const { service } = createService([]);
+    await expect(service.deleteStudent(actor, "missing")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it("searchStudents filters branchless students when noBranch is set", async () => {
+    const { service, query } = createServiceWithQueryResults([{ rows: [] }]);
+    await service.searchStudents(actor, { noBranch: true } as never);
+    const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(sql).toContain(
+      "coalesce(s.branch_id::text, s.custom_data->>'branchId', s.custom_data->>'branch_id') is null",
+    );
+  });
+
   it("resolves a lead chat user via an explicit crm link", async () => {
     const { service } = createServiceWithQueryResults([
       { rows: [{ id: "lead-a", name: "Иван", phone: "+7 999 000-00-00" }] },

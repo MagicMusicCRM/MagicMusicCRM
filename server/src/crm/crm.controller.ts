@@ -165,6 +165,14 @@ export class CrmController {
     return this.crm.updateStudent(actor, id, dto);
   }
 
+  @Delete("students/:id")
+  deleteStudent(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.deleteStudent(actor, id);
+  }
+
   @Post("students/:id/invite")
   inviteStudent(
     @CurrentActor() actor: ActorContext,
