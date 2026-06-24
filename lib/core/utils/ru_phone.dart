@@ -11,10 +11,13 @@ bool isCanonicalRu(String? phone) {
 /// All digit characters of [raw], in order.
 String digitsFrom(String raw) => raw.replaceAll(RegExp(r'\D'), '');
 
-/// Up to 10 Russian national digits (country code 7/8 stripped, never padded).
+/// Up to 10 Russian national digits. The field always renders the `+7` country
+/// code, so a single leading 7 or 8 (country code / old trunk prefix) is always
+/// stripped — never padded. This keeps partial edits and deletion correct (the
+/// prefix is not re-counted as a national digit).
 String nationalDigits(String raw) {
   var d = digitsFrom(raw);
-  if (d.length == 11 && (d.startsWith('7') || d.startsWith('8'))) {
+  if (d.startsWith('7') || d.startsWith('8')) {
     d = d.substring(1);
   }
   if (d.length > 10) d = d.substring(d.length - 10);
