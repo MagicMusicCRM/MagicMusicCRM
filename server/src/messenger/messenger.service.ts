@@ -74,6 +74,7 @@ interface MessageRow {
   sender_email: string | null;
   sender_first_name: string | null;
   sender_last_name: string | null;
+  sender_role?: string | null;
   attachment_original_name?: string | null;
   attachment_mime_type?: string | null;
   attachment_size_bytes?: string | number | null;
@@ -346,6 +347,7 @@ export class MessengerService implements OnModuleInit {
           m.pinned_by, m.pinned_at, m.created_at, m.updated_at,
           m.deleted_at, u.email as sender_email, p.first_name as sender_first_name,
           p.last_name as sender_last_name,
+          u.role as sender_role,
           f.original_name as attachment_original_name,
           f.mime_type as attachment_mime_type,
           f.size_bytes as attachment_size_bytes,
@@ -377,8 +379,21 @@ export class MessengerService implements OnModuleInit {
       [chatId, query.before ?? null, limit, actor.userId],
     );
 
+    // Privacy: the single non-staff member of an administration chat is its
+    // owner (the client). They must never receive a staff member's real
+    // identity. Staff viewers always see real identities.
+    const viewerMasksStaff =
+      chat.type === "administration" && !isStaffRole(actor.role as never);
+
     return {
-      items: result.rows.map((row) => this.toMessageDto(row)).reverse(),
+      items: result.rows
+        .map((row) =>
+          this.toMessageDto(row, {
+            maskStaffSender:
+              viewerMasksStaff && isStaffRole((row.sender_role ?? "") as never),
+          }),
+        )
+        .reverse(),
     };
   }
 
@@ -464,8 +479,19 @@ export class MessengerService implements OnModuleInit {
     });
 
     const payload = this.toMessageDto(message);
-    this.realtime.publishChatEvent(chatId, "message.created", payload);
-    await this.fanoutChatListUpdate(chat, chatId, payload);
+    // Privacy: in an administration chat the client (a member of the chat room)
+    // must never receive staff identity on the wire. When the author is staff,
+    // publish the MASKED DTO to the chat room. Non-staff (the client) is
+    // published unmasked so staff see the real client identity in realtime.
+    const roomPayload =
+      chat.type === "administration" && isStaffRole(actor.role)
+        ? this.toMessageDto(message, { maskStaffSender: true })
+        : payload;
+    this.realtime.publishChatEvent(chatId, "message.created", roomPayload);
+    await this.fanoutChatListUpdate(chat, chatId, payload, {
+      maskStaffSenderForMembers:
+        chat.type === "administration" && isStaffRole(actor.role),
+    });
     if (chat.type === "administration") {
       // Resurface: clear archived_at for ALL staff so the thread reappears in inboxes.
       // Best-effort: a failure here must not break the send.
@@ -1196,6 +1222,7 @@ export class MessengerService implements OnModuleInit {
       createdAt: Date | string;
       senderId: string | null;
     },
+    opts?: { maskStaffSenderForMembers?: boolean },
   ): Promise<void> {
     try {
       // Carry a lightweight last-message preview so recipients can patch their
@@ -1209,9 +1236,16 @@ export class MessengerService implements OnModuleInit {
         lastMessageAt: message.createdAt,
         senderId: message.senderId,
       };
+      // Privacy: administration-chat members are non-staff (the owner client).
+      // For a staff-authored message, withhold the staff senderId from their
+      // user-room preview so identity never reaches the client off the wire.
+      // The admin-inbox preview (staff-only surface) keeps the real senderId.
+      const memberPreview = opts?.maskStaffSenderForMembers
+        ? { ...preview, senderId: null }
+        : preview;
       const memberIds = await this.getChatMemberUserIds(chatId);
       for (const userId of memberIds) {
-        this.realtime.publishUserEvent(userId, "chat.updated", preview);
+        this.realtime.publishUserEvent(userId, "chat.updated", memberPreview);
       }
       if (chat.type === "administration") {
         this.realtime.publishAdminInboxEvent("chat.updated", preview);
@@ -1535,19 +1569,33 @@ export class MessengerService implements OnModuleInit {
     };
   }
 
-  private toMessageDto(row: MessageRow) {
+  private toMessageDto(
+    row: MessageRow,
+    opts?: { maskStaffSender?: boolean },
+  ) {
+    // When masking, the staff sender is collapsed into the anonymous
+    // "Администрация" identity and the real senderId is withheld.
+    const masked = opts?.maskStaffSender === true;
     return {
       id: row.id,
       chatId: row.chat_id,
-      senderId: row.sender_id,
-      sender: row.sender_id
+      senderId: masked ? null : row.sender_id,
+      sender: masked
         ? {
-            id: row.sender_id,
-            email: row.sender_email,
-            firstName: row.sender_first_name,
-            lastName: row.sender_last_name,
+            id: null,
+            name: "Администрация",
+            firstName: null,
+            lastName: null,
+            email: null,
           }
-        : null,
+        : row.sender_id
+          ? {
+              id: row.sender_id,
+              email: row.sender_email,
+              firstName: row.sender_first_name,
+              lastName: row.sender_last_name,
+            }
+          : null,
       content: row.deleted_at ? null : row.content,
       messageType: row.message_type,
       attachmentFileId: row.deleted_at ? null : row.attachment_file_id,

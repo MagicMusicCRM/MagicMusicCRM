@@ -1215,6 +1215,249 @@ describe("MessengerService", () => {
     });
   });
 
+  describe("client-side staff-identity masking in administration chats", () => {
+    const adminChatId = "chat-admin-mask";
+    const staffMessageRow = {
+      id: "msg-staff",
+      chat_id: adminChatId,
+      sender_id: "staff-1",
+      content: "Здравствуйте, чем помочь?",
+      message_type: "text",
+      attachment_file_id: null,
+      reply_to_id: null,
+      forwarded_from_id: null,
+      pinned_by: null,
+      pinned_at: null,
+      created_at: new Date("2026-06-25T10:00:00Z"),
+      updated_at: new Date("2026-06-25T10:00:00Z"),
+      deleted_at: null,
+      sender_email: "manager@example.com",
+      sender_first_name: "Анна",
+      sender_last_name: "Иванова",
+      sender_role: "manager",
+      is_read: true,
+    };
+    const ownClientMessageRow = {
+      id: "msg-client",
+      chat_id: adminChatId,
+      sender_id: "client-owner",
+      content: "Здравствуйте!",
+      message_type: "text",
+      attachment_file_id: null,
+      reply_to_id: null,
+      forwarded_from_id: null,
+      pinned_by: null,
+      pinned_at: null,
+      created_at: new Date("2026-06-25T09:00:00Z"),
+      updated_at: new Date("2026-06-25T09:00:00Z"),
+      deleted_at: null,
+      sender_email: "client@example.com",
+      sender_first_name: "Пётр",
+      sender_last_name: "Сидоров",
+      sender_role: "client",
+      is_read: true,
+    };
+
+    function makeAdminChatService(rows: unknown[]) {
+      return createService({
+        database: {
+          query: jest.fn().mockResolvedValueOnce({ rows }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue({
+            id: adminChatId,
+            type: "administration",
+            memberUserId: "client-owner",
+            memberRole: "member",
+          }),
+          assertCanReadChat: jest.fn(),
+        },
+      });
+    }
+
+    it("masks a STAFF-sent message to 'Администрация' when the OWNER client reads", async () => {
+      const { service } = makeAdminChatService([staffMessageRow]);
+
+      const result = await service.getMessages(
+        { userId: "client-owner", role: "client" },
+        adminChatId,
+        {},
+      );
+
+      const msg = result.items[0];
+      expect(msg.senderId).toBeNull();
+      expect(msg.sender).toEqual({
+        id: null,
+        name: "Администрация",
+        firstName: null,
+        lastName: null,
+        email: null,
+      });
+    });
+
+    it("returns the REAL staff sender when a STAFF viewer reads the same chat", async () => {
+      const { service } = makeAdminChatService([staffMessageRow]);
+
+      const result = await service.getMessages(
+        { userId: "manager-x", role: "manager" },
+        adminChatId,
+        {},
+      );
+
+      const msg = result.items[0];
+      expect(msg.senderId).toBe("staff-1");
+      expect(msg.sender).toEqual(
+        expect.objectContaining({
+          id: "staff-1",
+          email: "manager@example.com",
+          firstName: "Анна",
+          lastName: "Иванова",
+        }),
+      );
+    });
+
+    it("leaves the client's OWN (non-staff) message unchanged for the owner client", async () => {
+      const { service } = makeAdminChatService([ownClientMessageRow]);
+
+      const result = await service.getMessages(
+        { userId: "client-owner", role: "client" },
+        adminChatId,
+        {},
+      );
+
+      const msg = result.items[0];
+      expect(msg.senderId).toBe("client-owner");
+      expect(msg.sender).toEqual(
+        expect.objectContaining({
+          id: "client-owner",
+          firstName: "Пётр",
+          lastName: "Сидоров",
+        }),
+      );
+    });
+
+    it("publishes a MASKED message.created to the chat room when STAFF sends in an administration chat", async () => {
+      const staffActor = { userId: "staff-1", role: "manager" as const };
+      type MockClient = { query: jest.Mock };
+      const client = {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id: "msg-staff-rt",
+                chat_id: adminChatId,
+                sender_id: staffActor.userId,
+                content: "Готов помочь",
+                message_type: "text",
+                attachment_file_id: null,
+                reply_to_id: null,
+                forwarded_from_id: null,
+                pinned_by: null,
+                pinned_at: null,
+                created_at: new Date("2026-06-25T10:00:00Z"),
+                updated_at: new Date("2026-06-25T10:00:00Z"),
+                deleted_at: null,
+                sender_email: null,
+                sender_first_name: null,
+                sender_last_name: null,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({ rows: [] }),
+      };
+      const { service, realtime } = createService({
+        database: {
+          transaction: jest.fn(
+            async (work: (c: MockClient) => Promise<unknown>) => work(client),
+          ) as never,
+          query: jest.fn().mockResolvedValue({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue({
+            id: adminChatId,
+            type: "administration",
+            memberUserId: null,
+            memberRole: null,
+          }),
+          assertCanWriteChat: jest.fn(),
+        },
+      });
+
+      await service.sendMessage(staffActor, adminChatId, {
+        content: "Готов помочь",
+      } as never);
+
+      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
+        adminChatId,
+        "message.created",
+        expect.objectContaining({
+          senderId: null,
+          sender: expect.objectContaining({ id: null, name: "Администрация" }),
+        }),
+      );
+    });
+
+    it("publishes an UNMASKED message.created when a NON-staff client sends in an administration chat", async () => {
+      const clientActor = { userId: "client-owner", role: "client" as const };
+      type MockClient = { query: jest.Mock };
+      const client = {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id: "msg-client-rt",
+                chat_id: adminChatId,
+                sender_id: clientActor.userId,
+                content: "Здравствуйте",
+                message_type: "text",
+                attachment_file_id: null,
+                reply_to_id: null,
+                forwarded_from_id: null,
+                pinned_by: null,
+                pinned_at: null,
+                created_at: new Date("2026-06-25T10:00:00Z"),
+                updated_at: new Date("2026-06-25T10:00:00Z"),
+                deleted_at: null,
+                sender_email: null,
+                sender_first_name: null,
+                sender_last_name: null,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({ rows: [] }),
+      };
+      const { service, realtime } = createService({
+        database: {
+          transaction: jest.fn(
+            async (work: (c: MockClient) => Promise<unknown>) => work(client),
+          ) as never,
+          query: jest.fn().mockResolvedValue({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue({
+            id: adminChatId,
+            type: "administration",
+            memberUserId: clientActor.userId,
+            memberRole: "member",
+          }),
+          assertCanWriteChat: jest.fn(),
+        },
+      });
+
+      await service.sendMessage(clientActor, adminChatId, {
+        content: "Здравствуйте",
+      } as never);
+
+      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
+        adminChatId,
+        "message.created",
+        expect.objectContaining({ senderId: clientActor.userId }),
+      );
+    });
+  });
+
   describe("sendMessage resurface on administration chat", () => {
     it("clears archived_at for all staff when a message is sent in an administration chat", async () => {
       const adminChatId = "chat-admin-resurface";
