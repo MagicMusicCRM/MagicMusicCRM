@@ -978,6 +978,83 @@ describe("MessengerService", () => {
     );
   });
 
+  it("fanoutChatListUpdate masks senderId for member rooms but keeps real senderId in admin-inbox when staff sends", async () => {
+    const adminChatId = "chat-admin-fanout";
+    const staffActor = { userId: "staff-user-fanout", role: "manager" as const };
+    const memberUserId = "client-member-fanout";
+    type MockClient = { query: jest.Mock };
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "msg-fanout-1",
+              chat_id: adminChatId,
+              sender_id: staffActor.userId,
+              content: "Привет от менеджера",
+              message_type: "text",
+              attachment_file_id: null,
+              reply_to_id: null,
+              forwarded_from_id: null,
+              pinned_by: null,
+              pinned_at: null,
+              created_at: new Date("2026-06-25T11:00:00Z"),
+              updated_at: new Date("2026-06-25T11:00:00Z"),
+              deleted_at: null,
+              sender_email: null,
+              sender_first_name: null,
+              sender_last_name: null,
+              sender_role: "manager",
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    const { service, realtime } = createService({
+      database: {
+        transaction: jest.fn(
+          async (work: (c: MockClient) => Promise<unknown>) => work(client),
+        ) as never,
+        // getChatMemberUserIds query returns the member client
+        query: jest.fn().mockResolvedValue({ rows: [{ user_id: memberUserId }] }),
+      },
+      policy: {
+        getChatAccess: jest.fn().mockResolvedValue({
+          id: adminChatId,
+          type: "administration",
+          memberUserId: null,
+          memberRole: null,
+        }),
+        assertCanWriteChat: jest.fn(),
+      },
+    });
+
+    await service.sendMessage(staffActor, adminChatId, {
+      content: "Привет от менеджера",
+    } as never);
+
+    // Member's user-room preview must have senderId masked to null
+    expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+      memberUserId,
+      "chat.updated",
+      expect.objectContaining({
+        id: adminChatId,
+        lastMessageId: "msg-fanout-1",
+        senderId: null,
+      }),
+    );
+    // Admin-inbox preview must carry the REAL staff senderId
+    expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+      "chat.updated",
+      expect.objectContaining({
+        id: adminChatId,
+        lastMessageId: "msg-fanout-1",
+        senderId: staffActor.userId,
+      }),
+    );
+  });
+
   it("staff listChats maps owner, assignedTo, folder, archived from administration row", async () => {
     const staffActor = { userId: "manager-x", role: "manager" as const };
     const adminRow = {
@@ -1361,6 +1438,7 @@ describe("MessengerService", () => {
                 sender_email: null,
                 sender_first_name: null,
                 sender_last_name: null,
+                sender_role: "manager",
               },
             ],
           })
@@ -1423,6 +1501,7 @@ describe("MessengerService", () => {
                 sender_email: null,
                 sender_first_name: null,
                 sender_last_name: null,
+                sender_role: "client",
               },
             ],
           })
