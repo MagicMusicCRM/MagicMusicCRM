@@ -25,6 +25,8 @@ describe("CrmService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertManagerOnly: jest.fn(),
+      assertCanReadStudentFinance: jest.fn(),
+      canReadStudentFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -69,6 +71,8 @@ describe("CrmService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertManagerOnly: jest.fn(),
+      assertCanReadStudentFinance: jest.fn(),
+      canReadStudentFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -2311,8 +2315,67 @@ describe("CrmService", () => {
       ],
     });
 
-    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanReadStudentFinance).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual(["student-a", true, 20]);
+  });
+
+  const stubCardSections = (service: CrmService) => {
+    jest.spyOn(service as unknown as { toStudentDto: () => unknown }, "toStudentDto").mockReturnValue({ id: "student-a" });
+    jest.spyOn(service, "listStudentGroups").mockResolvedValue({ items: [] } as never);
+    jest.spyOn(service, "listLessons").mockResolvedValue({ items: [] } as never);
+    jest.spyOn(service, "listTasks").mockResolvedValue({ items: [] } as never);
+    jest.spyOn(service, "listComments").mockResolvedValue({ items: [] } as never);
+    jest.spyOn(service as unknown as { listUserCrmLinks: () => Promise<unknown> }, "listUserCrmLinks").mockResolvedValue([]);
+  };
+
+  it("opens the student card for a non-finance role (teacher) without finance and never crashes", async () => {
+    const { service, policy } = createService();
+    (policy.canReadStudentFinance as jest.Mock).mockReturnValue(false);
+    jest.spyOn(service as unknown as { findStudent: () => Promise<unknown> }, "findStudent").mockResolvedValue({
+      id: "student-a",
+      profile_user_id: "user-a",
+      teacher_user_ids: ["teacher-a"],
+    });
+    stubCardSections(service);
+    const balances = jest.spyOn(service, "listStudentBalances");
+    const payments = jest.spyOn(service, "listPayments");
+    const expected = jest.spyOn(service, "listExpectedPayments");
+
+    const card = await service.getStudentCard(
+      { userId: "teacher-a", role: "teacher" },
+      "student-a",
+    );
+
+    expect(card.balance).toBeNull();
+    expect(card.payments).toEqual([]);
+    // Finance sections are never queried for a non-finance role.
+    expect(balances).not.toHaveBeenCalled();
+    expect(payments).not.toHaveBeenCalled();
+    expect(expected).not.toHaveBeenCalled();
+  });
+
+  it("never lets a forbidden/failed balance crash the student card for a finance reader (admin)", async () => {
+    const { service, policy } = createService();
+    (policy.canReadStudentFinance as jest.Mock).mockReturnValue(true);
+    jest.spyOn(service as unknown as { findStudent: () => Promise<unknown> }, "findStudent").mockResolvedValue({
+      id: "student-a",
+      profile_user_id: "user-a",
+      teacher_user_ids: [],
+    });
+    stubCardSections(service);
+    jest.spyOn(service, "listPayments").mockResolvedValue({ items: [] } as never);
+    jest.spyOn(service, "listExpectedPayments").mockResolvedValue({ items: [] } as never);
+    jest
+      .spyOn(service, "listStudentBalances")
+      .mockRejectedValue(new Error("balance forbidden"));
+
+    const card = await service.getStudentCard(
+      { userId: "admin-a", role: "admin" },
+      "student-a",
+    );
+
+    // Card still resolves; the failed balance degrades to null instead of 404.
+    expect(card.balance).toBeNull();
   });
 
   it("returns lesson attendance for allowed staff", async () => {
@@ -4364,6 +4427,8 @@ describe("CrmService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertManagerOnly: jest.fn(),
+      assertCanReadStudentFinance: jest.fn(),
+      canReadStudentFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -4474,6 +4539,8 @@ describe("CrmService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertManagerOnly: jest.fn(),
+      assertCanReadStudentFinance: jest.fn(),
+      canReadStudentFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -4522,6 +4589,8 @@ describe("CrmService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertManagerOnly: jest.fn(),
+      assertCanReadStudentFinance: jest.fn(),
+      canReadStudentFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
@@ -4586,6 +4655,8 @@ describe("CrmService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertManagerOnly: jest.fn(),
+      assertCanReadStudentFinance: jest.fn(),
+      canReadStudentFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };

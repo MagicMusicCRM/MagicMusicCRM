@@ -1127,6 +1127,12 @@ export class CrmService {
         entityId: student.id,
         metadata: { leadId },
       });
+      this.realtime.emitCrmChanged({
+        entity: "student",
+        action: "created",
+        id: student.id,
+        branchId: branchId ?? null,
+      });
       return this.toStudentDto(student);
     } catch (error) {
       this.rethrowCreatePersonError(error);
@@ -1151,6 +1157,15 @@ export class CrmService {
       teacherUserIds: student.teacher_user_ids ?? [],
     });
 
+    // Финансовые секции (баланс/оплаты/ожидаемые) видит только Управляющий +
+    // Администратор. Для остальных (напр. преподавателя) карточка всё равно
+    // открывается — финансы просто пустые. КАЖДАЯ секция изолирована (.catch),
+    // чтобы отказ в доступе или сбой одной секции НИКОГДА не ронял всю карточку
+    // (ранее Promise.all был «всё-или-ничего» → у admin/teacher падала вся
+    // карточка из-за manager-only баланса).
+    const canReadFinance = this.policy.canReadStudentFinance(actor);
+    const emptyList = { items: [] as never[] };
+
     const [
       groups,
       lessons,
@@ -1163,15 +1178,21 @@ export class CrmService {
     ] = await Promise.all([
       this.listStudentGroups(actor, studentId, { limit: 100 }),
       this.listLessons(actor, { studentId, limit: 100 }),
-      this.listPayments(actor, { studentId, limit: 100 }),
+      canReadFinance
+        ? this.listPayments(actor, { studentId, limit: 100 }).catch(() => emptyList)
+        : Promise.resolve(emptyList),
       this.listTasks(actor, { studentId, limit: 100 }),
       this.listComments(actor, {
         entityType: "student",
         entityId: studentId,
         limit: 100,
-      }),
-      this.listExpectedPayments(actor, { studentId, limit: 100 }),
-      this.listStudentBalances(actor, { studentId, limit: 1 }),
+      }).catch(() => emptyList),
+      canReadFinance
+        ? this.listExpectedPayments(actor, { studentId, limit: 100 }).catch(() => emptyList)
+        : Promise.resolve(emptyList),
+      canReadFinance
+        ? this.listStudentBalances(actor, { studentId, limit: 1 }).catch(() => emptyList)
+        : Promise.resolve(emptyList),
       this.listUserCrmLinks("student", studentId),
     ]);
 
@@ -1478,6 +1499,12 @@ export class CrmService {
         [studentId, student.status, branchId ?? beforeStudent.branch_id],
       );
     }
+    this.realtime.emitCrmChanged({
+      entity: "student",
+      action: "updated",
+      id: student.id,
+      branchId: branchId ?? beforeStudent?.branch_id ?? null,
+    });
     return this.toStudentDto(student);
   }
 
@@ -4049,6 +4076,11 @@ export class CrmService {
       entityId: dto.entityId,
       metadata: { commentId: comment.id },
     });
+    this.realtime.emitCrmChanged({
+      entity: "comment",
+      action: "created",
+      id: comment.id,
+    });
     return this.toCommentDto(comment);
   }
 
@@ -4086,6 +4118,11 @@ export class CrmService {
       action: "crm.task_created",
       entityType: "task",
       entityId: task.id,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "task",
+      action: "created",
+      id: task.id,
     });
     return this.toTaskDto(task);
   }
@@ -4125,6 +4162,11 @@ export class CrmService {
       action: "crm.task_updated",
       entityType: "task",
       entityId: task.id,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "task",
+      action: "updated",
+      id: task.id,
     });
     return this.toTaskDto(task);
   }
@@ -4228,7 +4270,8 @@ export class CrmService {
   }
 
   async listStudentBalances(actor: ActorContext, query: StudentBalanceQuery) {
-    this.policy.assertManagerOnly(actor);
+    // Финансы ученика: Управляющий + Администратор (см. canReadStudentFinance).
+    this.policy.assertCanReadStudentFinance(actor);
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<StudentBalanceRow>(
       `
@@ -4380,6 +4423,11 @@ export class CrmService {
       entityId: payment.student_id,
       metadata: { paymentId: payment.id },
     });
+    this.realtime.emitCrmChanged({
+      entity: "payment",
+      action: "created",
+      id: payment.id,
+    });
     return this.toPaymentDto(payment);
   }
 
@@ -4468,6 +4516,12 @@ export class CrmService {
       entityId: expense.id,
       metadata: { amount: dto.amount, category: expense.category },
     });
+    this.realtime.emitCrmChanged({
+      entity: "expense",
+      action: "created",
+      id: expense.id,
+      branchId: expense.branch_id ?? null,
+    });
     return this.toExpenseDto(expense);
   }
 
@@ -4505,6 +4559,12 @@ export class CrmService {
       entityType: "expense",
       entityId: expense.id,
     });
+    this.realtime.emitCrmChanged({
+      entity: "expense",
+      action: "updated",
+      id: expense.id,
+      branchId: expense.branch_id ?? null,
+    });
     return this.toExpenseDto(expense);
   }
 
@@ -4526,6 +4586,11 @@ export class CrmService {
       action: "crm.expense_deleted",
       entityType: "expense",
       entityId: expense.id,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "expense",
+      action: "deleted",
+      id: expense.id,
     });
     return { success: true };
   }
