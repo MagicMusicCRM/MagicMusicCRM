@@ -740,10 +740,16 @@ export class MessengerService implements OnModuleInit {
       lastReadMessageId,
     );
     for (const message of readUpdates) {
+      // Privacy: in an administration chat the client must never receive a
+      // staff author's real identity. Mask when the message author is staff.
       this.realtime.publishChatEvent(
         chatId,
         "message.updated",
-        this.toMessageDto(message),
+        this.toMessageDto(message, {
+          maskStaffSender:
+            chat.type === "administration" &&
+            isStaffRole((message.sender_role ?? "") as never),
+        }),
       );
     }
     return { success: true };
@@ -903,11 +909,18 @@ export class MessengerService implements OnModuleInit {
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name, false as is_read
+          null::text as sender_last_name,
+          (select role from app.users where id = app.messages.sender_id) as sender_role,
+          false as is_read
       `,
       [messageId, actor.userId],
     );
-    const payload = this.toMessageDto(result.rows[0]);
+    const row = result.rows[0];
+    const payload = this.toMessageDto(row, {
+      maskStaffSender:
+        chat.type === "administration" &&
+        isStaffRole((row?.sender_role ?? "") as never),
+    });
     this.realtime.publishChatEvent(message.chat_id, "message.updated", payload);
     return payload;
   }
@@ -925,11 +938,18 @@ export class MessengerService implements OnModuleInit {
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name, false as is_read
+          null::text as sender_last_name,
+          (select role from app.users where id = app.messages.sender_id) as sender_role,
+          false as is_read
       `,
       [messageId],
     );
-    const payload = this.toMessageDto(result.rows[0]);
+    const row = result.rows[0];
+    const payload = this.toMessageDto(row, {
+      maskStaffSender:
+        chat.type === "administration" &&
+        isStaffRole((row?.sender_role ?? "") as never),
+    });
     this.realtime.publishChatEvent(message.chat_id, "message.updated", payload);
     return payload;
   }
@@ -940,6 +960,7 @@ export class MessengerService implements OnModuleInit {
     dto: DeleteMessageDto,
   ) {
     const message = await this.requireMessage(actor, messageId);
+    const chat = await this.requireChat(actor, message.chat_id);
     this.policy.assertCanModerateMessage(actor, message.sender_id);
     const mode =
       actor.userId === message.sender_id ? "own" : (dto.mode ?? "moderated");
@@ -953,11 +974,18 @@ export class MessengerService implements OnModuleInit {
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name, false as is_read
+          null::text as sender_last_name,
+          (select role from app.users where id = app.messages.sender_id) as sender_role,
+          false as is_read
       `,
       [messageId, mode],
     );
-    const payload = this.toMessageDto(result.rows[0]);
+    const row = result.rows[0];
+    const payload = this.toMessageDto(row, {
+      maskStaffSender:
+        chat.type === "administration" &&
+        isStaffRole((row?.sender_role ?? "") as never),
+    });
     await this.audit.record({
       actor,
       action: "messenger.message_deleted",
@@ -975,6 +1003,7 @@ export class MessengerService implements OnModuleInit {
     dto: UpdateMessageDto,
   ) {
     const message = await this.requireMessage(actor, messageId);
+    const chat = await this.requireChat(actor, message.chat_id);
     if (message.sender_id !== actor.userId) {
       throw new ForbiddenException(
         "Можно редактировать только свои сообщения.",
@@ -1005,11 +1034,18 @@ export class MessengerService implements OnModuleInit {
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name, false as is_read
+          null::text as sender_last_name,
+          (select role from app.users where id = app.messages.sender_id) as sender_role,
+          false as is_read
       `,
       [messageId, content],
     );
-    const payload = this.toMessageDto(result.rows[0]);
+    const row = result.rows[0];
+    const payload = this.toMessageDto(row, {
+      maskStaffSender:
+        chat.type === "administration" &&
+        isStaffRole((row?.sender_role ?? "") as never),
+    });
     await this.audit.record({
       actor,
       action: "messenger.message_updated",
@@ -1437,7 +1473,7 @@ export class MessengerService implements OnModuleInit {
           m.attachment_file_id, m.reply_to_id, m.forwarded_from_id,
           m.pinned_by, m.pinned_at, m.created_at, m.updated_at,
           m.deleted_at, u.email as sender_email, p.first_name as sender_first_name,
-          p.last_name as sender_last_name,
+          p.last_name as sender_last_name, u.role as sender_role,
           f.original_name as attachment_original_name,
           f.mime_type as attachment_mime_type,
           f.size_bytes as attachment_size_bytes,
