@@ -82,16 +82,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColor.bg,
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0.0, -1.0),
-            radius: 1.1,
-            colors: [Color(0x1AC5A059), AppColor.bg],
-            stops: [0.0, 0.6],
-          ),
-        ),
-        child: SafeArea(
+      body: SafeArea(
           child: ResponsiveConstraint(
             child: Center(
               child: ConstrainedBox(
@@ -200,7 +191,6 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 }
