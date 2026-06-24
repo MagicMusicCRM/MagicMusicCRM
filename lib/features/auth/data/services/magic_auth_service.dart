@@ -149,6 +149,7 @@ class MagicAuthService {
     required String email,
     required String password,
     required String fullName,
+    String? phone,
   }) async {
     await _clearLocalSession();
     _addAuthBreadcrumb('signup');
@@ -159,6 +160,7 @@ class MagicAuthService {
           'email': email.trim(),
           'password': password,
           'fullName': fullName.trim(),
+          if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
         },
         authenticated: false,
       );
