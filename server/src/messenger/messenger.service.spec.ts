@@ -978,6 +978,51 @@ describe("MessengerService", () => {
     );
   });
 
+  it("staff listChats maps owner, assignedTo, folder, archived from administration row", async () => {
+    const staffActor = { userId: "manager-x", role: "manager" as const };
+    const adminRow = {
+      id: "chat-admin-1",
+      type: "administration",
+      title: "Администрация",
+      created_by: "client-1",
+      last_message_id: null,
+      last_message_content: null,
+      last_message_created_at: null,
+      unread_count: "0",
+      is_muted: false,
+      partner_user_id: null,
+      partner_email: null,
+      partner_first_name: null,
+      partner_last_name: null,
+      partner_avatar_file_id: null,
+      created_at: new Date("2026-06-25T10:00:00Z"),
+      updated_at: new Date("2026-06-25T10:00:00Z"),
+      // new columns from Task 4 joins
+      owner_first_name: "Иван",
+      owner_last_name: "Петров",
+      assigned_to_user_id: "staff-user-1",
+      assigned_first_name: "Анна",
+      assigned_last_name: "Иванова",
+      folder: "students",
+      archived_at: null,
+    };
+
+    const { service } = createService({
+      database: {
+        query: jest.fn().mockResolvedValueOnce({ rows: [adminRow] }),
+      },
+    });
+
+    const result = await service.listChats(staffActor, {});
+
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0];
+    expect(item.ownerName).toBe("Иван Петров");
+    expect(item.assignedTo).toEqual({ id: "staff-user-1", name: "Анна Иванова" });
+    expect(item.folder).toBe("students");
+    expect(item.archived).toBe(false);
+  });
+
   it("creates an administration chat with the actor as owner", async () => {
     type MockClient = { query: jest.Mock };
     const client = { query: jest.fn()

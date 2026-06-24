@@ -46,6 +46,14 @@ interface ChatRow {
   partner_avatar_file_id?: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  // Staff inbox fields (administration chats only)
+  owner_first_name?: string | null;
+  owner_last_name?: string | null;
+  assigned_to_user_id?: string | null;
+  assigned_first_name?: string | null;
+  assigned_last_name?: string | null;
+  folder?: string | null;
+  archived_at?: Date | string | null;
 }
 
 interface MessageRow {
@@ -238,7 +246,54 @@ export class MessengerService implements OnModuleInit {
               and (me.last_read_message_id is null or unread.created_at > (
                 select created_at from app.messages where id = me.last_read_message_id
               ))
-          )::text as unread_count
+          )::text as unread_count,
+          owp.first_name as owner_first_name,
+          owp.last_name as owner_last_name,
+          c.assigned_to_user_id,
+          asgp.first_name as assigned_first_name,
+          asgp.last_name as assigned_last_name,
+          ist.archived_at,
+          case
+            when ist.archived_at is not null then 'archive'
+            when exists (
+              select 1 from app.students s
+              join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+              where s.deleted_at is null
+                and (
+                  case
+                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 11
+                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) in ('7', '8')
+                      then '+7' || right(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 10)
+                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 10
+                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) = '9'
+                      then '+7' || regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')
+                    else null
+                  end
+                ) is not null
+                and (
+                  case
+                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 11
+                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) in ('7', '8')
+                      then '+7' || right(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 10)
+                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 10
+                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) = '9'
+                      then '+7' || regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')
+                    else null
+                  end
+                ) = (
+                  case
+                    when length(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g')) = 11
+                      and left(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g'), 1) in ('7', '8')
+                      then '+7' || right(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g'), 10)
+                    when length(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g')) = 10
+                      and left(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g'), 1) = '9'
+                      then '+7' || regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g')
+                    else null
+                  end
+                )
+            ) then 'students'
+            else 'leads'
+          end as folder
         from app.chats c
         left join app.chat_members cm on cm.chat_id = c.id and cm.left_at is null
         left join app.chat_members me_state
@@ -255,6 +310,11 @@ export class MessengerService implements OnModuleInit {
         ) partner on true
         left join app.users partner_u on partner_u.id = partner.user_id and partner_u.deleted_at is null
         left join app.profiles partner_p on partner_p.user_id = partner_u.id and partner_p.deleted_at is null
+        left join app.users ow on ow.id = c.owner_user_id and ow.deleted_at is null
+        left join app.profiles owp on owp.user_id = ow.id and owp.deleted_at is null
+        left join app.users asg on asg.id = c.assigned_to_user_id
+        left join app.profiles asgp on asgp.user_id = asg.id
+        left join app.chat_inbox_state ist on ist.chat_id = c.id and ist.staff_user_id = $2
         where c.deleted_at is null
           and ($3::timestamptz is null or c.updated_at < $3)
           and (
@@ -1314,6 +1374,14 @@ export class MessengerService implements OnModuleInit {
   }
 
   private toChatSummaryDto(row: ChatRow) {
+    const ownerFullName = [row.owner_first_name, row.owner_last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || null;
+    const assignedFullName = [row.assigned_first_name, row.assigned_last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || null;
     return {
       id: row.id,
       type: row.type,
@@ -1336,6 +1404,12 @@ export class MessengerService implements OnModuleInit {
       isMuted: row.is_muted == true,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      ownerName: ownerFullName,
+      assignedTo: row.assigned_to_user_id
+        ? { id: row.assigned_to_user_id, name: assignedFullName }
+        : null,
+      folder: row.folder ?? null,
+      archived: row.archived_at != null,
     };
   }
 
