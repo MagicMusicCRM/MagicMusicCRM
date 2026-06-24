@@ -1991,4 +1991,235 @@ describe("MessengerService", () => {
       expect(resurface).toBeUndefined();
     });
   });
+
+  // ─── Task 8: leaveGroup ───────────────────────────────────────────────────
+
+  describe("leaveGroup", () => {
+    const leaveActor = { userId: "member-a", role: "client" as const };
+    const groupChat = {
+      id: "chat-group-leave",
+      type: "group",
+      memberUserId: "member-a",
+      memberRole: "member",
+    };
+
+    it("updates left_at for the leaving member and emits chat.removed to their user room", async () => {
+      const { service, database, realtime } = createService({
+        database: {
+          query: jest.fn().mockResolvedValueOnce({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(groupChat),
+        },
+      });
+
+      await service.leaveGroup(leaveActor, "chat-group-leave");
+
+      expect(database.query).toHaveBeenCalledWith(
+        expect.stringContaining("set left_at = now()"),
+        ["chat-group-leave", "member-a"],
+      );
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "member-a",
+        "chat.removed",
+        { id: "chat-group-leave" },
+      );
+    });
+
+    it("emits chat.updated to the chat room after leaving", async () => {
+      const { service, realtime } = createService({
+        database: {
+          query: jest.fn().mockResolvedValueOnce({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(groupChat),
+        },
+      });
+
+      await service.leaveGroup(leaveActor, "chat-group-leave");
+
+      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
+        "chat-group-leave",
+        "chat.updated",
+        { id: "chat-group-leave" },
+      );
+    });
+
+    it("rejects leaveGroup when the chat is not a group", async () => {
+      const { service } = createService({
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue({
+            id: "chat-direct-1",
+            type: "direct",
+            memberUserId: "member-a",
+            memberRole: "member",
+          }),
+        },
+      });
+
+      await expect(service.leaveGroup(leaveActor, "chat-direct-1")).rejects.toThrow();
+    });
+
+    it("rejects leaveGroup when the actor is not a member (getChatAccess returns no membership)", async () => {
+      const { service } = createService({
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(null),
+        },
+      });
+
+      await expect(service.leaveGroup(leaveActor, "chat-group-leave")).rejects.toThrow();
+    });
+  });
+
+  // ─── Task 8: createGroup fan-out ─────────────────────────────────────────
+
+  describe("createGroup fan-out", () => {
+    it("emits chat.created to each member's user room after group is created", async () => {
+      const managerActor = { userId: "manager-a", role: "manager" as const };
+      const memberIds = ["manager-a", "user-b", "user-c"];
+      type MockClient = { query: jest.Mock };
+      const client = {
+        query: jest
+          .fn()
+          // insert chats returning row
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id: "chat-group-new",
+                type: "group",
+                title: "My Group",
+                created_by: "manager-a",
+                last_message_id: null,
+                last_message_content: null,
+                last_message_created_at: null,
+                unread_count: "0",
+                created_at: new Date("2026-06-25T10:00:00Z"),
+                updated_at: new Date("2026-06-25T10:00:00Z"),
+              },
+            ],
+          })
+          // insertMembers calls (3 members)
+          .mockResolvedValue({ rows: [] }),
+      };
+
+      const { service, realtime } = createService({
+        database: {
+          // assertActiveUsers: return all 3 users
+          query: jest.fn().mockResolvedValueOnce({
+            rows: memberIds.map((id) => ({ id })),
+          }),
+          transaction: jest.fn(
+            async (work: (c: MockClient) => Promise<unknown>) => work(client),
+          ) as never,
+        },
+        policy: {
+          assertCanCreateGroup: jest.fn(),
+        },
+      });
+
+      await service.createGroup(managerActor, {
+        name: "My Group",
+        memberUserIds: ["user-b", "user-c"],
+      });
+
+      // chat.created must be published to every member's user room
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "manager-a",
+        "chat.created",
+        expect.objectContaining({ id: "chat-group-new", type: "group" }),
+      );
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "user-b",
+        "chat.created",
+        expect.objectContaining({ id: "chat-group-new", type: "group" }),
+      );
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "user-c",
+        "chat.created",
+        expect.objectContaining({ id: "chat-group-new", type: "group" }),
+      );
+      expect(realtime.publishUserEvent).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  // ─── Task 8: updateGroupMembers fan-out ──────────────────────────────────
+
+  describe("updateGroupMembers fan-out", () => {
+    const managerActor = { userId: "manager-a", role: "manager" as const };
+    const groupChat = {
+      id: "chat-group-upd",
+      type: "group",
+      memberUserId: "manager-a",
+      memberRole: "admin",
+    };
+
+    it("emits chat.created to added members and chat.removed to removed members", async () => {
+      type MockClient = { query: jest.Mock };
+      const client = {
+        query: jest.fn().mockResolvedValue({ rows: [] }),
+      };
+
+      // getChat query result for the return value + fan-out summary
+      const chatRow = {
+        id: "chat-group-upd",
+        type: "group",
+        title: "My Group",
+        created_by: "manager-a",
+        last_message_id: null,
+        last_message_content: null,
+        last_message_created_at: null,
+        unread_count: "0",
+        is_muted: false,
+        partner_user_id: null,
+        partner_email: null,
+        partner_first_name: null,
+        partner_last_name: null,
+        partner_avatar_file_id: null,
+        created_at: new Date("2026-06-25T10:00:00Z"),
+        updated_at: new Date("2026-06-25T10:00:00Z"),
+      };
+
+      const { service, realtime } = createService({
+        database: {
+          // assertActiveUsers call
+          query: jest.fn()
+            .mockResolvedValueOnce({ rows: [{ id: "user-new" }] })
+            // getChat inner query
+            .mockResolvedValueOnce({ rows: [chatRow] }),
+          transaction: jest.fn(
+            async (work: (c: MockClient) => Promise<unknown>) => work(client),
+          ) as never,
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(groupChat),
+          assertCanManageGroup: jest.fn(),
+          assertCanReadChat: jest.fn(),
+        },
+      });
+
+      await service.updateGroupMembers(managerActor, "chat-group-upd", {
+        addUserIds: ["user-new"],
+        removeUserIds: ["user-old"],
+      });
+
+      // chat.created to added member's user room
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "user-new",
+        "chat.created",
+        expect.objectContaining({ id: "chat-group-upd", type: "group" }),
+      );
+      // chat.removed to removed member's user room
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "user-old",
+        "chat.removed",
+        { id: "chat-group-upd" },
+      );
+      // existing chat.updated to the chat room still fires
+      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
+        "chat-group-upd",
+        "chat.updated",
+        { id: "chat-group-upd" },
+      );
+    });
+  });
 });

@@ -592,7 +592,12 @@ export class MessengerService implements OnModuleInit {
       entityId: chat.id,
     });
 
-    return this.toChatSummaryDto(chat);
+    const summary = this.toChatSummaryDto(chat);
+    // Fan-out: every member receives chat.created so the group appears live.
+    for (const userId of uniqueMembers) {
+      this.realtime.publishUserEvent(userId, "chat.created", summary);
+    }
+    return summary;
   }
 
   async updateGroupMembers(
@@ -637,7 +642,33 @@ export class MessengerService implements OnModuleInit {
       entityId: chatId,
     });
     this.realtime.publishChatEvent(chatId, "chat.updated", { id: chatId });
-    return this.getChat(actor, chatId);
+    const result = await this.getChat(actor, chatId);
+    // Fan-out: added members receive chat.created; removed members receive chat.removed.
+    for (const userId of dto.addUserIds ?? []) {
+      this.realtime.publishUserEvent(userId, "chat.created", result);
+    }
+    for (const userId of dto.removeUserIds ?? []) {
+      this.realtime.publishUserEvent(userId, "chat.removed", { id: chatId });
+    }
+    return result;
+  }
+
+  async leaveGroup(actor: ActorContext, chatId: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "group") {
+      throw new NotFoundException("Группа не найдена.");
+    }
+    await this.database.query(
+      `
+        update app.chat_members
+        set left_at = now()
+        where chat_id = $1 and user_id = $2 and left_at is null
+      `,
+      [chatId, actor.userId],
+    );
+    this.realtime.publishUserEvent(actor.userId, "chat.removed", { id: chatId });
+    this.realtime.publishChatEvent(chatId, "chat.updated", { id: chatId });
+    return { success: true };
   }
 
   async getChat(actor: ActorContext, chatId: string) {

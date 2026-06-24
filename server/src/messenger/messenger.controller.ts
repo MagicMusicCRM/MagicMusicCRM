@@ -100,6 +100,14 @@ export class MessengerController {
     return this.messenger.updateGroupMembers(actor, id, dto);
   }
 
+  @Post("groups/:id/leave")
+  leaveGroup(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.messenger.leaveGroup(actor, id);
+  }
+
   @Post("chats/:chatId/read")
   markRead(
     @CurrentActor() actor: ActorContext,
