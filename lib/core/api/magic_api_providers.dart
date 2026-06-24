@@ -4,7 +4,9 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/constants/env.dart';
 
 final magicTokenStoreProvider = Provider<MagicTokenStore>((ref) {
-  return const SecureMagicTokenStore();
+  // Namespaced per MAGIC_PROFILE so several desktop windows of the same binary
+  // can stay logged into different accounts without clobbering each other.
+  return SecureMagicTokenStore(namespace: Env.storageNamespace);
 });
 
 final magicApiClientProvider = Provider<MagicApiClient>((ref) {
