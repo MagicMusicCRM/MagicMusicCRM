@@ -131,4 +131,55 @@ describe('MessengerPolicy', () => {
       ).not.toThrow();
     }
   });
+
+  describe('assertCanAssign', () => {
+    const unassignedChat = {
+      id: 'chat-a', type: 'administration', memberUserId: null, memberRole: null,
+      assignedToUserId: null
+    };
+    const chatAssignedToOther = {
+      id: 'chat-a', type: 'administration', memberUserId: null, memberRole: null,
+      assignedToUserId: 'staff-other'
+    };
+    const chatAssignedToSelf = {
+      id: 'chat-a', type: 'administration', memberUserId: null, memberRole: null,
+      assignedToUserId: 'manager-a'
+    };
+
+    it('allows a manager-tier actor to reassign a chat assigned to someone else', () => {
+      expect(() =>
+        policy.assertCanAssign(
+          { userId: 'manager-a', role: 'manager' },
+          chatAssignedToOther
+        )
+      ).not.toThrow();
+    });
+
+    it('allows a non-manager staff to self-claim an unassigned chat', () => {
+      expect(() =>
+        policy.assertCanAssign(
+          { userId: 'admin-a', role: 'admin' },
+          unassignedChat
+        )
+      ).not.toThrow();
+    });
+
+    it('allows a non-manager staff to reassign a chat already assigned to themselves', () => {
+      expect(() =>
+        policy.assertCanAssign(
+          { userId: 'manager-a', role: 'admin' },
+          chatAssignedToSelf
+        )
+      ).not.toThrow();
+    });
+
+    it('forbids a non-manager staff from reassigning a chat assigned to a different staff', () => {
+      expect(() =>
+        policy.assertCanAssign(
+          { userId: 'admin-a', role: 'admin' },
+          chatAssignedToOther
+        )
+      ).toThrow(ForbiddenException);
+    });
+  });
 });

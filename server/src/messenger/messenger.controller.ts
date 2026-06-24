@@ -14,6 +14,7 @@ import {
 import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
+import { AssignChatDto } from "./dto/assign-chat.dto";
 import { UpsertChannelDto } from "./dto/channel.dto";
 import { CreateChannelPostDto } from "./dto/create-channel-post.dto";
 import { CreateDirectChatDto } from "./dto/create-direct-chat.dto";
@@ -106,6 +107,23 @@ export class MessengerController {
     @Body() dto: MarkReadDto,
   ) {
     return this.messenger.markRead(actor, chatId, dto);
+  }
+
+  @Post("chats/:chatId/assign")
+  assignChat(
+    @CurrentActor() actor: ActorContext,
+    @Param("chatId", ParseUUIDPipe) chatId: string,
+    @Body() dto: AssignChatDto,
+  ) {
+    return this.messenger.assignChat(actor, chatId, dto.userId);
+  }
+
+  @Post("chats/:chatId/unassign")
+  unassignChat(
+    @CurrentActor() actor: ActorContext,
+    @Param("chatId", ParseUUIDPipe) chatId: string,
+  ) {
+    return this.messenger.unassignChat(actor, chatId);
   }
 
   @Put("chats/:chatId/mute")

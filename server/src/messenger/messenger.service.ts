@@ -11,6 +11,7 @@ import { AuditService } from "../audit/audit.service";
 import {
   ActorContext,
   isManagerOrAdminRole,
+  isManagerRole,
   isStaffRole,
 } from "../common/security/actor-context";
 import { CrmService } from "../crm/crm.service";
@@ -707,6 +708,73 @@ export class MessengerService implements OnModuleInit {
         this.toMessageDto(message),
       );
     }
+    return { success: true };
+  }
+
+  async assignChat(actor: ActorContext, chatId: string, userId?: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "administration") {
+      throw new NotFoundException("Чат не найден.");
+    }
+    if (!isStaffRole(actor.role)) {
+      throw new ForbiddenException("Только сотрудники могут брать чаты в работу.");
+    }
+
+    const targetUserId = userId ?? actor.userId;
+
+    // Verify the target is a staff user
+    const targetResult = await this.database.query<{ role: string }>(
+      "select role from app.users where id = $1 and deleted_at is null limit 1",
+      [targetUserId],
+    );
+    const targetRow = targetResult.rows[0];
+    if (!targetRow) {
+      throw new NotFoundException("Пользователь не найден.");
+    }
+    if (!isStaffRole(targetRow.role as never)) {
+      throw new ForbiddenException("Чат можно назначить только сотруднику.");
+    }
+
+    this.policy.assertCanAssign(actor, chat);
+
+    await this.database.query(
+      "update app.chats set assigned_to_user_id = $2, assigned_at = now() where id = $1",
+      [chatId, targetUserId],
+    );
+
+    this.realtime.publishAdminInboxEvent("chat.updated", {
+      id: chatId,
+      assignedTo: { id: targetUserId },
+    });
+
+    return { success: true };
+  }
+
+  async unassignChat(actor: ActorContext, chatId: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "administration") {
+      throw new NotFoundException("Чат не найден.");
+    }
+    if (!isStaffRole(actor.role)) {
+      throw new ForbiddenException("Только сотрудники могут снимать назначение.");
+    }
+
+    // Allowed for the current assignee or manager-tier
+    const current = chat.assignedToUserId ?? null;
+    if (!isManagerRole(actor.role) && current !== actor.userId) {
+      throw new ForbiddenException("Недостаточно прав для снятия назначения.");
+    }
+
+    await this.database.query(
+      "update app.chats set assigned_to_user_id = null, assigned_at = null where id = $1",
+      [chatId],
+    );
+
+    this.realtime.publishAdminInboxEvent("chat.updated", {
+      id: chatId,
+      assignedTo: null,
+    });
+
     return { success: true };
   }
 

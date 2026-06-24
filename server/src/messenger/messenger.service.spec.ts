@@ -1023,6 +1023,90 @@ describe("MessengerService", () => {
     expect(item.archived).toBe(false);
   });
 
+  describe("assignChat / unassignChat", () => {
+    const staffActor = { userId: "staff-a", role: "admin" as const };
+    const managerActor = { userId: "manager-a", role: "manager" as const };
+    const adminChat = {
+      id: "chat-admin", type: "administration",
+      memberUserId: null, memberRole: null, assignedToUserId: null,
+    };
+
+    it("assignChat sets assigned_to_user_id/assigned_at and publishes chat.updated to admin inbox", async () => {
+      const { service, database, realtime } = createService({
+        database: {
+          query: jest.fn()
+            // requireStaffTarget: user role lookup
+            .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
+            // update query
+            .mockResolvedValueOnce({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(adminChat),
+          assertCanAssign: jest.fn(),
+        },
+      });
+
+      await service.assignChat(staffActor, "chat-admin", undefined);
+
+      expect(database.query).toHaveBeenCalledWith(
+        expect.stringContaining("assigned_to_user_id"),
+        expect.arrayContaining(["chat-admin", "staff-a"]),
+      );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "chat.updated",
+        expect.objectContaining({ id: "chat-admin" }),
+      );
+    });
+
+    it("assignChat self-claim works for any staff actor (admin role)", async () => {
+      const { service, realtime } = createService({
+        database: {
+          query: jest.fn()
+            .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
+            .mockResolvedValueOnce({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(adminChat),
+          assertCanAssign: jest.fn(),
+        },
+      });
+
+      const adminActor = { userId: "admin-b", role: "admin" as const };
+      await service.assignChat(adminActor, "chat-admin", undefined);
+
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "chat.updated",
+        expect.objectContaining({ id: "chat-admin" }),
+      );
+    });
+
+    it("unassignChat clears assignment and publishes chat.updated with assignedTo null", async () => {
+      const assignedChat = {
+        ...adminChat, assignedToUserId: "manager-a",
+      };
+      const { service, database, realtime } = createService({
+        database: {
+          query: jest.fn().mockResolvedValueOnce({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(assignedChat),
+          assertCanAssign: jest.fn(),
+        },
+      });
+
+      await service.unassignChat(managerActor, "chat-admin");
+
+      expect(database.query).toHaveBeenCalledWith(
+        expect.stringContaining("assigned_to_user_id = null"),
+        ["chat-admin"],
+      );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "chat.updated",
+        expect.objectContaining({ id: "chat-admin", assignedTo: null }),
+      );
+    });
+  });
+
   it("creates an administration chat with the actor as owner", async () => {
     type MockClient = { query: jest.Mock };
     const client = { query: jest.fn()

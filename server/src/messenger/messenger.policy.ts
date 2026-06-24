@@ -3,6 +3,7 @@ import {
   ActorContext,
   isAdminRole,
   isManagerOrAdminRole,
+  isManagerRole,
   isStaffRole
 } from '../common/security/actor-context';
 import { DatabaseService } from '../db/database.service';
@@ -12,6 +13,7 @@ export interface ChatAccessRecord {
   type: string;
   memberUserId: string | null;
   memberRole: string | null;
+  assignedToUserId?: string | null;
 }
 
 export interface ChannelAccessRecord {
@@ -52,6 +54,14 @@ export class MessengerPolicy {
   assertCanCreateGroup(actor: ActorContext): void {
     if (isManagerOrAdminRole(actor.role)) return;
     throw new ForbiddenException('Недостаточно прав для создания группы.');
+  }
+
+  /** Manager-tier may always assign/reassign; other staff only when unassigned or already theirs. */
+  assertCanAssign(actor: ActorContext, chat: ChatAccessRecord): void {
+    if (isManagerRole(actor.role)) return;
+    const current = chat.assignedToUserId ?? null;
+    if (current === null || current === actor.userId) return;
+    throw new ForbiddenException('Чат уже назначен другому сотруднику.');
   }
 
   assertCanWriteChannel(actor: ActorContext, channel: ChannelAccessRecord): void {
@@ -107,7 +117,8 @@ export class MessengerPolicy {
   async getChatAccess(actor: ActorContext, chatId: string): Promise<ChatAccessRecord | undefined> {
     const result = await this.database.query<ChatAccessRecord>(
       `
-        select c.id, c.type, cm.user_id as "memberUserId", cm.role as "memberRole"
+        select c.id, c.type, cm.user_id as "memberUserId", cm.role as "memberRole",
+          c.assigned_to_user_id as "assignedToUserId"
         from app.chats c
         left join app.chat_members cm
           on cm.chat_id = c.id and cm.user_id = $2 and cm.left_at is null
