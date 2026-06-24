@@ -46,6 +46,23 @@ describe('MessengerPolicy', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
+  it('forbids a client from creating any direct chat', async () => {
+    await expect(policy.canCreateDirectChat({ userId: 'c', role: 'client' }, 'x'))
+      .rejects.toThrow(ForbiddenException);
+  });
+
+  it('forbids a direct chat whose target is a client', async () => {
+    query.mockResolvedValueOnce({ rows: [{ role: 'client' }] }); // target lookup
+    await expect(policy.canCreateDirectChat({ userId: 't', role: 'teacher' }, 'client-x'))
+      .rejects.toThrow(ForbiddenException);
+  });
+
+  it('allows a direct chat between two non-client staff/teachers', async () => {
+    query.mockResolvedValueOnce({ rows: [{ role: 'admin' }] }); // target lookup
+    await expect(policy.canCreateDirectChat({ userId: 't', role: 'teacher' }, 'admin-x'))
+      .resolves.toBeUndefined();
+  });
+
   it('allows channel writes for explicit write permission', () => {
     expect(() =>
       policy.assertCanWriteChannel(

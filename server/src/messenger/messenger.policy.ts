@@ -68,31 +68,18 @@ export class MessengerPolicy {
     if (actor.userId === targetUserId) {
       throw new ForbiddenException('Нельзя создать чат с самим собой.');
     }
-
-    if (isManagerOrAdminRole(actor.role)) return;
-
-    const result = await this.database.query<{ allowed: boolean }>(
-      `
-        select exists (
-          select 1
-          from app.lessons l
-          join app.students s on s.id = l.student_id and s.deleted_at is null
-          join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
-          join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
-          join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-          where l.deleted_at is null
-            and (
-              (sp.user_id = $1 and tp.user_id = $2)
-              or (tp.user_id = $1 and sp.user_id = $2)
-            )
-        ) as allowed
-      `,
-      [actor.userId, targetUserId]
-    );
-
-    if (!result.rows[0]?.allowed) {
-      throw new ForbiddenException('Недостаточно прав для создания прямого чата.');
+    if (actor.role === 'client') {
+      throw new ForbiddenException('Клиенты не могут создавать личные чаты.');
     }
+    const target = await this.database.query<{ role: string }>(
+      'select role from app.users where id = $1 and deleted_at is null limit 1',
+      [targetUserId],
+    );
+    if (!target.rows[0]) throw new NotFoundException('Пользователь не найден.');
+    if (target.rows[0].role === 'client') {
+      throw new ForbiddenException('С клиентом можно общаться только через Администрацию или группу.');
+    }
+    // both non-client → allowed (teaching-relationship rule removed).
   }
 
   async canJoinRealtimeRoom(actor: ActorContext, roomType: string, roomId: string): Promise<void> {
