@@ -244,7 +244,7 @@ async function main() {
       const groupCreated = waitForEvent<ChatResponse>(
         socket,
         "chat.created",
-        (p) => !!p.id,
+        (p) => !!p.id && p.title === groupName,
         15_000,
       );
       const group = await request<ChatResponse>(
