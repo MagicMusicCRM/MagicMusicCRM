@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/subscription_catalog_widget.dart';
 
 class ReportsWidget extends ConsumerStatefulWidget {
   final int initialTab;
@@ -49,9 +50,9 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 4,
+      length: 5,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 3),
+      initialIndex: widget.initialTab.clamp(0, 4),
     );
     _loadReports();
   }
@@ -59,7 +60,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   @override
   void didUpdateWidget(covariant ReportsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextTab = widget.initialTab.clamp(0, 3);
+    final nextTab = widget.initialTab.clamp(0, 4);
     if (nextTab != _tabController.index) {
       _tabController.index = nextTab;
     }
@@ -146,34 +147,28 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     }
 
     await Future.wait([
-      run(
-        () => service.getAnalyticsSources(from: from, to: to),
-        (data, error) {
-          _sources = data;
-          _sourcesError = error;
-        },
-      ),
-      run(
-        () => service.getAnalyticsDataQuality(),
-        (data, error) {
-          _dataQuality = data;
-          _dataQualityError = error;
-        },
-      ),
-      run(
-        () => service.getAnalyticsResponsible(from: from, to: to),
-        (data, error) {
-          _responsible = data;
-          _responsibleError = error;
-        },
-      ),
-      run(
-        () => service.getAnalyticsFinanceMonthly(from: from, to: to),
-        (data, error) {
-          _financeMonthly = data;
-          _financeMonthlyError = error;
-        },
-      ),
+      run(() => service.getAnalyticsSources(from: from, to: to), (data, error) {
+        _sources = data;
+        _sourcesError = error;
+      }),
+      run(() => service.getAnalyticsDataQuality(), (data, error) {
+        _dataQuality = data;
+        _dataQualityError = error;
+      }),
+      run(() => service.getAnalyticsResponsible(from: from, to: to), (
+        data,
+        error,
+      ) {
+        _responsible = data;
+        _responsibleError = error;
+      }),
+      run(() => service.getAnalyticsFinanceMonthly(from: from, to: to), (
+        data,
+        error,
+      ) {
+        _financeMonthly = data;
+        _financeMonthlyError = error;
+      }),
     ]);
   }
 
@@ -209,6 +204,8 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       children: [
         TabBar(
           controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           labelColor: AppColor.gold,
           unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
           indicatorColor: AppColor.gold,
@@ -217,6 +214,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             Tab(text: 'Финансы'),
             Tab(text: 'Активность'),
             Tab(text: 'Управление'),
+            Tab(text: 'Абонементы'),
           ],
         ),
         Expanded(
@@ -227,6 +225,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               const FinancialDashboardWidget(),
               const _ActivityLogTab(),
               const ManagementDashboardWidget(),
+              const SubscriptionCatalogWidget(),
             ],
           ),
         ),
@@ -310,272 +309,286 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                 ),
                 const SizedBox(height: 20),
 
-            // KPI Row
-            Row(
-              children: [
-                Expanded(
-                  child: _KpiCard(
-                    label: 'Посещаемость',
-                    value:
-                        '${_asDouble(_summary['attendance']).toStringAsFixed(1)}%',
-                    icon: Icons.trending_up_rounded,
-                    color: AppColor.success,
-                  ),
+                // KPI Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: _KpiCard(
+                        label: 'Посещаемость',
+                        value:
+                            '${_asDouble(_summary['attendance']).toStringAsFixed(1)}%',
+                        icon: Icons.trending_up_rounded,
+                        color: AppColor.success,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _KpiCard(
+                        label: 'Выручка',
+                        value: '${fmt.format(_summary['revenue'] ?? 0)} ₽',
+                        icon: Icons.payments_rounded,
+                        color: AppTheme.secondaryGold,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _KpiCard(
+                        label: 'Занятий',
+                        value: '${_summary['total_lessons'] ?? 0}',
+                        icon: Icons.calendar_month_rounded,
+                        color: AppColor.gold,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _KpiCard(
-                    label: 'Выручка',
-                    value: '${fmt.format(_summary['revenue'] ?? 0)} ₽',
-                    icon: Icons.payments_rounded,
-                    color: AppTheme.secondaryGold,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _KpiCard(
-                    label: 'Занятий',
-                    value: '${_summary['total_lessons'] ?? 0}',
-                    icon: Icons.calendar_month_rounded,
-                    color: AppColor.gold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            // Lessons Chart
-            const Text(
-              'Занятия по месяцам',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 176,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: _monthlyData.map((m) {
-                  final ratio = maxLessons > 0 ? m.lessons / maxLessons : 0.0;
-                  final completedRatio = m.lessons > 0
-                      ? m.completed / m.lessons
-                      : 0.0;
-                  final plannedHeight = m.lessons > 0
-                      ? math.max(8.0, 116 * ratio)
-                      : 2.0;
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          SizedBox(
-                            height: 18,
-                            child: Text(
-                              '${m.lessons}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Stack(
-                            alignment: Alignment.bottomCenter,
+                // Lessons Chart
+                const Text(
+                  'Занятия по месяцам',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 176,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: _monthlyData.map((m) {
+                      final ratio = maxLessons > 0
+                          ? m.lessons / maxLessons
+                          : 0.0;
+                      final completedRatio = m.lessons > 0
+                          ? m.completed / m.lessons
+                          : 0.0;
+                      final plannedHeight = m.lessons > 0
+                          ? math.max(8.0, 116 * ratio)
+                          : 2.0;
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              Container(
-                                width: double.infinity,
-                                height: plannedHeight,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.secondaryGold.withAlpha(34),
-                                  borderRadius: BorderRadius.circular(5),
+                              SizedBox(
+                                height: 18,
+                                child: Text(
+                                  '${m.lessons}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
+                                  ),
                                 ),
                               ),
+                              const SizedBox(height: 4),
+                              Stack(
+                                alignment: Alignment.bottomCenter,
+                                children: [
+                                  Container(
+                                    width: double.infinity,
+                                    height: plannedHeight,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.secondaryGold.withAlpha(
+                                        34,
+                                      ),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: double.infinity,
+                                    height: plannedHeight * completedRatio,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.secondaryGold,
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                m.month,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      color: AppTheme.secondaryGold,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Завершено',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Container(
+                      width: 10,
+                      height: 10,
+                      color: AppTheme.secondaryGold.withAlpha(34),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Всего запланировано',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Revenue Chart
+                const Text(
+                  'Выручка по месяцам',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 158,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: _monthlyData.map((m) {
+                      final ratio = maxRevenue > 0
+                          ? m.revenue / maxRevenue
+                          : 0.0;
+                      final barHeight = m.revenue > 0
+                          ? math.max(8.0, 96 * ratio)
+                          : 2.0;
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              SizedBox(
+                                height: 18,
+                                child: Text(
+                                  m.revenue >= 1000
+                                      ? '${(m.revenue / 1000).toStringAsFixed(0)}к'
+                                      : m.revenue.toStringAsFixed(0),
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: m.revenue > 0
+                                        ? Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface
+                                        : Colors.transparent,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
                               Container(
                                 width: double.infinity,
-                                height: plannedHeight * completedRatio,
+                                height: barHeight,
                                 decoration: BoxDecoration(
                                   color: AppTheme.secondaryGold,
                                   borderRadius: BorderRadius.circular(5),
                                 ),
                               ),
+                              const SizedBox(height: 6),
+                              Text(
+                                m.month,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            m.month,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Monthly table
+                const Text(
+                  'Детализация',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                ..._monthlyData.reversed.map(
+                  (m) => Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outlineVariant.withAlpha(90),
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Container(width: 10, height: 10, color: AppTheme.secondaryGold),
-                const SizedBox(width: 6),
-                Text(
-                  'Завершено',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Container(
-                  width: 10,
-                  height: 10,
-                  color: AppTheme.secondaryGold.withAlpha(34),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Всего запланировано',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Revenue Chart
-            const Text(
-              'Выручка по месяцам',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 158,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: _monthlyData.map((m) {
-                  final ratio = maxRevenue > 0 ? m.revenue / maxRevenue : 0.0;
-                  final barHeight = m.revenue > 0
-                      ? math.max(8.0, 96 * ratio)
-                      : 2.0;
-                  return Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Row(
                         children: [
-                          SizedBox(
-                            height: 18,
-                            child: Text(
-                              m.revenue >= 1000
-                                  ? '${(m.revenue / 1000).toStringAsFixed(0)}к'
-                                  : m.revenue.toStringAsFixed(0),
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                color: m.revenue > 0
-                                    ? Theme.of(context).colorScheme.onSurface
-                                    : Colors.transparent,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Container(
-                            width: double.infinity,
-                            height: barHeight,
-                            decoration: BoxDecoration(
-                              color: AppTheme.secondaryGold,
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
                           Text(
                             m.month,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const Spacer(),
+                          _SmallStat(
+                            label: 'занятий',
+                            value: '${m.lessons}',
+                            color: AppColor.gold,
+                          ),
+                          const SizedBox(width: 16),
+                          _SmallStat(
+                            label: 'новых',
+                            value: '${m.newStudents}',
+                            color: AppColor.success,
+                          ),
+                          const SizedBox(width: 16),
+                          _SmallStat(
+                            label: 'выручка',
+                            value: '${fmt.format(m.revenue)} ₽',
+                            color: AppTheme.secondaryGold,
                           ),
                         ],
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Monthly table
-            const Text(
-              'Детализация',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            ..._monthlyData.reversed.map(
-              (m) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outlineVariant.withAlpha(90),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        m.month,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const Spacer(),
-                      _SmallStat(
-                        label: 'занятий',
-                        value: '${m.lessons}',
-                        color: AppColor.gold,
-                      ),
-                      const SizedBox(width: 16),
-                      _SmallStat(
-                        label: 'новых',
-                        value: '${m.newStudents}',
-                        color: AppColor.success,
-                      ),
-                      const SizedBox(width: 16),
-                      _SmallStat(
-                        label: 'выручка',
-                        value: '${fmt.format(m.revenue)} ₽',
-                        color: AppTheme.secondaryGold,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
 
-            // ── KVA-198: four previously-orphaned analytics endpoints ─────────
-            const SizedBox(height: 24),
-            _buildSourcesCard(),
-            const SizedBox(height: 24),
-            _buildDataQualityCard(),
-            const SizedBox(height: 24),
-            _buildResponsibleCard(),
-            const SizedBox(height: 24),
-            _buildFinanceMonthlyCard(),
+                // ── KVA-198: four previously-orphaned analytics endpoints ─────────
+                const SizedBox(height: 24),
+                _buildSourcesCard(),
+                const SizedBox(height: 24),
+                _buildDataQualityCard(),
+                const SizedBox(height: 24),
+                _buildResponsibleCard(),
+                const SizedBox(height: 24),
+                _buildFinanceMonthlyCard(),
               ],
             ),
           ),
@@ -649,13 +662,13 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                           value: maxCount <= 0
                               ? 0
                               : (_asDouble(
-                                      _pick(r, const [
-                                        'leads',
-                                        'count',
-                                        'total',
-                                      ]),
-                                    ) /
-                                    maxCount)
+                                          _pick(r, const [
+                                            'leads',
+                                            'count',
+                                            'total',
+                                          ]),
+                                        ) /
+                                        maxCount)
                                     .clamp(0.0, 1.0),
                           minHeight: 6,
                           backgroundColor: colors.surfaceContainerHighest
@@ -709,7 +722,10 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             ),
             (
               'Ученики без направления',
-              _pick(students, const ['missingDiscipline', 'missing_discipline']),
+              _pick(students, const [
+                'missingDiscipline',
+                'missing_discipline',
+              ]),
             ),
           ].where((m) => m.$2 != null).toList();
 
@@ -727,10 +743,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               for (final m in rows)
                 _StatRow(
                   label: m.$1,
-                  value: NumberFormat(
-                    '#,##0',
-                    'ru',
-                  ).format(_asDouble(m.$2)),
+                  value: NumberFormat('#,##0', 'ru').format(_asDouble(m.$2)),
                 ),
             ],
           );
@@ -763,8 +776,11 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               for (final r in rows)
                 _StatRow(
                   label:
-                      _pick(r, const ['name', 'fullName', 'full_name'])
-                          ?.toString() ??
+                      _pick(r, const [
+                        'name',
+                        'fullName',
+                        'full_name',
+                      ])?.toString() ??
                       '—',
                   value: fmt.format(
                     _asDouble(_pick(r, const ['leads', 'count', 'total'])),
@@ -811,8 +827,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                 ),
               ),
               const Divider(height: 1),
-              for (final r in rows)
-                _buildFinanceRow(r, fmt, colors),
+              for (final r in rows) _buildFinanceRow(r, fmt, colors),
             ],
           );
         },
@@ -888,7 +903,6 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       ),
     );
   }
-
 }
 
 class _ReportsError extends StatelessWidget {
@@ -1201,10 +1215,7 @@ class _StatRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                fontSize: 13,
-                color: colors.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
             ),
           ),
           Text(
@@ -1395,9 +1406,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
         Expanded(
           child: _loading
               ? const Center(
-                  child: CircularProgressIndicator(
-                    color: AppColor.gold,
-                  ),
+                  child: CircularProgressIndicator(color: AppColor.gold),
                 )
               : _loadError != null
               ? _ReportsError(error: _loadError, onRetry: _loadActivity)
