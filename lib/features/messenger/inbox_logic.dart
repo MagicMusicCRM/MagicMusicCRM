@@ -11,6 +11,8 @@ const inboxFolderApiValues = {
 InboxFolder? folderOf(Map<String, dynamic> chat) {
   final raw = (chat['raw_type'] ?? chat['type']) as String?;
   if (raw != 'administration') return null;
+  // Optimistic archive flag (set locally before server confirms) takes priority.
+  if (chat['archived'] == true) return InboxFolder.archive;
   switch (chat['folder']) {
     case 'archive': return InboxFolder.archive;
     case 'students': return InboxFolder.students;

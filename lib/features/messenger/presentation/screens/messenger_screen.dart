@@ -420,6 +420,79 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     }
   }
 
+  // ── Archive / unarchive actions (administration chats, manager+admin only) ──
+
+  Future<void> _archiveChat(String chatId) async {
+    final svc = ref.read(magicMessengerServiceProvider);
+    // Optimistic: mark archived so folderOf re-buckets to Архив immediately.
+    setState(() => _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': true}));
+    try {
+      // Resurface is server-driven — a new client message clears archive for
+      // all staff and emits chat.updated (Task 5 patchChat moves it back out
+      // of Архив).
+      await svc.archiveChat(chatId);
+    } catch (e) {
+      if (!mounted) return;
+      // Revert optimistic update on failure.
+      setState(() => _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': false}));
+      _showChatSnack('Не удалось архивировать чат: $e', bg: AppColor.danger);
+    }
+  }
+
+  Future<void> _unarchiveChat(String chatId) async {
+    final svc = ref.read(magicMessengerServiceProvider);
+    // Optimistic: clear archived flag so folderOf re-buckets out of Архив.
+    setState(() => _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': false}));
+    try {
+      await svc.unarchiveChat(chatId);
+    } catch (e) {
+      if (!mounted) return;
+      // Revert optimistic update on failure.
+      setState(() => _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': true}));
+      _showChatSnack('Не удалось вернуть чат из архива: $e', bg: AppColor.danger);
+    }
+  }
+
+  /// Shows a long-press context menu for an administration chat row
+  /// (manager/admin only). Uses the same showDialog pattern as [_showStatusInfo].
+  void _showChatRowMenu(Map<String, dynamic> item) {
+    final id = item['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final isArchived = item['archived'] == true;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                isArchived ? Icons.unarchive_rounded : Icons.archive_rounded,
+                color: AppColor.gold,
+              ),
+              title: Text(isArchived ? 'Вернуть из архива' : 'Архивировать'),
+              onTap: () {
+                Navigator.pop(ctx);
+                if (isArchived) {
+                  _unarchiveChat(id);
+                } else {
+                  _archiveChat(id);
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _transferChat(String chatId) async {
     final pickedUserId = await showDialog<String>(
       context: context,
@@ -2350,6 +2423,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                           isMuted: _mutedChatIds.contains(id),
                           statusIcon: _buildStatusIcon(item, isDark),
                           onStatusTap: () => _showStatusInfo(item),
+                          // Archive long-press: manager/admin only, administration chats only.
+                          onLongPress: _isManagerOrAdminRole && isAdministration(item)
+                              ? () => _showChatRowMenu(item)
+                              : null,
                         );
                       },
                     ),
