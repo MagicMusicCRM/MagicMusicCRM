@@ -652,6 +652,35 @@ void main() {
       expect((c['assigned_to'] as Map)['name'], 'Анна');
     });
 
+    test(
+      'legacyChatFromSummary maps camelCase realtime summary to legacy keys',
+      () {
+        final adapter = _FakeAdapter([]);
+        final svc = MagicMessengerService(_client(adapter));
+        final summary = <String, dynamic>{
+          'id': 'chat-rt-1',
+          'type': 'administration',
+          'title': 'Администрация',
+          'unreadCount': 3,
+          'isMuted': false,
+          'ownerName': 'Мария Смирнова',
+          'folder': 'leads',
+          'archived': false,
+          'assignedTo': {'id': 'staff-7', 'name': 'Олег'},
+        };
+
+        final result = svc.legacyChatFromSummary(summary);
+
+        expect(result['id'], 'chat-rt-1');
+        expect(result['type'], 'direct'); // administration → direct
+        expect(result['raw_type'], 'administration');
+        expect(result['folder'], 'leads');
+        expect(result['archived'], false);
+        expect(result['owner_name'], 'Мария Смирнова');
+        expect((result['assigned_to'] as Map)['name'], 'Олег');
+      },
+    );
+
     test('reads channel access and permission rules through v3 API', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

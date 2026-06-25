@@ -601,6 +601,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       connection.onMessageCreated(_handleRealtimeMessageCreated);
       connection.onMessageUpdated(_handleRealtimeMessageUpdated);
       connection.onChannelPostCreated(_handleRealtimeChannelPostCreated);
+      connection.onChatCreated(_handleRealtimeChatCreated);
+      connection.onChatRemoved(_handleRealtimeChatRemoved);
       connection.onChatUpdated(_handleRealtimeChatUpdated);
       connection.onTypingStart(_handleRealtimeTypingStart);
       connection.onTypingStop(_handleRealtimeTypingStop);
@@ -718,6 +720,23 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     _updateChatItemLastMessage({...post, '_is_channel_post': true});
   }
 
+  void _handleRealtimeChatCreated(Map<String, dynamic> payload) {
+    if (!mounted) return;
+    final service = ref.read(magicMessengerServiceProvider);
+    final mapped = service.legacyChatFromSummary(payload);
+    setState(() => _chatItems = upsertChat(_chatItems, mapped));
+  }
+
+  void _handleRealtimeChatRemoved(Map<String, dynamic> payload) {
+    if (!mounted) return;
+    final id = payload['id'] as String?;
+    if (id == null) return;
+    setState(() {
+      _chatItems = removeChat(_chatItems, id);
+      _unreadCounts.remove(id);
+    });
+  }
+
   void _handleRealtimeChatUpdated(Map<String, dynamic> payload) {
     if (!mounted) return;
     final chatId = (payload['id'] ?? payload['chatId'])?.toString();
@@ -764,6 +783,15 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           () => _unreadCounts[chatId] = (_unreadCounts[chatId] ?? 0) + 1,
         );
       }
+      return;
+    }
+
+    // Assignment / archive / folder update — patch in place so folder badges
+    // and the assignee chip update live without a full reload.
+    if (payload.containsKey('assignedTo') ||
+        payload.containsKey('archived') ||
+        payload.containsKey('folder')) {
+      setState(() => _chatItems = patchChat(_chatItems, payload));
       return;
     }
 

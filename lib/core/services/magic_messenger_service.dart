@@ -302,6 +302,16 @@ class MagicMessengerService {
     return items.whereType<Map<String, dynamic>>().toList();
   }
 
+  /// Convert a camelCase `toChatSummaryDto` delivered via the realtime
+  /// `chat.created` event into the same snake_case shape that `_legacyChat`
+  /// produces from REST responses.  The summary has no `partner` sub-object;
+  /// display-name and title fall back to the same rules as `_legacyChat`.
+  Map<String, dynamic> legacyChatFromSummary(Map<String, dynamic> summary) {
+    // The summary uses the same camelCase field names as the REST response, so
+    // we can delegate directly to the private mapper.
+    return _legacyChat(summary);
+  }
+
   Map<String, dynamic> _legacyChat(Map<String, dynamic> item) {
     final rawType = item['type']?.toString() ?? 'direct';
     final type = rawType == 'administration' ? 'direct' : rawType;
