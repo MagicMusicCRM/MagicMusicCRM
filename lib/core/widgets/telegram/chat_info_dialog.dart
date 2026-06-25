@@ -796,7 +796,10 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
                                 },
                               ),
                             ],
-                            if (widget.chatType == 'group') ...[
+                            if (widget.chatType == 'group' &&
+                                _members.any(
+                                  (m) => m['is_current_user'] == true,
+                                )) ...[
                               const SizedBox(width: 32),
                               _buildActionButton(
                                 Icons.exit_to_app_rounded,
@@ -1189,6 +1192,7 @@ class _AddMembersDialogState extends ConsumerState<_AddMembersDialog> {
   List<Map<String, dynamic>> _filteredUsers = [];
   final Set<String> _selectedUserIds = {};
   bool _loading = true;
+  bool _loadError = false;
 
   @override
   void initState() {
@@ -1228,7 +1232,7 @@ class _AddMembersDialogState extends ConsumerState<_AddMembersDialog> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() { _loading = false; _loadError = true; });
     }
   }
 
@@ -1340,7 +1344,14 @@ class _AddMembersDialogState extends ConsumerState<_AddMembersDialog> {
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
-                  : _filteredUsers.isEmpty
+                  : _loadError
+                      ? const Center(
+                          child: Text(
+                            'Не удалось загрузить пользователей',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : _filteredUsers.isEmpty
                       ? Center(
                           child: Text(
                             'Нет пользователей для добавления',

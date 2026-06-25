@@ -2693,6 +2693,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                             if (leftId != null) {
                               _chatItems = removeChat(_chatItems, leftId);
                             }
+                            _showProfilePanel = false;
                           });
                           _deselectChat();
                         },
