@@ -1795,6 +1795,16 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 });
                 _selectChat(chat);
               },
+              onLeftGroup: () {
+                final leftId = _selectedChatId;
+                setState(() {
+                  if (leftId != null) {
+                    _chatItems = removeChat(_chatItems, leftId);
+                  }
+                  _showProfilePanel = false;
+                });
+                _deselectChat();
+              },
             )
           : const SizedBox.shrink(),
     );
@@ -2676,6 +2686,15 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                             _mutedChatIds.contains(_selectedChatId),
                         onNavigateToChat: (chat) {
                           _selectChat(chat);
+                        },
+                        onLeftGroup: () {
+                          final leftId = _selectedChatId;
+                          setState(() {
+                            if (leftId != null) {
+                              _chatItems = removeChat(_chatItems, leftId);
+                            }
+                          });
+                          _deselectChat();
                         },
                       ),
                     ),
