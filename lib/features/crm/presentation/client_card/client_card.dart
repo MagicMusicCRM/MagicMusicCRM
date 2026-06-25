@@ -17,7 +17,6 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'client_card_aggregation.dart';
-import 'show_client_card.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
 /// Инфо / Задачи / Комментарии / Семья / История). Behaviour is equivalent to
@@ -191,6 +190,57 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _loadingMetadata = true;
   List<CrmCustomFieldDefinition> _customFieldSchema = const [];
 
+  static const Set<String> _systemOnlyCustomFieldKeys = {
+    'hollihopid',
+    'hollihop_id',
+    'hollihopstudentid',
+    'hollihop_student_id',
+    'externalid',
+    'external_id',
+    'sourceleadid',
+    'source_lead_id',
+    'leadid',
+    'lead_id',
+  };
+
+  static const Set<String> _commonClientCustomFieldKeys = {
+    'middleName',
+    'gender',
+    'birthday',
+    'source',
+    'adSource',
+    'requestType',
+    'learningGoal',
+    'discipline',
+    'level',
+    'category',
+    'lessonType',
+    'responsible',
+    'preferredSchedule',
+    'contactPersonName',
+    'contactPersonRelation',
+    'contactPersonPhone',
+    'contactPersonEmail',
+    'address',
+    'applicationData',
+  };
+
+  static const Set<String> _studentOnlyCustomFieldKeys = {
+    'workplace',
+    'position',
+    'contractStatus',
+    'cabinetStatus',
+    'blacklisted',
+    'noEmail',
+    'individualPrice',
+  };
+
+  static const List<String> _studentStatusOptions = [
+    'Занимается',
+    'Закончил обучение',
+    'Саморегистрация',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -205,6 +255,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
       _mode = ClientMode.studentOnly;
       _resolvedStudentId = _entityId;
       _loadingFamily = true;
+      if (widget.allStatuses == null) _fetchStatuses();
+      _fetchMetadata();
       _fetchFamily();
       _fetchStudentData(then: _resolveLeadCounterpart);
       return;
@@ -279,11 +331,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
     List<Map<String, dynamic>> linked,
   ) {
     if (linked.isEmpty) return null;
-    final sorted = [...linked]..sort(
-      (a, b) => (b['created_at']?.toString() ?? '').compareTo(
-        a['created_at']?.toString() ?? '',
-      ),
-    );
+    final sorted = [...linked]
+      ..sort(
+        (a, b) => (b['created_at']?.toString() ?? '').compareTo(
+          a['created_at']?.toString() ?? '',
+        ),
+      );
     return sorted.first;
   }
 
@@ -360,22 +413,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // «Создать ученика» button even before resolution flips the mode.
   bool get _hasLinkedStudent => _list(_leadCard?['linked_students']).isNotEmpty;
 
-  // Linked students other than the active (primary) one — surfaced as links in
-  // the converted Инфо so the user can see siblings on the same lead.
-  List<Map<String, dynamic>> get _otherLinkedStudents {
-    final linked = _list(_leadCard?['linked_students']);
-    if (linked.length <= 1) return const [];
-    final activeId = _studentId;
-    return linked
-        .where((s) => s['id']?.toString() != activeId)
-        .toList();
-  }
-
   // Loads the student card in one round-trip (getStudentCard), mirroring
   // student_detail_screen._loadAllData. Per-section failures are isolated: the
   // bulk card load only fails the card if the student record itself is
   // unavailable; family loads independently via [_fetchFamily].
-  Future<void> _fetchStudentData({String? studentId, VoidCallback? then}) async {
+  Future<void> _fetchStudentData({
+    String? studentId,
+    VoidCallback? then,
+  }) async {
     final id = studentId ?? _studentId;
     if (id.isEmpty) return;
     if (mounted) {
@@ -589,25 +634,44 @@ class _ClientCardState extends ConsumerState<ClientCard>
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final id = _leadData['id'];
-      final customData = Map<String, dynamic>.from(
-        _leadData['custom_data'] as Map? ?? {},
-      );
-      if (_leadData['branch_id'] != null) {
-        customData['branchId'] = _leadData['branch_id'];
+      final service = ref.read(magicCrmServiceProvider);
+      if (_mode.hasLeadHalf && _leadId.isNotEmpty) {
+        final customData = Map<String, dynamic>.from(
+          _leadData['custom_data'] as Map? ?? {},
+        );
+        if (_leadData['branch_id'] != null) {
+          customData['branchId'] = _leadData['branch_id'];
+        }
+        await service.updateLead(
+          _leadId,
+          firstName: _clientFirstName,
+          lastName: _clientLastName,
+          phone: _clientPhone,
+          email: _clientEmail,
+          statusId: _leadData['status']?.toString(),
+          notes: _notesCtrl.text,
+          customDataPatch: customData,
+        );
       }
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateLead(
-            id.toString(),
-            firstName: _leadData['name']?.toString(),
-            lastName: _leadData['last_name']?.toString(),
-            phone: _leadData['phone']?.toString(),
-            email: _leadData['email']?.toString(),
-            statusId: _leadData['status']?.toString(),
-            notes: _notesCtrl.text,
-            customDataPatch: customData,
-          );
+
+      if (_mode.hasStudentHalf && _studentId.isNotEmpty) {
+        final customData = Map<String, dynamic>.from(
+          _student?['custom_data'] as Map? ?? {},
+        );
+        final branchId = _clientBranchId;
+        if (branchId != null && branchId.isNotEmpty) {
+          customData['branchId'] = branchId;
+        }
+        await service.updateStudent(
+          _studentId,
+          firstName: _clientFirstName,
+          lastName: _clientLastName,
+          phone: _clientPhone,
+          email: _clientEmail,
+          status: _student?['status']?.toString(),
+          customDataPatch: customData,
+        );
+      }
       if (mounted) {
         Navigator.pop(context, true);
       }
@@ -673,11 +737,31 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
   }
 
-  void _updateCustomData(String key, dynamic value) {
+  void _updateCustomDataForEntity(String entity, String key, dynamic value) {
     setState(() {
-      final cd = Map<String, dynamic>.from(_leadData['custom_data'] ?? {});
-      cd[key] = value;
-      _leadData['custom_data'] = cd;
+      void put(Map<String, dynamic> target) {
+        final cd = Map<String, dynamic>.from(target['custom_data'] ?? {});
+        if (value == null || value == '') {
+          cd.remove(key);
+        } else {
+          cd[key] = value;
+        }
+        target['custom_data'] = cd;
+      }
+
+      if (entity == 'students' && _student != null) {
+        put(_student!);
+        if (_isConverted && _commonClientCustomFieldKeys.contains(key)) {
+          put(_leadData);
+        }
+      } else {
+        put(_leadData);
+        if (_isConverted &&
+            _student != null &&
+            _commonClientCustomFieldKeys.contains(key)) {
+          put(_student!);
+        }
+      }
       _edited = true;
     });
   }
@@ -778,15 +862,21 @@ class _ClientCardState extends ConsumerState<ClientCard>
               _isStudent
                   ? _buildStudentHeader(cs, curStatus)
                   : _buildHeader(cs, curStatus),
-              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+              Divider(
+                height: 1,
+                color: cs.outlineVariant.withValues(alpha: 0.6),
+              ),
               _buildTabBar(cs),
-              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+              Divider(
+                height: 1,
+                color: cs.outlineVariant.withValues(alpha: 0.6),
+              ),
               Expanded(
                 child: IndexedStack(
                   index: _tabIndex,
                   children: _isStudent
                       ? [
-                          _buildStudentInfoTab(cs),
+                          _buildClientInfoTab(cs, curStatus),
                           _buildStudentTasksTab(cs),
                           _buildCommentsTab(cs),
                           _buildFamilyTab(cs),
@@ -798,7 +888,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                           _buildProgressTab(cs),
                         ]
                       : [
-                          _buildInfoTab(cs, curStatus),
+                          _buildClientInfoTab(cs, curStatus),
                           _buildTasksTab(cs),
                           _buildCommentsTab(cs),
                           _buildFamilyTab(cs),
@@ -806,7 +896,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
                         ],
                 ),
               ),
-              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+              Divider(
+                height: 1,
+                color: cs.outlineVariant.withValues(alpha: 0.6),
+              ),
               _isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs),
             ],
           ),
@@ -870,7 +963,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          'Лид · ${curStatus.$2} · ID ${_leadData['hollihop_id'] ?? '—'}',
+                          'Клиент · Лид · ${curStatus.$2}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1040,8 +1133,15 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
   }
 
-  // ── Tab: Инфо ──────────────────────────────────────────────────────────────
-  Widget _buildInfoTab(ColorScheme cs, StatusRecord curStatus) {
+  // ── Tab: Клиент ───────────────────────────────────────────────────────────
+  Widget _buildClientInfoTab(ColorScheme cs, StatusRecord curStatus) {
+    if (_isStudent) {
+      return _studentGuard(cs, () => _buildClientInfoContent(cs, curStatus));
+    }
+    return _buildClientInfoContent(cs, curStatus);
+  }
+
+  Widget _buildClientInfoContent(ColorScheme cs, StatusRecord curStatus) {
     final duplicateCandidates = _duplicateCandidates
         .where(_isCurrentLeadDuplicateCandidate)
         .toList();
@@ -1055,32 +1155,43 @@ class _ClientCardState extends ConsumerState<ClientCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle('Общая информация'),
-          _buildStatusPicker(cs, curStatus),
-          _buildTextField(cs, 'Имя', 'name'),
-          _buildTextField(cs, 'Фамилия', 'last_name'),
+          _sectionTitle('Клиент'),
+          if (_mode.hasLeadHalf) _buildStatusPicker(cs, curStatus),
+          if (_mode.hasStudentHalf) _buildStudentStatusPicker(cs),
+          _buildClientTextField(
+            cs,
+            'Имя',
+            _clientFirstName,
+            (value) => _updateClientCore('firstName', value),
+          ),
+          _buildClientTextField(
+            cs,
+            'Фамилия',
+            _clientLastName,
+            (value) => _updateClientCore('lastName', value),
+          ),
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: RuPhoneField(
-              initialCanonical: _leadData['phone']?.toString(),
+              key: ValueKey('client-phone-${_clientPhone ?? ''}'),
+              initialCanonical: _clientPhone,
               onCanonicalChanged: (c) {
-                setState(() {
-                  _leadData['phone'] = c.isEmpty ? null : c;
-                  _edited = true;
-                });
+                _updateClientCore('phone', c.isEmpty ? null : c);
               },
             ),
           ),
           const SizedBox(height: AppSpace.sm),
-          _buildTextField(
+          _buildClientTextField(
             cs,
             'Электронная почта',
-            'email',
+            _clientEmail,
+            (value) => _updateClientCore('email', value),
             keyboard: TextInputType.emailAddress,
           ),
+          if (!_loadingMetadata) _buildBranchDropdown(cs, 'Основной филиал'),
 
           const SizedBox(height: AppSpace.lg),
-          _sectionTitle('Дополнительные поля CRM'),
+          _sectionTitle('Параметры клиента'),
           if (_loadingMetadata)
             const Center(
               child: Padding(
@@ -1091,39 +1202,76 @@ class _ClientCardState extends ConsumerState<ClientCard>
           else ...[
             ..._buildCustomFieldControls(
               cs,
-              'leads',
-              excludedKeys: const {
-                'branchId',
-                'hollihopId',
-                'hollihop_id',
-                'sourceLeadId',
-              },
+              _isStudent ? 'students' : 'leads',
+              includeKeys: _commonClientCustomFieldKeys,
             ),
-            _buildBranchDropdown(cs, 'Основной филиал'),
+          ],
+
+          if (_mode.hasStudentHalf) ...[
+            const SizedBox(height: AppSpace.lg),
+            _sectionTitle('Поля ученика'),
+            if (_loadingMetadata)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(color: AppColor.gold),
+                ),
+              )
+            else
+              ..._buildCustomFieldControls(
+                cs,
+                'students',
+                includeKeys: _studentOnlyCustomFieldKeys,
+              ),
+            if (_balance != null) ...[
+              const SizedBox(height: AppSpace.lg),
+              _buildInfoCard('Финансы', [
+                _InfoRow(
+                  icon: Icons.summarize_outlined,
+                  label: 'Всего оплачено',
+                  value: '${_balance!['total_paid']} ₽',
+                ),
+                _InfoRow(
+                  icon: Icons.history_edu_outlined,
+                  label: 'Списано за уроки',
+                  value: '${_balance!['total_cost']} ₽',
+                ),
+                _InfoRow(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: 'Баланс',
+                  value: '${_balance!['balance']} ₽',
+                ),
+              ]),
+            ],
+            const SizedBox(height: AppSpace.lg),
+            _buildStudentGroupsInfoCard(cs),
+          ],
+
+          if (_mode.hasLeadHalf) ...[
+            const SizedBox(height: AppSpace.lg),
+            _sectionTitle('Заметки'),
+            TextField(
+              controller: _notesCtrl,
+              maxLines: 3,
+              decoration: _inputDecoration(
+                cs,
+                hint: 'Общие примечания по клиенту...',
+              ),
+            ),
           ],
 
           const SizedBox(height: AppSpace.lg),
-          _sectionTitle('Заметки'),
-          TextField(
-            controller: _notesCtrl,
-            maxLines: 3,
-            decoration: _inputDecoration(
-              cs,
-              hint: 'Общие примечания по лиду...',
-            ),
-          ),
-
-          const SizedBox(height: AppSpace.lg),
           ClientAppUserPanel(
-            entityType: 'lead',
-            entityId: widget.lead['id'].toString(),
+            entityType: _mode.hasStudentHalf ? 'student' : 'lead',
+            entityId: _mode.hasStudentHalf ? _studentId : _leadId,
           ),
 
           const SizedBox(height: AppSpace.lg),
           _sectionTitle('Связи и активность'),
           _buildAggregateCard(cs, includeTasks: false),
 
-          if (_loadingDuplicates || duplicateCandidates.isNotEmpty) ...[
+          if (_mode.hasLeadHalf &&
+              (_loadingDuplicates || duplicateCandidates.isNotEmpty)) ...[
             const SizedBox(height: AppSpace.md),
             _sectionTitle('Кандидаты на связь'),
             _duplicateCandidatesSection(cs, duplicateCandidates),
@@ -1142,7 +1290,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
       );
     }
     final card = _leadCard;
-    final tasks = card == null ? const <Map<String, dynamic>>[] : _list(card['tasks']);
+    final tasks = card == null
+        ? const <Map<String, dynamic>>[]
+        : _list(card['tasks']);
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
         AppSpace.xl,
@@ -1524,6 +1674,78 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
   }
 
+  String? _nonEmpty(dynamic value) {
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty || text == '—' ? null : text;
+  }
+
+  String? get _clientFirstName => _isStudent
+      ? _nonEmpty(_student?['first_name'])
+      : _nonEmpty(_leadData['name'] ?? _leadData['first_name']);
+
+  String? get _clientLastName => _isStudent
+      ? _nonEmpty(_student?['last_name'])
+      : _nonEmpty(_leadData['last_name']);
+
+  String? get _clientPhone => _isStudent
+      ? _nonEmpty(_student?['phone'])
+      : _nonEmpty(_leadData['phone']);
+
+  String? get _clientEmail => _isStudent
+      ? _nonEmpty(_student?['email'])
+      : _nonEmpty(_leadData['email']);
+
+  String? get _clientBranchId {
+    final studentCustom = _student?['custom_data'];
+    if (_isStudent && studentCustom is Map) {
+      return _nonEmpty(studentCustom['branchId'] ?? studentCustom['branch_id']);
+    }
+    return _nonEmpty(_leadData['branch_id']);
+  }
+
+  void _updateClientCore(String key, dynamic value) {
+    setState(() {
+      if (_mode.hasLeadHalf) {
+        switch (key) {
+          case 'firstName':
+            _leadData['name'] = value;
+            _leadData['first_name'] = value;
+          case 'lastName':
+            _leadData['last_name'] = value;
+          case 'phone':
+            _leadData['phone'] = value;
+          case 'email':
+            _leadData['email'] = value;
+          case 'branchId':
+            _leadData['branch_id'] = value;
+        }
+      }
+      if (_mode.hasStudentHalf && _student != null) {
+        switch (key) {
+          case 'firstName':
+            _student!['first_name'] = value;
+          case 'lastName':
+            _student!['last_name'] = value;
+          case 'phone':
+            _student!['phone'] = value;
+          case 'email':
+            _student!['email'] = value;
+          case 'branchId':
+            final cd = Map<String, dynamic>.from(
+              _student!['custom_data'] ?? {},
+            );
+            if (value == null || value == '') {
+              cd.remove('branchId');
+            } else {
+              cd['branchId'] = value;
+            }
+            _student!['custom_data'] = cd;
+        }
+      }
+      _edited = true;
+    });
+  }
+
   // Parse the balance defensively (it can arrive as a string) and color it:
   // red < 0, green > 0, neutral at exactly 0. (Ported from student_detail.)
   num? get _studentBalanceNum {
@@ -1579,9 +1801,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
               border: Border.all(color: AppColor.goldLine),
             ),
             child: Icon(
-              converted
-                  ? Icons.swap_horiz_rounded
-                  : Icons.school_outlined,
+              converted ? Icons.swap_horiz_rounded : Icons.school_outlined,
               size: 22,
               color: AppColor.gold,
             ),
@@ -1712,277 +1932,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   // Read-only «Исходный лид» card for the converted Инфо tab: source, request
-  // (creation) date and lead status. Shows a spinner while the lead half loads.
-  Widget _buildOriginatingLeadCard(ColorScheme cs) {
-    if (_loadingCard) {
-      return _buildInfoCard('Исходный лид', const [
-        Padding(
-          padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-          child: LinearProgressIndicator(color: AppColor.gold),
-        ),
-      ]);
-    }
-    final source = _leadData['source']?.toString().trim();
-    final requestDate = _formatDate(_leadData['created_at']);
-    final statusKey = _leadData['status']?.toString();
-    final statusLabel = _statuses
-        .firstWhere(
-          (s) => s.$1 == statusKey,
-          orElse: () => (
-            statusKey ?? '—',
-            _leadData['status_label']?.toString() ?? statusKey ?? '—',
-            AppTheme.primaryGold,
-          ),
-        )
-        .$2;
-    return _buildInfoCard('Исходный лид', [
-      _InfoRow(
-        icon: Icons.flag_rounded,
-        label: 'Статус лида',
-        value: statusLabel,
-      ),
-      _InfoRow(
-        icon: Icons.campaign_rounded,
-        label: 'Источник',
-        value: (source != null && source.isNotEmpty) ? source : '—',
-      ),
-      _InfoRow(
-        icon: Icons.event_rounded,
-        label: 'Дата заявки',
-        value: requestDate.isEmpty ? '—' : requestDate,
-      ),
-      if ((_leadData['hollihop_id']?.toString().trim().isNotEmpty ?? false))
-        _InfoRow(
-          icon: Icons.fingerprint_rounded,
-          label: 'ID лида',
-          value: _leadData['hollihop_id'].toString(),
-        ),
-    ]);
-  }
-
-  // Read-only links to the other students sharing this lead (siblings). Tapping
-  // a row opens that student in a fresh card.
-  Widget _buildLinkedStudentsCard(ColorScheme cs) {
-    return _buildInfoCard('Другие связанные ученики', [
-      for (final s in _otherLinkedStudents)
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          leading: const Icon(Icons.school_outlined, color: AppColor.gold),
-          title: Text(
-            '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim().isEmpty
-                ? 'Без имени'
-                : '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: (s['phone']?.toString().trim().isNotEmpty ?? false)
-              ? Text(s['phone'].toString())
-              : null,
-          trailing: const Icon(Icons.open_in_new_rounded, size: 16),
-          onTap: () {
-            final id = s['id']?.toString();
-            if (id == null || id.isEmpty) return;
-            showClientCard(context, entityType: 'student', entityId: id);
-          },
-        ),
-    ]);
-  }
-
-  // ── Student tab: Инфо ────────────────────────────────────────────────────
-  Widget _buildStudentInfoTab(ColorScheme cs) {
-    return _studentGuard(cs, () {
-      final contact = _studentContact();
-      final customData =
-          _student!['custom_data'] as Map<String, dynamic>? ?? {};
-      return ListView(
-        padding: const EdgeInsets.all(AppSpace.xl),
-        children: [
-          _buildInfoCard('Контактные данные', [
-            _InfoRow(
-              icon: Icons.phone_rounded,
-              label: 'Телефон',
-              value: contact.phone,
-            ),
-            _InfoRow(
-              icon: Icons.email_rounded,
-              label: 'Электронная почта',
-              value: contact.email,
-            ),
-          ]),
-          // Converted client: surface the originating lead (source, request
-          // date, lead status) as a read-only section so the lead Инфо isn't
-          // lost when the student layout takes over.
-          if (_isConverted) ...[
-            const SizedBox(height: AppSpace.lg),
-            _buildOriginatingLeadCard(cs),
-            // Additional linked students (beyond the active one) shown as links.
-            if (_otherLinkedStudents.isNotEmpty) ...[
-              const SizedBox(height: AppSpace.lg),
-              _buildLinkedStudentsCard(cs),
-            ],
-          ],
-          const SizedBox(height: AppSpace.lg),
-          ClientAppUserPanel(
-            entityType: 'student',
-            entityId: _studentId.isEmpty ? _entityId : _studentId,
-          ),
-          const SizedBox(height: AppSpace.lg),
-          _buildInfoCard('Дополнительная информация', [
-            _InfoRow(
-              icon: Icons.cake_rounded,
-              label: 'День рождения',
-              value: _student!['birthday']?.toString() ?? '—',
-            ),
-            _InfoRow(
-              icon: Icons.person_outline_rounded,
-              label: 'Пол',
-              value: _student!['gender'] == 'male'
-                  ? 'Мужской'
-                  : (_student!['gender'] == 'female' ? 'Женский' : '—'),
-            ),
-            if ((_student!['hollihop_id']?.toString().trim().isNotEmpty ??
-                false))
-              _InfoRow(
-                icon: Icons.fingerprint_rounded,
-                label: 'Идентификатор HolliHop',
-                value: _student!['hollihop_id'].toString(),
-              ),
-            ...customData.entries
-                .where(
-                  (e) =>
-                      !_isHiddenStudentCustomDataRow(e.key) &&
-                      (e.value?.toString().trim().isNotEmpty ?? false),
-                )
-                .map(
-                  (e) => _InfoRow(
-                    icon: Icons.info_outline_rounded,
-                    label: e.key,
-                    value: e.value.toString(),
-                  ),
-                ),
-          ]),
-          const SizedBox(height: AppSpace.lg),
-          _buildInfoCard('Финансовые настройки', [
-            _InfoRow(
-              icon: Icons.payments_outlined,
-              label: 'Цена инд. занятия',
-              value: _student!['individual_price'] != null
-                  ? '${_student!['individual_price']} ₽'
-                  : 'Не задана',
-              onEdit: _editStudentPrice,
-            ),
-            if (_balance != null) ...[
-              _InfoRow(
-                icon: Icons.summarize_outlined,
-                label: 'Всего оплачено',
-                value: '${_balance!['total_paid']} ₽',
-              ),
-              _InfoRow(
-                icon: Icons.history_edu_outlined,
-                label: 'Списано за уроки',
-                value: '${_balance!['total_cost']} ₽',
-              ),
-            ],
-          ]),
-          const SizedBox(height: AppSpace.lg),
-          _buildInfoCard('Группы', [
-            if (_groups.isEmpty)
-              const _InfoRow(
-                icon: Icons.group_off_rounded,
-                label: 'Группы',
-                value: 'Нет активных групп',
-              )
-            else
-              ..._groups.map((g) {
-                final teacher = g['teachers'];
-                String tName = '—';
-                if (teacher != null) {
-                  final tfName = teacher['first_name']?.toString() ?? '';
-                  final tlName = teacher['last_name']?.toString() ?? '';
-                  final p = teacher['profiles'] as Map<String, dynamic>?;
-                  tName = '$tfName $tlName'.trim();
-                  if (tName.isEmpty && p != null) {
-                    tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'
-                        .trim();
-                  }
-                }
-                return _InfoRow(
-                  icon: Icons.group_rounded,
-                  label: g['name']?.toString() ?? 'Группа',
-                  value: 'Преп.: $tName',
-                );
-              }),
-          ]),
-          const SizedBox(height: AppSpace.lg),
-          _buildInfoCard('Семья', _buildStudentFamilyRows()),
-        ],
-      );
-    });
-  }
-
-  bool _isHiddenStudentCustomDataRow(String key) {
-    const hidden = {
-      'hollihopid',
-      'hollihop_id',
-      'hollihopstudentid',
-      'hollihop_student_id',
-      'externalid',
-      'external_id',
-      'demoaccount',
-      'demo_account',
-      'isdemo',
-      'is_demo',
-      'sourceleadid',
-      'source_lead_id',
-      'leadid',
-      'lead_id',
-      'branchid',
-      'branch_id',
-      'disciplineid',
-      'discipline_id',
-      'disciplineinternal',
-      'discipline_internal',
-    };
-    return hidden.contains(key.trim().toLowerCase());
-  }
-
-  List<Widget> _buildStudentFamilyRows() {
-    final family = _family?['family'] as Map<String, dynamic>?;
-    final members =
-        (_family?['members'] as List?)
-            ?.whereType<Map<String, dynamic>>()
-            .toList() ??
-        const <Map<String, dynamic>>[];
-    if (family == null || members.isEmpty) {
-      return const [
-        _InfoRow(
-          icon: Icons.people_outline_rounded,
-          label: 'Семья',
-          value: 'Не указана',
-        ),
-      ];
-    }
-    final primaryId = family['primary_payer_member_id']?.toString();
-    return members.map((m) {
-      final role = _familyRoleLabel(m['role']);
-      final isPayer = primaryId != null && m['id']?.toString() == primaryId;
-      final label = [
-        role,
-        if (m['is_primary_contact'] == true) 'осн. контакт',
-        if (isPayer) 'плательщик',
-      ].join(' · ');
-      return _InfoRow(
-        icon: Icons.people_alt_rounded,
-        label: label,
-        value: (m['name']?.toString().trim().isNotEmpty ?? false)
-            ? m['name'].toString()
-            : 'Без имени',
-      );
-    }).toList();
-  }
-
   // ── Student tab: Задачи ──────────────────────────────────────────────────
   Widget _buildStudentTasksTab(ColorScheme cs) {
     return _studentGuard(cs, () {
@@ -2138,9 +2087,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   /// screen. The schedule lives on canonical CRM tab 2 (Расписание) inside the
   /// admin dashboard, so we also request that tab via [crmNavigationRequestProvider].
   void _openScheduleForLesson(DateTime scheduledAt, String lessonId) {
-    ref
-        .read(scheduleNavigationProvider.notifier)
-        .focus(scheduledAt, lessonId);
+    ref.read(scheduleNavigationProvider.notifier).focus(scheduledAt, lessonId);
     // Select the schedule destination (tab 2) once the dashboard renders.
     ref
         .read(crmNavigationRequestProvider.notifier)
@@ -2253,8 +2200,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
               trailing: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: (paid ? AppTheme.success : AppTheme.warning)
-                      .withAlpha(30),
+                  color: (paid ? AppTheme.success : AppTheme.warning).withAlpha(
+                    30,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -2377,7 +2325,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
                     ),
                     Text(
                       dateStr,
-                      style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -2646,10 +2597,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                 child: ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.assignment_rounded,
-                    color: AppColor.gold,
-                  ),
+                  leading: Icon(Icons.assignment_rounded, color: AppColor.gold),
                   title: Text('Задать ДЗ'),
                 ),
               ),
@@ -2667,7 +2615,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
                 child: ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.description_rounded, color: AppColor.gold),
+                  leading: Icon(
+                    Icons.description_rounded,
+                    color: AppColor.gold,
+                  ),
                   title: Text('Редактировать договор'),
                 ),
               ),
@@ -2688,13 +2639,69 @@ class _ClientCardState extends ConsumerState<ClientCard>
           ),
           const Spacer(),
           TextButton(
-            onPressed: _handleClose,
+            onPressed: _saving || _converting ? null : _handleClose,
             style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
-            child: const Text('Закрыть'),
+            child: const Text('Отмена'),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          FilledButton(
+            onPressed: busy || _saving || _converting ? null : _save,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColor.gold,
+              foregroundColor: AppColor.onGold,
+              disabledBackgroundColor: AppColor.gold.withValues(alpha: 0.42),
+              disabledForegroundColor: AppColor.onGold.withValues(alpha: 0.7),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+            child: _saving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColor.onGold,
+                    ),
+                  )
+                : const Text('Сохранить'),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildStudentGroupsInfoCard(ColorScheme cs) {
+    return _buildInfoCard('Группы', [
+      if (_groups.isEmpty)
+        const _InfoRow(
+          icon: Icons.group_off_rounded,
+          label: 'Группы',
+          value: 'Нет активных групп',
+        )
+      else
+        ..._groups.map((g) {
+          final teacher = g['teachers'];
+          var teacherName = '—';
+          if (teacher is Map<String, dynamic>) {
+            final firstName = teacher['first_name']?.toString() ?? '';
+            final lastName = teacher['last_name']?.toString() ?? '';
+            teacherName = '$firstName $lastName'.trim();
+          }
+          return _InfoRow(
+            icon: Icons.groups_rounded,
+            label: g['name']?.toString() ?? 'Группа',
+            value: teacherName.isEmpty || teacherName == '—'
+                ? 'Без преподавателя'
+                : 'Преподаватель: $teacherName',
+          );
+        }),
+    ]);
   }
 
   // ── Student actions (ported from student_detail_screen) ──────────────────
@@ -3228,36 +3235,54 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
   }
 
-  Widget _buildTextField(
+  Widget _buildStudentStatusPicker(ColorScheme cs) {
+    final current = _student?['status']?.toString() ?? '';
+    final options = [
+      if (current.isNotEmpty && !_studentStatusOptions.contains(current))
+        current,
+      ..._studentStatusOptions,
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: DropdownButtonFormField<String>(
+        initialValue: current.isEmpty ? null : current,
+        isExpanded: true,
+        decoration: _inputDecoration(
+          cs,
+          label: 'Статус ученика',
+          isDense: true,
+        ),
+        items: options
+            .map(
+              (status) => DropdownMenuItem(value: status, child: Text(status)),
+            )
+            .toList(),
+        onChanged: (value) {
+          if (value == null) return;
+          setState(() {
+            _student?['status'] = value;
+            _edited = true;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildClientTextField(
     ColorScheme cs,
     String label,
-    String key, {
+    String? value,
+    ValueChanged<String?> onChanged, {
     TextInputType? keyboard,
-    bool isCustom = false,
   }) {
-    String? initialVal;
-    if (isCustom) {
-      initialVal = (_leadData['custom_data'] as Map?)?[key]?.toString();
-    } else {
-      initialVal = _leadData[key]?.toString();
-    }
-
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: TextFormField(
-        initialValue: initialVal ?? '',
+        key: ValueKey('$label-${value ?? ''}'),
+        initialValue: value ?? '',
         decoration: _inputDecoration(cs, label: label, isDense: true),
         keyboardType: keyboard,
-        onChanged: (v) {
-          if (isCustom) {
-            _updateCustomData(key, v);
-          } else {
-            setState(() {
-              _leadData[key] = v;
-              _edited = true;
-            });
-          }
-        },
+        onChanged: (v) => onChanged(v.trim().isEmpty ? null : v),
       ),
     );
   }
@@ -3265,30 +3290,34 @@ class _ClientCardState extends ConsumerState<ClientCard>
   List<Widget> _buildCustomFieldControls(
     ColorScheme cs,
     String entity, {
+    Set<String>? includeKeys,
     Set<String> excludedKeys = const {},
   }) {
     final fields = _customFieldSchema
         .where(
           (field) =>
-              field.entity == entity && !excludedKeys.contains(field.key),
+              field.entity == entity &&
+              !_isSystemOnlyCustomField(field.key) &&
+              (includeKeys == null || includeKeys.contains(field.key)) &&
+              !excludedKeys.contains(field.key),
         )
         .toList();
     if (fields.isEmpty) {
       return [
         Text(
           'Дополнительные поля не настроены',
-          style: TextStyle(
-            color: cs.onSurfaceVariant,
-            fontSize: 13,
-          ),
+          style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
         ),
       ];
     }
     return fields.map((field) => _buildCustomFieldControl(cs, field)).toList();
   }
 
-  Widget _buildCustomFieldControl(ColorScheme cs, CrmCustomFieldDefinition field) {
-    final customData = _leadData['custom_data'] as Map? ?? {};
+  Widget _buildCustomFieldControl(
+    ColorScheme cs,
+    CrmCustomFieldDefinition field,
+  ) {
+    final customData = _customDataForEntity(field.entity);
     final rawValue = customData[field.key];
     final label = field.required ? '${field.label} *' : field.label;
 
@@ -3312,7 +3341,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
               (option) => DropdownMenuItem(value: option, child: Text(option)),
             ),
           ],
-          onChanged: (value) => _updateCustomData(
+          onChanged: (value) => _updateCustomDataForEntity(
+            field.entity,
             field.key,
             value == null || value.isEmpty ? null : value,
           ),
@@ -3324,7 +3354,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
       return SwitchListTile(
         value: rawValue == true || rawValue?.toString() == 'true',
         activeThumbColor: AppColor.gold,
-        onChanged: (value) => _updateCustomData(field.key, value),
+        onChanged: (value) =>
+            _updateCustomDataForEntity(field.entity, field.key, value),
         title: Text(label),
         subtitle: field.hint == null ? null : Text(field.hint!),
         contentPadding: EdgeInsets.zero,
@@ -3335,12 +3366,53 @@ class _ClientCardState extends ConsumerState<ClientCard>
       return _buildDateCustomField(cs, field, rawValue?.toString());
     }
 
-    return _buildTextField(
+    return _buildCustomTextField(
       cs,
       label,
-      field.key,
+      field,
+      rawValue?.toString(),
       keyboard: _keyboardForCustomField(field.type),
-      isCustom: true,
+    );
+  }
+
+  bool _isSystemOnlyCustomField(String key) =>
+      _systemOnlyCustomFieldKeys.contains(_normalizedCustomKey(key));
+
+  String _normalizedCustomKey(String key) =>
+      key.trim().replaceAll('-', '_').toLowerCase();
+
+  Map<String, dynamic> _customDataForEntity(String entity) {
+    if (entity == 'students' && _student != null) {
+      return Map<String, dynamic>.from(_student!['custom_data'] as Map? ?? {});
+    }
+    return Map<String, dynamic>.from(_leadData['custom_data'] as Map? ?? {});
+  }
+
+  Widget _buildCustomTextField(
+    ColorScheme cs,
+    String label,
+    CrmCustomFieldDefinition field,
+    String? value, {
+    TextInputType? keyboard,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: TextFormField(
+        key: ValueKey('${field.entity}-${field.key}-${value ?? ''}'),
+        initialValue: value ?? '',
+        decoration: _inputDecoration(
+          cs,
+          label: label,
+          helperText: field.hint,
+          isDense: true,
+        ),
+        keyboardType: keyboard,
+        onChanged: (v) => _updateCustomDataForEntity(
+          field.entity,
+          field.key,
+          v.trim().isEmpty ? null : v,
+        ),
+      ),
     );
   }
 
@@ -3366,7 +3438,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
             lastDate: DateTime(2100),
           );
           if (picked != null) {
-            _updateCustomData(field.key, picked.toIso8601String());
+            _updateCustomDataForEntity(
+              field.entity,
+              field.key,
+              picked.toIso8601String(),
+            );
           }
         },
         child: InputDecorator(
@@ -3406,7 +3482,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: DropdownButtonFormField<String>(
-        initialValue: _leadData['branch_id'],
+        initialValue: _clientBranchId,
         isExpanded: true,
         decoration: _inputDecoration(cs, label: label, isDense: true),
         items: _branches
@@ -3417,10 +3493,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
               ),
             )
             .toList(),
-        onChanged: (v) => setState(() {
-          _leadData['branch_id'] = v;
-          _edited = true;
-        }),
+        onChanged: (v) => _updateClientCore('branchId', v),
       ),
     );
   }
@@ -3447,11 +3520,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
             onTap: _addComment,
             child: const Padding(
               padding: EdgeInsets.all(AppSpace.md),
-              child: Icon(
-                Icons.send_rounded,
-                color: AppColor.onGold,
-                size: 18,
-              ),
+              child: Icon(Icons.send_rounded, color: AppColor.onGold, size: 18),
             ),
           ),
         ),
@@ -3594,10 +3663,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
         if (members.isEmpty)
           Text(
             'Участники не добавлены',
-            style: TextStyle(
-              color: cs.onSurfaceVariant,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
           )
         else
           ...members.map((m) {
@@ -3615,7 +3681,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
                 visualDensity: VisualDensity.compact,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppRadius.control),
-                  side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                  side: BorderSide(
+                    color: cs.outlineVariant.withValues(alpha: 0.5),
+                  ),
                 ),
                 tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
                 leading: const Icon(
@@ -3634,9 +3702,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                 trailing: IconButton(
                   tooltip: 'Удалить участника',
                   visualDensity: VisualDensity.compact,
-                  onPressed: _familyBusy
-                      ? null
-                      : () => _removeFamilyMember(m),
+                  onPressed: _familyBusy ? null : () => _removeFamilyMember(m),
                   icon: Icon(
                     Icons.delete_outline_rounded,
                     size: 18,
@@ -3917,10 +3983,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     if (_statusHistory.isEmpty) {
       return Text(
         'Изменений статуса пока нет',
-        style: TextStyle(
-          color: cs.onSurfaceVariant,
-          fontSize: 12,
-        ),
+        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
       );
     }
     return Column(
@@ -3949,7 +4012,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
               size: 18,
               color: AppColor.gold,
             ),
-            title: Text(transition, maxLines: 1, overflow: TextOverflow.ellipsis),
+            title: Text(
+              transition,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             subtitle: Text(
               [
                 _formatDate(h['changed_at']),
@@ -4036,7 +4103,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
                 visualDensity: VisualDensity.compact,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppRadius.control),
-                  side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                  side: BorderSide(
+                    color: cs.outlineVariant.withValues(alpha: 0.5),
+                  ),
                 ),
                 tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
                 title: Text(
@@ -4151,9 +4220,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
         subtitle: subtitle == null || subtitle.isEmpty
             ? null
             : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: origin == null
-            ? null
-            : ClientOriginChip(entityType: origin),
+        trailing: origin == null ? null : ClientOriginChip(entityType: origin),
       ),
     );
   }
@@ -4179,10 +4246,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
           if (rows.isEmpty)
             Text(
               empty,
-              style: TextStyle(
-                color: cs.onSurfaceVariant,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
             )
           else
             ...rows.take(4).map((row) {
@@ -4195,7 +4259,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
                   visualDensity: VisualDensity.compact,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppRadius.control),
-                    side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                    side: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: 0.5),
+                    ),
                   ),
                   tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
                   title: Text(
@@ -4337,9 +4403,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
             entityType: r.entityType,
             entityId: r.entityId,
           );
-          return rows
-              .map((c) => {...c, '_origin': r.entityType})
-              .toList();
+          return rows.map((c) => {...c, '_origin': r.entityType}).toList();
         } catch (_) {
           return <Map<String, dynamic>>[];
         }
@@ -4371,10 +4435,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
               children: [
                 Text(
                   'Не удалось загрузить комментарии',
-                  style: TextStyle(
-                    color: cs.onSurfaceVariant,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
                 ),
                 const SizedBox(height: AppSpace.xs),
                 TextButton.icon(
@@ -4392,10 +4453,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
         if (comments.isEmpty) {
           return Text(
             'Нет комментариев',
-            style: TextStyle(
-              color: cs.onSurfaceVariant,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
           );
         }
 
@@ -4448,8 +4506,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                               const SizedBox(width: 6),
                               _kindBadge(kindLabel),
                             ],
-                            if (widget.showOrigin &&
-                                c['_origin'] != null) ...[
+                            if (widget.showOrigin && c['_origin'] != null) ...[
                               const SizedBox(width: 6),
                               ClientOriginChip(
                                 entityType: c['_origin'].toString(),
@@ -4483,65 +4540,52 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
   }
 }
 
-/// One labelled info row for the student Инфо / Документы tabs (ported from
-/// student_detail_screen). When [onEdit] is set the row is tappable and shows a
-/// trailing edit affordance.
+/// One labelled info row for compact read-only card sections.
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  final VoidCallback? onEdit;
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
-    this.onEdit,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onEdit,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 11,
                   ),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            if (onEdit != null)
-              const Icon(
-                Icons.edit_outlined,
-                size: 14,
-                color: AppTheme.primaryGold,
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -4626,10 +4670,7 @@ class _SubscriptionPackageTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: AppColor.text2,
-              ),
+              const Icon(Icons.chevron_right_rounded, color: AppColor.text2),
             ],
           ),
         ),
@@ -4682,10 +4723,7 @@ class _HomeworkTile extends StatelessWidget {
                 if (subtitle.isNotEmpty)
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColor.text2,
-                    ),
+                    style: const TextStyle(fontSize: 11, color: AppColor.text2),
                   ),
               ],
             ),

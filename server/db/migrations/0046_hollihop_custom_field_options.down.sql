@@ -1,0 +1,2 @@
+-- Intentionally left blank: crm_custom_fields is owner-editable runtime
+-- configuration, so automatic rollback must not overwrite post-migration edits.

@@ -38,6 +38,54 @@ type CrmCustomFieldDefinition = Required<
 const ADMIN_CHAT_AVATAR_KEY = "admin_chat_avatar_url";
 const CRM_CUSTOM_FIELDS_KEY = "crm_custom_fields";
 
+const HOLLIHOP_SOURCE_OPTIONS = [
+  "* брат нашего ученика",
+  "* вотсап",
+  "* вотсап/и др. соц сети",
+  "* для брони",
+  "* Заявка с сайта",
+  "* Звонок",
+  "* Звонок на мобильный 0387",
+  "* от Наташи (МК)",
+  "* Папа нашего ученика",
+  "* папа нашей ученицы",
+  "* продал холодильник",
+  "* Родственник ученика",
+  "* сайт заявка",
+  "* Сразу в: Watsapp/Telegram/Instagram",
+  "* через Завена, личный визит",
+  "* Sokol.KIDS",
+  "АВИТО",
+  "Заявка с сайта MagicMusic",
+  "Заявка с сайта SOKOL",
+  "Заявка с сайта Sokol.KIDS",
+  "Звонок на мобильный 0387 СОКОЛ",
+  "Звонок на мобильный СПОРТИВНАЯ",
+  "Звонок на IP-трубку",
+  "Мимо проходили.",
+  "не известно(старый период)",
+  "от Наташи",
+  "Родственник/друг ученика",
+  "Сразу в: Watsapp/Telegram/Instagram + Коммент:Куда!",
+  "ЯК",
+];
+const HOLLIHOP_DISCIPLINE_OPTIONS = ["Барабаны", "Вокал", "Гитара", "Фортепиано"];
+const HOLLIHOP_LEVEL_OPTIONS = ["Без опыта", "Начальный", "Средний"];
+const HOLLIHOP_CATEGORY_OPTIONS = ["Взрослые", "Дети"];
+const HOLLIHOP_LEARNING_TYPE_OPTIONS = ["И.", "Общий", "С.", "Сертификат"];
+const HOLLIHOP_CONTACT_RELATION_OPTIONS = [
+  "бабушка",
+  "даритель",
+  "жена",
+  "мама",
+  "мать",
+  "муж",
+  "папа",
+  "подруга",
+  "сестра",
+  "другое",
+];
+
 const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   {
     entity: "students",
@@ -75,7 +123,7 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Направление",
     type: "select",
     required: false,
-    options: ["Вокал", "Фортепиано", "Гитара", "Барабаны"],
+    options: HOLLIHOP_DISCIPLINE_OPTIONS,
   },
   {
     entity: "students",
@@ -83,14 +131,15 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Уровень",
     type: "select",
     required: false,
-    options: ["Начинающий", "Средний", "Продвинутый"],
+    options: HOLLIHOP_LEVEL_OPTIONS,
   },
   {
     entity: "students",
     key: "category",
     label: "Категория обучения",
-    type: "text",
+    type: "select",
     required: false,
+    options: HOLLIHOP_CATEGORY_OPTIONS,
   },
   {
     entity: "students",
@@ -98,7 +147,7 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Тип обучения",
     type: "select",
     required: false,
-    options: ["Индивидуально", "Группа", "Пробное", "Корпоративное"],
+    options: HOLLIHOP_LEARNING_TYPE_OPTIONS,
   },
   {
     entity: "students",
@@ -106,7 +155,7 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Источник",
     type: "select",
     required: false,
-    options: ["Сайт", "Рекомендация", "Соцсети", "HolliHop", "Другое"],
+    options: HOLLIHOP_SOURCE_OPTIONS,
   },
   {
     entity: "students",
@@ -161,8 +210,9 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     entity: "students",
     key: "contactPersonRelation",
     label: "Кем приходится",
-    type: "text",
+    type: "select",
     required: false,
+    options: HOLLIHOP_CONTACT_RELATION_OPTIONS,
   },
   {
     entity: "students",
@@ -258,14 +308,15 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Источник заявки",
     type: "select",
     required: false,
-    options: ["Сайт", "Рекомендация", "Соцсети", "HolliHop", "Другое"],
+    options: HOLLIHOP_SOURCE_OPTIONS,
   },
   {
     entity: "leads",
     key: "adSource",
     label: "Рекламный источник",
-    type: "text",
+    type: "select",
     required: false,
+    options: HOLLIHOP_SOURCE_OPTIONS,
   },
   {
     entity: "leads",
@@ -287,7 +338,7 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Интересующее направление",
     type: "select",
     required: false,
-    options: ["Вокал", "Фортепиано", "Гитара", "Барабаны"],
+    options: HOLLIHOP_DISCIPLINE_OPTIONS,
   },
   {
     entity: "leads",
@@ -295,14 +346,15 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Уровень",
     type: "select",
     required: false,
-    options: ["Начинающий", "Средний", "Продвинутый"],
+    options: HOLLIHOP_LEVEL_OPTIONS,
   },
   {
     entity: "leads",
     key: "category",
     label: "Категория обучения",
-    type: "text",
+    type: "select",
     required: false,
+    options: HOLLIHOP_CATEGORY_OPTIONS,
   },
   {
     entity: "leads",
@@ -310,7 +362,7 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Тип обучения",
     type: "select",
     required: false,
-    options: ["Индивидуально", "Группа", "Пробное", "Корпоративное"],
+    options: HOLLIHOP_LEARNING_TYPE_OPTIONS,
   },
   {
     entity: "leads",
@@ -358,8 +410,9 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     entity: "leads",
     key: "contactPersonRelation",
     label: "Кем приходится",
-    type: "text",
+    type: "select",
     required: false,
+    options: HOLLIHOP_CONTACT_RELATION_OPTIONS,
   },
   {
     entity: "leads",
@@ -425,7 +478,7 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Основное направление",
     type: "select",
     required: false,
-    options: ["Вокал", "Фортепиано", "Гитара", "Барабаны"],
+    options: HOLLIHOP_DISCIPLINE_OPTIONS,
   },
   {
     entity: "teachers",
