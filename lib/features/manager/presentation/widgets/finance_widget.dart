@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -67,11 +69,20 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   /// (and so the UI can show a spinner) — the download runs off the UI thread.
   bool _exporting = false;
 
+  // ── Realtime invalidation (crm.changed) ───────────────────────────────────
+  Timer? _realtimeDebounce;
+
   @override
   void initState() {
     super.initState();
     _loadPayments();
     _loadExpenses();
+  }
+
+  @override
+  void dispose() {
+    _realtimeDebounce?.cancel();
+    super.dispose();
   }
 
   DateTime _periodStart() {
@@ -362,6 +373,22 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Realtime: refresh totals/lists when another staff member records a payment
+    // or an expense.
+    ref.listen(crmRealtimeProvider, (prev, next) {
+      final event = next.value;
+      if (event == null || !mounted) return;
+      if (event.entity != 'payment' && event.entity != 'expense') return;
+      // Skip while a load or an add (payment/expense) is in flight — those
+      // refetch themselves on completion.
+      if (_loading || _addingPayment || _savingExpense) return;
+      _realtimeDebounce?.cancel();
+      _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted || _loading || _addingPayment || _savingExpense) return;
+        _loadPayments();
+        _loadExpenses();
+      });
+    });
     final fmt = NumberFormat('#,##0', 'ru');
     final colors = Theme.of(context).colorScheme;
     return Scaffold(

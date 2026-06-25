@@ -5,6 +5,7 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/show_clien
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -24,6 +25,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   final _searchCtrl = TextEditingController();
   final Set<String> _pendingTaskIds = {};
   Timer? _searchDebounce;
+  Timer? _realtimeDebounce;
   bool _loading = true;
   bool _filtersLoading = true;
   bool _creatingTask = false;
@@ -45,6 +47,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
 
   @override
   void dispose() {
+    _realtimeDebounce?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.removeListener(_onSearchChanged);
     _searchCtrl.dispose();
@@ -346,6 +349,19 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Realtime: refresh the task list when another staff member changes a task.
+    ref.listen(crmRealtimeProvider, (prev, next) {
+      final event = next.value;
+      if (event == null || event.entity != 'task' || !mounted) return;
+      // Skip while loading or while an optimistic status/assignee update is in
+      // flight — those refetch themselves on completion.
+      if (_loading || _pendingTaskIds.isNotEmpty) return;
+      _realtimeDebounce?.cancel();
+      _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted || _loading || _pendingTaskIds.isNotEmpty) return;
+        _loadTasks(showLoading: false);
+      });
+    });
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(

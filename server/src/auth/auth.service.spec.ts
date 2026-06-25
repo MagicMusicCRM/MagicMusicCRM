@@ -713,6 +713,39 @@ describe("AuthService", () => {
     ).rejects.toThrow("Код подтверждения недействителен или истек.");
   });
 
+  it("stores a normalized phone on the profile at signup", async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // signup rate-limit
+      .mockResolvedValueOnce({ rows: [] }) // existing-email check
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "u1",
+            email: "a@b.c",
+            role: "client",
+            email_verified_at: null,
+            is_app_account: true,
+          },
+        ],
+      }) // insert into app.users
+      .mockResolvedValueOnce({ rows: [] }) // insert into app.profiles
+      .mockResolvedValueOnce({ rows: [] }); // insert into app.otp_challenges
+
+    await service.signup({
+      email: "a@b.c",
+      password: "x".repeat(12),
+      fullName: "Иван Петров",
+      phone: "+79991234567",
+    } as never);
+
+    const profileInsert = query.mock.calls.find(
+      (c) => typeof c[0] === "string" && c[0].includes("insert into app.profiles"),
+    );
+    expect(profileInsert).toBeTruthy();
+    // phone param is the normalized '79991234567'
+    expect(profileInsert![1]).toContain("79991234567");
+  });
+
   it("uses same safe error for missing user and invalid password", async () => {
     query
       .mockResolvedValueOnce({ rows: [{ count: "0" }] })

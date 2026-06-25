@@ -9,6 +9,7 @@ import {
   isAdminRole,
 } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
+import { RealtimeBus } from "../realtime/realtime-bus";
 import {
   CRM_CUSTOM_FIELD_ENTITIES,
   CRM_CUSTOM_FIELD_TYPES,
@@ -107,6 +108,7 @@ export class SettingsService {
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
+    private readonly realtime: RealtimeBus,
   ) {}
 
   async getAdminChatAvatar(_actor: ActorContext) {
@@ -158,6 +160,9 @@ export class SettingsService {
       entityId: ADMIN_CHAT_AVATAR_KEY,
       metadata: { cleared: normalized === null },
     });
+    // Shared UI element visible to every role — broadcast so open messengers
+    // refetch the avatar without a manual refresh.
+    this.realtime.emitSettingChanged(ADMIN_CHAT_AVATAR_KEY);
     return {
       key: ADMIN_CHAT_AVATAR_KEY,
       value: row?.value_text ?? null,
@@ -214,6 +219,12 @@ export class SettingsService {
       entityType: "setting",
       entityId: CRM_CUSTOM_FIELDS_KEY,
       metadata: { fieldCount: normalized.length },
+    });
+    // CRM custom fields affect staff CRM forms — scope the hint to the crm room.
+    this.realtime.emitCrmChanged({
+      entity: "setting",
+      action: "updated",
+      id: CRM_CUSTOM_FIELDS_KEY,
     });
     return {
       key: CRM_CUSTOM_FIELDS_KEY,

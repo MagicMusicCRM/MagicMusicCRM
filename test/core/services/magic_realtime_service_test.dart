@@ -86,6 +86,30 @@ void main() {
       });
     });
 
+    test('joinChannel emits a channel room.join for announcements delivery', () {
+      final transport = _FakeTransport();
+      final connection = MagicRealtimeConnection(transport);
+
+      connection.joinChannel('channel-a');
+
+      expect(transport.emits.single, {
+        'event': 'room.join',
+        'payload': {'roomType': 'channel', 'roomId': 'channel-a'},
+      });
+    });
+
+    test('onConnect fires on every (re)connect so rooms can be re-joined', () {
+      final transport = _FakeTransport();
+      final connection = MagicRealtimeConnection(transport);
+      var connects = 0;
+
+      connection.onConnect(() => connects++);
+      transport.fire('connect', null);
+      transport.fire('connect', null);
+
+      expect(connects, 2);
+    });
+
     test('maps socket payloads to string-keyed event maps', () {
       final transport = _FakeTransport();
       final connection = MagicRealtimeConnection(transport);
@@ -98,6 +122,29 @@ void main() {
       expect(received, [
         {'1': 'numeric-key', 'id': 'msg-a'},
       ]);
+    });
+
+    test('onChatCreated receives chat.created payloads', () {
+      final transport = _FakeTransport();
+      final connection = MagicRealtimeConnection(transport);
+      Map<String, dynamic>? got;
+
+      connection.onChatCreated((p) => got = p);
+      transport.fire('chat.created', {'id': 'c9', 'type': 'group', 'title': 'Группа'});
+
+      expect(got!['id'], 'c9');
+      expect(got!['type'], 'group');
+    });
+
+    test('onChatRemoved receives chat.removed payloads', () {
+      final transport = _FakeTransport();
+      final connection = MagicRealtimeConnection(transport);
+      String? removedId;
+
+      connection.onChatRemoved((p) => removedId = p['id'] as String?);
+      transport.fire('chat.removed', {'id': 'c9'});
+
+      expect(removedId, 'c9');
     });
 
     test('rejects connect without an authenticated session', () async {

@@ -16,6 +16,7 @@ import { NotificationTokenCrypto } from './notification-token-crypto.service';
 import { NotificationWorker } from './notification-worker.service';
 import { NotificationsPolicy } from './notifications.policy';
 import { NotificationChannel } from './notifications.types';
+import { RealtimeBus } from '../realtime/realtime-bus';
 
 interface NotificationRow {
   id: string;
@@ -61,7 +62,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     private readonly audit: AuditService,
     private readonly policy: NotificationsPolicy,
     private readonly worker: NotificationWorker,
-    private readonly tokenCrypto: NotificationTokenCrypto
+    private readonly tokenCrypto: NotificationTokenCrypto,
+    private readonly realtime: RealtimeBus
   ) {}
 
   onModuleInit(): void {
@@ -387,7 +389,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   }): Promise<string> {
     if (input.userIds.length === 0) throw new NotFoundException('Получатели не найдены.');
     const uniqueUserIds = [...new Set(input.userIds)];
-    return this.database.transaction(async (client) => {
+    const notificationId = await this.database.transaction(async (client) => {
       const notification = await client.query<{ id: string }>(
         `
           insert into app.notifications (type, title, body, data, created_by)
@@ -446,6 +448,15 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       }
       return notificationId;
     });
+    // After the row + recipients commit, nudge each recipient's bell live so the
+    // unread badge updates without a poll. Scoped per-user via affectedUserIds.
+    this.realtime.emitCrmChanged({
+      entity: 'notification',
+      action: 'created',
+      id: notificationId,
+      affectedUserIds: uniqueUserIds
+    });
+    return notificationId;
   }
 
   private async enqueueEmail(

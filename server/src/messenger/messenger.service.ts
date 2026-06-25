@@ -2,13 +2,16 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { AuditService } from "../audit/audit.service";
 import {
   ActorContext,
   isManagerOrAdminRole,
+  isManagerRole,
   isStaffRole,
 } from "../common/security/actor-context";
 import { CrmService } from "../crm/crm.service";
@@ -44,6 +47,14 @@ interface ChatRow {
   partner_avatar_file_id?: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  // Staff inbox fields (administration chats only)
+  owner_first_name?: string | null;
+  owner_last_name?: string | null;
+  assigned_to_user_id?: string | null;
+  assigned_first_name?: string | null;
+  assigned_last_name?: string | null;
+  folder?: string | null;
+  archived_at?: Date | string | null;
 }
 
 interface MessageRow {
@@ -63,6 +74,7 @@ interface MessageRow {
   sender_email: string | null;
   sender_first_name: string | null;
   sender_last_name: string | null;
+  sender_role?: string | null;
   attachment_original_name?: string | null;
   attachment_mime_type?: string | null;
   attachment_size_bytes?: string | number | null;
@@ -117,7 +129,12 @@ interface ReactionRow {
 }
 
 @Injectable()
-export class MessengerService {
+export class MessengerService implements OnModuleInit {
+  private readonly logger = new Logger(MessengerService.name);
+
+  /** Stable identity of the default system "Объявления" channel. */
+  static readonly announcementsSlug = "announcements";
+
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
@@ -125,6 +142,87 @@ export class MessengerService {
     private readonly realtime: RealtimeGateway,
     private readonly crm: CrmService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    // Self-heal the durable default channels on boot. Idempotent and best-effort
+    // (migration 0042 already seeds them; this covers fresh/partial databases).
+    try {
+      await this.ensureDefaultChannels();
+    } catch (err) {
+      this.logger.warn(`ensureDefaultChannels failed: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Idempotently ensure the default system "Объявления" channel exists with the
+   * correct role permissions (read: all roles; write: admin/manager/system_admin).
+   * Safe to call repeatedly — never creates a duplicate channel.
+   */
+  async ensureDefaultChannels(): Promise<void> {
+    await this.database.transaction(async (client) => {
+      // Adopt a pre-existing "Объявления" channel (created before the system-slug
+      // contract) instead of creating a duplicate.
+      await client.query(
+        `
+          update app.channels
+          set slug = $1, is_system = true, updated_at = now()
+          where id = (
+            select id from app.channels
+            where title = 'Объявления' and slug is null and deleted_at is null
+            order by created_at asc
+            limit 1
+          )
+          and not exists (
+            select 1 from app.channels where slug = $1 and deleted_at is null
+          )
+        `,
+        [MessengerService.announcementsSlug],
+      );
+
+      const existing = await client.query<{ id: string }>(
+        `select id from app.channels where slug = $1 and deleted_at is null limit 1`,
+        [MessengerService.announcementsSlug],
+      );
+      let channelId = existing.rows[0]?.id;
+      if (!channelId) {
+        const inserted = await client.query<{ id: string }>(
+          `
+            insert into app.channels (title, description, slug, is_system)
+            values ('Объявления', 'Школьные объявления', $1, true)
+            returning id
+          `,
+          [MessengerService.announcementsSlug],
+        );
+        channelId = inserted.rows[0].id;
+      }
+
+      const permissions: Array<{
+        role: string;
+        canRead: boolean;
+        canWrite: boolean;
+      }> = [
+        { role: "client", canRead: true, canWrite: false },
+        { role: "teacher", canRead: true, canWrite: false },
+        { role: "admin", canRead: true, canWrite: true },
+        { role: "manager", canRead: true, canWrite: true },
+        { role: "system_admin", canRead: true, canWrite: true },
+      ];
+      for (const permission of permissions) {
+        await client.query(
+          `
+            insert into app.channel_permissions (channel_id, role, can_read, can_write)
+            select $1, $2::app.user_role, $3, $4
+            where not exists (
+              select 1 from app.channel_permissions cp
+              where cp.channel_id = $1 and cp.user_id is null
+                and cp.role = $2::app.user_role
+            )
+          `,
+          [channelId, permission.role, permission.canRead, permission.canWrite],
+        );
+      }
+    });
+  }
 
   async listChats(actor: ActorContext, query: MessengerListQuery) {
     const limit = Math.min(query.limit ?? 50, 100);
@@ -150,7 +248,54 @@ export class MessengerService {
               and (me.last_read_message_id is null or unread.created_at > (
                 select created_at from app.messages where id = me.last_read_message_id
               ))
-          )::text as unread_count
+          )::text as unread_count,
+          owp.first_name as owner_first_name,
+          owp.last_name as owner_last_name,
+          c.assigned_to_user_id,
+          asgp.first_name as assigned_first_name,
+          asgp.last_name as assigned_last_name,
+          ist.archived_at,
+          case
+            when ist.archived_at is not null then 'archive'
+            when exists (
+              select 1 from app.students s
+              join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+              where s.deleted_at is null
+                and (
+                  case
+                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 11
+                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) in ('7', '8')
+                      then '+7' || right(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 10)
+                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 10
+                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) = '9'
+                      then '+7' || regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')
+                    else null
+                  end
+                ) is not null
+                and (
+                  case
+                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 11
+                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) in ('7', '8')
+                      then '+7' || right(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 10)
+                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 10
+                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) = '9'
+                      then '+7' || regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')
+                    else null
+                  end
+                ) = (
+                  case
+                    when length(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g')) = 11
+                      and left(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g'), 1) in ('7', '8')
+                      then '+7' || right(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g'), 10)
+                    when length(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g')) = 10
+                      and left(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g'), 1) = '9'
+                      then '+7' || regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g')
+                    else null
+                  end
+                )
+            ) then 'students'
+            else 'leads'
+          end as folder
         from app.chats c
         left join app.chat_members cm on cm.chat_id = c.id and cm.left_at is null
         left join app.chat_members me_state
@@ -167,6 +312,11 @@ export class MessengerService {
         ) partner on true
         left join app.users partner_u on partner_u.id = partner.user_id and partner_u.deleted_at is null
         left join app.profiles partner_p on partner_p.user_id = partner_u.id and partner_p.deleted_at is null
+        left join app.users ow on ow.id = c.owner_user_id and ow.deleted_at is null
+        left join app.profiles owp on owp.user_id = ow.id and owp.deleted_at is null
+        left join app.users asg on asg.id = c.assigned_to_user_id and asg.deleted_at is null
+        left join app.profiles asgp on asgp.user_id = asg.id and asgp.deleted_at is null
+        left join app.chat_inbox_state ist on ist.chat_id = c.id and ist.staff_user_id = $2
         where c.deleted_at is null
           and ($3::timestamptz is null or c.updated_at < $3)
           and (
@@ -197,6 +347,7 @@ export class MessengerService {
           m.pinned_by, m.pinned_at, m.created_at, m.updated_at,
           m.deleted_at, u.email as sender_email, p.first_name as sender_first_name,
           p.last_name as sender_last_name,
+          u.role as sender_role,
           f.original_name as attachment_original_name,
           f.mime_type as attachment_mime_type,
           f.size_bytes as attachment_size_bytes,
@@ -228,8 +379,21 @@ export class MessengerService {
       [chatId, query.before ?? null, limit, actor.userId],
     );
 
+    // Privacy: the single non-staff member of an administration chat is its
+    // owner (the client). They must never receive a staff member's real
+    // identity. Staff viewers always see real identities.
+    const viewerMasksStaff =
+      chat.type === "administration" && !isStaffRole(actor.role as never);
+
     return {
-      items: result.rows.map((row) => this.toMessageDto(row)).reverse(),
+      items: result.rows
+        .map((row) =>
+          this.toMessageDto(row, {
+            maskStaffSender:
+              viewerMasksStaff && isStaffRole((row.sender_role ?? "") as never),
+          }),
+        )
+        .reverse(),
     };
   }
 
@@ -315,7 +479,31 @@ export class MessengerService {
     });
 
     const payload = this.toMessageDto(message);
-    this.realtime.publishChatEvent(chatId, "message.created", payload);
+    // Privacy: in an administration chat the client (a member of the chat room)
+    // must never receive staff identity on the wire. When the author is staff,
+    // publish the MASKED DTO to the chat room. Non-staff (the client) is
+    // published unmasked so staff see the real client identity in realtime.
+    const roomPayload =
+      chat.type === "administration" && isStaffRole(actor.role)
+        ? this.toMessageDto(message, { maskStaffSender: true })
+        : payload;
+    this.realtime.publishChatEvent(chatId, "message.created", roomPayload);
+    await this.fanoutChatListUpdate(chat, chatId, payload, {
+      maskStaffSenderForMembers:
+        chat.type === "administration" && isStaffRole(actor.role),
+    });
+    if (chat.type === "administration") {
+      // Resurface: clear archived_at for ALL staff so the thread reappears in inboxes.
+      // Best-effort: a failure here must not break the send.
+      try {
+        await this.database.query(
+          "update app.chat_inbox_state set archived_at = null where chat_id = $1",
+          [chatId],
+        );
+      } catch (err) {
+        this.logger.warn(`resurface chat_inbox_state failed: ${String(err)}`);
+      }
+    }
     if (chat.type === "administration" && !isStaffRole(actor.role)) {
       void this.crm.autoCreateLeadFromChat(actor, actor.userId).catch(() => undefined);
     }
@@ -404,7 +592,12 @@ export class MessengerService {
       entityId: chat.id,
     });
 
-    return this.toChatSummaryDto(chat);
+    const summary = this.toChatSummaryDto(chat);
+    // Fan-out: every member receives chat.created so the group appears live.
+    for (const userId of uniqueMembers) {
+      this.realtime.publishUserEvent(userId, "chat.created", summary);
+    }
+    return summary;
   }
 
   async updateGroupMembers(
@@ -449,7 +642,40 @@ export class MessengerService {
       entityId: chatId,
     });
     this.realtime.publishChatEvent(chatId, "chat.updated", { id: chatId });
-    return this.getChat(actor, chatId);
+    const result = await this.getChat(actor, chatId);
+    // Fan-out: added members receive chat.created; removed members receive chat.removed.
+    // The summary from getChat carries the manager's actor-scoped fields (isMuted,
+    // unreadCount). Freshly-added members have no prior membership state, so send
+    // a neutral copy with isMuted: false and unreadCount: 0.
+    const addedMemberSummary = { ...result, isMuted: false, unreadCount: 0 };
+    for (const userId of dto.addUserIds ?? []) {
+      this.realtime.publishUserEvent(userId, "chat.created", addedMemberSummary);
+    }
+    for (const userId of dto.removeUserIds ?? []) {
+      this.realtime.publishUserEvent(userId, "chat.removed", { id: chatId });
+    }
+    return result;
+  }
+
+  async leaveGroup(actor: ActorContext, chatId: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "group") {
+      throw new NotFoundException("Группа не найдена.");
+    }
+    if (chat.memberUserId !== actor.userId) {
+      throw new NotFoundException("Группа не найдена.");
+    }
+    await this.database.query(
+      `
+        update app.chat_members
+        set left_at = now()
+        where chat_id = $1 and user_id = $2 and left_at is null
+      `,
+      [chatId, actor.userId],
+    );
+    this.realtime.publishUserEvent(actor.userId, "chat.removed", { id: chatId });
+    this.realtime.publishChatEvent(chatId, "chat.updated", { id: chatId });
+    return { success: true };
   }
 
   async getChat(actor: ActorContext, chatId: string) {
@@ -552,12 +778,127 @@ export class MessengerService {
       lastReadMessageId,
     );
     for (const message of readUpdates) {
+      // Privacy: in an administration chat the client must never receive a
+      // staff author's real identity. Mask when the message author is staff.
       this.realtime.publishChatEvent(
         chatId,
         "message.updated",
-        this.toMessageDto(message),
+        this.toMessageDto(message, {
+          maskStaffSender:
+            chat.type === "administration" &&
+            isStaffRole((message.sender_role ?? "") as never),
+        }),
       );
     }
+    return { success: true };
+  }
+
+  async archiveChat(actor: ActorContext, chatId: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "administration") {
+      throw new NotFoundException("Чат не найден.");
+    }
+    if (!isStaffRole(actor.role)) {
+      throw new ForbiddenException("Только сотрудники могут архивировать чаты.");
+    }
+    await this.database.query(
+      `insert into app.chat_inbox_state (chat_id, staff_user_id, archived_at)
+       values ($1, $2, now())
+       on conflict (chat_id, staff_user_id) do update set archived_at = now()`,
+      [chatId, actor.userId],
+    );
+    this.realtime.publishUserEvent(actor.userId, "chat.updated", {
+      id: chatId,
+      archived: true,
+    });
+    return { success: true };
+  }
+
+  async unarchiveChat(actor: ActorContext, chatId: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "administration") {
+      throw new NotFoundException("Чат не найден.");
+    }
+    if (!isStaffRole(actor.role)) {
+      throw new ForbiddenException("Только сотрудники могут разархивировать чаты.");
+    }
+    await this.database.query(
+      `insert into app.chat_inbox_state (chat_id, staff_user_id, archived_at)
+       values ($1, $2, null)
+       on conflict (chat_id, staff_user_id) do update set archived_at = null`,
+      [chatId, actor.userId],
+    );
+    this.realtime.publishUserEvent(actor.userId, "chat.updated", {
+      id: chatId,
+      archived: false,
+    });
+    return { success: true };
+  }
+
+  async assignChat(actor: ActorContext, chatId: string, userId?: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "administration") {
+      throw new NotFoundException("Чат не найден.");
+    }
+    if (!isStaffRole(actor.role)) {
+      throw new ForbiddenException("Только сотрудники могут брать чаты в работу.");
+    }
+
+    const targetUserId = userId ?? actor.userId;
+
+    // Verify the target is a staff user
+    const targetResult = await this.database.query<{ role: string }>(
+      "select role from app.users where id = $1 and deleted_at is null limit 1",
+      [targetUserId],
+    );
+    const targetRow = targetResult.rows[0];
+    if (!targetRow) {
+      throw new NotFoundException("Пользователь не найден.");
+    }
+    if (!isStaffRole(targetRow.role as never)) {
+      throw new ForbiddenException("Чат можно назначить только сотруднику.");
+    }
+
+    this.policy.assertCanAssign(actor, chat);
+
+    await this.database.query(
+      "update app.chats set assigned_to_user_id = $2, assigned_at = now() where id = $1",
+      [chatId, targetUserId],
+    );
+
+    this.realtime.publishAdminInboxEvent("chat.updated", {
+      id: chatId,
+      assignedTo: { id: targetUserId },
+    });
+
+    return { success: true };
+  }
+
+  async unassignChat(actor: ActorContext, chatId: string) {
+    const chat = await this.requireChat(actor, chatId);
+    if (chat.type !== "administration") {
+      throw new NotFoundException("Чат не найден.");
+    }
+    if (!isStaffRole(actor.role)) {
+      throw new ForbiddenException("Только сотрудники могут снимать назначение.");
+    }
+
+    // Allowed for the current assignee or manager-tier
+    const current = chat.assignedToUserId ?? null;
+    if (!isManagerRole(actor.role) && current !== actor.userId) {
+      throw new ForbiddenException("Недостаточно прав для снятия назначения.");
+    }
+
+    await this.database.query(
+      "update app.chats set assigned_to_user_id = null, assigned_at = null where id = $1",
+      [chatId],
+    );
+
+    this.realtime.publishAdminInboxEvent("chat.updated", {
+      id: chatId,
+      assignedTo: null,
+    });
+
     return { success: true };
   }
 
@@ -606,11 +947,18 @@ export class MessengerService {
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name, false as is_read
+          null::text as sender_last_name,
+          (select role from app.users where id = app.messages.sender_id) as sender_role,
+          false as is_read
       `,
       [messageId, actor.userId],
     );
-    const payload = this.toMessageDto(result.rows[0]);
+    const row = result.rows[0];
+    const payload = this.toMessageDto(row, {
+      maskStaffSender:
+        chat.type === "administration" &&
+        isStaffRole((row?.sender_role ?? "") as never),
+    });
     this.realtime.publishChatEvent(message.chat_id, "message.updated", payload);
     return payload;
   }
@@ -628,11 +976,18 @@ export class MessengerService {
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name, false as is_read
+          null::text as sender_last_name,
+          (select role from app.users where id = app.messages.sender_id) as sender_role,
+          false as is_read
       `,
       [messageId],
     );
-    const payload = this.toMessageDto(result.rows[0]);
+    const row = result.rows[0];
+    const payload = this.toMessageDto(row, {
+      maskStaffSender:
+        chat.type === "administration" &&
+        isStaffRole((row?.sender_role ?? "") as never),
+    });
     this.realtime.publishChatEvent(message.chat_id, "message.updated", payload);
     return payload;
   }
@@ -643,6 +998,7 @@ export class MessengerService {
     dto: DeleteMessageDto,
   ) {
     const message = await this.requireMessage(actor, messageId);
+    const chat = await this.requireChat(actor, message.chat_id);
     this.policy.assertCanModerateMessage(actor, message.sender_id);
     const mode =
       actor.userId === message.sender_id ? "own" : (dto.mode ?? "moderated");
@@ -656,11 +1012,18 @@ export class MessengerService {
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name, false as is_read
+          null::text as sender_last_name,
+          (select role from app.users where id = app.messages.sender_id) as sender_role,
+          false as is_read
       `,
       [messageId, mode],
     );
-    const payload = this.toMessageDto(result.rows[0]);
+    const row = result.rows[0];
+    const payload = this.toMessageDto(row, {
+      maskStaffSender:
+        chat.type === "administration" &&
+        isStaffRole((row?.sender_role ?? "") as never),
+    });
     await this.audit.record({
       actor,
       action: "messenger.message_deleted",
@@ -678,6 +1041,7 @@ export class MessengerService {
     dto: UpdateMessageDto,
   ) {
     const message = await this.requireMessage(actor, messageId);
+    const chat = await this.requireChat(actor, message.chat_id);
     if (message.sender_id !== actor.userId) {
       throw new ForbiddenException(
         "Можно редактировать только свои сообщения.",
@@ -708,11 +1072,18 @@ export class MessengerService {
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name, false as is_read
+          null::text as sender_last_name,
+          (select role from app.users where id = app.messages.sender_id) as sender_role,
+          false as is_read
       `,
       [messageId, content],
     );
-    const payload = this.toMessageDto(result.rows[0]);
+    const row = result.rows[0];
+    const payload = this.toMessageDto(row, {
+      maskStaffSender:
+        chat.type === "administration" &&
+        isStaffRole((row?.sender_role ?? "") as never),
+    });
     await this.audit.record({
       actor,
       action: "messenger.message_updated",
@@ -905,8 +1276,65 @@ export class MessengerService {
       entityId: channelId,
       metadata: { postId: post.id },
     });
-    this.realtime.publishChatEvent(channelId, "channel.post_created", post);
+    this.realtime.publishChannelEvent(channelId, "channel.post_created", post);
     return post;
+  }
+
+  /**
+   * After a chat message is written, push a lightweight `chat.updated` hint to
+   * every member's user room (so chat lists/badges refresh even when the member
+   * is not inside the chat room) and, for administration chats, to the staff
+   * `admin-inbox` surface so brand-new user→staff conversations appear live.
+   * Best-effort: realtime failures never break the underlying write.
+   */
+  private async fanoutChatListUpdate(
+    chat: { type: string },
+    chatId: string,
+    message: {
+      id: string;
+      content: string | null;
+      createdAt: Date | string;
+      senderId: string | null;
+    },
+    opts?: { maskStaffSenderForMembers?: boolean },
+  ): Promise<void> {
+    try {
+      // Carry a lightweight last-message preview so recipients can patch their
+      // chat list in place (bump order + last message + unread) without a full
+      // refetch. Brand-new conversations (chat not yet in the list) still trigger
+      // a scoped reload on the client.
+      const preview = {
+        id: chatId,
+        lastMessageId: message.id,
+        lastMessage: message.content,
+        lastMessageAt: message.createdAt,
+        senderId: message.senderId,
+      };
+      // Privacy: administration-chat members are non-staff (the owner client).
+      // For a staff-authored message, withhold the staff senderId from their
+      // user-room preview so identity never reaches the client off the wire.
+      // The admin-inbox preview (staff-only surface) keeps the real senderId.
+      const memberPreview = opts?.maskStaffSenderForMembers
+        ? { ...preview, senderId: null }
+        : preview;
+      const memberIds = await this.getChatMemberUserIds(chatId);
+      for (const userId of memberIds) {
+        this.realtime.publishUserEvent(userId, "chat.updated", memberPreview);
+      }
+      if (chat.type === "administration") {
+        this.realtime.publishAdminInboxEvent("chat.updated", preview);
+      }
+    } catch (err) {
+      this.logger.warn(`fanoutChatListUpdate failed: ${String(err)}`);
+    }
+  }
+
+  private async getChatMemberUserIds(chatId: string): Promise<string[]> {
+    const result = await this.database.query<{ user_id: string }>(
+      `select user_id from app.chat_members where chat_id = $1 and left_at is null`,
+      [chatId],
+    );
+    return (result?.rows ?? []).map((row) => row.user_id);
   }
 
   private async createAdministrationChat(actor: ActorContext) {
@@ -927,8 +1355,8 @@ export class MessengerService {
 
       const inserted = await client.query<ChatRow>(
         `
-          insert into app.chats (type, title, created_by)
-          values ('administration', 'Администрация', $1)
+          insert into app.chats (type, title, created_by, owner_user_id)
+          values ('administration', 'Администрация', $1, $1)
           returning id, type, title, created_by, last_message_id,
             null::text as last_message_content, null::timestamptz as last_message_created_at,
             '0'::text as unread_count, created_at, updated_at
@@ -1083,7 +1511,7 @@ export class MessengerService {
           m.attachment_file_id, m.reply_to_id, m.forwarded_from_id,
           m.pinned_by, m.pinned_at, m.created_at, m.updated_at,
           m.deleted_at, u.email as sender_email, p.first_name as sender_first_name,
-          p.last_name as sender_last_name,
+          p.last_name as sender_last_name, u.role as sender_role,
           f.original_name as attachment_original_name,
           f.mime_type as attachment_mime_type,
           f.size_bytes as attachment_size_bytes,
@@ -1176,6 +1604,14 @@ export class MessengerService {
   }
 
   private toChatSummaryDto(row: ChatRow) {
+    const ownerFullName = [row.owner_first_name, row.owner_last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || null;
+    const assignedFullName = [row.assigned_first_name, row.assigned_last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || null;
     return {
       id: row.id,
       type: row.type,
@@ -1198,22 +1634,42 @@ export class MessengerService {
       isMuted: row.is_muted == true,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      ownerName: ownerFullName,
+      assignedTo: row.assigned_to_user_id
+        ? { id: row.assigned_to_user_id, name: assignedFullName }
+        : null,
+      folder: row.folder ?? null,
+      archived: row.archived_at != null,
     };
   }
 
-  private toMessageDto(row: MessageRow) {
+  private toMessageDto(
+    row: MessageRow,
+    opts?: { maskStaffSender?: boolean },
+  ) {
+    // When masking, the staff sender is collapsed into the anonymous
+    // "Администрация" identity and the real senderId is withheld.
+    const masked = opts?.maskStaffSender === true;
     return {
       id: row.id,
       chatId: row.chat_id,
-      senderId: row.sender_id,
-      sender: row.sender_id
+      senderId: masked ? null : row.sender_id,
+      sender: masked
         ? {
-            id: row.sender_id,
-            email: row.sender_email,
-            firstName: row.sender_first_name,
-            lastName: row.sender_last_name,
+            id: null,
+            name: "Администрация",
+            firstName: null,
+            lastName: null,
+            email: null,
           }
-        : null,
+        : row.sender_id
+          ? {
+              id: row.sender_id,
+              email: row.sender_email,
+              firstName: row.sender_first_name,
+              lastName: row.sender_last_name,
+            }
+          : null,
       content: row.deleted_at ? null : row.content,
       messageType: row.message_type,
       attachmentFileId: row.deleted_at ? null : row.attachment_file_id,

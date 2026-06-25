@@ -72,6 +72,37 @@ class MagicMessengerService {
     return _legacyChat(response);
   }
 
+  Future<Map<String, dynamic>> assignChat(String chatId, {String? userId}) async {
+    final data = <String, dynamic>{};
+    if (userId != null) data['userId'] = userId;
+    final response = await _api.post<Map<String, dynamic>>(
+      '/messenger/chats/$chatId/assign', data: data);
+    return _legacyChat(response);
+  }
+
+  Future<Map<String, dynamic>> unassignChat(String chatId) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/messenger/chats/$chatId/unassign', data: <String, dynamic>{});
+    return _legacyChat(response);
+  }
+
+  Future<Map<String, dynamic>> archiveChat(String chatId) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/messenger/chats/$chatId/archive', data: <String, dynamic>{});
+    return _legacyChat(response);
+  }
+
+  Future<Map<String, dynamic>> unarchiveChat(String chatId) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/messenger/chats/$chatId/unarchive', data: <String, dynamic>{});
+    return _legacyChat(response);
+  }
+
+  Future<void> leaveGroup(String chatId) async {
+    await _api.post<Map<String, dynamic>>(
+      '/messenger/groups/$chatId/leave', data: <String, dynamic>{});
+  }
+
   Future<List<Map<String, dynamic>>> listChatMembers(String chatId) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/messenger/chats/$chatId/members',
@@ -271,6 +302,16 @@ class MagicMessengerService {
     return items.whereType<Map<String, dynamic>>().toList();
   }
 
+  /// Convert a camelCase `toChatSummaryDto` delivered via the realtime
+  /// `chat.created` event into the same snake_case shape that `_legacyChat`
+  /// produces from REST responses.  The summary has no `partner` sub-object;
+  /// display-name and title fall back to the same rules as `_legacyChat`.
+  Map<String, dynamic> legacyChatFromSummary(Map<String, dynamic> summary) {
+    // The summary uses the same camelCase field names as the REST response, so
+    // we can delegate directly to the private mapper.
+    return _legacyChat(summary);
+  }
+
   Map<String, dynamic> _legacyChat(Map<String, dynamic> item) {
     final rawType = item['type']?.toString() ?? 'direct';
     final type = rawType == 'administration' ? 'direct' : rawType;
@@ -339,6 +380,10 @@ class MagicMessengerService {
               'created_at': lastCreatedAt,
             },
       '_last_message_time': lastCreatedAt,
+      'folder': item['folder'],
+      'assigned_to': item['assignedTo'],
+      'archived': item['archived'] == true,
+      'owner_name': item['ownerName'],
     };
   }
 

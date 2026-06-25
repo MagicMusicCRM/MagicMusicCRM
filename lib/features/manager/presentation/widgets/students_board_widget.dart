@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
@@ -44,6 +45,9 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   /// studentIds with an update in flight (card shows a spinner, drag disabled).
   final Set<String> _pendingStudentIds = {};
 
+  // ── Realtime invalidation (crm.changed) ───────────────────────────────────
+  Timer? _realtimeDebounce;
+
   // ── Auto-scroll while dragging near the board edges (mirrors leads_widget) ──
   Timer? _autoScrollTimer;
   int _autoScrollDir = 0;
@@ -63,6 +67,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   @override
   void dispose() {
+    _realtimeDebounce?.cancel();
     _autoScrollTimer?.cancel();
     _boardScrollController.dispose();
     _searchCtrl.dispose();
@@ -392,6 +397,19 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Realtime: refresh the board when another staff member changes a student.
+    ref.listen(crmRealtimeProvider, (prev, next) {
+      final event = next.value;
+      if (event == null || event.entity != 'student' || !mounted) return;
+      // Don't refetch while an optimistic move is in flight — a mid-flight
+      // reload would clobber the in-place patch (the move refetches on completion).
+      if (_pendingStudentIds.isNotEmpty) return;
+      _realtimeDebounce?.cancel();
+      _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted || _pendingStudentIds.isNotEmpty) return;
+        _refreshBoard();
+      });
+    });
     final transfer = ref.watch(leadTransferControllerProvider);
     // Persist the branch chosen during a transfer into the local selection so it
     // stays the active filter once the flow finishes (storyboard screen 7).

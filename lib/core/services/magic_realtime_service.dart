@@ -107,6 +107,12 @@ class MagicRealtimeConnection {
     _transport.emit('room.join', {'roomType': 'chat', 'roomId': chatId});
   }
 
+  /// Join a broadcast channel room (e.g. `Объявления`) so `channel.post_created`
+  /// events are delivered. The backend authorizes this via channel read access.
+  void joinChannel(String channelId) {
+    _transport.emit('room.join', {'roomType': 'channel', 'roomId': channelId});
+  }
+
   void joinUserRoom(String userId) {
     _transport.emit('room.join', {'roomType': 'user', 'roomId': userId});
   }
@@ -135,6 +141,14 @@ class MagicRealtimeConnection {
     _onMap('message.updated', handler);
   }
 
+  void onChatCreated(MagicRealtimeHandler handler) {
+    _onMap('chat.created', handler);
+  }
+
+  void onChatRemoved(MagicRealtimeHandler handler) {
+    _onMap('chat.removed', handler);
+  }
+
   void onChatUpdated(MagicRealtimeHandler handler) {
     _onMap('chat.updated', handler);
   }
@@ -158,6 +172,13 @@ class MagicRealtimeConnection {
   /// CRM invalidation hint broadcast to staff (lessons/leads/etc. changed).
   void onCrmChanged(MagicRealtimeHandler handler) {
     _onMap('crm.changed', handler);
+  }
+
+  /// Fires on every (re)connect of the underlying socket. Use it to re-join all
+  /// needed rooms after a network drop — Socket.IO restores only the server-side
+  /// user/crm rooms, so chat/channel subscriptions must be re-issued by the app.
+  void onConnect(void Function() handler) {
+    _transport.on('connect', (_) => handler());
   }
 
   void off(String event) => _transport.off(event);

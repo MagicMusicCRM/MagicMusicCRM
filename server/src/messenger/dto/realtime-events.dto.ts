@@ -1,8 +1,8 @@
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class JoinRoomPayload {
-  @IsIn(['chat', 'user'])
-  roomType: 'chat' | 'user';
+  @IsIn(['chat', 'user', 'channel'])
+  roomType: 'chat' | 'user' | 'channel';
 
   @IsString()
   @MaxLength(120)

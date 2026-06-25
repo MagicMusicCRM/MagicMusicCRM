@@ -19,6 +19,9 @@ class ChatInfoDialog extends ConsumerStatefulWidget {
   final Future<void> Function(bool isMuted)? onMute;
   final Function(Map<String, dynamic> chat)? onNavigateToChat;
   final bool initialIsMuted;
+  /// Called after the current user successfully leaves a group chat.
+  /// The screen should remove the chat from its list and deselect it.
+  final VoidCallback? onLeftGroup;
 
   const ChatInfoDialog({
     super.key,
@@ -31,6 +34,7 @@ class ChatInfoDialog extends ConsumerStatefulWidget {
     this.onMute,
     this.onNavigateToChat,
     this.initialIsMuted = false,
+    this.onLeftGroup,
   });
 
   @override
@@ -362,6 +366,91 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
+    }
+  }
+
+  // ── Group actions ──────────────────────────────────────────────────────────
+
+  Future<void> _leaveGroup() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Выйти из группы'),
+        content: const Text(
+          'Вы уверены, что хотите выйти из этой группы?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Выйти',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(magicMessengerServiceProvider).leaveGroup(widget.chatId);
+      if (!mounted) return;
+      // Close the info panel / page first.
+      if (widget.onClose != null) {
+        widget.onClose!();
+      } else if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      // Signal the screen to remove this chat from the list.
+      widget.onLeftGroup?.call();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось выйти из группы: $e')),
+      );
+    }
+  }
+
+  Future<void> _addMembers() async {
+    if (!_isManagerOrAdminRole) return;
+
+    final selectedIds = await showDialog<Set<String>>(
+      context: context,
+      builder: (ctx) => _AddMembersDialog(
+        existingMemberUserIds: _members
+            .map((m) => m['user_id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet(),
+      ),
+    );
+
+    if (selectedIds == null || selectedIds.isEmpty) return;
+    if (!mounted) return;
+
+    try {
+      await ref
+          .read(magicMessengerServiceProvider)
+          .updateGroupMembers(widget.chatId, addUserIds: selectedIds.toList());
+      if (!mounted) return;
+      // Reload member list to reflect the addition.
+      final updated = await ref
+          .read(magicMessengerServiceProvider)
+          .listChatMembers(widget.chatId);
+      if (!mounted) return;
+      setState(() {
+        _members
+          ..clear()
+          ..addAll(updated);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось добавить участников: $e')),
+      );
     }
   }
 
@@ -707,6 +796,19 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
                                 },
                               ),
                             ],
+                            if (widget.chatType == 'group' &&
+                                _members.any(
+                                  (m) => m['is_current_user'] == true,
+                                )) ...[
+                              const SizedBox(width: 32),
+                              _buildActionButton(
+                                Icons.exit_to_app_rounded,
+                                'Выйти',
+                                isDark,
+                                color: Colors.red,
+                                onTap: _leaveGroup,
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -832,7 +934,13 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
     String label,
     bool isDark, {
     VoidCallback? onTap,
+    Color? color,
   }) {
+    final iconColor = color ?? (isDark ? Colors.white : Colors.black);
+    final labelColor = color ??
+        (isDark
+            ? TelegramColors.darkTextSecondary
+            : TelegramColors.lightTextSecondary);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -850,16 +958,14 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
                     : TelegramColors.lightSurface,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Icon(icon, color: isDark ? Colors.white : Colors.black),
+              child: Icon(icon, color: iconColor),
             ),
             const SizedBox(height: 8),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: isDark
-                    ? TelegramColors.darkTextSecondary
-                    : TelegramColors.lightTextSecondary,
+                color: labelColor,
               ),
             ),
           ],
@@ -883,14 +989,41 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Участники',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark
-                ? TelegramColors.darkTextSecondary
-                : TelegramColors.lightTextSecondary,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Участники',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark
+                    ? TelegramColors.darkTextSecondary
+                    : TelegramColors.lightTextSecondary,
+              ),
+            ),
+            if (_isManagerOrAdminRole)
+              GestureDetector(
+                onTap: _addMembers,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.person_add_rounded,
+                      size: 16,
+                      color: TelegramColors.accent,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Добавить',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: TelegramColors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 8),
         ...previewMembers.map((member) {
@@ -1035,6 +1168,274 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Picker dialog for adding new members to a group chat.
+/// Reuses the same profile-list loading + multi-select pattern as
+/// [CreateGroupChatDialog], but excludes already-present members.
+class _AddMembersDialog extends ConsumerStatefulWidget {
+  final Set<String> existingMemberUserIds;
+
+  const _AddMembersDialog({required this.existingMemberUserIds});
+
+  @override
+  ConsumerState<_AddMembersDialog> createState() => _AddMembersDialogState();
+}
+
+class _AddMembersDialogState extends ConsumerState<_AddMembersDialog> {
+  final _searchController = TextEditingController();
+
+  List<Map<String, dynamic>> _allUsers = [];
+  List<Map<String, dynamic>> _filteredUsers = [];
+  final Set<String> _selectedUserIds = {};
+  bool _loading = true;
+  bool _loadError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUsers() async {
+    try {
+      final res = await ref
+          .read(magicProfileAdminServiceProvider)
+          .listProfiles(limit: 100);
+      if (mounted) {
+        setState(() {
+          _allUsers = res
+              .where(
+                (user) =>
+                    user['user_id'] != null &&
+                    !widget.existingMemberUserIds
+                        .contains(user['user_id']?.toString()),
+              )
+              .map(
+                (user) => {
+                  ...user,
+                  'id': user['user_id'],
+                },
+              )
+              .toList();
+          _filteredUsers = _allUsers;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _loadError = true; });
+    }
+  }
+
+  void _filterUsers(String query) {
+    final q = query.toLowerCase();
+    setState(() {
+      _filteredUsers = _allUsers.where((u) {
+        final name = '${u['first_name'] ?? ''} ${u['last_name'] ?? ''}'
+            .toLowerCase();
+        final email = (u['email'] ?? '').toString().toLowerCase();
+        return name.contains(q) || email.contains(q);
+      }).toList();
+    });
+  }
+
+  String _getRoleLabel(String? role) {
+    return switch (role) {
+      'system_admin' => 'Администратор системы',
+      'admin' => 'Администратор',
+      'manager' => 'Управляющий',
+      'teacher' => 'Преподаватель',
+      _ => 'Клиент',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Dialog(
+      child: Container(
+        width: 480,
+        height: 520,
+        padding: EdgeInsets.zero,
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Добавить участников',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Поиск пользователей...',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      filled: true,
+                      fillColor: isDark
+                          ? TelegramColors.darkInputBg
+                          : TelegramColors.lightInputBg,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onChanged: _filterUsers,
+                  ),
+                ],
+              ),
+            ),
+            // Selected chips
+            if (_selectedUserIds.isNotEmpty)
+              Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: _selectedUserIds.map((uid) {
+                    final user = _allUsers.firstWhere(
+                      (u) => u['id'] == uid,
+                      orElse: () => const {},
+                    );
+                    final name =
+                        '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'
+                            .trim();
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Chip(
+                        avatar: TelegramAvatar(
+                          name: name,
+                          uniqueId: uid,
+                          radius: 12,
+                        ),
+                        label: Text(
+                          name,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () =>
+                            setState(() => _selectedUserIds.remove(uid)),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            const Divider(height: 1),
+            // User list
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _loadError
+                      ? const Center(
+                          child: Text(
+                            'Не удалось загрузить пользователей',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : _filteredUsers.isEmpty
+                      ? Center(
+                          child: Text(
+                            'Нет пользователей для добавления',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: _filteredUsers.length,
+                          itemBuilder: (context, index) {
+                            final user = _filteredUsers[index];
+                            final uid = user['id']?.toString() ?? '';
+                            final name =
+                                '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'
+                                    .trim();
+                            final role = user['role']?.toString();
+                            final isSelected = _selectedUserIds.contains(uid);
+
+                            return ListTile(
+                              leading: TelegramAvatar(
+                                name: name,
+                                uniqueId: uid,
+                                radius: 20,
+                              ),
+                              title: Text(
+                                name.isEmpty ? 'Без имени' : name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              subtitle: Text(
+                                _getRoleLabel(role),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              trailing: isSelected
+                                  ? const Icon(
+                                      Icons.check_circle_rounded,
+                                      color: TelegramColors.accent,
+                                    )
+                                  : Icon(
+                                      Icons.circle_outlined,
+                                      color: isDark
+                                          ? TelegramColors.darkTextSecondary
+                                          : TelegramColors.lightTextSecondary,
+                                    ),
+                              onTap: () {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedUserIds.remove(uid);
+                                  } else {
+                                    _selectedUserIds.add(uid);
+                                  }
+                                });
+                              },
+                            );
+                          },
+                        ),
+            ),
+            const Divider(height: 1),
+            // Footer buttons
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Отмена'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _selectedUserIds.isEmpty
+                        ? null
+                        : () => Navigator.pop(context, _selectedUserIds),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: TelegramColors.accent,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text('Добавить (${_selectedUserIds.length})'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

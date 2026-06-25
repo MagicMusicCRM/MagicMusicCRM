@@ -45,6 +45,21 @@ export class CrmPolicy {
     throw new ForbiddenException("Недостаточно прав для изменения CRM.");
   }
 
+  /**
+   * Финансы ученика в карточке (баланс/оплаты/ожидаемые платежи): Управляющий +
+   * Администратор (+ system_admin). Преподаватель/клиент финансы в карточке не
+   * видят. Отдельно от общего Финансы-таба (`assertManagerOnly`), который остаётся
+   * только у Управляющего.
+   */
+  canReadStudentFinance(actor: ActorContext): boolean {
+    return isManagerOrAdminRole(actor.role);
+  }
+
+  assertCanReadStudentFinance(actor: ActorContext): void {
+    if (this.canReadStudentFinance(actor)) return;
+    throw new NotFoundException("Платежи не найдены.");
+  }
+
   // Управляющий-онли операции: Обзор/Финансы/Отчёты/Задачи/Пользователи.
   // Администратор (admin) — ниже Управляющего и сюда не допускается (бизнес-
   // правило A1, KVA-216; зеркалит фронтовый crm_nav_rbac.dart). system_admin —
