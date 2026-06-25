@@ -77,6 +77,19 @@ void main() {
     expect(isAdministration({'raw_type': 'direct', 'type': 'direct'}), isFalse);
   });
 
+  // ── showInboxFolders ──────────────────────────────────────────────────────
+
+  test('showInboxFolders: true for manager, admin, system_admin', () {
+    expect(showInboxFolders('manager'),      isTrue);
+    expect(showInboxFolders('admin'),        isTrue);
+    expect(showInboxFolders('system_admin'), isTrue);
+  });
+
+  test('showInboxFolders: false for client and teacher', () {
+    expect(showInboxFolders('client'),  isFalse);
+    expect(showInboxFolders('teacher'), isFalse);
+  });
+
   // ── canShowAssignActions ──────────────────────────────────────────────────
 
   test('canShowAssignActions: true for manager+admin on administration chat', () {

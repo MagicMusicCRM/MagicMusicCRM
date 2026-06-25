@@ -2346,7 +2346,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         // Search
         ChatSearchBar(onChanged: (q) => setState(() => _searchQuery = q)),
         // Folder bar — staff (manager/admin) only
-        if (_isManagerOrAdminRole)
+        if (showInboxFolders(widget.role))
           InboxFolderBar(
             selected: _selectedFolder,
             unread: {
@@ -2365,7 +2365,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                   // For staff: show administration chats in the selected folder
                   // first, then groups/channels/direct (non-inbox) chats.
                   // For non-staff: use sortedItems unchanged.
-                  final listItems = _isManagerOrAdminRole
+                  final listItems = showInboxFolders(widget.role)
                       ? [
                           ...chatsInFolder(sortedItems, _selectedFolder),
                           ...nonInboxChats(sortedItems),

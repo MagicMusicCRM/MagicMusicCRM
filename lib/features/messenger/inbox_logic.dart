@@ -1,3 +1,8 @@
+/// Returns true when the role should see the inbox folder bar
+/// (Лиды / Ученики / Архив). Only manager-tier roles qualify.
+bool showInboxFolders(String role) =>
+  role == 'manager' || role == 'admin' || role == 'system_admin';
+
 enum InboxFolder { leads, students, archive }
 
 const inboxFolderApiValues = {
