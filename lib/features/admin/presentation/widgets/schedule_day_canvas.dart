@@ -576,7 +576,8 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
       ),
       child: Stack(
         children: [
-          // Empty-area gesture layer (tap = 1h create, long-press-drag = select).
+          // Empty-area gesture layer (tap = 1h create, desktop drag / touch
+          // long-press-drag = multi-hour select).
           Positioned.fill(
             child: DragTarget<Map<String, dynamic>>(
               // «Без аудитории» only accepts lessons that are ALREADY roomless
@@ -591,9 +592,27 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
               onAcceptWithDetails: (d) =>
                   _onDropOnColumn(col, d.data, d.offset),
               builder: (context, candidate, rejected) {
+                final platform = Theme.of(context).platform;
+                final desktop = platform == TargetPlatform.windows ||
+                    platform == TargetPlatform.linux ||
+                    platform == TargetPlatform.macOS;
                 return GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTapUp: (d) => _onColumnTap(col, d.localPosition.dy),
+                  onPanStart: desktop
+                      ? (d) => _onSelectStart(
+                            col,
+                            colIndex,
+                            d.localPosition.dy,
+                          )
+                      : null,
+                  onPanUpdate: desktop
+                      ? (d) => _onSelectUpdate(
+                            d.localPosition.dy,
+                            d.localPosition.dx,
+                          )
+                      : null,
+                  onPanEnd: desktop ? (_) => _onSelectEnd() : null,
                   onLongPressStart: (d) =>
                       _onSelectStart(col, colIndex, d.localPosition.dy),
                   onLongPressMoveUpdate: (d) => _onSelectUpdate(

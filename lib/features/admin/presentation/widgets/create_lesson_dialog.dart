@@ -205,6 +205,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           branchId: _selectedBranchId,
           roomId: _selectedRoomId,
           scheduledAt: scheduledAt,
+          durationMinutes: _durationMinutes,
         );
       } else {
         await _crm.createLesson(

@@ -269,6 +269,12 @@ class MagicCrmService {
     await _api.delete<Map<String, dynamic>>('/crm/students/$id');
   }
 
+  Future<Map<String, dynamic>> returnStudentToLead(String id) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/students/$id/return-to-lead',
+    );
+  }
+
   Future<List<Map<String, dynamic>>> listTeachers({
     String? q,
     String? status,

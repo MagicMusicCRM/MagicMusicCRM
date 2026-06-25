@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 
 /// Карточка пользователя (профиль/админ).
 ///
@@ -382,11 +382,19 @@ class _LinkTile extends StatelessWidget {
           : null,
       onTap: !canOpen
           ? null
-          : () {
+          : () async {
               if (isStudent) {
-                context.push('/student/$entityId');
+                await showClientCard(
+                  context,
+                  entityType: 'student',
+                  entityId: entityId,
+                );
               } else {
-                context.push('/leads/$entityId');
+                await showClientCard(
+                  context,
+                  entityType: 'lead',
+                  entityId: entityId,
+                );
               }
             },
     );

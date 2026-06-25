@@ -16,6 +16,12 @@ describe("CrmService", () => {
 
   const createService = (rows: Record<string, unknown>[] = []) => {
     const query = jest.fn().mockResolvedValue({ rows });
+    const database = {
+      query,
+      transaction: jest.fn(async (fn: (client: { query: typeof query }) => unknown) =>
+        fn({ query }),
+      ),
+    };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const notifications = {
       sendEmail: jest.fn().mockResolvedValue({ queued: true }),
@@ -44,7 +50,7 @@ describe("CrmService", () => {
     };
 
     const service = new CrmService(
-      { query } as unknown as DatabaseService,
+      database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       hollihop as unknown as HolliHopMetadataService,
@@ -52,7 +58,7 @@ describe("CrmService", () => {
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
-    return { service, query, audit, policy, hollihop, notifications };
+    return { service, query, audit, policy, hollihop, notifications, database };
   };
 
   const createServiceWithQueryResults = (
@@ -62,6 +68,12 @@ describe("CrmService", () => {
     for (const result of results) {
       query.mockResolvedValueOnce(result);
     }
+    const database = {
+      query,
+      transaction: jest.fn(async (fn: (client: { query: typeof query }) => unknown) =>
+        fn({ query }),
+      ),
+    };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const notifications = {
       sendEmail: jest.fn().mockResolvedValue({ queued: true }),
@@ -90,7 +102,7 @@ describe("CrmService", () => {
     };
 
     const service = new CrmService(
-      { query } as unknown as DatabaseService,
+      database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       hollihop as unknown as HolliHopMetadataService,
@@ -98,7 +110,7 @@ describe("CrmService", () => {
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
-    return { service, query, audit, policy, hollihop, notifications };
+    return { service, query, audit, policy, hollihop, notifications, database };
   };
 
   it("lists branches through operational-data policy", async () => {
@@ -1339,7 +1351,11 @@ describe("CrmService", () => {
         ],
       },
       { rows: [{ id: "group-student-a", student_id: "student-a" }] },
+      { rows: [] },
+      { rows: [] },
       { rows: [{ id: "group-student-a" }] },
+      { rows: [] },
+      { rows: [] },
     ]);
 
     await expect(
@@ -1363,7 +1379,7 @@ describe("CrmService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0][1]).toEqual(["group-a", 10]);
     expect(query.mock.calls[1][1]).toEqual(["group-a", "student-a"]);
-    expect(query.mock.calls[2][1]).toEqual(["group-a", "student-a"]);
+    expect(query.mock.calls[4][1]).toEqual(["group-a", "student-a"]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.group_student_added",
@@ -2116,6 +2132,7 @@ describe("CrmService", () => {
           },
         ],
       },
+      { rows: [] },
     ]);
 
     await expect(service.getLeadCard(actor, "lead-a")).resolves.toEqual(
@@ -2140,7 +2157,7 @@ describe("CrmService", () => {
     );
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    expect(query).toHaveBeenCalledTimes(6);
+    expect(query).toHaveBeenCalledTimes(7);
   });
 
   it("proxies HolliHop metadata through CRM write policy", async () => {
@@ -3723,6 +3740,92 @@ describe("CrmService", () => {
     );
   });
 
+  it("returns a linked student back to its existing lead", async () => {
+    const { service, query, audit, policy, database } =
+      createServiceWithQueryResults([
+        {
+          rows: [
+            {
+              id: "student-a",
+              lead_id: "lead-a",
+              branch_id: "branch-a",
+              custom_data: { sourceLeadId: "lead-a" },
+              first_name: "Анна",
+              last_name: "Иванова",
+              email: "anna@example.com",
+              phone: "+79990000000",
+            },
+          ],
+        },
+        { rows: [{ id: "lead-a" }] },
+        { rows: [] },
+      ]);
+
+    await expect(
+      service.returnStudentToLead(actor, "student-a"),
+    ).resolves.toEqual({
+      success: true,
+      studentId: "student-a",
+      leadId: "lead-a",
+      createdLead: false,
+    });
+
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(database.transaction).toHaveBeenCalledTimes(1);
+    expect(String(query.mock.calls[2][0])).toContain("update app.students");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.student_returned_to_lead",
+        entityType: "student",
+        entityId: "student-a",
+        metadata: { leadId: "lead-a", createdLead: false },
+      }),
+    );
+  });
+
+  it("creates a lead when returning an unlinked student", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "student-a",
+            lead_id: null,
+            branch_id: "branch-a",
+            custom_data: { discipline: "Вокал" },
+            first_name: "Анна",
+            last_name: "Иванова",
+            email: "anna@example.com",
+            phone: "+79990000000",
+          },
+        ],
+      },
+      { rows: [{ id: "status-new" }] },
+      { rows: [{ id: "lead-new" }] },
+      { rows: [] },
+    ]);
+
+    await expect(
+      service.returnStudentToLead(actor, "student-a"),
+    ).resolves.toEqual({
+      success: true,
+      studentId: "student-a",
+      leadId: "lead-new",
+      createdLead: true,
+    });
+
+    expect(String(query.mock.calls[2][0])).toContain("insert into app.leads");
+    expect(query.mock.calls[2][1]).toEqual([
+      "status-new",
+      "Анна",
+      "Иванова",
+      "+79990000000",
+      "anna@example.com",
+      JSON.stringify({ discipline: "Вокал", sourceStudentId: "student-a" }),
+      "manager-a",
+      "branch-a",
+    ]);
+  });
+
   it("searchStudents filters branchless students when noBranch is set", async () => {
     const { service, query } = createServiceWithQueryResults([{ rows: [] }]);
     await service.searchStudents(actor, { noBranch: true } as never);
@@ -4746,6 +4849,7 @@ describe("CrmService", () => {
     const { service, query } = createServiceWithQueryResults([
       { rows: [] }, // 1st: dup-check empty
       { rows: [paymentRow] }, // insert
+      { rows: [] }, // affected client users for realtime fan-out
       { rows: [paymentRow] }, // 2nd: dup-check returns existing
     ]);
     const dto = {
@@ -4760,8 +4864,9 @@ describe("CrmService", () => {
 
     expect(first.id).toBe("pay-a");
     expect(second.id).toBe("pay-a");
-    // dup-check, insert, dup-check — the second submit must NOT insert again.
-    expect(query).toHaveBeenCalledTimes(3);
+    // dup-check, insert, realtime affected users, dup-check — the second submit
+    // must NOT insert again.
+    expect(query).toHaveBeenCalledTimes(4);
   });
 
   it("lists expenses with branch/category filters and a total (P5-5)", async () => {

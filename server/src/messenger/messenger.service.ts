@@ -16,6 +16,7 @@ import {
 } from "../common/security/actor-context";
 import { CrmService } from "../crm/crm.service";
 import { DatabaseService } from "../db/database.service";
+import { RealtimeBus } from "../realtime/realtime-bus";
 import { ChannelPermissionDto, UpsertChannelDto } from "./dto/channel.dto";
 import { CreateChannelPostDto } from "./dto/create-channel-post.dto";
 import { CreateDirectChatDto } from "./dto/create-direct-chat.dto";
@@ -141,6 +142,7 @@ export class MessengerService implements OnModuleInit {
     private readonly policy: MessengerPolicy,
     private readonly realtime: RealtimeGateway,
     private readonly crm: CrmService,
+    private readonly realtimeBus: RealtimeBus,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -861,14 +863,41 @@ export class MessengerService implements OnModuleInit {
 
     this.policy.assertCanAssign(actor, chat);
 
-    await this.database.query(
-      "update app.chats set assigned_to_user_id = $2, assigned_at = now() where id = $1",
-      [chatId, targetUserId],
-    );
+    const event = await this.database.transaction(async (client) => {
+      await client.query(
+        "update app.chats set assigned_to_user_id = $2, assigned_at = now() where id = $1",
+        [chatId, targetUserId],
+      );
+      const inserted = await client.query<{ id: string }>(
+        `insert into app.chat_work_events (
+           chat_id, actor_user_id, target_user_id, previous_assigned_user_id, action
+         )
+         values ($1, $2, $3, $4, 'claimed')
+         returning id`,
+        [chatId, actor.userId, targetUserId, chat.assignedToUserId ?? null],
+      );
+      return inserted.rows[0];
+    });
+
+    await this.audit.record({
+      actor,
+      action: "messenger.chat_claimed",
+      entityType: "chat",
+      entityId: chatId,
+      metadata: {
+        targetUserId,
+        previousAssignedUserId: chat.assignedToUserId ?? null,
+      },
+    });
 
     this.realtime.publishAdminInboxEvent("chat.updated", {
       id: chatId,
       assignedTo: { id: targetUserId },
+    });
+    this.realtimeBus.emitCrmChanged({
+      entity: "chat_work",
+      action: "created",
+      id: event.id,
     });
 
     return { success: true };
@@ -889,14 +918,38 @@ export class MessengerService implements OnModuleInit {
       throw new ForbiddenException("Недостаточно прав для снятия назначения.");
     }
 
-    await this.database.query(
-      "update app.chats set assigned_to_user_id = null, assigned_at = null where id = $1",
-      [chatId],
-    );
+    const event = await this.database.transaction(async (client) => {
+      await client.query(
+        "update app.chats set assigned_to_user_id = null, assigned_at = null where id = $1",
+        [chatId],
+      );
+      const inserted = await client.query<{ id: string }>(
+        `insert into app.chat_work_events (
+           chat_id, actor_user_id, target_user_id, previous_assigned_user_id, action
+         )
+         values ($1, $2, null, $3, 'unassigned')
+         returning id`,
+        [chatId, actor.userId, current],
+      );
+      return inserted.rows[0];
+    });
+
+    await this.audit.record({
+      actor,
+      action: "messenger.chat_unassigned",
+      entityType: "chat",
+      entityId: chatId,
+      metadata: { previousAssignedUserId: current },
+    });
 
     this.realtime.publishAdminInboxEvent("chat.updated", {
       id: chatId,
       assignedTo: null,
+    });
+    this.realtimeBus.emitCrmChanged({
+      entity: "chat_work",
+      action: "created",
+      id: event.id,
     });
 
     return { success: true };

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/skeletons.dart';
@@ -9,7 +10,6 @@ import '../../../../core/widgets/v7/v7.dart';
 import 'create_student_dialog.dart';
 import 'create_teacher_dialog.dart';
 import 'create_group_dialog.dart';
-import 'package:go_router/go_router.dart';
 import 'teacher_detail_dialog.dart';
 import 'staff_detail_dialog.dart';
 import 'group_detail_dialog.dart';
@@ -321,7 +321,12 @@ class _StudentsList extends ConsumerWidget {
                   onTap: () async {
                     final id = item['id']?.toString();
                     if (id == null || id.isEmpty) return;
-                    await context.push('/student/$id');
+                    await showClientCard(
+                      context,
+                      entityType: 'student',
+                      entityId: id,
+                      seed: item,
+                    );
                     // Refresh on return — the screen may have changed the
                     // student (edits, payments, etc.).
                     ref.invalidate(entitiesProvider('students'));
@@ -1513,7 +1518,10 @@ class _PackageCard extends ConsumerWidget {
         },
         leading: CircleAvatar(
           backgroundColor: AppColor.goldSoft,
-          child: const Icon(Icons.card_membership_rounded, color: AppColor.gold),
+          child: const Icon(
+            Icons.card_membership_rounded,
+            color: AppColor.gold,
+          ),
         ),
         title: Text(name),
         subtitle: Padding(
@@ -1576,11 +1584,7 @@ class _PackagesSkeleton extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 8),
           child: Row(
             children: [
-              const SkeletonBox(
-                width: 40,
-                height: 40,
-                radius: AppRadius.pill,
-              ),
+              const SkeletonBox(width: 40, height: 40, radius: AppRadius.pill),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

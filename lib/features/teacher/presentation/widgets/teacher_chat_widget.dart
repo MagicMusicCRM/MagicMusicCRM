@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -208,6 +210,8 @@ class _ChatViewState extends State<_ChatView> {
   String? _chatId;
   MagicRealtimeConnection? _realtime;
   bool _realtimeConnecting = false;
+  Timer? _fallbackPollTimer;
+  DateTime _lastRealtimeEventAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -264,6 +268,7 @@ class _ChatViewState extends State<_ChatView> {
       }
       connection.joinChat(chatId);
       connection.onMessageCreated((payload) {
+        _markRealtimeEvent();
         if (payload['chatId'] != chatId) return;
         if (!mounted) return;
         setState(() {
@@ -275,6 +280,7 @@ class _ChatViewState extends State<_ChatView> {
         _markAsRead(_messages);
       });
       connection.onMessageUpdated((payload) {
+        _markRealtimeEvent();
         if (payload['chatId'] != chatId) return;
         if (!mounted) return;
         setState(() {
@@ -290,10 +296,46 @@ class _ChatViewState extends State<_ChatView> {
         });
       });
       _realtime = connection;
+      _startFallbackPolling();
     } catch (e) {
       debugPrint('Teacher chat realtime unavailable: $e');
+      _startFallbackPolling();
     } finally {
       _realtimeConnecting = false;
+    }
+  }
+
+  void _markRealtimeEvent() {
+    _lastRealtimeEventAt = DateTime.now();
+  }
+
+  void _startFallbackPolling() {
+    if (_fallbackPollTimer != null) return;
+    _fallbackPollTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (!mounted) return;
+      final realtimeIsFresh =
+          DateTime.now().difference(_lastRealtimeEventAt) <
+          const Duration(seconds: 18);
+      if (realtimeIsFresh) return;
+      unawaited(_refreshMessagesSilently());
+    });
+  }
+
+  Future<void> _refreshMessagesSilently() async {
+    final chatId = _chatId;
+    if (chatId == null || chatId.isEmpty || _loading) return;
+    try {
+      final messages = await widget.messenger.listMessages(chatId, limit: 100);
+      if (!mounted || _chatId != chatId) return;
+      setState(() {
+        for (final message in messages) {
+          _upsertMessage(message);
+        }
+        _sortMessages();
+      });
+      await _markAsRead(_messages);
+    } catch (e) {
+      debugPrint('Teacher chat fallback poll failed: $e');
     }
   }
 
@@ -317,6 +359,29 @@ class _ChatViewState extends State<_ChatView> {
           curve: Curves.easeOut,
         );
       }
+    });
+  }
+
+  void _upsertMessage(Map<String, dynamic> message) {
+    final id = message['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final index = _messages.indexWhere((item) => item['id'] == id);
+    if (index == -1) {
+      _messages.add(message);
+    } else {
+      _messages[index] = {..._messages[index], ...message};
+    }
+  }
+
+  void _sortMessages() {
+    _messages.sort((a, b) {
+      final left =
+          DateTime.tryParse(a['created_at']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final right =
+          DateTime.tryParse(b['created_at']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return left.compareTo(right);
     });
   }
 
@@ -344,6 +409,7 @@ class _ChatViewState extends State<_ChatView> {
 
   @override
   void dispose() {
+    _fallbackPollTimer?.cancel();
     final chatId = _chatId;
     if (chatId != null) _realtime?.leaveRoom(chatId);
     _realtime?.disconnect();

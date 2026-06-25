@@ -109,6 +109,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   // live even when the user is not viewing the channel. Re-joined on reconnect.
   final Set<String> _joinedChannelIds = {};
   Timer? _chatListReloadTimer;
+  Timer? _realtimeFallbackTimer;
+  DateTime _lastRealtimeEventAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastFallbackChatListAt = DateTime.fromMillisecondsSinceEpoch(0);
   String? _currentUserId;
 
   // Folder bar state (staff / manager+admin only)
@@ -119,15 +122,13 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   bool get _isManagerOrAdminRole => _isAdminRole || widget.role == 'manager';
 
-  /// Manager-tier for assignment RBAC: may claim/reassign/unassign ANY chat.
-  /// Plain `admin` and `teacher` are excluded — they may only claim unassigned
-  /// chats and unassign their own. Matches backend PATCH /chats/:id/assign.
+  /// Manager-tier may clear assignment markers created by others. Claiming is
+  /// advisory and available to every staff role.
   bool get _isManagerTier =>
       widget.role == 'manager' || widget.role == 'system_admin';
 
-  /// A1: manager-tier access for the manager-only CRM destinations and role
-  /// editing. Администратор (`admin`) is EXCLUDED (Управляющий > Администратор);
-  /// superuser `system_admin` is included. See [crmHasManagerAccess].
+  /// Operational CRM access. Role editing itself remains backend-limited to
+  /// manager/system_admin via canAssignRole/ProfilePolicy.
   bool get _hasManagerAccess => crmHasManagerAccess(widget.role);
 
   bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';
@@ -263,6 +264,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   void dispose() {
     _typingStopTimer?.cancel();
     _chatListReloadTimer?.cancel();
+    _realtimeFallbackTimer?.cancel();
     _leaveTypingChannel();
     _realtimeConnection?.dispose();
     super.dispose();
@@ -342,8 +344,11 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       final leadId = contact['leadId']?.toString();
       if (studentId != null && studentId.isNotEmpty) {
         if (!mounted) return;
-        // Open the canonical (rich, tabbed) student screen.
-        context.push('/student/$studentId');
+        await showClientCard(
+          context,
+          entityType: 'student',
+          entityId: studentId,
+        );
       } else if (leadId != null && leadId.isNotEmpty) {
         if (!mounted) return;
         // KVA-175: open lead card directly in a dialog instead of redirecting.
@@ -357,10 +362,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      _showChatSnack(
-        'Не удалось открыть карточку: $e',
-        bg: AppColor.danger,
-      );
+      _showChatSnack('Не удалось открыть карточку: $e', bg: AppColor.danger);
     }
   }
 
@@ -369,7 +371,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   // ── Assignment actions (administration chats) ──────────────────────────────
 
   /// Optimistically patches the chat in _chatItems and triggers a rebuild.
-  void _patchOpenChatAssignment(String chatId, Map<String, dynamic>? assignedTo) {
+  void _patchOpenChatAssignment(
+    String chatId,
+    Map<String, dynamic>? assignedTo,
+  ) {
     setState(() {
       _chatItems = _chatItems.map((c) {
         if (c['id'] == chatId) return {...c, 'assigned_to': assignedTo};
@@ -381,16 +386,16 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   Future<void> _assignChatToMe(String chatId) async {
     final svc = ref.read(magicMessengerServiceProvider);
     // Optimistic: build a minimal assigned_to map from known current user data.
-    final optimistic = {
-      'id': _currentUserId,
-      'name': _currentUserDisplayName,
-    };
+    final optimistic = {'id': _currentUserId, 'name': _currentUserDisplayName};
     _patchOpenChatAssignment(chatId, optimistic);
     try {
       final updated = await svc.assignChat(chatId);
       if (!mounted) return;
       // Apply server's authoritative assigned_to.
-      _patchOpenChatAssignment(chatId, updated['assigned_to'] as Map<String, dynamic>?);
+      _patchOpenChatAssignment(
+        chatId,
+        updated['assigned_to'] as Map<String, dynamic>?,
+      );
     } catch (e) {
       if (!mounted) return;
       // Roll back optimistic update.
@@ -406,8 +411,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       (c) => c['id'] == chatId,
       orElse: () => const {},
     );
-    final previousAssignedTo =
-        openChat['assigned_to'] as Map<String, dynamic>?;
+    final previousAssignedTo = openChat['assigned_to'] as Map<String, dynamic>?;
     // Optimistic: clear assigned_to.
     _patchOpenChatAssignment(chatId, null);
     try {
@@ -425,7 +429,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   Future<void> _archiveChat(String chatId) async {
     final svc = ref.read(magicMessengerServiceProvider);
     // Optimistic: mark archived so folderOf re-buckets to Архив immediately.
-    setState(() => _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': true}));
+    setState(
+      () =>
+          _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': true}),
+    );
     try {
       // Resurface is server-driven — a new client message clears archive for
       // all staff and emits chat.updated (Task 5 patchChat moves it back out
@@ -434,7 +441,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     } catch (e) {
       if (!mounted) return;
       // Revert optimistic update on failure.
-      setState(() => _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': false}));
+      setState(
+        () => _chatItems = patchChat(_chatItems, {
+          'id': chatId,
+          'archived': false,
+        }),
+      );
       _showChatSnack('Не удалось архивировать чат: $e', bg: AppColor.danger);
     }
   }
@@ -442,14 +454,25 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   Future<void> _unarchiveChat(String chatId) async {
     final svc = ref.read(magicMessengerServiceProvider);
     // Optimistic: clear archived flag so folderOf re-buckets out of Архив.
-    setState(() => _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': false}));
+    setState(
+      () =>
+          _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': false}),
+    );
     try {
       await svc.unarchiveChat(chatId);
     } catch (e) {
       if (!mounted) return;
       // Revert optimistic update on failure.
-      setState(() => _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': true}));
-      _showChatSnack('Не удалось вернуть чат из архива: $e', bg: AppColor.danger);
+      setState(
+        () => _chatItems = patchChat(_chatItems, {
+          'id': chatId,
+          'archived': true,
+        }),
+      );
+      _showChatSnack(
+        'Не удалось вернуть чат из архива: $e',
+        bg: AppColor.danger,
+      );
     }
   }
 
@@ -491,26 +514,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _transferChat(String chatId) async {
-    final pickedUserId = await showDialog<String>(
-      context: context,
-      builder: (_) => _StaffPickerDialog(
-        currentUserId: _currentUserId,
-      ),
-    );
-    if (pickedUserId == null || !mounted) return;
-
-    final svc = ref.read(magicMessengerServiceProvider);
-    try {
-      final updated = await svc.assignChat(chatId, userId: pickedUserId);
-      if (!mounted) return;
-      _patchOpenChatAssignment(chatId, updated['assigned_to'] as Map<String, dynamic>?);
-    } catch (e) {
-      if (!mounted) return;
-      _showChatSnack('Не удалось передать: $e', bg: AppColor.danger);
-    }
   }
 
   // ── Load chat list ─────────────────────────────────────────────────────────
@@ -769,8 +772,56 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       // Subscribe to broadcast channels (Объявления) so posts arrive live even
       // when the channel is not the active conversation.
       _joinAnnouncementChannels();
+      _startRealtimeFallbackPolling();
     } catch (e) {
       _logMessenger('MessengerScreen: Error connecting v3 realtime: $e');
+      _startRealtimeFallbackPolling();
+    }
+  }
+
+  void _markRealtimeEvent() {
+    _lastRealtimeEventAt = DateTime.now();
+  }
+
+  void _startRealtimeFallbackPolling() {
+    if (_realtimeFallbackTimer != null) return;
+    _realtimeFallbackTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (!mounted) return;
+      final realtimeIsFresh =
+          DateTime.now().difference(_lastRealtimeEventAt) <
+          const Duration(seconds: 18);
+      if (realtimeIsFresh) return;
+
+      unawaited(_refreshSelectedMessagesSilently());
+
+      final shouldRefreshList =
+          DateTime.now().difference(_lastFallbackChatListAt) >
+          const Duration(seconds: 36);
+      if (shouldRefreshList) {
+        _lastFallbackChatListAt = DateTime.now();
+        unawaited(_loadChatList());
+      }
+    });
+  }
+
+  Future<void> _refreshSelectedMessagesSilently() async {
+    final chatId = _selectedChatId;
+    if (chatId == null || chatId.isEmpty || _loadingMessages) return;
+    try {
+      final messenger = ref.read(magicMessengerServiceProvider);
+      final items = _selectedChatType == 'channel'
+          ? await messenger.listChannelPosts(chatId, limit: 100)
+          : await messenger.listMessages(chatId, limit: 100);
+      if (!mounted || _selectedChatId != chatId) return;
+      setState(() {
+        for (final item in items) {
+          _upsertMessage(item);
+        }
+        _sortMessagesChronologically();
+      });
+      if (_selectedChatType != 'channel') unawaited(_markMessagesRead());
+    } catch (e) {
+      _logMessenger('MessengerScreen: fallback message poll failed: $e');
     }
   }
 
@@ -809,6 +860,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   void _handleRealtimeMessageCreated(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted) return;
     final message = _normalizeRealtimeMessage(payload);
     final chatId = message['chat_id']?.toString();
@@ -842,6 +894,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   void _handleRealtimeMessageUpdated(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted) return;
     final message = _normalizeRealtimeMessage(payload);
     final messageId = message['id']?.toString();
@@ -860,6 +913,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   void _handleRealtimeChannelPostCreated(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted) return;
     final post = _normalizeRealtimeChannelPost(payload);
     final channelId = post['channel_id']?.toString();
@@ -874,6 +928,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   void _handleRealtimeChatCreated(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted) return;
     final service = ref.read(magicMessengerServiceProvider);
     final mapped = service.legacyChatFromSummary(payload);
@@ -881,6 +936,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   void _handleRealtimeChatRemoved(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted) return;
     final id = payload['id'] as String?;
     if (id == null) return;
@@ -891,6 +947,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   void _handleRealtimeChatUpdated(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted) return;
     final chatId = (payload['id'] ?? payload['chatId'])?.toString();
     final readerId = payload['readerId']?.toString();
@@ -957,12 +1014,14 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   /// administration chat avatar affects this screen — refetch the list (which
   /// reloads the avatar) when it changes.
   void _handleRealtimeCrmChanged(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted) return;
     if (payload['entity']?.toString() != 'setting') return;
     _scheduleChatListReload();
   }
 
   void _handleRealtimeTypingStart(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted || payload['chatId'] != _selectedChatId) return;
     final userId = payload['userId']?.toString();
     if (userId == null || userId == _userId) return;
@@ -970,11 +1029,13 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   void _handleRealtimeTypingStop(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted || payload['chatId'] != _selectedChatId) return;
     setState(() => _typingText = '');
   }
 
   void _handleRealtimePresenceUpdated(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
     if (!mounted) return;
     final userId = payload['userId']?.toString();
     if (userId == null || userId == _userId) return;
@@ -1968,8 +2029,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       if (next == null || !mounted) return;
       final requested = next.tabIndex.toInt();
       setState(() {
-        // A1: only honour deep-links to a destination this role can see, so a
-        // notification can't drop Администратор onto a manager-only tab.
+        // Only honour deep-links to a destination this role can see.
         if (_visibleCrmTabs(isDesktop).contains(requested)) {
           _selectedCrmTab = requested;
         }
@@ -1982,7 +2042,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
     final visibleCrmTabs = _visibleCrmTabs(isDesktop);
     // Normalise to a tab the current role can actually see, so a stale or
-    // hidden index never renders a manager-only body for Администратор (A1).
+    // hidden index never renders a destination unavailable to the role.
     final selectedCrmTab = visibleCrmTabs.contains(_selectedCrmTab)
         ? _selectedCrmTab
         : visibleCrmTabs.first;
@@ -2091,9 +2151,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       };
     }
 
-    // A1: every manager-only destination is gated on `_hasManagerAccess`, so
-    // Администратор can only ever render Чат/Расписание/Клиенты even if a stale
-    // index slips through.
+    // Operational destinations are gated on `_hasManagerAccess`; role mutation
+    // controls live inside the user/profile widgets and backend policy.
     return switch (selectedTab) {
       1 when _hasManagerAccess =>
         _isAdminRole
@@ -2202,7 +2261,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Widget _buildChatList(BuildContext context, bool isMobile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dividerColor = isDark ? AppColor.divider : TelegramColors.lightDivider;
+    final dividerColor = isDark
+        ? AppColor.divider
+        : TelegramColors.lightDivider;
     final secondaryText = isDark
         ? AppColor.text2
         : TelegramColors.lightTextSecondary;
@@ -2241,9 +2302,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
           decoration: BoxDecoration(
             color: isDark ? AppColor.surface : TelegramColors.lightBg,
-            border: Border(
-              bottom: BorderSide(color: dividerColor, width: 0.5),
-            ),
+            border: Border(bottom: BorderSide(color: dividerColor, width: 0.5)),
           ),
           child: Row(
             children: [
@@ -2362,119 +2421,135 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               ? const Center(
                   child: CircularProgressIndicator(color: AppColor.gold),
                 )
-              : Builder(builder: (context) {
-                  // For staff: show administration chats in the selected folder
-                  // first, then groups/channels/direct (non-inbox) chats below a
-                  // section header — but ONLY for non-archive tabs. Архив shows
-                  // only archived administration chats (no groups/channels).
-                  // For non-staff: use sortedItems unchanged.
-                  const kSectionHeader = {'_section_header': 'Группы и каналы'};
-                  List<Map<String, dynamic>> listItems;
-                  if (showInboxFolders(widget.role)) {
-                    final folderChats = chatsInFolder(sortedItems, _selectedFolder);
-                    if (_selectedFolder == InboxFolder.archive) {
-                      // Архив: only archived administration chats, no groups.
-                      listItems = folderChats;
+              : Builder(
+                  builder: (context) {
+                    // For staff: show administration chats in the selected folder
+                    // first, then groups/channels/direct (non-inbox) chats below a
+                    // section header — but ONLY for non-archive tabs. Архив shows
+                    // only archived administration chats (no groups/channels).
+                    // For non-staff: use sortedItems unchanged.
+                    const kSectionHeader = {
+                      '_section_header': 'Группы и каналы',
+                    };
+                    List<Map<String, dynamic>> listItems;
+                    if (showInboxFolders(widget.role)) {
+                      final folderChats = chatsInFolder(
+                        sortedItems,
+                        _selectedFolder,
+                      );
+                      if (_selectedFolder == InboxFolder.archive) {
+                        // Архив: only archived administration chats, no groups.
+                        listItems = folderChats;
+                      } else {
+                        final extras = nonInboxChats(sortedItems);
+                        listItems = [
+                          ...folderChats,
+                          if (extras.isNotEmpty) kSectionHeader,
+                          ...extras,
+                        ];
+                      }
                     } else {
-                      final extras = nonInboxChats(sortedItems);
-                      listItems = [
-                        ...folderChats,
-                        if (extras.isNotEmpty) kSectionHeader,
-                        ...extras,
-                      ];
+                      listItems = sortedItems;
                     }
-                  } else {
-                    listItems = sortedItems;
-                  }
 
-                  if (listItems.isEmpty) {
-                    return Center(
-                      child: Text(
-                        _searchQuery.isNotEmpty ? 'Ничего не найдено' : 'Нет чатов',
-                        style: TextStyle(color: secondaryText),
+                    if (listItems.isEmpty) {
+                      return Center(
+                        child: Text(
+                          _searchQuery.isNotEmpty
+                              ? 'Ничего не найдено'
+                              : 'Нет чатов',
+                          style: TextStyle(color: secondaryText),
+                        ),
+                      );
+                    }
+
+                    return RefreshIndicator(
+                      onRefresh: _loadChatList,
+                      color: AppColor.gold,
+                      child: ListView.builder(
+                        itemCount: listItems.length,
+                        itemBuilder: (context, index) {
+                          final item = listItems[index];
+
+                          // Section header sentinel — rendered as a non-tappable label.
+                          if (item.containsKey('_section_header')) {
+                            return Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                              child: Text(
+                                item['_section_header'] as String,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: secondaryText,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            );
+                          }
+
+                          final id = (item['id'] ?? '').toString();
+                          final type =
+                              (item['_item_type'] ??
+                                      item['item_type'] ??
+                                      'individual')
+                                  .toString();
+                          final name =
+                              (item['_display_name'] ??
+                                      item['display_name'] ??
+                                      'Аноним')
+                                  .toString();
+                          final lastMsg =
+                              item['_last_message'] as Map<String, dynamic>?;
+                          final unread = _unreadCounts[id] ?? 0;
+                          final avatarUrl = _getAvatarUrl(item);
+
+                          // For staff: always show the work marker so new client
+                          // messages clearly surface as not taken yet.
+                          final assignee = _isStaffRole
+                              ? assigneeName(item)
+                              : null;
+                          final preview = _messagePreview(lastMsg);
+                          final isAdminChat = isAdministration(item);
+                          final assignmentText = !_isStaffRole || !isAdminChat
+                              ? null
+                              : assignee != null
+                              ? 'ведёт: $assignee'
+                              : 'Никто не взял в работу';
+                          final subtitleText = assignmentText != null
+                              ? '$assignmentText · $preview'
+                              : preview;
+
+                          return ChatListTile(
+                            title: name,
+                            subtitle: subtitleText,
+                            time: _formatTime(
+                              item['_last_message_time'] as String?,
+                            ),
+                            unreadCount: unread,
+                            isSelected: _selectedChatId == id,
+                            isChannel: type == 'channel',
+                            uniqueId: id,
+                            avatarUrl: avatarUrl,
+                            channelIcon: type == 'channel'
+                                ? Icons.campaign_rounded
+                                : type == 'group'
+                                ? Icons.group_rounded
+                                : null,
+                            onTap: () => _selectChat(item),
+                            isMuted: _mutedChatIds.contains(id),
+                            statusIcon: _buildStatusIcon(item, isDark),
+                            onStatusTap: () => _showStatusInfo(item),
+                            // Archive long-press: manager/admin only, administration chats only.
+                            onLongPress:
+                                _isManagerOrAdminRole && isAdministration(item)
+                                ? () => _showChatRowMenu(item)
+                                : null,
+                          );
+                        },
                       ),
                     );
-                  }
-
-                  return RefreshIndicator(
-                    onRefresh: _loadChatList,
-                    color: AppColor.gold,
-                    child: ListView.builder(
-                      itemCount: listItems.length,
-                      itemBuilder: (context, index) {
-                        final item = listItems[index];
-
-                        // Section header sentinel — rendered as a non-tappable label.
-                        if (item.containsKey('_section_header')) {
-                          return Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                            child: Text(
-                              item['_section_header'] as String,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: secondaryText,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                          );
-                        }
-
-                        final id = (item['id'] ?? '').toString();
-                        final type =
-                            (item['_item_type'] ??
-                                    item['item_type'] ??
-                                    'individual')
-                                .toString();
-                        final name =
-                            (item['_display_name'] ??
-                                    item['display_name'] ??
-                                    'Аноним')
-                                .toString();
-                        final lastMsg =
-                            item['_last_message'] as Map<String, dynamic>?;
-                        final unread = _unreadCounts[id] ?? 0;
-                        final avatarUrl = _getAvatarUrl(item);
-
-                        // For staff: show "ведёт: Имя · <preview>" so the assignee
-                        // indicator is visible without replacing the message preview.
-                        final assignee = _isStaffRole
-                            ? assigneeName(item)
-                            : null;
-                        final preview = _messagePreview(lastMsg);
-                        final subtitleText = assignee != null
-                            ? 'ведёт: $assignee · $preview'
-                            : preview;
-
-                        return ChatListTile(
-                          title: name,
-                          subtitle: subtitleText,
-                          time: _formatTime(
-                            item['_last_message_time'] as String?,
-                          ),
-                          unreadCount: unread,
-                          isSelected: _selectedChatId == id,
-                          isChannel: type == 'channel',
-                          uniqueId: id,
-                          avatarUrl: avatarUrl,
-                          channelIcon: type == 'channel'
-                              ? Icons.campaign_rounded
-                              : type == 'group'
-                              ? Icons.group_rounded
-                              : null,
-                          onTap: () => _selectChat(item),
-                          isMuted: _mutedChatIds.contains(id),
-                          statusIcon: _buildStatusIcon(item, isDark),
-                          onStatusTap: () => _showStatusInfo(item),
-                          // Archive long-press: manager/admin only, administration chats only.
-                          onLongPress: _isManagerOrAdminRole && isAdministration(item)
-                              ? () => _showChatRowMenu(item)
-                              : null,
-                        );
-                      },
-                    ),
-                  );
-                }),
+                  },
+                ),
         ),
       ],
     );
@@ -2625,76 +2700,71 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                         orElse: () => const {},
                       ),
                     ))
-                  Builder(builder: (context) {
-                    final openChat = _chatItems.firstWhere(
-                      (c) => c['id'] == _selectedChatId,
-                      orElse: () => const {},
-                    );
-                    final assignedToId =
-                        (openChat['assigned_to'] as Map?)?['id']?.toString();
-                    final isAssignedToMe =
-                        assignedToId != null &&
-                        assignedToId == _currentUserId;
-                    final isAssigned = assignedToId != null;
-                    return PopupMenuButton<String>(
-                      icon: const Icon(
-                        Icons.assignment_ind_rounded,
-                        size: 20,
-                        color: AppColor.gold,
-                      ),
-                      tooltip: 'Назначение',
-                      itemBuilder: (_) => [
-                        // Manager-tier may steal any chat not already theirs;
-                        // plain admin/teacher may only claim a truly unassigned one.
-                        if (_isManagerTier ? !isAssignedToMe : !isAssigned)
-                          const PopupMenuItem(
-                            value: 'assign_me',
-                            child: Row(
-                              children: [
-                                Icon(Icons.assignment_turned_in_outlined, size: 18),
-                                SizedBox(width: 8),
-                                Text('Взять в работу'),
-                              ],
+                  Builder(
+                    builder: (context) {
+                      final openChat = _chatItems.firstWhere(
+                        (c) => c['id'] == _selectedChatId,
+                        orElse: () => const {},
+                      );
+                      final assignedToId =
+                          (openChat['assigned_to'] as Map?)?['id']?.toString();
+                      final isAssignedToMe =
+                          assignedToId != null &&
+                          assignedToId == _currentUserId;
+                      final isAssigned = assignedToId != null;
+                      return PopupMenuButton<String>(
+                        icon: const Icon(
+                          Icons.assignment_ind_rounded,
+                          size: 20,
+                          color: AppColor.gold,
+                        ),
+                        tooltip: 'Назначение',
+                        itemBuilder: (_) => [
+                          // Advisory marker: any staff member can mark that they
+                          // started working the chat. This is not an exclusive
+                          // lock; the history/audit tells who acted when.
+                          if (!isAssignedToMe)
+                            const PopupMenuItem(
+                              value: 'assign_me',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.assignment_turned_in_outlined,
+                                    size: 18,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text('Взять в работу'),
+                                ],
+                              ),
                             ),
-                          ),
-                        // Manager-tier may unassign anyone; others only their own.
-                        if (isAssigned && (isAssignedToMe || _isManagerTier))
-                          const PopupMenuItem(
-                            value: 'unassign',
-                            child: Row(
-                              children: [
-                                Icon(Icons.assignment_return_outlined, size: 18),
-                                SizedBox(width: 8),
-                                Text('Снять с работы'),
-                              ],
+                          // Manager-tier may clear anyone's marker; others only their own.
+                          if (isAssigned && (isAssignedToMe || _isManagerTier))
+                            const PopupMenuItem(
+                              value: 'unassign',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.assignment_return_outlined,
+                                    size: 18,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text('Снять с работы'),
+                                ],
+                              ),
                             ),
-                          ),
-                        // Only manager-tier may reassign to another staff member.
-                        if (_isManagerTier)
-                          const PopupMenuItem(
-                            value: 'transfer',
-                            child: Row(
-                              children: [
-                                Icon(Icons.transfer_within_a_station_rounded, size: 18),
-                                SizedBox(width: 8),
-                                Text('Передать'),
-                              ],
-                            ),
-                          ),
-                      ],
-                      onSelected: (value) async {
-                        final chatId = _selectedChatId;
-                        if (chatId == null) return;
-                        if (value == 'assign_me') {
-                          await _assignChatToMe(chatId);
-                        } else if (value == 'unassign') {
-                          await _unassignChat(chatId);
-                        } else if (value == 'transfer') {
-                          await _transferChat(chatId);
-                        }
-                      },
-                    );
-                  }),
+                        ],
+                        onSelected: (value) async {
+                          final chatId = _selectedChatId;
+                          if (chatId == null) return;
+                          if (value == 'assign_me') {
+                            await _assignChatToMe(chatId);
+                          } else if (value == 'unassign') {
+                            await _unassignChat(chatId);
+                          }
+                        },
+                      );
+                    },
+                  ),
               ],
               onTitleTap: () {
                 if (_selectedChatId == null || _selectedChatType == null) {
@@ -2906,10 +2976,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ListTile(
-              leading: const Icon(
-                Icons.person_rounded,
-                color: AppColor.gold,
-              ),
+              leading: const Icon(Icons.person_rounded, color: AppColor.gold),
               title: const Text('Ответил первым:'),
               subtitle: Text(responderName),
               contentPadding: EdgeInsets.zero,
@@ -3037,10 +3104,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                   }
                 },
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 48,
-                  minHeight: 48,
-                ),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               ),
             ],
           ),
@@ -3399,7 +3463,9 @@ class _MessageListViewState extends State<_MessageListView> {
       if (!_isJumping) {
         if (_isAtBottom) {
           // KVA-174: auto-scroll only when already at the bottom.
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _scrollToBottom(),
+          );
         } else {
           // KVA-174: count unseen messages while scrolled up — by the actual
           // number added so a burst/batch delivery isn't undercounted.
@@ -3594,143 +3660,6 @@ class _MessageListViewState extends State<_MessageListView> {
               ],
             ),
           ),
-      ],
-    );
-  }
-}
-
-/// Staff-picker dialog for "Передать" (transfer to another staff member).
-/// Loads all staff profiles (admin/system_admin/manager/teacher) and lets the
-/// user pick one. Returns the selected user's `user_id` or null if cancelled.
-class _StaffPickerDialog extends ConsumerStatefulWidget {
-  final String? currentUserId;
-
-  const _StaffPickerDialog({this.currentUserId});
-
-  @override
-  ConsumerState<_StaffPickerDialog> createState() => _StaffPickerDialogState();
-}
-
-class _StaffPickerDialogState extends ConsumerState<_StaffPickerDialog> {
-  List<Map<String, dynamic>> _allStaff = [];
-  List<Map<String, dynamic>> _filtered = [];
-  bool _loading = true;
-  final _searchController = TextEditingController();
-
-  static const _staffRoles = {'admin', 'system_admin', 'manager', 'teacher'};
-
-  @override
-  void initState() {
-    super.initState();
-    _loadStaff();
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadStaff() async {
-    try {
-      final profiles = await ref
-          .read(magicProfileAdminServiceProvider)
-          .listProfiles(limit: 200);
-      if (!mounted) return;
-      final staff = profiles
-          .where((p) => _staffRoles.contains(p['role']))
-          .where((p) => p['user_id'] != null)
-          .toList();
-      setState(() {
-        _allStaff = staff;
-        _filtered = staff;
-        _loading = false;
-      });
-    } catch (e) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _filter(String q) {
-    final query = q.toLowerCase();
-    setState(() {
-      _filtered = _allStaff.where((u) {
-        final name =
-            '${u['first_name'] ?? ''} ${u['last_name'] ?? ''}'.toLowerCase();
-        final email = (u['email'] ?? '').toString().toLowerCase();
-        return name.contains(query) || email.contains(query);
-      }).toList();
-    });
-  }
-
-  String _roleLabel(String? role) {
-    switch (role) {
-      case 'admin': return 'Администратор';
-      case 'system_admin': return 'Администратор системы';
-      case 'manager': return 'Управляющий';
-      case 'teacher': return 'Преподаватель';
-      default: return role ?? '';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Передать чат'),
-      content: SizedBox(
-        width: 360,
-        height: 400,
-        child: Column(
-          children: [
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Поиск сотрудника…',
-                prefixIcon: Icon(Icons.search),
-                isDense: true,
-              ),
-              onChanged: _filter,
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: AppColor.gold),
-                    )
-                  : _filtered.isEmpty
-                  ? const Center(child: Text('Нет сотрудников'))
-                  : ListView.builder(
-                      itemCount: _filtered.length,
-                      itemBuilder: (context, index) {
-                        final user = _filtered[index];
-                        final userId = user['user_id']?.toString() ?? '';
-                        final firstName = user['first_name'] ?? '';
-                        final lastName = user['last_name'] ?? '';
-                        final name = '$firstName $lastName'.trim();
-                        final role = user['role']?.toString();
-                        final isMe = userId == widget.currentUserId;
-                        return ListTile(
-                          leading: const Icon(
-                            Icons.person_rounded,
-                            color: AppColor.gold,
-                          ),
-                          title: Text(name.isEmpty ? user['email'] ?? '' : name),
-                          subtitle: Text(
-                            _roleLabel(role) + (isMe ? ' (вы)' : ''),
-                          ),
-                          onTap: () => Navigator.of(context).pop(userId),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('Отмена'),
-        ),
       ],
     );
   }

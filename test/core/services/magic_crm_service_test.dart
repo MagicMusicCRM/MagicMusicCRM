@@ -1017,6 +1017,28 @@ void main() {
       );
     });
 
+    test('returns student to lead through v3 API', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/students/student-a/return-to-lead',
+          statusCode: 201,
+          body: {
+            'success': true,
+            'studentId': 'student-a',
+            'leadId': 'lead-a',
+            'createdLead': false,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final result = await service.returnStudentToLead('student-a');
+
+      expect(result['leadId'], 'lead-a');
+      expect(result['createdLead'], false);
+      expect(adapter.requests.single.body, isEmpty);
+    });
+
     test('queues student invite through v3 API', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

@@ -1175,6 +1175,7 @@ export class CrmService {
       expectedPayments,
       balances,
       links,
+      chatWork,
     ] = await Promise.all([
       this.listStudentGroups(actor, studentId, { limit: 100 }),
       this.listLessons(actor, { studentId, limit: 100 }),
@@ -1194,6 +1195,7 @@ export class CrmService {
         ? this.listStudentBalances(actor, { studentId, limit: 1 }).catch(() => emptyList)
         : Promise.resolve(emptyList),
       this.listUserCrmLinks("student", studentId),
+      this.listChatWorkTimeline("student", studentId),
     ]);
 
     const timeline = [
@@ -1229,6 +1231,7 @@ export class CrmService {
         status: null,
         occurredAt: payment.paymentDate,
       })),
+      ...chatWork,
     ].sort(
       (a, b) =>
         new Date(String(b.occurredAt)).getTime() -
@@ -2600,6 +2603,14 @@ export class CrmService {
       entityType: "group",
       entityId: group.id,
     });
+    const affectedUserIds = await this.affectedUserIdsForGroup(group.id);
+    this.realtime.emitCrmChanged({
+      entity: "group",
+      action: "created",
+      id: group.id,
+      branchId: group.branch_id ?? null,
+      affectedUserIds,
+    });
     return this.toGroupDto(group);
   }
 
@@ -2669,6 +2680,16 @@ export class CrmService {
       entityId: groupId,
       metadata: { studentId: row.student_id },
     });
+    const [groupUserIds, studentUserIds] = await Promise.all([
+      this.affectedUserIdsForGroup(groupId),
+      this.affectedUserIdsForStudent(row.student_id),
+    ]);
+    this.realtime.emitCrmChanged({
+      entity: "group",
+      action: "updated",
+      id: groupId,
+      affectedUserIds: Array.from(new Set([...groupUserIds, ...studentUserIds])),
+    });
     return { success: true };
   }
 
@@ -2697,6 +2718,16 @@ export class CrmService {
       entityType: "group",
       entityId: groupId,
       metadata: { studentId },
+    });
+    const [groupUserIds, studentUserIds] = await Promise.all([
+      this.affectedUserIdsForGroup(groupId),
+      this.affectedUserIdsForStudent(studentId),
+    ]);
+    this.realtime.emitCrmChanged({
+      entity: "group",
+      action: "updated",
+      id: groupId,
+      affectedUserIds: Array.from(new Set([...groupUserIds, ...studentUserIds])),
     });
     return { success: true };
   }
@@ -3291,6 +3322,17 @@ export class CrmService {
               $1::text = 'client'
               and exists (
                 select 1
+                from app.user_crm_links lead_link
+                where lead_link.user_id = $2
+                  and lead_link.entity_type = 'lead'
+                  and lead_link.entity_id = l.lead_id
+                  and lead_link.deleted_at is null
+              )
+            )
+            or (
+              $1::text = 'client'
+              and exists (
+                select 1
                 from app.group_students actor_gs
                 join app.students actor_student
                   on actor_student.id = actor_gs.student_id
@@ -3365,11 +3407,13 @@ export class CrmService {
       entityType: "lesson",
       entityId: lesson.id,
     });
+    const affectedUserIds = await this.affectedUserIdsForLesson(lesson);
     this.realtime.emitCrmChanged({
       entity: "lesson",
       action: "created",
       id: lesson.id,
       branchId: lesson.branch_id ?? null,
+      affectedUserIds,
     });
     return this.toLessonDto(lesson);
   }
@@ -3452,11 +3496,13 @@ export class CrmService {
       entityType: "lesson",
       entityId: lesson.id,
     });
+    const affectedUserIds = await this.affectedUserIdsForLesson(lesson);
     this.realtime.emitCrmChanged({
       entity: "lesson",
       action: "updated",
       id: lesson.id,
       branchId: lesson.branch_id ?? null,
+      affectedUserIds,
     });
     return this.toLessonDto(lesson);
   }
@@ -3571,12 +3617,17 @@ export class CrmService {
     // Only managers/admins may delete a lesson outright; teachers can update
     // status/notes via updateLesson but not remove a lesson from the schedule.
     this.policy.assertCanWriteCrm(actor);
-    const result = await this.database.query<{ id: string }>(
+    const result = await this.database.query<LessonRow>(
       `
         update app.lessons
         set deleted_at = now(), updated_at = now()
         where id = $1 and deleted_at is null
-        returning id
+        returning id, student_id, group_id, lead_id, teacher_id, branch_id,
+          room_id, scheduled_at, duration_minutes, status, is_trial, notes,
+          null::uuid as student_user_id, null::uuid as teacher_user_id,
+          null::text as student_name, null::text as teacher_name,
+          null::text as branch_name, null::text as room_name,
+          null::text as group_name, null::numeric as group_price_per_lesson
       `,
       [lessonId],
     );
@@ -3593,10 +3644,13 @@ export class CrmService {
       entityType: "lesson",
       entityId: row.id,
     });
+    const affectedUserIds = await this.affectedUserIdsForLesson(row);
     this.realtime.emitCrmChanged({
       entity: "lesson",
       action: "deleted",
       id: row.id,
+      branchId: row.branch_id ?? null,
+      affectedUserIds,
     });
     return { success: true };
   }
@@ -3974,6 +4028,54 @@ export class CrmService {
 
           union all
 
+          select work.id::text as id, 'chat_work'::text as type,
+            case
+              when work.action = 'unassigned' then 'Снято с работы'
+              else 'Взято в работу'
+            end as title,
+            nullif(
+              trim(coalesce(target_profile.first_name, '') || ' ' || coalesce(target_profile.last_name, '')),
+              ''
+            ) as body,
+            work.action as status, null::numeric as amount,
+            work.actor_user_id,
+            actor_profile.first_name as actor_first_name,
+            actor_profile.last_name as actor_last_name,
+            work.created_at as occurred_at
+          from app.chat_work_events work
+          join app.chats chat on chat.id = work.chat_id and chat.deleted_at is null
+          left join app.users actor_user on actor_user.id = work.actor_user_id and actor_user.deleted_at is null
+          left join app.profiles actor_profile on actor_profile.user_id = actor_user.id and actor_profile.deleted_at is null
+          left join app.users target_user on target_user.id = work.target_user_id and target_user.deleted_at is null
+          left join app.profiles target_profile on target_profile.user_id = target_user.id and target_profile.deleted_at is null
+          where chat.type = 'administration'
+            and (
+              ($1 = 'student' and (
+                chat.student_id = $2::uuid
+                or exists (
+                  select 1
+                  from app.user_crm_links link
+                  where link.entity_type = 'student'
+                    and link.entity_id = $2::uuid
+                    and link.user_id = chat.owner_user_id
+                    and link.deleted_at is null
+                )
+              ))
+              or ($1 = 'lead' and (
+                chat.lead_id = $2::uuid
+                or exists (
+                  select 1
+                  from app.user_crm_links link
+                  where link.entity_type = 'lead'
+                    and link.entity_id = $2::uuid
+                    and link.user_id = chat.owner_user_id
+                    and link.deleted_at is null
+                )
+              ))
+            )
+
+          union all
+
           select audit.id::text as id, 'audit'::text as type,
             audit.action as title, audit.metadata::text as body,
             audit.entity_type as status, null::numeric as amount,
@@ -4187,7 +4289,7 @@ export class CrmService {
           and ($4::timestamptz is null or pay.payment_date >= $4)
           and ($5::timestamptz is null or pay.payment_date < $5)
           and (
-            $1::text in ('manager', 'system_admin')
+            $1::text in ('manager', 'admin', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
           )
         order by pay.payment_date desc, pay.id desc
@@ -4219,7 +4321,7 @@ export class CrmService {
           and ($4::timestamptz is null or pay.payment_date >= $4)
           and ($5::timestamptz is null or pay.payment_date < $5)
           and (
-            $1::text in ('manager', 'system_admin')
+            $1::text in ('manager', 'admin', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
           )
       `,
@@ -4354,7 +4456,7 @@ export class CrmService {
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where ($3::uuid is null or sub.student_id = $3)
           and (
-            $1::text in ('manager', 'system_admin')
+            $1::text in ('manager', 'admin', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
           )
         order by sub.expires_at desc nulls last, sub.created_at desc, sub.id desc
@@ -4423,10 +4525,14 @@ export class CrmService {
       entityId: payment.student_id,
       metadata: { paymentId: payment.id },
     });
+    const affectedUserIds = await this.affectedUserIdsForStudent(
+      payment.student_id,
+    );
     this.realtime.emitCrmChanged({
       entity: "payment",
       action: "created",
       id: payment.id,
+      affectedUserIds,
     });
     return this.toPaymentDto(payment);
   }
@@ -4792,6 +4898,19 @@ export class CrmService {
         packageId: sub.package_id,
         paymentId: sub.payment_id,
       },
+    });
+    const affectedUserIds = await this.affectedUserIdsForStudent(studentId);
+    this.realtime.emitCrmChanged({
+      entity: "payment",
+      action: "created",
+      id: sub.payment_id,
+      affectedUserIds,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "subscription",
+      action: "created",
+      id: sub.id,
+      affectedUserIds,
     });
     return {
       id: sub.id,
@@ -5211,12 +5330,13 @@ export class CrmService {
     const lead = leadResult.rows[0];
     if (!lead) throw new NotFoundException("Лид не найден.");
 
-    const [students, otherLeads, comments, tasks, trials] = await Promise.all([
+    const [students, otherLeads, comments, tasks, trials, chatWork] = await Promise.all([
       this.listStudentsLinkedToLead(leadId),
       this.listRelatedLeads(lead),
       this.listLeadComments(leadId),
       this.listLeadTasks(leadId),
       this.listLeadTrialLessons(leadId),
+      this.listChatWorkTimeline("lead", leadId),
     ]);
 
     const timeline = [
@@ -5244,6 +5364,7 @@ export class CrmService {
         status: lesson.status,
         occurredAt: lesson.scheduledAt,
       })),
+      ...chatWork,
     ].sort(
       (a, b) =>
         new Date(String(b.occurredAt)).getTime() -
@@ -5714,6 +5835,118 @@ export class CrmService {
       id: row.id,
     });
     return { success: true };
+  }
+
+  async returnStudentToLead(actor: ActorContext, studentId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const current = await this.database.query<{
+      id: string;
+      lead_id: string | null;
+      branch_id: string | null;
+      custom_data: Record<string, unknown> | null;
+      first_name: string | null;
+      last_name: string | null;
+      email: string | null;
+      phone: string | null;
+    }>(
+      `
+        select s.id, s.lead_id, s.branch_id, s.custom_data,
+          p.first_name, p.last_name, u.email, p.phone
+        from app.students s
+        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+        left join app.users u on u.id = p.user_id and u.deleted_at is null
+        where s.id = $1 and s.deleted_at is null
+        limit 1
+      `,
+      [studentId],
+    );
+    const student = current.rows[0];
+    if (!student) throw new NotFoundException("Ученик не найден.");
+
+    const returned = await this.database.transaction(async (client) => {
+      let leadId = student.lead_id;
+      let created = false;
+      if (leadId) {
+        const existingLead = await client.query<{ id: string }>(
+          `select id from app.leads where id = $1 and deleted_at is null limit 1`,
+          [leadId],
+        );
+        if (!existingLead.rows[0]) {
+          leadId = null;
+        }
+      }
+
+      if (!leadId) {
+        const statusRow = await client.query<{ id: string }>(
+          `select id from app.lead_statuses where lower(btrim(name)) = 'новый' limit 1`,
+        );
+        const customData = {
+          ...(student.custom_data ?? {}),
+          sourceStudentId: student.id,
+        };
+        const inserted = await client.query<{ id: string }>(
+          `
+            insert into app.leads (
+              status_id, first_name, last_name, phone, email,
+              source, notes, assigned_to, custom_data, created_by, branch_id
+            )
+            values ($1, $2, $3, $4, $5, 'Возврат из ученика', null, null, $6::jsonb, $7, $8)
+            returning id
+          `,
+          [
+            statusRow.rows[0]?.id ?? null,
+            student.first_name,
+            student.last_name,
+            student.phone,
+            student.email,
+            JSON.stringify(customData),
+            actor.userId,
+            student.branch_id,
+          ],
+        );
+        leadId = inserted.rows[0].id;
+        created = true;
+      }
+
+      await client.query(
+        `
+          update app.students
+          set deleted_at = now(), updated_at = now()
+          where id = $1 and deleted_at is null
+        `,
+        [student.id],
+      );
+      return { leadId, created };
+    });
+
+    await this.audit.record({
+      actor,
+      action: "crm.student_returned_to_lead",
+      entityType: "student",
+      entityId: student.id,
+      metadata: {
+        leadId: returned.leadId,
+        createdLead: returned.created,
+      },
+    });
+    this.realtime.emitCrmChanged({
+      entity: "student",
+      action: "deleted",
+      id: student.id,
+      branchId: student.branch_id ?? null,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "lead",
+      action: returned.created ? "created" : "updated",
+      id: returned.leadId,
+      branchId: student.branch_id ?? null,
+    });
+    return {
+      success: true,
+      studentId: student.id,
+      leadId: returned.leadId,
+      createdLead: returned.created,
+    };
   }
 
   async deleteLead(actor: ActorContext, leadId: string) {
@@ -6217,6 +6450,65 @@ export class CrmService {
     return result.rows.map((row) => this.toLessonDto(row));
   }
 
+  private async listChatWorkTimeline(
+    entityType: "student" | "lead",
+    entityId: string,
+  ) {
+    const result = await this.database.query<TimelineRow>(
+      `
+        select work.id::text as id, 'chat_work'::text as type,
+          case
+            when work.action = 'unassigned' then 'Снято с работы'
+            else 'Взято в работу'
+          end as title,
+          nullif(
+            trim(coalesce(target_profile.first_name, '') || ' ' || coalesce(target_profile.last_name, '')),
+            ''
+          ) as body,
+          work.action as status, null::numeric as amount,
+          work.actor_user_id,
+          actor_profile.first_name as actor_first_name,
+          actor_profile.last_name as actor_last_name,
+          work.created_at as occurred_at
+        from app.chat_work_events work
+        join app.chats chat on chat.id = work.chat_id and chat.deleted_at is null
+        left join app.users actor_user on actor_user.id = work.actor_user_id and actor_user.deleted_at is null
+        left join app.profiles actor_profile on actor_profile.user_id = actor_user.id and actor_profile.deleted_at is null
+        left join app.users target_user on target_user.id = work.target_user_id and target_user.deleted_at is null
+        left join app.profiles target_profile on target_profile.user_id = target_user.id and target_profile.deleted_at is null
+        where chat.type = 'administration'
+          and (
+            ($1 = 'student' and (
+              chat.student_id = $2::uuid
+              or exists (
+                select 1
+                from app.user_crm_links link
+                where link.entity_type = 'student'
+                  and link.entity_id = $2::uuid
+                  and link.user_id = chat.owner_user_id
+                  and link.deleted_at is null
+              )
+            ))
+            or ($1 = 'lead' and (
+              chat.lead_id = $2::uuid
+              or exists (
+                select 1
+                from app.user_crm_links link
+                where link.entity_type = 'lead'
+                  and link.entity_id = $2::uuid
+                  and link.user_id = chat.owner_user_id
+                  and link.deleted_at is null
+              )
+            ))
+          )
+        order by work.created_at desc, work.id desc
+        limit 50
+      `,
+      [entityType, entityId],
+    );
+    return (result?.rows ?? []).map((row) => this.toTimelineDto(row));
+  }
+
   private async listClientStudents(userId: string): Promise<StudentRow[]> {
     const result = await this.database.query<StudentRow>(
       `
@@ -6560,6 +6852,126 @@ export class CrmService {
 
   private hashEmail(value: string): string {
     return createHash("sha256").update(value.toLowerCase()).digest("hex");
+  }
+
+  private async affectedUserIdsForStudent(
+    studentId: string | null | undefined,
+  ): Promise<string[]> {
+    if (!studentId) return [];
+    const result = await this.database.query<{ user_id: string }>(
+      `
+        select distinct user_id
+        from (
+          select p.user_id
+          from app.students s
+          join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+          where s.id = $1 and s.deleted_at is null and p.user_id is not null
+          union
+          select link.user_id
+          from app.user_crm_links link
+          where link.entity_type = 'student'
+            and link.entity_id = $1
+            and link.deleted_at is null
+        ) affected
+        where user_id is not null
+      `,
+      [studentId],
+    );
+    return (result?.rows ?? []).map((row) => row.user_id);
+  }
+
+  private async affectedUserIdsForLesson(lesson: {
+    student_id: string | null;
+    group_id: string | null;
+    lead_id: string | null;
+    teacher_id: string | null;
+  }): Promise<string[]> {
+    const result = await this.database.query<{ user_id: string }>(
+      `
+        select distinct user_id
+        from (
+          select p.user_id
+          from app.students s
+          join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+          where s.id = $1 and s.deleted_at is null and p.user_id is not null
+          union
+          select student_link.user_id
+          from app.user_crm_links student_link
+          where student_link.entity_type = 'student'
+            and student_link.entity_id = $1
+            and student_link.deleted_at is null
+          union
+          select lead_link.user_id
+          from app.user_crm_links lead_link
+          where lead_link.entity_type = 'lead'
+            and lead_link.entity_id = $2
+            and lead_link.deleted_at is null
+          union
+          select tp.user_id
+          from app.teachers t
+          join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+          where t.id = $4 and t.deleted_at is null and tp.user_id is not null
+          union
+          select gp.user_id
+          from app.group_students gs
+          join app.students gs_student
+            on gs_student.id = gs.student_id
+           and gs_student.deleted_at is null
+          join app.profiles gp
+            on gp.id = gs_student.profile_id
+           and gp.deleted_at is null
+          where gs.group_id = $3 and gs.deleted_at is null and gp.user_id is not null
+          union
+          select group_link.user_id
+          from app.group_students gs
+          join app.user_crm_links group_link
+            on group_link.entity_type = 'student'
+           and group_link.entity_id = gs.student_id
+           and group_link.deleted_at is null
+          where gs.group_id = $3 and gs.deleted_at is null
+        ) affected
+        where user_id is not null
+      `,
+      [
+        lesson.student_id,
+        lesson.lead_id,
+        lesson.group_id,
+        lesson.teacher_id,
+      ],
+    );
+    return (result?.rows ?? []).map((row) => row.user_id);
+  }
+
+  private async affectedUserIdsForGroup(groupId: string): Promise<string[]> {
+    const result = await this.database.query<{ user_id: string }>(
+      `
+        select distinct user_id
+        from (
+          select tp.user_id
+          from app.groups g
+          join app.teachers t on t.id = g.teacher_id and t.deleted_at is null
+          join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+          where g.id = $1 and g.deleted_at is null and tp.user_id is not null
+          union
+          select sp.user_id
+          from app.group_students gs
+          join app.students s on s.id = gs.student_id and s.deleted_at is null
+          join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+          where gs.group_id = $1 and gs.left_at is null and sp.user_id is not null
+          union
+          select link.user_id
+          from app.group_students gs
+          join app.user_crm_links link
+            on link.entity_type = 'student'
+           and link.entity_id = gs.student_id
+           and link.deleted_at is null
+          where gs.group_id = $1 and gs.left_at is null
+        ) affected
+        where user_id is not null
+      `,
+      [groupId],
+    );
+    return (result?.rows ?? []).map((row) => row.user_id);
   }
 
   private toStudentDto(row: StudentRow) {

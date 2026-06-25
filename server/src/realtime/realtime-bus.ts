@@ -6,12 +6,15 @@ export type CrmEntity =
   | 'lead'
   | 'student'
   | 'payment'
+  | 'subscription'
+  | 'group'
   | 'task'
   | 'comment'
   | 'expense'
   | 'user'
   | 'setting'
-  | 'notification';
+  | 'notification'
+  | 'chat_work';
 
 export interface CrmChangedPayload {
   entity: CrmEntity;

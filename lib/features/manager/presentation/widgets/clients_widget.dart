@@ -173,6 +173,33 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
     }
   }
 
+  Future<void> _returnStudentToLead(Map<String, dynamic> student) async {
+    if (_converting) return;
+    final studentId = student['id']?.toString() ?? '';
+    if (studentId.isEmpty) return;
+    setState(() => _converting = true);
+    try {
+      final result =
+          await ref.read(magicCrmServiceProvider).returnStudentToLead(studentId);
+      ref.invalidate(studentBoardProvider);
+      if (!mounted) return;
+      final leadId = result['leadId']?.toString() ?? '';
+      setState(() {
+        _segment = 0;
+        _success = null;
+      });
+      _toast(
+        leadId.isEmpty
+            ? 'Ученик возвращён в лиды.'
+            : 'Ученик возвращён в лиды: $leadId',
+      );
+    } catch (e) {
+      _showError('Не удалось вернуть ученика в лиды: $e');
+    } finally {
+      if (mounted) setState(() => _converting = false);
+    }
+  }
+
   void _toast(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -200,6 +227,7 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
           controller: controller,
           success: _success,
           onSelectSegment: _selectSegment,
+          onReturnStudentToLead: _returnStudentToLead,
           onUndo: _undoTransfer,
           onDismissSuccess: () {
             _successTimer?.cancel();
@@ -224,6 +252,7 @@ class _Header extends StatelessWidget {
   final LeadTransferController controller;
   final _SuccessInfo? success;
   final ValueChanged<int> onSelectSegment;
+  final ValueChanged<Map<String, dynamic>> onReturnStudentToLead;
   final VoidCallback onUndo;
   final VoidCallback onDismissSuccess;
 
@@ -232,6 +261,7 @@ class _Header extends StatelessWidget {
     required this.controller,
     required this.success,
     required this.onSelectSegment,
+    required this.onReturnStudentToLead,
     required this.onUndo,
     required this.onDismissSuccess,
   });
@@ -261,7 +291,11 @@ class _Header extends StatelessWidget {
                 children: [
                   Expanded(
                     child:
-                        _CompactTabs(segment: segment, onSelect: onSelectSegment),
+                        _CompactTabs(
+                          segment: segment,
+                          onSelect: onSelectSegment,
+                          onReturnStudentToLead: onReturnStudentToLead,
+                        ),
                   ),
                   const SizedBox(width: 8),
                   // D1: the notification center (read + mark-read), surfaced where
@@ -285,8 +319,13 @@ class _Header extends StatelessWidget {
 class _CompactTabs extends StatelessWidget {
   final int segment;
   final ValueChanged<int> onSelect;
+  final ValueChanged<Map<String, dynamic>> onReturnStudentToLead;
 
-  const _CompactTabs({required this.segment, required this.onSelect});
+  const _CompactTabs({
+    required this.segment,
+    required this.onSelect,
+    required this.onReturnStudentToLead,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -302,11 +341,35 @@ class _CompactTabs extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _pill('Лиды', Icons.people_outline_rounded, 0),
+            _leadPill(),
             _pill('Ученики', Icons.school_outlined, 1),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _leadPill() {
+    final pill = _pill('Лиды', Icons.people_outline_rounded, 0);
+    if (segment != 1) return pill;
+    return DragTarget<Map<String, dynamic>>(
+      onWillAcceptWithDetails: (details) =>
+          (details.data['id']?.toString() ?? '').isNotEmpty,
+      onAcceptWithDetails: (details) => onReturnStudentToLead(details.data),
+      builder: (context, candidateData, rejectedData) {
+        final hovering = candidateData.isNotEmpty;
+        return AnimatedContainer(
+          duration: AppMotion.fast,
+          curve: AppMotion.ease,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: hovering
+                ? Border.all(color: AppColor.transferCyan, width: 1.5)
+                : null,
+          ),
+          child: pill,
+        );
+      },
     );
   }
 

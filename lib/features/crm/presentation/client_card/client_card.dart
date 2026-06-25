@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
@@ -154,6 +155,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   List<Map<String, dynamic>> _expectedPayments = [];
   bool _loadingStudent = true;
   String? _studentError;
+  bool _realtimeRefreshQueued = false;
 
   Future<void> _handleClose() async {
     if (!_edited) {
@@ -543,6 +545,40 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
   }
 
+  void _scheduleRealtimeRefresh(String entity) {
+    if (!mounted || _realtimeRefreshQueued) return;
+    if (_edited && (entity == 'lead' || entity == 'student')) return;
+    _realtimeRefreshQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _realtimeRefreshQueued = false;
+      _refreshFromRealtime(entity);
+    });
+  }
+
+  void _refreshFromRealtime(String entity) {
+    switch (entity) {
+      case 'lead':
+      case 'student':
+      case 'task':
+      case 'comment':
+      case 'lesson':
+      case 'payment':
+      case 'subscription':
+      case 'group':
+      case 'chat_work':
+        if (_mode.hasLeadHalf && _leadId.isNotEmpty) {
+          _fetchCard();
+          _fetchStatusHistory();
+        }
+        if (_mode.hasStudentHalf && _studentId.isNotEmpty) {
+          _fetchStudentData();
+        }
+        _fetchFamily();
+        break;
+    }
+  }
+
   @override
   void dispose() {
     _notesCtrl.dispose();
@@ -701,6 +737,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(crmRealtimeProvider, (previous, next) {
+      final event = next.value;
+      if (event == null) return;
+      _scheduleRealtimeRefresh(event.entity);
+    });
+
     final cs = Theme.of(context).colorScheme;
     final fallbackStatus = _statuses.isNotEmpty
         ? _statuses.first

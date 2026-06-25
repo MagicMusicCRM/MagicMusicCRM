@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show File;
 import 'dart:typed_data';
 
@@ -45,6 +46,8 @@ class _ChatWidgetState extends ConsumerState<ChatWidget> {
   bool _isSendingFile = false;
   bool _realtimeConnecting = false;
   MagicRealtimeConnection? _realtime;
+  Timer? _fallbackPollTimer;
+  DateTime _lastRealtimeEventAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   MagicMessengerService get _messenger =>
       ref.read(magicMessengerServiceProvider);
@@ -177,6 +180,7 @@ class _ChatWidgetState extends ConsumerState<ChatWidget> {
 
       connection.joinChat(chatId);
       connection.onMessageCreated((payload) {
+        _markRealtimeEvent();
         if (payload['chatId'] != chatId) return;
         final message = _legacyRealtimeMessage(payload);
         if (!mounted) return;
@@ -185,16 +189,53 @@ class _ChatWidgetState extends ConsumerState<ChatWidget> {
         _markAsRead(_messages);
       });
       connection.onMessageUpdated((payload) {
+        _markRealtimeEvent();
         if (payload['chatId'] != chatId) return;
         final message = _legacyRealtimeMessage(payload);
         if (!mounted) return;
         setState(() => _upsertMessage(message));
       });
       _realtime = connection;
+      _startFallbackPolling();
     } catch (e) {
       debugPrint('Client chat realtime unavailable: $e');
+      _startFallbackPolling();
     } finally {
       _realtimeConnecting = false;
+    }
+  }
+
+  void _markRealtimeEvent() {
+    _lastRealtimeEventAt = DateTime.now();
+  }
+
+  void _startFallbackPolling() {
+    if (_fallbackPollTimer != null) return;
+    _fallbackPollTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (!mounted) return;
+      final realtimeIsFresh =
+          DateTime.now().difference(_lastRealtimeEventAt) <
+          const Duration(seconds: 18);
+      if (realtimeIsFresh) return;
+      unawaited(_refreshMessagesSilently());
+    });
+  }
+
+  Future<void> _refreshMessagesSilently() async {
+    final chatId = _activeChatId;
+    if (chatId == null || chatId.isEmpty || _messagesLoading) return;
+    try {
+      final messages = await _messenger.listMessages(chatId, limit: 200);
+      if (!mounted || _activeChatId != chatId) return;
+      setState(() {
+        for (final message in messages) {
+          _upsertMessage(message);
+        }
+        _sortMessages();
+      });
+      await _markAsRead(_messages);
+    } catch (e) {
+      debugPrint('Client chat fallback poll failed: $e');
     }
   }
 
@@ -337,6 +378,18 @@ class _ChatWidgetState extends ConsumerState<ChatWidget> {
     }
   }
 
+  void _sortMessages() {
+    _messages.sort((a, b) {
+      final left =
+          DateTime.tryParse(a['created_at']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final right =
+          DateTime.tryParse(b['created_at']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return left.compareTo(right);
+    });
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -360,6 +413,8 @@ class _ChatWidgetState extends ConsumerState<ChatWidget> {
   }
 
   void _disconnectRealtime() {
+    _fallbackPollTimer?.cancel();
+    _fallbackPollTimer = null;
     final chatId = _activeChatId;
     if (chatId != null) _realtime?.leaveRoom(chatId);
     _realtime?.disconnect();

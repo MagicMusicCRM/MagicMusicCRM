@@ -18,41 +18,75 @@ class CrmChangedEvent {
   });
 
   factory CrmChangedEvent.fromMap(Map<String, dynamic> map) => CrmChangedEvent(
-        entity: map['entity']?.toString() ?? '',
-        action: map['action']?.toString() ?? '',
-        id: map['id']?.toString(),
-        branchId: map['branchId']?.toString(),
-      );
+    entity: map['entity']?.toString() ?? '',
+    action: map['action']?.toString() ?? '',
+    id: map['id']?.toString(),
+    branchId: map['branchId']?.toString(),
+  );
+
+  bool get isFallbackPoll => action == 'poll';
 }
 
 /// App-level realtime stream of CRM changes. Kept alive (not autoDispose) so a
-/// single staff socket serves every screen; connection failures are swallowed
-/// (realtime is best-effort — screens still work via manual refresh / re-entry).
+/// single staff/client socket serves every screen. It also emits low-frequency
+/// fallback invalidation events so screens continue to refetch if Socket.IO is
+/// unavailable, a tab wakes from sleep, or an event is missed.
 final crmRealtimeProvider = StreamProvider<CrmChangedEvent>((ref) {
   final service = ref.watch(magicRealtimeServiceProvider);
   final controller = StreamController<CrmChangedEvent>.broadcast();
   MagicRealtimeConnection? connection;
+  Timer? fallbackTimer;
+  DateTime lastSocketEventAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void emit(CrmChangedEvent event) {
+    if (!controller.isClosed) controller.add(event);
+  }
 
   Future<void> start() async {
     try {
       final conn = await service.connect();
       connection = conn;
       conn.onCrmChanged((payload) {
-        if (!controller.isClosed) {
-          controller.add(CrmChangedEvent.fromMap(payload));
-        }
+        lastSocketEventAt = DateTime.now();
+        emit(CrmChangedEvent.fromMap(payload));
       });
     } catch (_) {
-      // Best-effort: leave the stream open but empty.
+      // Best-effort: fallback polling below keeps screens eventually fresh.
     }
   }
+
+  fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // If realtime is active and has just delivered a CRM event, avoid a needless
+    // duplicate refresh burst. Idle sockets still get a periodic API truth check.
+    if (DateTime.now().difference(lastSocketEventAt) <
+        const Duration(seconds: 25)) {
+      return;
+    }
+    for (final entity in _fallbackCrmEntities) {
+      emit(CrmChangedEvent(entity: entity, action: 'poll'));
+    }
+  });
 
   start();
 
   ref.onDispose(() {
+    fallbackTimer?.cancel();
     connection?.dispose();
     controller.close();
   });
 
   return controller.stream;
 });
+
+const _fallbackCrmEntities = <String>[
+  'lesson',
+  'lead',
+  'student',
+  'payment',
+  'subscription',
+  'task',
+  'group',
+  'comment',
+  'chat_work',
+  'notification',
+];

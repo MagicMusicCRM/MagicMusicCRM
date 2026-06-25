@@ -146,7 +146,7 @@ describe('MessengerPolicy', () => {
       assignedToUserId: 'manager-a'
     };
 
-    it('allows a manager-tier actor to reassign a chat assigned to someone else', () => {
+    it('allows manager-tier staff to mark a chat assigned to someone else', () => {
       expect(() =>
         policy.assertCanAssign(
           { userId: 'manager-a', role: 'manager' },
@@ -155,7 +155,7 @@ describe('MessengerPolicy', () => {
       ).not.toThrow();
     });
 
-    it('allows a non-manager staff to self-claim an unassigned chat', () => {
+    it('allows admin staff to claim an unassigned chat', () => {
       expect(() =>
         policy.assertCanAssign(
           { userId: 'admin-a', role: 'admin' },
@@ -164,7 +164,7 @@ describe('MessengerPolicy', () => {
       ).not.toThrow();
     });
 
-    it('allows a non-manager staff to reassign a chat already assigned to themselves', () => {
+    it('allows admin staff to refresh their own work marker', () => {
       expect(() =>
         policy.assertCanAssign(
           { userId: 'manager-a', role: 'admin' },
@@ -173,11 +173,20 @@ describe('MessengerPolicy', () => {
       ).not.toThrow();
     });
 
-    it('forbids a non-manager staff from reassigning a chat assigned to a different staff', () => {
+    it('allows admin staff to continue work even when another staff member was marked', () => {
       expect(() =>
         policy.assertCanAssign(
           { userId: 'admin-a', role: 'admin' },
           chatAssignedToOther
+        )
+      ).not.toThrow();
+    });
+
+    it('forbids clients from marking chats as in work', () => {
+      expect(() =>
+        policy.assertCanAssign(
+          { userId: 'client-a', role: 'client' },
+          unassignedChat
         )
       ).toThrow(ForbiddenException);
     });

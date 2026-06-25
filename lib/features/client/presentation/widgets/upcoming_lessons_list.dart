@@ -10,10 +10,10 @@ import 'package:magic_music_crm/core/widgets/skeletons.dart';
 final upcomingLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
-  // Scope to the student selected in the portal switcher (KVA-156); falls back
-  // to the first linked student via magicCurrentStudentIdProvider.
+  // Scope to the selected linked student when present. If the signed-in client
+  // is only linked to a lead, omit studentId so the backend can return lead
+  // lessons through the actor scope.
   final studentId = ref.watch(magicCurrentStudentIdProvider).asData?.value;
-  if (studentId == null) return const [];
   return ref
       .watch(magicCrmServiceProvider)
       .listLessons(
@@ -27,7 +27,6 @@ final pastLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
   final studentId = ref.watch(magicCurrentStudentIdProvider).asData?.value;
-  if (studentId == null) return const [];
   return ref
       .watch(magicCrmServiceProvider)
       .listLessons(

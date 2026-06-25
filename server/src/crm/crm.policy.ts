@@ -60,14 +60,12 @@ export class CrmPolicy {
     throw new NotFoundException("Платежи не найдены.");
   }
 
-  // Управляющий-онли операции: Обзор/Финансы/Отчёты/Задачи/Пользователи.
-  // Администратор (admin) — ниже Управляющего и сюда не допускается (бизнес-
-  // правило A1, KVA-216; зеркалит фронтовый crm_nav_rbac.dart). system_admin —
-  // полный доступ.
+  // Operational CRM work: administrators must be able to cover each other's
+  // shifts. Role management stays separate in ProfilePolicy/canAssignRole.
   assertManagerOnly(actor: ActorContext): void {
-    if (isManagerRole(actor.role)) return;
+    if (isManagerOrAdminRole(actor.role)) return;
     throw new ForbiddenException(
-      "Недостаточно прав: операция доступна только Управляющему.",
+      "Недостаточно прав для операционного раздела CRM.",
     );
   }
 
@@ -83,8 +81,8 @@ export class CrmPolicy {
   }
 
   assertCanReadFinance(actor: ActorContext, ownerUserId: string | null): void {
-    // Финансы — только Управляющий/Администратор системы (A1); клиент видит свои.
-    if (isManagerRole(actor.role)) return;
+    // Staff finance: admin/manager/system_admin. Client sees only own rows.
+    if (isManagerOrAdminRole(actor.role)) return;
     if (actor.role === "client" && ownerUserId === actor.userId) return;
     throw new NotFoundException("Платежи не найдены.");
   }

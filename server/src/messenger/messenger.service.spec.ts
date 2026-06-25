@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { CrmService } from "../crm/crm.service";
 import { DatabaseService } from "../db/database.service";
+import { RealtimeBus } from "../realtime/realtime-bus";
 import { MessengerPolicy } from "./messenger.policy";
 import { MessengerService } from "./messenger.service";
 import { RealtimeGateway } from "./realtime.gateway";
@@ -14,6 +15,7 @@ describe("MessengerService", () => {
     audit?: Partial<AuditService>;
     policy?: Partial<MessengerPolicy>;
     realtime?: Partial<RealtimeGateway>;
+    realtimeBus?: Partial<RealtimeBus>;
     crm?: Partial<CrmService>;
   }) {
     const database = {
@@ -21,6 +23,11 @@ describe("MessengerService", () => {
       transaction: jest.fn(),
       ...overrides?.database,
     } as unknown as DatabaseService;
+    if (!overrides?.database?.transaction) {
+      (database.transaction as jest.Mock).mockImplementation(
+        async (fn: (client: DatabaseService) => unknown) => fn(database),
+      );
+    }
     const audit = {
       record: jest.fn(),
       ...overrides?.audit,
@@ -51,14 +58,26 @@ describe("MessengerService", () => {
         .mockResolvedValue({ leadId: "l1", created: true }),
       ...overrides?.crm,
     } as unknown as CrmService;
+    const realtimeBus = {
+      emitCrmChanged: jest.fn(),
+      ...overrides?.realtimeBus,
+    } as unknown as RealtimeBus;
 
     return {
-      service: new MessengerService(database, audit, policy, realtime, crm),
+      service: new MessengerService(
+        database,
+        audit,
+        policy,
+        realtime,
+        crm,
+        realtimeBus,
+      ),
       database,
       audit,
       policy,
       realtime,
       crm,
+      realtimeBus,
     };
   }
 
@@ -124,6 +143,7 @@ describe("MessengerService", () => {
       policy,
       realtime,
       { autoCreateLeadFromChat: jest.fn().mockResolvedValue({ leadId: "l1", created: true }) } as unknown as CrmService,
+      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
     );
 
     const result = await service.sendMessage(
@@ -1165,7 +1185,9 @@ describe("MessengerService", () => {
             // requireStaffTarget: user role lookup
             .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
             // update query
-            .mockResolvedValueOnce({ rows: [] }),
+            .mockResolvedValueOnce({ rows: [] })
+            // chat_work_events insert
+            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue(adminChat),
@@ -1190,7 +1212,8 @@ describe("MessengerService", () => {
         database: {
           query: jest.fn()
             .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
-            .mockResolvedValueOnce({ rows: [] }),
+            .mockResolvedValueOnce({ rows: [] })
+            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue(adminChat),
@@ -1213,7 +1236,9 @@ describe("MessengerService", () => {
       };
       const { service, database, realtime } = createService({
         database: {
-          query: jest.fn().mockResolvedValueOnce({ rows: [] }),
+          query: jest.fn()
+            .mockResolvedValueOnce({ rows: [] })
+            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue(assignedChat),

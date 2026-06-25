@@ -6,7 +6,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
-import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 
 class LessonsKanbanWidget extends ConsumerStatefulWidget {
   const LessonsKanbanWidget({super.key});
@@ -112,173 +112,177 @@ class _LessonsKanbanWidgetState extends ConsumerState<LessonsKanbanWidget> {
             child: RefreshIndicator(
               onRefresh: () async {
                 ref.invalidate(lessonsFilteredProvider(_selectedDate));
-                await ref.read(
-                  lessonsFilteredProvider(_selectedDate).future,
-                );
+                await ref.read(lessonsFilteredProvider(_selectedDate).future);
               },
               child: lessonsAsync.when(
-              data: (lessons) {
-                var filtered = lessons;
-                if (_selectedRoomId != null) {
-                  filtered = filtered
-                      .where((l) => l['room_id'].toString() == _selectedRoomId)
-                      .toList();
-                }
-                if (_selectedTeacherId != null) {
-                  filtered = filtered
-                      .where(
-                        (l) => l['teacher_id'].toString() == _selectedTeacherId,
-                      )
-                      .toList();
-                }
-                if (_selectedStudentId != null) {
-                  filtered = filtered
-                      .where(
-                        (l) => l['student_id'].toString() == _selectedStudentId,
-                      )
-                      .toList();
-                }
-
-                if (_searchQuery.isNotEmpty) {
-                  final q = _searchQuery.toLowerCase();
-                  filtered = filtered.where((l) {
-                    final studentName =
-                        (l['student_name'] ??
-                                '${l['student_first_name'] ?? ''} ${l['student_last_name'] ?? ''}')
-                            .toString()
-                            .trim();
-                    final sName = studentName.toLowerCase();
-
-                    final teacherName =
-                        (l['teacher_name'] ??
-                                '${l['teacher_first_name'] ?? ''} ${l['teacher_last_name'] ?? ''}')
-                            .toString()
-                            .trim();
-                    final tName = teacherName.toLowerCase();
-
-                    final gName =
-                        (l['group_name'] ?? l['groups']?['name'] ?? '')
-                            .toString()
-                            .toLowerCase();
-
-                    return sName.contains(q) ||
-                        tName.contains(q) ||
-                        gName.contains(q);
-                  }).toList();
-                }
-
-                if (filtered.isEmpty) {
-                  return ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 120),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Нет занятий на эту дату',
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => _selectDate(context),
-                              child: Text(
-                                'Выбрать другую дату (${DateFormat('d MMM').format(_selectedDate)})',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }
-
-                // Group by room
-                final grouped = <String, List<Map<String, dynamic>>>{};
-                for (final l in filtered) {
-                  final roomId = l['room_id']?.toString() ?? 'unassigned';
-                  grouped.putIfAbsent(roomId, () => []).add(l);
-                }
-
-                final sortedRooms = [
-                  ..._rooms,
-                ]..sort((a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''));
-
-                return ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.all(12),
-                  children: [
-                    ...sortedRooms
+                data: (lessons) {
+                  var filtered = lessons;
+                  if (_selectedRoomId != null) {
+                    filtered = filtered
                         .where(
-                          (r) =>
-                              grouped.containsKey(r['id']) ||
-                              _selectedRoomId == null,
+                          (l) => l['room_id'].toString() == _selectedRoomId,
                         )
-                        .map((room) {
-                          final roomLessons = grouped[room['id']] ?? [];
-                          if (roomLessons.isEmpty && _selectedRoomId != null) {
-                            return const SizedBox.shrink();
-                          }
-                          return _KanbanColumn(
-                            title: room['name'] ?? 'Без названия',
-                            lessons: roomLessons,
-                            studentNames: _studentNames,
-                            teacherNames: _teacherNames,
-                            selectedDate: _selectedDate,
-                          );
-                        }),
-                    if (grouped.containsKey('unassigned'))
-                      _KanbanColumn(
-                        title: 'Без аудитории',
-                        lessons: grouped['unassigned']!,
-                        studentNames: _studentNames,
-                        teacherNames: _teacherNames,
-                        selectedDate: _selectedDate,
-                      ),
-                  ],
-                );
-              },
-              loading: () => ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.all(12),
-                children: List.generate(
-                  3,
-                  (i) => const _KanbanColumnSkeleton(),
-                ),
-              ),
-              error: (e, _) => ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 120),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                        .toList();
+                  }
+                  if (_selectedTeacherId != null) {
+                    filtered = filtered
+                        .where(
+                          (l) =>
+                              l['teacher_id'].toString() == _selectedTeacherId,
+                        )
+                        .toList();
+                  }
+                  if (_selectedStudentId != null) {
+                    filtered = filtered
+                        .where(
+                          (l) =>
+                              l['student_id'].toString() == _selectedStudentId,
+                        )
+                        .toList();
+                  }
+
+                  if (_searchQuery.isNotEmpty) {
+                    final q = _searchQuery.toLowerCase();
+                    filtered = filtered.where((l) {
+                      final studentName =
+                          (l['student_name'] ??
+                                  '${l['student_first_name'] ?? ''} ${l['student_last_name'] ?? ''}')
+                              .toString()
+                              .trim();
+                      final sName = studentName.toLowerCase();
+
+                      final teacherName =
+                          (l['teacher_name'] ??
+                                  '${l['teacher_first_name'] ?? ''} ${l['teacher_last_name'] ?? ''}')
+                              .toString()
+                              .trim();
+                      final tName = teacherName.toLowerCase();
+
+                      final gName =
+                          (l['group_name'] ?? l['groups']?['name'] ?? '')
+                              .toString()
+                              .toLowerCase();
+
+                      return sName.contains(q) ||
+                          tName.contains(q) ||
+                          gName.contains(q);
+                    }).toList();
+                  }
+
+                  if (filtered.isEmpty) {
+                    return ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       children: [
-                        Text(
-                          'Не удалось загрузить занятия',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                        Padding(
+                          padding: const EdgeInsets.only(top: 120),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Нет занятий на эту дату',
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => _selectDate(context),
+                                child: Text(
+                                  'Выбрать другую дату (${DateFormat('d MMM').format(_selectedDate)})',
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: () => ref.invalidate(
-                            lessonsFilteredProvider(_selectedDate),
-                          ),
-                          child: const Text('Повторить'),
                         ),
                       ],
-                    ),
+                    );
+                  }
+
+                  // Group by room
+                  final grouped = <String, List<Map<String, dynamic>>>{};
+                  for (final l in filtered) {
+                    final roomId = l['room_id']?.toString() ?? 'unassigned';
+                    grouped.putIfAbsent(roomId, () => []).add(l);
+                  }
+
+                  final sortedRooms = [..._rooms]
+                    ..sort(
+                      (a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''),
+                    );
+
+                  return ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      ...sortedRooms
+                          .where(
+                            (r) =>
+                                grouped.containsKey(r['id']) ||
+                                _selectedRoomId == null,
+                          )
+                          .map((room) {
+                            final roomLessons = grouped[room['id']] ?? [];
+                            if (roomLessons.isEmpty &&
+                                _selectedRoomId != null) {
+                              return const SizedBox.shrink();
+                            }
+                            return _KanbanColumn(
+                              title: room['name'] ?? 'Без названия',
+                              lessons: roomLessons,
+                              studentNames: _studentNames,
+                              teacherNames: _teacherNames,
+                              selectedDate: _selectedDate,
+                            );
+                          }),
+                      if (grouped.containsKey('unassigned'))
+                        _KanbanColumn(
+                          title: 'Без аудитории',
+                          lessons: grouped['unassigned']!,
+                          studentNames: _studentNames,
+                          teacherNames: _teacherNames,
+                          selectedDate: _selectedDate,
+                        ),
+                    ],
+                  );
+                },
+                loading: () => ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.all(12),
+                  children: List.generate(
+                    3,
+                    (i) => const _KanbanColumnSkeleton(),
                   ),
-                ],
+                ),
+                error: (e, _) => ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 120),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Не удалось загрузить занятия',
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () => ref.invalidate(
+                              lessonsFilteredProvider(_selectedDate),
+                            ),
+                            child: const Text('Повторить'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
             ),
           ),
         ],
@@ -656,7 +660,11 @@ class _LessonKanbanCard extends ConsumerWidget {
         },
         onLongPress: () {
           if (lesson['student_id'] != null) {
-            GoRouter.of(context).push('/student/${lesson['student_id']}');
+            showClientCard(
+              context,
+              entityType: 'student',
+              entityId: lesson['student_id'].toString(),
+            );
           }
         },
         borderRadius: BorderRadius.circular(12),

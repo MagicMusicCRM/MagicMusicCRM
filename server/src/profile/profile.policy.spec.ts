@@ -22,8 +22,11 @@ describe('ProfilePolicy', () => {
     ).toThrow(NotFoundException);
   });
 
-  it('allows managers to list profiles, forbids clients', () => {
+  it('allows operational staff to list profiles, forbids non-staff', () => {
     expect(() => policy.assertCanListProfiles(manager)).not.toThrow();
+    expect(() => policy.assertCanListProfiles(admin)).not.toThrow();
+    expect(() => policy.assertCanListProfiles(sys)).not.toThrow();
+    expect(() => policy.assertCanListProfiles(teacher)).toThrow(ForbiddenException);
     expect(() => policy.assertCanListProfiles(client)).toThrow(ForbiddenException);
   });
 

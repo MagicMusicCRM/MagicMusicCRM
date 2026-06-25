@@ -1000,10 +1000,7 @@ class _TaskCard extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  _Tag(
-                    label: _statusLabel(status),
-                    color: AppColor.gold,
-                  ),
+                  _Tag(label: _statusLabel(status), color: AppColor.gold),
                   if (dueDate != null)
                     _Tag(
                       label: 'До: $dueDate',
@@ -1030,8 +1027,9 @@ class _TaskCard extends StatelessWidget {
                       onTap:
                           (creatorProfileId != null &&
                               creatorProfileId.isNotEmpty)
-                          ? () =>
-                                context.push('/admin/profiles/$creatorProfileId')
+                          ? () => context.push(
+                              '/admin/profiles/$creatorProfileId',
+                            )
                           : null,
                     ),
                   if (branchText != null && branchText.trim().isNotEmpty)
@@ -1056,13 +1054,11 @@ class _TaskCard extends StatelessWidget {
     if (entityId == null) return null;
     switch (task['entity_type']) {
       case 'student':
-        return () => showClientCard(
-          context,
-          entityType: 'student',
-          entityId: entityId,
-        );
+        return () =>
+            showClientCard(context, entityType: 'student', entityId: entityId);
       case 'lead':
-        return () => context.push('/leads/$entityId');
+        return () =>
+            showClientCard(context, entityType: 'lead', entityId: entityId);
       case 'lesson':
         return () => context.push('/lessons/$entityId');
       default:

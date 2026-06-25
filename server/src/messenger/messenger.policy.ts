@@ -56,12 +56,10 @@ export class MessengerPolicy {
     throw new ForbiddenException('Недостаточно прав для создания группы.');
   }
 
-  /** Manager-tier may always assign/reassign; other staff only when unassigned or already theirs. */
+  /** Any staff member may mark an administration chat as being worked. */
   assertCanAssign(actor: ActorContext, chat: ChatAccessRecord): void {
-    if (isManagerRole(actor.role)) return;
-    const current = chat.assignedToUserId ?? null;
-    if (current === null || current === actor.userId) return;
-    throw new ForbiddenException('Чат уже назначен другому сотруднику.');
+    if (isStaffRole(actor.role)) return;
+    throw new ForbiddenException('Недостаточно прав для взятия чата в работу.');
   }
 
   assertCanWriteChannel(actor: ActorContext, channel: ChannelAccessRecord): void {

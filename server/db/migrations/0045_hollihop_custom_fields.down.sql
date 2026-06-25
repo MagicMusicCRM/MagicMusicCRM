@@ -1,0 +1,2 @@
+-- Keep user-edited CRM custom field settings intact on rollback.
+-- This migration only appends missing HolliHop-compatible defaults.
