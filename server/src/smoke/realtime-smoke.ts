@@ -11,6 +11,21 @@ interface AuthResponse {
 
 interface ChatResponse {
   id: string;
+  type?: string;
+  title?: string | null;
+}
+
+interface MaskedSender {
+  id: string | null;
+  name?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+}
+
+interface MaskedMessageResponse extends MessageResponse {
+  sender?: MaskedSender | null;
+  senderId?: string | null;
 }
 
 interface MessageResponse {
@@ -108,6 +123,12 @@ async function main() {
     });
     steps.clientJoinedAnnouncements = joinAck;
 
+    // Client must be in its user room to receive chat.created / chat.removed events.
+    await emitWithAck(socket, "room.join", {
+      roomType: "user",
+      roomId: login.user.id,
+    });
+
     // ── Client -> (administration) self echo (baseline). ──
     const content = `realtime-smoke-${Date.now()}`;
     const eventPromise = waitForMessageCreated(socket, chat.id, content);
@@ -181,6 +202,74 @@ async function main() {
       );
       steps.announcementPostId = post.id;
       steps.clientReceivedPost = await postRecv;
+
+      // ── Assign → masked staff reply. ──
+      // Staff claims the administration chat. The client must never receive
+      // the real staff identity — toMessageDto masks the sender to
+      // { id: null, name: "Администрация", ... } with senderId: null.
+      await request("POST", `/messenger/chats/${chat.id}/assign`, {}, staffToken);
+      steps.assigned = true;
+
+      const masked = `masked-reply-${Date.now()}`;
+      const clientMaskedRecv = waitForEvent<MaskedMessageResponse>(
+        socket,
+        "message.created",
+        (p) => p.chatId === chat.id && p.content === masked,
+      );
+      await request(
+        "POST",
+        `/messenger/chats/${chat.id}/messages`,
+        { content: masked, messageType: "text" },
+        staffToken,
+      );
+      const maskedEvent = await clientMaskedRecv;
+      // Assert masking: sender.name MUST be "Администрация" and sender.id / senderId MUST be null.
+      // If real staff identity leaks (Phase 3 regression), this throws — smoke fails immediately.
+      const senderName = maskedEvent.sender?.name;
+      const senderId =
+        maskedEvent.sender?.id !== undefined
+          ? maskedEvent.sender.id
+          : (maskedEvent.senderId ?? null);
+      if (senderName !== "Администрация" || senderId !== null) {
+        throw new Error(
+          `Staff identity leaked to client: sender=${JSON.stringify(maskedEvent.sender)} senderId=${String(senderId)}`,
+        );
+      }
+      steps.maskedStaffReply = { ok: true };
+
+      // ── Group create → client receives chat.created; leave → chat.removed. ──
+      // Staff creates a group that includes the client; the client must receive
+      // chat.created on its user room. Then the client leaves; it receives chat.removed.
+      const groupName = `smoke-group-${Date.now()}`;
+      const groupCreated = waitForEvent<ChatResponse>(
+        socket,
+        "chat.created",
+        (p) => !!p.id,
+        15_000,
+      );
+      const group = await request<ChatResponse>(
+        "POST",
+        "/messenger/groups",
+        { name: groupName, memberUserIds: [login.user.id] },
+        staffToken,
+      );
+      steps.groupCreatedEvent = await groupCreated; // client saw the new group live
+      steps.groupId = group.id;
+
+      // Client leaves → user room receives chat.removed { id }.
+      const groupRemoved = waitForEvent<{ id: string }>(
+        socket,
+        "chat.removed",
+        (p) => p.id === group.id,
+        15_000,
+      );
+      await request(
+        "POST",
+        `/messenger/groups/${group.id}/leave`,
+        {},
+        accessToken,
+      );
+      steps.groupRemovedEvent = await groupRemoved;
     } else {
       steps.staffScenarios =
         "skipped (set REALTIME_SMOKE_STAFF_EMAIL/REALTIME_SMOKE_STAFF_PASSWORD to run)";
