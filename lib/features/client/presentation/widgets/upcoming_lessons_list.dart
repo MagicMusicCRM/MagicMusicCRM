@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/features/client/presentation/widgets/homework_widget.dart';
 
 // Provider for the active tab (0: Upcoming, 1: History)
 
@@ -18,7 +19,10 @@ final upcomingLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
       .watch(magicCrmServiceProvider)
       .listLessons(
         studentId: studentId,
-        from: DateTime.now().toIso8601String(),
+        // Send an absolute UTC instant (…Z). A naive local string was being
+        // read by Postgres in the session TZ (UTC), shifting the boundary by
+        // +3h so imminent lessons fell into История instead of Предстоящие.
+        from: DateTime.now().toUtc().toIso8601String(),
         limit: 20,
       );
 });
@@ -31,7 +35,7 @@ final pastLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
       .watch(magicCrmServiceProvider)
       .listLessons(
         studentId: studentId,
-        to: DateTime.now().toIso8601String(),
+        to: DateTime.now().toUtc().toIso8601String(),
         limit: 50,
       );
 });
@@ -45,7 +49,7 @@ class UpcomingLessonsList extends ConsumerStatefulWidget {
 }
 
 class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
-  int _activeTab = 0; // 0: Upcoming, 1: History
+  int _activeTab = 0; // 0: Upcoming, 1: History, 2: Homework
 
   String _statusLabel(String? s) {
     switch (s) {
@@ -97,156 +101,150 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                   isActive: _activeTab == 1,
                   onTap: () => setState(() => _activeTab = 1),
                 ),
+                _TabButton(
+                  label: 'Задания',
+                  isActive: _activeTab == 2,
+                  onTap: () => setState(() => _activeTab = 2),
+                ),
               ],
             ),
           ),
         ),
         Expanded(
-          child: (_activeTab == 0 ? upcomingAsync : pastAsync).when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(12),
-              child: ListSkeleton(count: 5),
-            ),
-            error: (err, _) => Center(
-              child: Text(
-                'Ошибка: $err',
-                style: const TextStyle(color: AppTheme.danger),
-              ),
-            ),
-            data: (lessons) {
-              if (lessons.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _activeTab == 0
-                            ? Icons.calendar_today_rounded
-                            : Icons.history_rounded,
-                        size: 64,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurfaceVariant.withAlpha(80),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _activeTab == 0
-                            ? 'Нет предстоящих занятий'
-                            : 'История занятий пуста',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        onPressed: () {
-                          ref.invalidate(upcomingLessonsRichProvider);
-                          ref.invalidate(pastLessonsRichProvider);
-                        },
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('Обновить'),
-                      ),
-                    ],
+          child: _activeTab == 2
+              ? const HomeworkWidget()
+              : (_activeTab == 0 ? upcomingAsync : pastAsync).when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: ListSkeleton(count: 5),
                   ),
-                );
-              }
-
-              return RefreshIndicator(
-                color: AppTheme.primaryGold,
-                onRefresh: () async {
-                  ref.invalidate(upcomingLessonsRichProvider);
-                  ref.invalidate(pastLessonsRichProvider);
-                },
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: lessons.length,
-                  itemBuilder: (context, index) {
-                    final lesson = lessons[index];
-                    final branchName =
-                        lesson['branch_name'] as String? ?? 'Без филиала';
-
-                    // Unified name resolution from flattened fields
-                    var teacherFirst =
-                        lesson['teacher_first_name'] as String? ?? '';
-                    var teacherLast =
-                        lesson['teacher_last_name'] as String? ?? '';
-                    if (teacherFirst.isEmpty && teacherLast.isEmpty) {
-                      teacherFirst =
-                          lesson['teacher_profile_first_name'] as String? ?? '';
-                      teacherLast =
-                          lesson['teacher_profile_last_name'] as String? ?? '';
-                    }
-                    final teacherName = '$teacherFirst $teacherLast'.trim();
-
-                    final room = lesson['room_name'] as String? ?? '';
-                    final status = lesson['status'] as String?;
-                    final dt = DateTime.tryParse(
-                      lesson['scheduled_at'] as String? ?? '',
-                    );
-
-                    final dateStr = dt != null
-                        ? DateFormat(
-                            'EEEE, d MMMM · HH:mm',
-                            'ru',
-                          ).format(dt.toUtc().add(const Duration(hours: 3)))
-                        : '—';
-                    final duration = lesson['duration_minutes'] as int? ?? 60;
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
+                  error: (err, _) => Center(
+                    child: Text(
+                      'Ошибка: $err',
+                      style: const TextStyle(color: AppTheme.danger),
+                    ),
+                  ),
+                  data: (lessons) {
+                    if (lessons.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryGold.withAlpha(25),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.music_note_rounded,
-                                color: AppTheme.primaryGold,
+                            Icon(
+                              _activeTab == 0
+                                  ? Icons.calendar_today_rounded
+                                  : Icons.history_rounded,
+                              size: 64,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant.withAlpha(80),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _activeTab == 0
+                                  ? 'Нет предстоящих занятий'
+                                  : 'История занятий пуста',
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontSize: 16,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: () {
+                                ref.invalidate(upcomingLessonsRichProvider);
+                                ref.invalidate(pastLessonsRichProvider);
+                              },
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('Обновить'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return RefreshIndicator(
+                      color: AppTheme.primaryGold,
+                      onRefresh: () async {
+                        ref.invalidate(upcomingLessonsRichProvider);
+                        ref.invalidate(pastLessonsRichProvider);
+                      },
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: lessons.length,
+                        itemBuilder: (context, index) {
+                          final lesson = lessons[index];
+                          final branchName =
+                              lesson['branch_name'] as String? ?? 'Без филиала';
+
+                          // Unified name resolution from flattened fields
+                          var teacherFirst =
+                              lesson['teacher_first_name'] as String? ?? '';
+                          var teacherLast =
+                              lesson['teacher_last_name'] as String? ?? '';
+                          if (teacherFirst.isEmpty && teacherLast.isEmpty) {
+                            teacherFirst =
+                                lesson['teacher_profile_first_name']
+                                    as String? ??
+                                '';
+                            teacherLast =
+                                lesson['teacher_profile_last_name']
+                                    as String? ??
+                                '';
+                          }
+                          final teacherName = '$teacherFirst $teacherLast'
+                              .trim();
+
+                          final room = lesson['room_name'] as String? ?? '';
+                          final status = lesson['status'] as String?;
+                          final dt = DateTime.tryParse(
+                            lesson['scheduled_at'] as String? ?? '',
+                          );
+
+                          final dateStr = dt != null
+                              ? DateFormat('EEEE, d MMMM · HH:mm', 'ru').format(
+                                  dt.toUtc().add(const Duration(hours: 3)),
+                                )
+                              : '—';
+                          final duration =
+                              lesson['duration_minutes'] as int? ?? 60;
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    dateStr,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
+                                  Container(
+                                    width: 52,
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryGold.withAlpha(25),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.music_note_rounded,
+                                      color: AppTheme.primaryGold,
                                     ),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Преподаватель: ${teacherName.isEmpty ? 'Не назначен' : teacherName}',
-                                    style: TextStyle(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        'Филиал: $branchName',
-                                        style: TextStyle(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurfaceVariant,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      if (room.isNotEmpty) ...[
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
                                         Text(
-                                          ' · ',
+                                          dateStr,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Преподаватель: ${teacherName.isEmpty ? 'Не назначен' : teacherName}',
                                           style: TextStyle(
                                             color: Theme.of(
                                               context,
@@ -254,66 +252,87 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                                             fontSize: 12,
                                           ),
                                         ),
-                                        Text(
-                                          room,
-                                          style: TextStyle(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.onSurfaceVariant,
-                                            fontSize: 12,
-                                          ),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'Филиал: $branchName',
+                                              style: TextStyle(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurfaceVariant,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            if (room.isNotEmpty) ...[
+                                              Text(
+                                                ' · ',
+                                                style: TextStyle(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                              Text(
+                                                room,
+                                                style: TextStyle(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                            Text(
+                                              ' · ',
+                                              style: TextStyle(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurfaceVariant,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            Text(
+                                              '$duration мин',
+                                              style: TextStyle(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurfaceVariant,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
-                                      Text(
-                                        ' · ',
-                                        style: TextStyle(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurfaceVariant,
-                                          fontSize: 12,
-                                        ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _statusColor(status).withAlpha(25),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      _statusLabel(status),
+                                      style: TextStyle(
+                                        color: _statusColor(status),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                      Text(
-                                        '$duration мин',
-                                        style: TextStyle(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurfaceVariant,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _statusColor(status).withAlpha(25),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                _statusLabel(status),
-                                style: TextStyle(
-                                  color: _statusColor(status),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     );
                   },
                 ),
-              );
-            },
-          ),
         ),
       ],
     );

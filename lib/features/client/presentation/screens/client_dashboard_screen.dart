@@ -11,14 +11,14 @@ import 'package:magic_music_crm/features/client/presentation/widgets/upcoming_le
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 
-final clientPaymentsProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final clientPaymentsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
   final studentId = ref.watch(magicCurrentStudentIdProvider).asData?.value;
   if (studentId == null) return const [];
-  return ref.watch(magicCrmServiceProvider).listPayments(
-        studentId: studentId,
-        limit: 100,
-      );
+  return ref
+      .watch(magicCrmServiceProvider)
+      .listPayments(studentId: studentId, limit: 100);
 });
 
 class ClientDashboardScreen extends ConsumerStatefulWidget {
@@ -32,31 +32,24 @@ class ClientDashboardScreen extends ConsumerStatefulWidget {
 class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
   int _selectedIndex = 0;
 
+  // Client bottom nav (mobile) / rail (desktop): Чат opens first by default,
+  // Профиль is last. «Занятия» merges the old Занятия+Расписание; «Абонемент»
+  // merges the old Абонемент+Оплаты behind an in-tab toggle.
   static const _destinations = <_ClientDestination>[
+    _ClientDestination(
+      label: 'Чат',
+      icon: Icons.chat_bubble_outline_rounded,
+      selectedIcon: Icons.chat_bubble_rounded,
+    ),
     _ClientDestination(
       label: 'Занятия',
       icon: Icons.school_outlined,
       selectedIcon: Icons.school_rounded,
     ),
     _ClientDestination(
-      label: 'Расписание',
-      icon: Icons.calendar_today_outlined,
-      selectedIcon: Icons.calendar_today_rounded,
-    ),
-    _ClientDestination(
-      label: 'Оплаты',
-      icon: Icons.payments_outlined,
-      selectedIcon: Icons.payments_rounded,
-    ),
-    _ClientDestination(
       label: 'Абонемент',
       icon: Icons.confirmation_number_outlined,
       selectedIcon: Icons.confirmation_number_rounded,
-    ),
-    _ClientDestination(
-      label: 'Чат',
-      icon: Icons.chat_bubble_outline_rounded,
-      selectedIcon: Icons.chat_bubble_rounded,
     ),
     _ClientDestination(
       label: 'Профиль',
@@ -125,7 +118,8 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
       body: SafeArea(child: body),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+        onDestinationSelected: (index) =>
+            setState(() => _selectedIndex = index),
         destinations: [
           for (final d in _destinations)
             NavigationDestination(
@@ -140,13 +134,11 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
 
   Widget _buildBody(int index) {
     return switch (index) {
-      0 => const _ClientSectionFrame(child: UpcomingLessonsList()),
+      0 => const MessengerScreen(role: 'client'),
       1 => const _ClientSectionFrame(child: UpcomingLessonsList()),
-      2 => const _ClientPaymentsView(),
-      3 => const _ClientSectionFrame(child: SubscriptionStatusCard()),
-      4 => const MessengerScreen(role: 'client'),
-      5 => const ProfileScreen(),
-      _ => const _ClientSectionFrame(child: UpcomingLessonsList()),
+      2 => const _ClientSubscriptionView(),
+      3 => const ProfileScreen(),
+      _ => const MessengerScreen(role: 'client'),
     };
   }
 }
@@ -174,6 +166,103 @@ class _ClientSectionFrame extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 900),
         child: child,
+      ),
+    );
+  }
+}
+
+/// «Абонемент» tab: a single tab that toggles between the subscription status
+/// (окно «Абонемент») and the payments history (окно «Оплаты»), replacing the
+/// two former separate bottom-nav tabs.
+class _ClientSubscriptionView extends StatefulWidget {
+  const _ClientSubscriptionView();
+
+  @override
+  State<_ClientSubscriptionView> createState() =>
+      _ClientSubscriptionViewState();
+}
+
+class _ClientSubscriptionViewState extends State<_ClientSubscriptionView> {
+  int _segment = 0; // 0: Абонемент, 1: Оплаты
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.primaryGold.withAlpha(30)),
+            ),
+            child: Row(
+              children: [
+                _SegmentButton(
+                  label: 'Абонемент',
+                  isActive: _segment == 0,
+                  onTap: () => setState(() => _segment = 0),
+                ),
+                _SegmentButton(
+                  label: 'Оплаты',
+                  isActive: _segment == 1,
+                  onTap: () => setState(() => _segment = 1),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: _segment == 0
+              ? _ClientSectionFrame(
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: const [SubscriptionStatusCard()],
+                  ),
+                )
+              : const _ClientPaymentsView(),
+        ),
+      ],
+    );
+  }
+}
+
+/// Segmented toggle button matching the in-tab toggle used by the lessons list.
+class _SegmentButton extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _SegmentButton({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isActive ? AppTheme.primaryGold : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isActive
+                  ? Colors.white
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              fontSize: 13,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -212,10 +301,9 @@ class _ClientPaymentsView extends ConsumerWidget {
                   Icon(
                     Icons.payments_outlined,
                     size: 64,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant
-                        .withAlpha(80),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withAlpha(80),
                   ),
                   const SizedBox(height: 16),
                   Text(
