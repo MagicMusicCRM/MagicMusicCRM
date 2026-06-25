@@ -13,6 +13,14 @@ void main() {
     expect(folderOf(admin('a', folder: 'archive')), InboxFolder.archive);
   });
 
+  test('folderOf: archived flag takes priority over server folder', () {
+    // Optimistically archived row should bucket to Архив regardless of server folder.
+    expect(folderOf(admin('a', folder: 'leads',    archived: true)),  InboxFolder.archive);
+    expect(folderOf(admin('a', folder: 'students', archived: true)),  InboxFolder.archive);
+    // archived:false should fall through to normal folder logic.
+    expect(folderOf(admin('a', folder: 'leads',    archived: false)), InboxFolder.leads);
+  });
+
   test('folderOf returns null for non-administration chats', () {
     expect(folderOf({'id': 'g', 'type': 'group', 'raw_type': 'group'}), isNull);
   });
