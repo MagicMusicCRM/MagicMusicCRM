@@ -941,6 +941,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
     // Assignment / archive / folder update — patch in place so folder badges
     // and the assignee chip update live without a full reload.
+    // Backend never combines lastMessageId with assignedTo/archived/folder in one chat.updated; if it ever does, this branch must also run inside the fan-out branch above (it currently early-returns).
     if (payload.containsKey('assignedTo') ||
         payload.containsKey('archived') ||
         payload.containsKey('folder')) {
@@ -2363,14 +2364,28 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 )
               : Builder(builder: (context) {
                   // For staff: show administration chats in the selected folder
-                  // first, then groups/channels/direct (non-inbox) chats.
+                  // first, then groups/channels/direct (non-inbox) chats below a
+                  // section header — but ONLY for non-archive tabs. Архив shows
+                  // only archived administration chats (no groups/channels).
                   // For non-staff: use sortedItems unchanged.
-                  final listItems = showInboxFolders(widget.role)
-                      ? [
-                          ...chatsInFolder(sortedItems, _selectedFolder),
-                          ...nonInboxChats(sortedItems),
-                        ]
-                      : sortedItems;
+                  const kSectionHeader = {'_section_header': 'Группы и каналы'};
+                  List<Map<String, dynamic>> listItems;
+                  if (showInboxFolders(widget.role)) {
+                    final folderChats = chatsInFolder(sortedItems, _selectedFolder);
+                    if (_selectedFolder == InboxFolder.archive) {
+                      // Архив: only archived administration chats, no groups.
+                      listItems = folderChats;
+                    } else {
+                      final extras = nonInboxChats(sortedItems);
+                      listItems = [
+                        ...folderChats,
+                        if (extras.isNotEmpty) kSectionHeader,
+                        ...extras,
+                      ];
+                    }
+                  } else {
+                    listItems = sortedItems;
+                  }
 
                   if (listItems.isEmpty) {
                     return Center(
@@ -2388,6 +2403,23 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       itemCount: listItems.length,
                       itemBuilder: (context, index) {
                         final item = listItems[index];
+
+                        // Section header sentinel — rendered as a non-tappable label.
+                        if (item.containsKey('_section_header')) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                            child: Text(
+                              item['_section_header'] as String,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: secondaryText,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          );
+                        }
+
                         final id = (item['id'] ?? '').toString();
                         final type =
                             (item['_item_type'] ??
@@ -2404,14 +2436,15 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                         final unread = _unreadCounts[id] ?? 0;
                         final avatarUrl = _getAvatarUrl(item);
 
-                        // For staff: prepend "ведёт: Имя" to the subtitle of
-                        // administration chats that have an assignee.
+                        // For staff: show "ведёт: Имя · <preview>" so the assignee
+                        // indicator is visible without replacing the message preview.
                         final assignee = _isStaffRole
                             ? assigneeName(item)
                             : null;
+                        final preview = _messagePreview(lastMsg);
                         final subtitleText = assignee != null
-                            ? 'ведёт: $assignee'
-                            : _messagePreview(lastMsg);
+                            ? 'ведёт: $assignee · $preview'
+                            : preview;
 
                         return ChatListTile(
                           title: name,
