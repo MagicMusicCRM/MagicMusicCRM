@@ -270,9 +270,7 @@ class MagicCrmService {
   }
 
   Future<Map<String, dynamic>> returnStudentToLead(String id) async {
-    return _api.post<Map<String, dynamic>>(
-      '/crm/students/$id/return-to-lead',
-    );
+    return _api.post<Map<String, dynamic>>('/crm/students/$id/return-to-lead');
   }
 
   Future<List<Map<String, dynamic>>> listTeachers({
@@ -535,9 +533,9 @@ class MagicCrmService {
 
   Future<List<Map<String, dynamic>>> listDisciplines() async {
     final response = await _api.get<Map<String, dynamic>>('/crm/disciplines');
-    return _items(response)
-        .map((item) => {'id': item['id'], 'name': item['name']})
-        .toList();
+    return _items(
+      response,
+    ).map((item) => {'id': item['id'], 'name': item['name']}).toList();
   }
 
   Future<Map<String, dynamic>> createBranch({
@@ -1565,7 +1563,12 @@ class MagicCrmService {
   /// (`totalAmount`, `totalCount`) over the full filtered set, so the UI can
   /// show a correct «Итого» rather than summing a truncated page.
   Future<({List<Map<String, dynamic>> items, num totalAmount, int totalCount})>
-  listPaymentsWithTotal({String? from, String? to, String? studentId, int limit = 100}) async {
+  listPaymentsWithTotal({
+    String? from,
+    String? to,
+    String? studentId,
+    int limit = 100,
+  }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
     if (studentId != null) queryParameters['studentId'] = studentId;
     if (from != null) queryParameters['from'] = from;
@@ -1720,7 +1723,7 @@ class MagicCrmService {
 
   Future<Map<String, dynamic>> createSubscriptionPackage({
     required String name,
-    required int lessonsTotal,
+    required num lessonsTotal, // hours of lessons (fractional allowed)
     required num price,
     String? disciplineId,
     String? branchId,
@@ -2042,7 +2045,9 @@ class MagicCrmService {
       // HolliHop-imported clients have no linked profile, so their name/contact
       // live only in custom_data — fall back to it so the card isn't blank.
       'first_name':
-          item['firstName'] ?? customData['firstName'] ?? customData['first_name'],
+          item['firstName'] ??
+          customData['firstName'] ??
+          customData['first_name'],
       'last_name':
           item['lastName'] ?? customData['lastName'] ?? customData['last_name'],
       'middle_name': customData['middleName'] ?? customData['middle_name'],
@@ -2060,9 +2065,13 @@ class MagicCrmService {
         'id': item['profileId'],
         'user_id': item['profileUserId'],
         'first_name':
-            item['firstName'] ?? customData['firstName'] ?? customData['first_name'],
+            item['firstName'] ??
+            customData['firstName'] ??
+            customData['first_name'],
         'last_name':
-            item['lastName'] ?? customData['lastName'] ?? customData['last_name'],
+            item['lastName'] ??
+            customData['lastName'] ??
+            customData['last_name'],
         'phone': item['phone'] ?? customData['phone'],
       },
     };
@@ -2188,7 +2197,9 @@ class MagicCrmService {
     // Преподаватели без профиля хранят имя только в custom_data — берём оттуда,
     // чтобы карточка не показывалась пустой (как в _legacyStudent).
     final firstName =
-        item['firstName'] ?? customData['firstName'] ?? customData['first_name'];
+        item['firstName'] ??
+        customData['firstName'] ??
+        customData['first_name'];
     final lastName =
         item['lastName'] ?? customData['lastName'] ?? customData['last_name'];
     return {

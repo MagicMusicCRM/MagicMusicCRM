@@ -1496,7 +1496,8 @@ class _PackageCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final name = item['name'] as String? ?? 'Без названия';
-    final lessons = _asInt(item['lessons_total'] ?? item['lessonsTotal']);
+    final hoursNum = _asNum(item['lessons_total'] ?? item['lessonsTotal']);
+    final hours = hoursNum % 1 == 0 ? hoursNum.toInt() : hoursNum;
     final price = _asNum(item['price']);
     final validity = item['validity_days'] ?? item['validityDays'];
     final validityDays = validity == null ? null : _asInt(validity);
@@ -1532,7 +1533,7 @@ class _PackageCard extends ConsumerWidget {
             children: [
               _StudentMetricChip(
                 icon: Icons.event_available_rounded,
-                label: 'Занятий: $lessons',
+                label: 'Часов: $hours',
                 color: AppColor.gold,
               ),
               _StudentMetricChip(
@@ -1745,7 +1746,7 @@ class _PackageFormState extends State<_PackageForm> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final name = _name.text.trim();
-    final lessonsTotal = int.parse(_lessons.text.trim());
+    final lessonsTotal = num.parse(_lessons.text.trim().replaceAll(',', '.'));
     final price = num.parse(_price.text.trim().replaceAll(',', '.'));
     final validityText = _validity.text.trim();
     final validityDays = validityText.isEmpty ? null : int.parse(validityText);
@@ -1805,7 +1806,7 @@ class _PackageFormState extends State<_PackageForm> {
         children: [
           TextFormField(
             controller: _name,
-            decoration: _dec('Название', hint: 'Напр. «8 занятий»'),
+            decoration: _dec('Название', hint: 'Напр. «16 часов»'),
             textInputAction: TextInputAction.next,
             validator: (v) =>
                 (v == null || v.trim().isEmpty) ? 'Укажите название' : null,
@@ -1813,12 +1814,12 @@ class _PackageFormState extends State<_PackageForm> {
           const SizedBox(height: AppSpace.md),
           TextFormField(
             controller: _lessons,
-            decoration: _dec('Количество занятий'),
-            keyboardType: TextInputType.number,
+            decoration: _dec('Количество часов'),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textInputAction: TextInputAction.next,
             validator: (v) {
-              final n = int.tryParse((v ?? '').trim());
-              if (n == null) return 'Введите целое число';
+              final n = num.tryParse((v ?? '').trim().replaceAll(',', '.'));
+              if (n == null) return 'Введите число';
               if (n <= 0) return 'Должно быть больше 0';
               return null;
             },

@@ -3768,6 +3768,10 @@ export class CrmService {
             select subscription_id from app.lesson_participation
             where lesson_id = $1 and student_id = $2
           ),
+          lesson as (
+            select coalesce(duration_minutes, 60)::numeric / 60 as hours
+            from app.lessons where id = $1
+          ),
           pick as (
             select s.id
             from app.subscriptions s, part
@@ -3779,7 +3783,8 @@ export class CrmService {
           ),
           dec as (
             update app.subscriptions s
-            set lessons_used = lessons_used + 1, updated_at = now()
+            set lessons_used = lessons_used + (select hours from lesson),
+              updated_at = now()
             from pick where s.id = pick.id
             returning s.id
           )
@@ -3798,9 +3803,14 @@ export class CrmService {
           select subscription_id from app.lesson_participation
           where lesson_id = $1 and student_id = $2
         ),
+        lesson as (
+          select coalesce(duration_minutes, 60)::numeric / 60 as hours
+          from app.lessons where id = $1
+        ),
         inc as (
           update app.subscriptions s
-          set lessons_used = greatest(lessons_used - 1, 0), updated_at = now()
+          set lessons_used = greatest(lessons_used - (select hours from lesson), 0),
+            updated_at = now()
           from part
           where part.subscription_id is not null and s.id = part.subscription_id
           returning s.id
@@ -4708,7 +4718,7 @@ export class CrmService {
       name: row.name,
       disciplineId: row.discipline_id,
       branchId: row.branch_id,
-      lessonsTotal: row.lessons_total,
+      lessonsTotal: Number(row.lessons_total),
       price: Number(row.price),
       validityDays: row.validity_days,
       isActive: row.is_active,
@@ -7374,8 +7384,8 @@ export class CrmService {
     return {
       id: row.id,
       studentId: row.student_id,
-      lessonsTotal: row.lessons_total,
-      lessonsUsed: row.lessons_used,
+      lessonsTotal: Number(row.lessons_total),
+      lessonsUsed: Number(row.lessons_used),
       startsAt: row.starts_at,
       expiresAt: row.expires_at,
       status: row.status,

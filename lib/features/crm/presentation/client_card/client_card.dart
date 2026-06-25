@@ -4605,7 +4605,7 @@ class _SubscriptionPackageTile extends StatelessWidget {
     final price = package['price'];
     final validity = package['validity_days'] ?? package['validityDays'];
     final meta = [
-      if (lessons != null) '$lessons зан.',
+      if (lessons != null) '$lessons ч.',
       if (price != null) '$price ₽',
       if (validity != null) '$validity дн.',
     ].join(' · ');

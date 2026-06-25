@@ -109,8 +109,6 @@ class _PackageRow extends ConsumerWidget {
   final Map<String, dynamic> item;
   const _PackageRow({required this.item});
 
-  int _asInt(Object? v) =>
-      v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0;
   num _asNum(Object? v) =>
       v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
 
@@ -165,10 +163,11 @@ class _PackageRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final name = item['name'] as String? ?? 'Без названия';
-    final lessons = _asInt(item['lessons_total'] ?? item['lessonsTotal']);
+    final hoursNum = _asNum(item['lessons_total'] ?? item['lessonsTotal']);
+    final hours = hoursNum % 1 == 0 ? hoursNum.toInt() : hoursNum;
     final price = _asNum(item['price']);
     final validityRaw = item['validity_days'] ?? item['validityDays'];
-    final validity = validityRaw == null ? null : _asInt(validityRaw);
+    final validity = validityRaw == null ? null : _asNum(validityRaw).toInt();
     final isActive =
         item['is_active'] == true ||
         item['isActive'] == true ||
@@ -198,10 +197,7 @@ class _PackageRow extends ConsumerWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              _Chip(
-                icon: Icons.event_available_rounded,
-                label: 'Занятий: $lessons',
-              ),
+              _Chip(icon: Icons.schedule_rounded, label: 'Часов: $hours'),
               _Chip(icon: Icons.payments_rounded, label: '$money ₽'),
               if (validity != null)
                 _Chip(
@@ -283,7 +279,7 @@ class _EmptyCatalog extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Text(
-              'Создайте пакет (занятия + срок + цена), затем выдайте его '
+              'Создайте пакет (часы + срок + цена), затем выдайте его '
               'ученику из его карточки → «Выдать абонемент».',
               textAlign: TextAlign.center,
               style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),

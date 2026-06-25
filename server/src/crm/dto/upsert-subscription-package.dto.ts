@@ -23,9 +23,11 @@ export class UpsertSubscriptionPackageDto {
   @IsUUID()
   branchId?: string;
 
+  // Hours of lessons in the package (e.g. 16 = 16h). Fractional allowed so a
+  // 90-minute lesson can consume 1.5h. Column name kept for compatibility.
   @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.5)
   lessonsTotal: number;
 
   @Type(() => Number)

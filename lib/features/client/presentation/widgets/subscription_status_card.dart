@@ -72,9 +72,13 @@ class SubscriptionStatusCard extends ConsumerWidget {
 
         final courseName = (subscription['type']?.toString() ?? 'Абонемент')
             .toUpperCase();
-        final lessonsTotal = subscription['lessons_total'] as int? ?? 0;
-        final lessonsUsed = subscription['lessons_used'] as int? ?? 0;
-        final remainingClasses = lessonsTotal - lessonsUsed;
+        // Subscriptions are tracked in HOURS (may be fractional).
+        final hoursTotal = (subscription['lessons_total'] as num?) ?? 0;
+        final hoursUsed = (subscription['lessons_used'] as num?) ?? 0;
+        final remainingNum = hoursTotal - hoursUsed;
+        final remainingClasses = remainingNum % 1 == 0
+            ? remainingNum.toInt()
+            : remainingNum;
         final endDateStr = subscription['valid_until'] as String?;
         if (endDateStr == null) return const SizedBox.shrink();
         final endDate = DateTime.parse(endDateStr).toLocal();
@@ -113,7 +117,7 @@ class SubscriptionStatusCard extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        'Осталось: $remainingClasses',
+                        'Осталось: $remainingClasses ч',
                         style: TextStyle(
                           color: isExpiringSoon
                               ? AppTheme.danger

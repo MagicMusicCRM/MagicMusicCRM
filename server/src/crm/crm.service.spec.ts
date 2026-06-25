@@ -5073,9 +5073,12 @@ describe("CrmService", () => {
       items: [{ studentId: "student-a", status: "present" }],
     });
 
-    // The reconciliation query (call index 3) decrements an active subscription.
+    // The reconciliation query (call index 3) consumes the lesson's hours from
+    // an active subscription (KVA: subscriptions are tracked in hours).
     const reconcileSql = String(query.mock.calls[3][0]);
-    expect(reconcileSql).toContain("lessons_used = lessons_used + 1");
+    expect(reconcileSql).toContain(
+      "lessons_used = lessons_used + (select hours from lesson)",
+    );
     expect(query.mock.calls[3][1]).toEqual(["lesson-a", "student-a"]);
   });
 
