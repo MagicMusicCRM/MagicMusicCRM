@@ -119,6 +119,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   bool get _isManagerOrAdminRole => _isAdminRole || widget.role == 'manager';
 
+  /// Manager-tier for assignment RBAC: may claim/reassign/unassign ANY chat.
+  /// Plain `admin` and `teacher` are excluded — they may only claim unassigned
+  /// chats and unassign their own. Matches backend PATCH /chats/:id/assign.
+  bool get _isManagerTier =>
+      widget.role == 'manager' || widget.role == 'system_admin';
+
   /// A1: manager-tier access for the manager-only CRM destinations and role
   /// editing. Администратор (`admin`) is EXCLUDED (Управляющий > Администратор);
   /// superuser `system_admin` is included. See [crmHasManagerAccess].
@@ -395,14 +401,22 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   Future<void> _unassignChat(String chatId) async {
     final svc = ref.read(magicMessengerServiceProvider);
+    // Capture existing assigned_to BEFORE optimistic clear so we can roll back.
+    final openChat = _chatItems.firstWhere(
+      (c) => c['id'] == chatId,
+      orElse: () => const {},
+    );
+    final previousAssignedTo =
+        openChat['assigned_to'] as Map<String, dynamic>?;
     // Optimistic: clear assigned_to.
     _patchOpenChatAssignment(chatId, null);
     try {
       await svc.unassignChat(chatId);
     } catch (e) {
       if (!mounted) return;
+      // Roll back to the captured value.
+      _patchOpenChatAssignment(chatId, previousAssignedTo);
       _showChatSnack('Не удалось снять с работы: $e', bg: AppColor.danger);
-      // No rollback here — we don't have the old value; chat list will refresh on next load.
     }
   }
 
@@ -2510,7 +2524,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       ),
                       tooltip: 'Назначение',
                       itemBuilder: (_) => [
-                        if (!isAssignedToMe)
+                        // Manager-tier may steal any chat not already theirs;
+                        // plain admin/teacher may only claim a truly unassigned one.
+                        if (_isManagerTier ? !isAssignedToMe : !isAssigned)
                           const PopupMenuItem(
                             value: 'assign_me',
                             child: Row(
@@ -2521,7 +2537,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                               ],
                             ),
                           ),
-                        if (isAssigned)
+                        // Manager-tier may unassign anyone; others only their own.
+                        if (isAssigned && (isAssignedToMe || _isManagerTier))
                           const PopupMenuItem(
                             value: 'unassign',
                             child: Row(
@@ -2532,16 +2549,18 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                               ],
                             ),
                           ),
-                        const PopupMenuItem(
-                          value: 'transfer',
-                          child: Row(
-                            children: [
-                              Icon(Icons.transfer_within_a_station_rounded, size: 18),
-                              SizedBox(width: 8),
-                              Text('Передать'),
-                            ],
+                        // Only manager-tier may reassign to another staff member.
+                        if (_isManagerTier)
+                          const PopupMenuItem(
+                            value: 'transfer',
+                            child: Row(
+                              children: [
+                                Icon(Icons.transfer_within_a_station_rounded, size: 18),
+                                SizedBox(width: 8),
+                                Text('Передать'),
+                              ],
+                            ),
                           ),
-                        ),
                       ],
                       onSelected: (value) async {
                         final chatId = _selectedChatId;
