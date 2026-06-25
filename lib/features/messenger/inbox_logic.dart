@@ -69,6 +69,15 @@ List<Map<String, dynamic>> patchChat(
   return next;
 }
 
+/// True when the chat is an administration (inbox) chat.
+bool isAdministration(Map<String, dynamic> chat) =>
+  (chat['raw_type'] ?? chat['type']) == 'administration';
+
+/// True when the current user can see assignment actions for this chat.
+/// Requires manager-or-admin role AND the chat must be an administration chat.
+bool canShowAssignActions(bool isManagerOrAdmin, Map<String, dynamic> chat) =>
+  isManagerOrAdmin && isAdministration(chat);
+
 /// Display name for an administration chat's assignee chip, or null.
 String? assigneeName(Map<String, dynamic> chat) {
   final a = chat['assigned_to'];

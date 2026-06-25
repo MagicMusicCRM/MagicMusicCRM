@@ -360,6 +360,72 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   String get _userId => _currentUserId ?? '';
 
+  // ── Assignment actions (administration chats) ──────────────────────────────
+
+  /// Optimistically patches the chat in _chatItems and triggers a rebuild.
+  void _patchOpenChatAssignment(String chatId, Map<String, dynamic>? assignedTo) {
+    setState(() {
+      _chatItems = _chatItems.map((c) {
+        if (c['id'] == chatId) return {...c, 'assigned_to': assignedTo};
+        return c;
+      }).toList();
+    });
+  }
+
+  Future<void> _assignChatToMe(String chatId) async {
+    final svc = ref.read(magicMessengerServiceProvider);
+    // Optimistic: build a minimal assigned_to map from known current user data.
+    final optimistic = {
+      'id': _currentUserId,
+      'name': _currentUserDisplayName,
+    };
+    _patchOpenChatAssignment(chatId, optimistic);
+    try {
+      final updated = await svc.assignChat(chatId);
+      if (!mounted) return;
+      // Apply server's authoritative assigned_to.
+      _patchOpenChatAssignment(chatId, updated['assigned_to'] as Map<String, dynamic>?);
+    } catch (e) {
+      if (!mounted) return;
+      // Roll back optimistic update.
+      _patchOpenChatAssignment(chatId, null);
+      _showChatSnack('Не удалось взять в работу: $e', bg: AppColor.danger);
+    }
+  }
+
+  Future<void> _unassignChat(String chatId) async {
+    final svc = ref.read(magicMessengerServiceProvider);
+    // Optimistic: clear assigned_to.
+    _patchOpenChatAssignment(chatId, null);
+    try {
+      await svc.unassignChat(chatId);
+    } catch (e) {
+      if (!mounted) return;
+      _showChatSnack('Не удалось снять с работы: $e', bg: AppColor.danger);
+      // No rollback here — we don't have the old value; chat list will refresh on next load.
+    }
+  }
+
+  Future<void> _transferChat(String chatId) async {
+    final pickedUserId = await showDialog<String>(
+      context: context,
+      builder: (_) => _StaffPickerDialog(
+        currentUserId: _currentUserId,
+      ),
+    );
+    if (pickedUserId == null || !mounted) return;
+
+    final svc = ref.read(magicMessengerServiceProvider);
+    try {
+      final updated = await svc.assignChat(chatId, userId: pickedUserId);
+      if (!mounted) return;
+      _patchOpenChatAssignment(chatId, updated['assigned_to'] as Map<String, dynamic>?);
+    } catch (e) {
+      if (!mounted) return;
+      _showChatSnack('Не удалось передать: $e', bg: AppColor.danger);
+    }
+  }
+
   // ── Load chat list ─────────────────────────────────────────────────────────
 
   Future<void> _loadChatList() async {
@@ -2241,9 +2307,18 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                         final unread = _unreadCounts[id] ?? 0;
                         final avatarUrl = _getAvatarUrl(item);
 
+                        // For staff: prepend "ведёт: Имя" to the subtitle of
+                        // administration chats that have an assignee.
+                        final assignee = _isStaffRole
+                            ? assigneeName(item)
+                            : null;
+                        final subtitleText = assignee != null
+                            ? 'ведёт: $assignee'
+                            : _messagePreview(lastMsg);
+
                         return ChatListTile(
                           title: name,
-                          subtitle: _messagePreview(lastMsg),
+                          subtitle: subtitleText,
                           time: _formatTime(
                             item['_last_message_time'] as String?,
                           ),
@@ -2407,6 +2482,80 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       ),
                     ],
                   ),
+                // Assignment actions for administration (inbox) chats.
+                if (_selectedChatId != null &&
+                    canShowAssignActions(
+                      _isManagerOrAdminRole,
+                      _chatItems.firstWhere(
+                        (c) => c['id'] == _selectedChatId,
+                        orElse: () => const {},
+                      ),
+                    ))
+                  Builder(builder: (context) {
+                    final openChat = _chatItems.firstWhere(
+                      (c) => c['id'] == _selectedChatId,
+                      orElse: () => const {},
+                    );
+                    final assignedToId =
+                        (openChat['assigned_to'] as Map?)?['id']?.toString();
+                    final isAssignedToMe =
+                        assignedToId != null &&
+                        assignedToId == _currentUserId;
+                    final isAssigned = assignedToId != null;
+                    return PopupMenuButton<String>(
+                      icon: const Icon(
+                        Icons.assignment_ind_rounded,
+                        size: 20,
+                        color: AppColor.gold,
+                      ),
+                      tooltip: 'Назначение',
+                      itemBuilder: (_) => [
+                        if (!isAssignedToMe)
+                          const PopupMenuItem(
+                            value: 'assign_me',
+                            child: Row(
+                              children: [
+                                Icon(Icons.assignment_turned_in_outlined, size: 18),
+                                SizedBox(width: 8),
+                                Text('Взять в работу'),
+                              ],
+                            ),
+                          ),
+                        if (isAssigned)
+                          const PopupMenuItem(
+                            value: 'unassign',
+                            child: Row(
+                              children: [
+                                Icon(Icons.assignment_return_outlined, size: 18),
+                                SizedBox(width: 8),
+                                Text('Снять с работы'),
+                              ],
+                            ),
+                          ),
+                        const PopupMenuItem(
+                          value: 'transfer',
+                          child: Row(
+                            children: [
+                              Icon(Icons.transfer_within_a_station_rounded, size: 18),
+                              SizedBox(width: 8),
+                              Text('Передать'),
+                            ],
+                          ),
+                        ),
+                      ],
+                      onSelected: (value) async {
+                        final chatId = _selectedChatId;
+                        if (chatId == null) return;
+                        if (value == 'assign_me') {
+                          await _assignChatToMe(chatId);
+                        } else if (value == 'unassign') {
+                          await _unassignChat(chatId);
+                        } else if (value == 'transfer') {
+                          await _transferChat(chatId);
+                        }
+                      },
+                    );
+                  }),
               ],
               onTitleTap: () {
                 if (_selectedChatId == null || _selectedChatType == null) {
@@ -3296,6 +3445,143 @@ class _MessageListViewState extends State<_MessageListView> {
               ],
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// Staff-picker dialog for "Передать" (transfer to another staff member).
+/// Loads all staff profiles (admin/system_admin/manager/teacher) and lets the
+/// user pick one. Returns the selected user's `user_id` or null if cancelled.
+class _StaffPickerDialog extends ConsumerStatefulWidget {
+  final String? currentUserId;
+
+  const _StaffPickerDialog({this.currentUserId});
+
+  @override
+  ConsumerState<_StaffPickerDialog> createState() => _StaffPickerDialogState();
+}
+
+class _StaffPickerDialogState extends ConsumerState<_StaffPickerDialog> {
+  List<Map<String, dynamic>> _allStaff = [];
+  List<Map<String, dynamic>> _filtered = [];
+  bool _loading = true;
+  final _searchController = TextEditingController();
+
+  static const _staffRoles = {'admin', 'system_admin', 'manager', 'teacher'};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStaff();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadStaff() async {
+    try {
+      final profiles = await ref
+          .read(magicProfileAdminServiceProvider)
+          .listProfiles(limit: 200);
+      if (!mounted) return;
+      final staff = profiles
+          .where((p) => _staffRoles.contains(p['role']))
+          .where((p) => p['user_id'] != null)
+          .toList();
+      setState(() {
+        _allStaff = staff;
+        _filtered = staff;
+        _loading = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _filter(String q) {
+    final query = q.toLowerCase();
+    setState(() {
+      _filtered = _allStaff.where((u) {
+        final name =
+            '${u['first_name'] ?? ''} ${u['last_name'] ?? ''}'.toLowerCase();
+        final email = (u['email'] ?? '').toString().toLowerCase();
+        return name.contains(query) || email.contains(query);
+      }).toList();
+    });
+  }
+
+  String _roleLabel(String? role) {
+    switch (role) {
+      case 'admin': return 'Администратор';
+      case 'system_admin': return 'Администратор системы';
+      case 'manager': return 'Управляющий';
+      case 'teacher': return 'Преподаватель';
+      default: return role ?? '';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Передать чат'),
+      content: SizedBox(
+        width: 360,
+        height: 400,
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                hintText: 'Поиск сотрудника…',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+              onChanged: _filter,
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _loading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColor.gold),
+                    )
+                  : _filtered.isEmpty
+                  ? const Center(child: Text('Нет сотрудников'))
+                  : ListView.builder(
+                      itemCount: _filtered.length,
+                      itemBuilder: (context, index) {
+                        final user = _filtered[index];
+                        final userId = user['user_id']?.toString() ?? '';
+                        final firstName = user['first_name'] ?? '';
+                        final lastName = user['last_name'] ?? '';
+                        final name = '$firstName $lastName'.trim();
+                        final role = user['role']?.toString();
+                        final isMe = userId == widget.currentUserId;
+                        return ListTile(
+                          leading: const Icon(
+                            Icons.person_rounded,
+                            color: AppColor.gold,
+                          ),
+                          title: Text(name.isEmpty ? user['email'] ?? '' : name),
+                          subtitle: Text(
+                            _roleLabel(role) + (isMe ? ' (вы)' : ''),
+                          ),
+                          onTap: () => Navigator.of(context).pop(userId),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Отмена'),
+        ),
       ],
     );
   }

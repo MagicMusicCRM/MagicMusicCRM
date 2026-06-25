@@ -53,4 +53,41 @@ void main() {
     expect(assigneeName(admin('a', assignedTo: null)), isNull);
     expect(assigneeName(admin('a', assignedTo: {'id': 's', 'name': '  '})), isNull);
   });
+
+  // ── isAdministration ──────────────────────────────────────────────────────
+
+  test('isAdministration: true for raw_type == administration', () {
+    expect(isAdministration({'raw_type': 'administration', 'type': 'anything'}), isTrue);
+  });
+
+  test('isAdministration: true via type fallback when raw_type absent', () {
+    expect(isAdministration({'type': 'administration'}), isTrue);
+  });
+
+  test('isAdministration: false for group and direct chats', () {
+    expect(isAdministration({'raw_type': 'group', 'type': 'group'}), isFalse);
+    expect(isAdministration({'raw_type': 'direct', 'type': 'direct'}), isFalse);
+  });
+
+  // ── canShowAssignActions ──────────────────────────────────────────────────
+
+  test('canShowAssignActions: true for manager+admin on administration chat', () {
+    final chat = admin('a', folder: 'leads');
+    expect(canShowAssignActions(true, chat), isTrue);
+  });
+
+  test('canShowAssignActions: false for client (isManagerOrAdmin=false) even on administration chat', () {
+    final chat = admin('a', folder: 'leads');
+    expect(canShowAssignActions(false, chat), isFalse);
+  });
+
+  test('canShowAssignActions: false for manager+admin on non-administration chat', () {
+    final groupChat = {'raw_type': 'group', 'type': 'group', 'id': 'g1'};
+    expect(canShowAssignActions(true, groupChat), isFalse);
+  });
+
+  test('canShowAssignActions: false for client on non-administration chat', () {
+    final directChat = {'raw_type': 'direct', 'type': 'direct', 'id': 'd1'};
+    expect(canShowAssignActions(false, directChat), isFalse);
+  });
 }
