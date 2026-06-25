@@ -295,7 +295,9 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
       // Base URL is normalised to a trailing slash by MagicApiClient; the path
       // is normalised to no leading slash to match its request pipeline.
       final baseUrl = api.rawDio.options.baseUrl;
-      final url = '$baseUrl' 'analytics/finance/monthly.$ext';
+      final url =
+          '$baseUrl'
+          'analytics/finance/monthly.$ext';
 
       final from = _periodStart().toIso8601String();
       final to = _periodEnd().toIso8601String();
@@ -695,7 +697,13 @@ class _PaymentDialog extends ConsumerStatefulWidget {
 
 class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
   final _amountCtrl = TextEditingController();
-  String _type = 'subscription';
+  // NOTE: "Абонемент" is intentionally NOT a payment type here. A subscription
+  // is a real entity (lessons + validity) issued from a package via the student
+  // card → «Выдать абонемент» (issueSubscription), which atomically creates the
+  // payment AND the app.subscriptions row the client's «Абонемент» window reads.
+  // A plain payment cannot represent a subscription, so we only offer ad-hoc
+  // payment categories here.
+  String _type = 'extra_lesson';
   List<Map<String, dynamic>> _students = [];
   String? _selectedStudentId;
 
@@ -760,16 +768,20 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
           DropdownButtonFormField<String>(
             initialValue: _type,
             dropdownColor: Theme.of(context).colorScheme.surface,
-            decoration: const InputDecoration(labelText: 'Тип'),
+            decoration: const InputDecoration(
+              labelText: 'Тип',
+              helperText:
+                  'Абонемент выдаётся в карточке ученика → «Выдать абонемент»',
+              helperMaxLines: 2,
+            ),
             items: [
-              DropdownMenuItem(value: 'subscription', child: Text('Абонемент')),
               DropdownMenuItem(
                 value: 'extra_lesson',
                 child: Text('Доп. занятие'),
               ),
               DropdownMenuItem(value: 'other', child: Text('Прочее')),
             ],
-            onChanged: (v) => setState(() => _type = v ?? 'subscription'),
+            onChanged: (v) => setState(() => _type = v ?? 'extra_lesson'),
           ),
           if (!canSubmit) ...[
             const SizedBox(height: 10),
@@ -893,11 +905,7 @@ class _ExportButton extends StatelessWidget {
               ),
             )
           : Icon(icon, size: 18),
-      label: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
       style: FilledButton.styleFrom(
         backgroundColor: AppColor.gold,
         foregroundColor: AppColor.onGold,
@@ -998,10 +1006,7 @@ class _ExpensesPanel extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               'Нет расходов за период',
-              style: TextStyle(
-                color: colors.onSurfaceVariant,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
             ),
           ] else ...[
             const SizedBox(height: 10),
