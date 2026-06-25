@@ -6920,7 +6920,7 @@ export class CrmService {
           join app.profiles gp
             on gp.id = gs_student.profile_id
            and gp.deleted_at is null
-          where gs.group_id = $3 and gs.deleted_at is null and gp.user_id is not null
+          where gs.group_id = $3 and gs.left_at is null and gp.user_id is not null
           union
           select group_link.user_id
           from app.group_students gs
@@ -6928,7 +6928,7 @@ export class CrmService {
             on group_link.entity_type = 'student'
            and group_link.entity_id = gs.student_id
            and group_link.deleted_at is null
-          where gs.group_id = $3 and gs.deleted_at is null
+          where gs.group_id = $3 and gs.left_at is null
         ) affected
         where user_id is not null
       `,
