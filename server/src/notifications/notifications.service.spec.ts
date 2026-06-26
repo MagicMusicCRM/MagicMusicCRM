@@ -140,6 +140,7 @@ describe('NotificationsService', () => {
       'hash-push-token-1234567890',
       'encrypted-push-token-1234567890'
     ]);
+    expect(database.query.mock.calls[0][0]).toContain('encrypted_token = excluded.encrypted_token');
   });
 
   it('queues push delivery and schedules push worker', async () => {

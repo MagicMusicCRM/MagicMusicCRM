@@ -76,6 +76,7 @@ interface MessageRow {
   sender_first_name: string | null;
   sender_last_name: string | null;
   sender_role?: string | null;
+  sender_avatar_file_id?: string | null;
   attachment_original_name?: string | null;
   attachment_mime_type?: string | null;
   attachment_size_bytes?: string | number | null;
@@ -350,6 +351,7 @@ export class MessengerService implements OnModuleInit {
           m.deleted_at, u.email as sender_email, p.first_name as sender_first_name,
           p.last_name as sender_last_name,
           u.role as sender_role,
+          p.avatar_file_id as sender_avatar_file_id,
           f.original_name as attachment_original_name,
           f.mime_type as attachment_mime_type,
           f.size_bytes as attachment_size_bytes,
@@ -449,8 +451,23 @@ export class MessengerService implements OnModuleInit {
           returning id, chat_id, sender_id, content, message_type,
             attachment_file_id, reply_to_id, forwarded_from_id,
             pinned_by, pinned_at, created_at, updated_at, deleted_at,
-            null::text as sender_email, null::text as sender_first_name,
-            null::text as sender_last_name,
+            (select email from app.users where id = app.messages.sender_id) as sender_email,
+            (
+              select first_name from app.profiles
+              where user_id = app.messages.sender_id and deleted_at is null
+              limit 1
+            ) as sender_first_name,
+            (
+              select last_name from app.profiles
+              where user_id = app.messages.sender_id and deleted_at is null
+              limit 1
+            ) as sender_last_name,
+            (select role from app.users where id = app.messages.sender_id) as sender_role,
+            (
+              select avatar_file_id from app.profiles
+              where user_id = app.messages.sender_id and deleted_at is null
+              limit 1
+            ) as sender_avatar_file_id,
             (
               select original_name from app.file_objects where id = $5
             ) as attachment_original_name,
@@ -1007,9 +1024,23 @@ export class MessengerService implements OnModuleInit {
         returning id, chat_id, sender_id, content, message_type,
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
-          null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name,
+          (select email from app.users where id = app.messages.sender_id) as sender_email,
+          (
+            select first_name from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_first_name,
+          (
+            select last_name from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_last_name,
           (select role from app.users where id = app.messages.sender_id) as sender_role,
+          (
+            select avatar_file_id from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_avatar_file_id,
           false as is_read
       `,
       [messageId, actor.userId],
@@ -1043,9 +1074,23 @@ export class MessengerService implements OnModuleInit {
         returning id, chat_id, sender_id, content, message_type,
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
-          null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name,
+          (select email from app.users where id = app.messages.sender_id) as sender_email,
+          (
+            select first_name from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_first_name,
+          (
+            select last_name from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_last_name,
           (select role from app.users where id = app.messages.sender_id) as sender_role,
+          (
+            select avatar_file_id from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_avatar_file_id,
           false as is_read
       `,
       [messageId],
@@ -1086,9 +1131,23 @@ export class MessengerService implements OnModuleInit {
         returning id, chat_id, sender_id, content, message_type,
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
-          null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name,
+          (select email from app.users where id = app.messages.sender_id) as sender_email,
+          (
+            select first_name from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_first_name,
+          (
+            select last_name from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_last_name,
           (select role from app.users where id = app.messages.sender_id) as sender_role,
+          (
+            select avatar_file_id from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_avatar_file_id,
           false as is_read
       `,
       [messageId, mode],
@@ -1153,9 +1212,23 @@ export class MessengerService implements OnModuleInit {
         returning id, chat_id, sender_id, content, message_type,
           attachment_file_id, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
-          null::text as sender_email, null::text as sender_first_name,
-          null::text as sender_last_name,
+          (select email from app.users where id = app.messages.sender_id) as sender_email,
+          (
+            select first_name from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_first_name,
+          (
+            select last_name from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_last_name,
           (select role from app.users where id = app.messages.sender_id) as sender_role,
+          (
+            select avatar_file_id from app.profiles
+            where user_id = app.messages.sender_id and deleted_at is null
+            limit 1
+          ) as sender_avatar_file_id,
           false as is_read
       `,
       [messageId, content],
@@ -1650,6 +1723,7 @@ export class MessengerService implements OnModuleInit {
           m.pinned_by, m.pinned_at, m.created_at, m.updated_at,
           m.deleted_at, u.email as sender_email, p.first_name as sender_first_name,
           p.last_name as sender_last_name, u.role as sender_role,
+          p.avatar_file_id as sender_avatar_file_id,
           f.original_name as attachment_original_name,
           f.mime_type as attachment_mime_type,
           f.size_bytes as attachment_size_bytes,
@@ -1799,6 +1873,8 @@ export class MessengerService implements OnModuleInit {
             firstName: null,
             lastName: null,
             email: null,
+            role: null,
+            avatarFileId: null,
           }
         : row.sender_id
           ? {
@@ -1806,6 +1882,8 @@ export class MessengerService implements OnModuleInit {
               email: row.sender_email,
               firstName: row.sender_first_name,
               lastName: row.sender_last_name,
+              role: row.sender_role ?? null,
+              avatarFileId: row.sender_avatar_file_id ?? null,
             }
           : null,
       content: row.deleted_at ? null : row.content,

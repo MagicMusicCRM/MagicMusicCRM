@@ -276,6 +276,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         values ($1, $2, $3, $4, true, now())
         on conflict (user_id, token_hash) do update
         set platform = excluded.platform,
+            encrypted_token = excluded.encrypted_token,
             enabled = true,
             last_seen_at = now(),
             updated_at = now()

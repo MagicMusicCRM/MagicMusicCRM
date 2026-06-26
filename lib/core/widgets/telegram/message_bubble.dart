@@ -5,12 +5,15 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
 import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
+import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 
 /// Telegram-style message bubble.
 class MessageBubble extends StatelessWidget {
   final Map<String, dynamic> message;
   final bool isMe;
   final String? senderName;
+  final String? senderRole;
+  final String? senderAvatarUrl;
   final bool showSenderName;
   final bool isGroupChat;
   final Map<String, dynamic>? repliedMessage;
@@ -31,6 +34,8 @@ class MessageBubble extends StatelessWidget {
     required this.message,
     required this.isMe,
     this.senderName,
+    this.senderRole,
+    this.senderAvatarUrl,
     this.showSenderName = false,
     this.isGroupChat = false,
     this.repliedMessage,
@@ -52,6 +57,8 @@ class MessageBubble extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDeleted = message['deleted_at'] != null;
     final isPending = message['_pending'] == true;
+    final maxBubbleWidth = MediaQuery.of(context).size.width * 0.75;
+    final senderLabelMaxWidth = (maxBubbleWidth - 48).clamp(120.0, 360.0);
 
     final messageType = message['message_type']?.toString() ?? 'text';
     final attachmentUrl =
@@ -116,9 +123,7 @@ class MessageBubble extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 400),
             curve: Curves.easeInOut,
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.75,
-            ),
+            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
             padding: isImageFile
                 ? const EdgeInsets.all(3)
                 : const EdgeInsets.fromLTRB(10, 6, 10, 4),
@@ -141,17 +146,58 @@ class MessageBubble extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Sender name
+                  // Sender identity
                   if (showSenderName && senderName != null && !isMe)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Text(
-                        senderName!,
-                        style: TextStyle(
-                          color: senderColor ?? AppColor.gold,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TelegramAvatar(
+                            name: senderName,
+                            avatarUrl: senderAvatarUrl,
+                            uniqueId:
+                                message['sender_id']?.toString() ?? senderName!,
+                            radius: 11,
+                          ),
+                          const SizedBox(width: 6),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: senderLabelMaxWidth,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  senderName!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: senderColor ?? AppColor.gold,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                if (_roleLabel(senderRole) != null)
+                                  Text(
+                                    _roleLabel(senderRole)!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color:
+                                          (isMe
+                                                  ? outgoingTextColor
+                                                  : incomingTextColor)
+                                              .withAlpha(150),
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
 
@@ -412,6 +458,17 @@ class MessageBubble extends StatelessWidget {
         ),
       );
     }).toList();
+  }
+
+  String? _roleLabel(String? role) {
+    return switch (role) {
+      'client' => 'Клиент',
+      'teacher' => 'Преподаватель',
+      'admin' => 'Администратор',
+      'manager' => 'Управляющий',
+      'system_admin' => 'Администратор системы',
+      _ => null,
+    };
   }
 
   void _showContextMenu(BuildContext context) {

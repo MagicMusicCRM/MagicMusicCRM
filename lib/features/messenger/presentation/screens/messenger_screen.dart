@@ -67,6 +67,7 @@ class MessengerScreen extends ConsumerStatefulWidget {
 class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   String? _selectedChatId;
   String? _selectedChatType; // 'direct', 'group', 'channel'
+  String? _selectedChatRawType;
   String? _selectedChatName;
   String? _selectedChatAvatarUrl;
   String? _selectedPartnerId;
@@ -643,6 +644,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               (i) => i['id'] == _selectedChatId,
             );
             _selectedChatName = selectedItem['_display_name'];
+            _selectedChatRawType =
+                selectedItem['raw_type']?.toString() ??
+                selectedItem['_item_type']?.toString();
             _selectedChatAvatarUrl = _getAvatarUrl(selectedItem);
             _selectedPartnerId = selectedItem['_partner_id']?.toString();
           } catch (_) {}
@@ -1089,8 +1093,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       if (payload['reactions'] is List) 'reactions': payload['reactions'],
       'profiles': {
         'id': senderMap['id'],
+        'email': senderMap['email'],
         'first_name': senderMap['firstName'] ?? senderMap['first_name'],
         'last_name': senderMap['lastName'] ?? senderMap['last_name'],
+        'role': senderMap['role'],
+        'avatar_file_id':
+            senderMap['avatarFileId'] ?? senderMap['avatar_file_id'],
       },
     };
   }
@@ -1539,6 +1547,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     String id = (item['id'] ?? '').toString();
     final type = (item['_item_type'] ?? item['item_type'] ?? 'direct')
         .toString();
+    final rawType = (item['raw_type'] ?? type).toString();
 
     // Robust ID resolution:
     // If the ID looks like a user ID (e.g. from profile), try to find an existing chat session first
@@ -1568,6 +1577,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     setState(() {
       _selectedChatId = id;
       _selectedChatType = type;
+      _selectedChatRawType = rawType;
       _selectedChatName = name;
       _selectedChatAvatarUrl = avatarUrl;
       _selectedPartnerId = partnerId;
@@ -1603,6 +1613,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     setState(() {
       _selectedChatId = null;
       _selectedChatType = null;
+      _selectedChatRawType = null;
       _selectedChatName = null;
       _selectedChatAvatarUrl = null;
       _selectedPartnerId = null;
@@ -2856,6 +2867,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       currentUserId: _userId,
                       isGroupChat: isGroup,
                       isChannel: isChannel,
+                      isAdministrationChat:
+                          _selectedChatRawType == 'administration',
                       chatItems: _chatItems,
                       adminIds: _adminIds,
                       role: widget.role,
@@ -3320,6 +3333,7 @@ class _MessageListView extends StatefulWidget {
   final String currentUserId;
   final bool isGroupChat;
   final bool isChannel;
+  final bool isAdministrationChat;
   final List<Map<String, dynamic>> chatItems;
   final List<String> adminIds;
   final String role;
@@ -3339,6 +3353,7 @@ class _MessageListView extends StatefulWidget {
     required this.currentUserId,
     required this.isGroupChat,
     required this.isChannel,
+    required this.isAdministrationChat,
     required this.chatItems,
     required this.adminIds,
     required this.role,
@@ -3509,6 +3524,27 @@ class _MessageListViewState extends State<_MessageListView> {
     return 'Пользователь';
   }
 
+  String? _getSenderRole(Map<String, dynamic> msg) {
+    final profiles = msg['profiles'];
+    if (profiles is Map) return profiles['role']?.toString();
+    return null;
+  }
+
+  String? _getSenderAvatarUrl(Map<String, dynamic> msg) {
+    final profiles = msg['profiles'];
+    if (profiles is Map) {
+      return profiles['avatar_file_id']?.toString() ??
+          profiles['avatar_url']?.toString();
+    }
+    return null;
+  }
+
+  bool get _canSeeAdministrationAuthors {
+    return widget.role == 'admin' ||
+        widget.role == 'manager' ||
+        widget.role == 'system_admin';
+  }
+
   String? _getForwardedName(Map<String, dynamic> msg) {
     if (msg['forwarded_from_id'] == null) return null;
 
@@ -3590,7 +3626,13 @@ class _MessageListViewState extends State<_MessageListView> {
                   message: msg,
                   isMe: isMe,
                   senderName: _getSenderName(msg),
-                  showSenderName: widget.isGroupChat || widget.isChannel,
+                  senderRole: _getSenderRole(msg),
+                  senderAvatarUrl: _getSenderAvatarUrl(msg),
+                  showSenderName:
+                      widget.isGroupChat ||
+                      widget.isChannel ||
+                      (widget.isAdministrationChat &&
+                          _canSeeAdministrationAuthors),
                   isGroupChat: widget.isGroupChat,
                   repliedMessage: repliedMsg,
                   onReply: () => widget.onReply?.call(msg),

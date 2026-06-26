@@ -1387,6 +1387,7 @@ describe("MessengerService", () => {
       sender_first_name: "Анна",
       sender_last_name: "Иванова",
       sender_role: "manager",
+      sender_avatar_file_id: "avatar-staff",
       is_read: true,
     };
     const ownClientMessageRow = {
@@ -1407,6 +1408,7 @@ describe("MessengerService", () => {
       sender_first_name: "Пётр",
       sender_last_name: "Сидоров",
       sender_role: "client",
+      sender_avatar_file_id: "avatar-client",
       is_read: true,
     };
 
@@ -1444,6 +1446,8 @@ describe("MessengerService", () => {
         firstName: null,
         lastName: null,
         email: null,
+        role: null,
+        avatarFileId: null,
       });
     });
 
@@ -1464,6 +1468,8 @@ describe("MessengerService", () => {
           email: "manager@example.com",
           firstName: "Анна",
           lastName: "Иванова",
+          role: "manager",
+          avatarFileId: "avatar-staff",
         }),
       );
     });
