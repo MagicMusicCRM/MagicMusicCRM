@@ -1488,7 +1488,7 @@ describe("MessengerService", () => {
       );
     });
 
-    it("publishes a MASKED message.created to the chat room when STAFF sends in an administration chat", async () => {
+    it("publishes audience-specific message.created when STAFF sends in an administration chat", async () => {
       const staffActor = { userId: "staff-1", role: "manager" as const };
       type MockClient = { query: jest.Mock };
       const client = {
@@ -1524,7 +1524,7 @@ describe("MessengerService", () => {
           transaction: jest.fn(
             async (work: (c: MockClient) => Promise<unknown>) => work(client),
           ) as never,
-          query: jest.fn().mockResolvedValue({ rows: [] }),
+          query: jest.fn().mockResolvedValue({ rows: [{ user_id: "client-owner" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1541,17 +1541,26 @@ describe("MessengerService", () => {
         content: "Готов помочь",
       } as never);
 
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        adminChatId,
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "client-owner",
         "message.created",
         expect.objectContaining({
           senderId: null,
           sender: expect.objectContaining({ id: null, name: "Администрация" }),
         }),
       );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "message.created",
+        expect.objectContaining({ senderId: staffActor.userId }),
+      );
+      expect(realtime.publishChatEvent).not.toHaveBeenCalledWith(
+        adminChatId,
+        "message.created",
+        expect.anything(),
+      );
     });
 
-    it("publishes an UNMASKED message.created when a NON-staff client sends in an administration chat", async () => {
+    it("publishes an UNMASKED message.created to both audiences when a NON-staff client sends in an administration chat", async () => {
       const clientActor = { userId: "client-owner", role: "client" as const };
       type MockClient = { query: jest.Mock };
       const client = {
@@ -1587,7 +1596,7 @@ describe("MessengerService", () => {
           transaction: jest.fn(
             async (work: (c: MockClient) => Promise<unknown>) => work(client),
           ) as never,
-          query: jest.fn().mockResolvedValue({ rows: [] }),
+          query: jest.fn().mockResolvedValue({ rows: [{ user_id: clientActor.userId }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1604,10 +1613,19 @@ describe("MessengerService", () => {
         content: "Здравствуйте",
       } as never);
 
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        adminChatId,
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        clientActor.userId,
         "message.created",
         expect.objectContaining({ senderId: clientActor.userId }),
+      );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "message.created",
+        expect.objectContaining({ senderId: clientActor.userId }),
+      );
+      expect(realtime.publishChatEvent).not.toHaveBeenCalledWith(
+        adminChatId,
+        "message.created",
+        expect.anything(),
       );
     });
   });
@@ -1649,7 +1667,8 @@ describe("MessengerService", () => {
           query: jest
             .fn()
             .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "staff-1" }] })
-            .mockResolvedValueOnce({ rows: [baseUpdatedRow()] }),
+            .mockResolvedValueOnce({ rows: [baseUpdatedRow()] })
+            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1665,10 +1684,14 @@ describe("MessengerService", () => {
 
       await service.pinMessage({ userId: "staff-1", role: "manager" }, "msg-upd");
 
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        adminChatId,
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "client-owner",
         "message.updated",
         expect.objectContaining({ senderId: null }),
+      );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "message.updated",
+        expect.objectContaining({ senderId: "staff-1" }),
       );
     });
 
@@ -1709,7 +1732,8 @@ describe("MessengerService", () => {
             .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "client-owner" }] })
             .mockResolvedValueOnce({
               rows: [baseUpdatedRow({ sender_id: "client-owner", sender_role: "client" })],
-            }),
+            })
+            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1725,8 +1749,12 @@ describe("MessengerService", () => {
 
       await service.pinMessage({ userId: "manager-x", role: "manager" }, "msg-upd");
 
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        adminChatId,
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "client-owner",
+        "message.updated",
+        expect.objectContaining({ senderId: "client-owner" }),
+      );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
         "message.updated",
         expect.objectContaining({ senderId: "client-owner" }),
       );
@@ -1742,7 +1770,8 @@ describe("MessengerService", () => {
             .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "staff-1" }] })
             .mockResolvedValueOnce({
               rows: [baseUpdatedRow({ content: null, deleted_at: new Date("2026-06-25T10:05:00Z") })],
-            }),
+            })
+            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1758,10 +1787,14 @@ describe("MessengerService", () => {
 
       await service.deleteMessage({ userId: "manager-x", role: "manager" }, "msg-upd", {} as never);
 
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        adminChatId,
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "client-owner",
         "message.updated",
         expect.objectContaining({ senderId: null }),
+      );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "message.updated",
+        expect.objectContaining({ senderId: "staff-1" }),
       );
     });
 
@@ -1805,7 +1838,8 @@ describe("MessengerService", () => {
           query: jest
             .fn()
             .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "staff-1" }] })
-            .mockResolvedValueOnce({ rows: [baseUpdatedRow({ pinned_by: null, pinned_at: null })] }),
+            .mockResolvedValueOnce({ rows: [baseUpdatedRow({ pinned_by: null, pinned_at: null })] })
+            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1821,10 +1855,14 @@ describe("MessengerService", () => {
 
       await service.unpinMessage({ userId: "staff-1", role: "manager" }, "msg-upd");
 
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        adminChatId,
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "client-owner",
         "message.updated",
         expect.objectContaining({ senderId: null }),
+      );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "message.updated",
+        expect.objectContaining({ senderId: "staff-1" }),
       );
     });
 
@@ -1840,7 +1878,8 @@ describe("MessengerService", () => {
             .mockResolvedValueOnce({
               rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "staff-1", deleted_at: null, message_type: "text", attachment_file_id: null }],
             })
-            .mockResolvedValueOnce({ rows: [baseUpdatedRow({ content: "Обновлено" })] }),
+            .mockResolvedValueOnce({ rows: [baseUpdatedRow({ content: "Обновлено" })] })
+            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1859,10 +1898,14 @@ describe("MessengerService", () => {
         { content: "Обновлено" } as never,
       );
 
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        adminChatId,
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "client-owner",
         "message.updated",
         expect.objectContaining({ senderId: null }),
+      );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "message.updated",
+        expect.objectContaining({ senderId: "staff-1" }),
       );
     });
 
@@ -1878,7 +1921,8 @@ describe("MessengerService", () => {
             .mockResolvedValueOnce({ rowCount: 1, rows: [] })
             .mockResolvedValueOnce({
               rows: [baseUpdatedRow({ id: "msg-read", is_read: true })],
-            }),
+            })
+            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1895,10 +1939,14 @@ describe("MessengerService", () => {
         lastReadMessageId: "msg-read",
       } as never);
 
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        adminChatId,
+      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+        "client-owner",
         "message.updated",
         expect.objectContaining({ id: "msg-read", senderId: null }),
+      );
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "message.updated",
+        expect.objectContaining({ id: "msg-read", senderId: "staff-1" }),
       );
     });
 

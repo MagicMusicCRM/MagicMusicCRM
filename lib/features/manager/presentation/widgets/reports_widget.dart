@@ -179,6 +179,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
       if (event == null || !mounted) return;
+      if (event.isFallbackPoll) return;
       if (event.entity != 'payment' &&
           event.entity != 'lesson' &&
           event.entity != 'expense') {

@@ -2244,6 +2244,43 @@ describe("CrmService", () => {
     ]);
   });
 
+  it("allows a client to list subscriptions for a manually linked student", async () => {
+    const { service, query } = createService([
+      {
+        id: "sub-linked",
+        student_id: "student-linked",
+        student_user_id: null,
+        lessons_total: 12,
+        lessons_used: 0,
+        starts_at: "2026-06-22",
+        expires_at: "2026-08-22",
+        status: "active",
+        created_at: "2026-06-22T00:00:00.000Z",
+        updated_at: "2026-06-22T00:00:00.000Z",
+      },
+    ]);
+
+    await expect(
+      service.listSubscriptions(
+        { userId: "client-linked", role: "client" },
+        { studentId: "student-linked", limit: 1 },
+      ),
+    ).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          id: "sub-linked",
+          studentId: "student-linked",
+          lessonsTotal: 12,
+        }),
+      ],
+    });
+
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("app.user_crm_links");
+    expect(sql).toContain("link.user_id = $2");
+    expect(sql).toContain("link.entity_type = 'student'");
+  });
+
   it("lists payments with date filters and student summary", async () => {
     const { service, query } = createService([
       {
@@ -2293,6 +2330,55 @@ describe("CrmService", () => {
       "2026-07-01T00:00:00.000Z",
       10,
     ]);
+  });
+
+  it("allows a client to list payments for a manually linked student", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "payment-linked",
+            student_id: "student-linked",
+            student_user_id: null,
+            student_first_name: "Анна",
+            student_last_name: "Связанная",
+            amount: "9000.00",
+            currency: "RUB",
+            payment_date: "2026-06-22T12:00:00.000Z",
+            method: "subscription",
+            external_id: null,
+            notes: "Покупка абонемента",
+            created_by: "manager-a",
+            created_at: "2026-06-22T12:00:00.000Z",
+          },
+        ],
+      },
+      { rows: [{ total_amount: "9000", total_count: "1" }] },
+    ]);
+
+    await expect(
+      service.listPayments(
+        { userId: "client-linked", role: "client" },
+        { studentId: "student-linked", limit: 10 },
+      ),
+    ).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          id: "payment-linked",
+          studentId: "student-linked",
+          amount: 9000,
+        }),
+      ],
+      totalAmount: 9000,
+      totalCount: 1,
+    });
+
+    for (const call of query.mock.calls.slice(0, 2)) {
+      const sql = String(call[0]);
+      expect(sql).toContain("app.user_crm_links");
+      expect(sql).toContain("link.user_id = $2");
+      expect(sql).toContain("link.entity_type = 'student'");
+    }
   });
 
   it("lists computed student balances for CRM writers", async () => {
@@ -4490,10 +4576,11 @@ describe("CrmService", () => {
           },
         ],
       },
-      { rows: [] }, // 3) listLessons
-      { rows: [] }, // 4) listTasks
-      { rows: [] }, // 5) listPayments items
-      { rows: [{ total_amount: "0", total_count: "0" }] }, // 6) listPayments total
+      { rows: [] }, // 3) manually linked students
+      { rows: [] }, // 4) listLessons
+      { rows: [] }, // 5) listTasks
+      { rows: [] }, // 6) listPayments items
+      { rows: [{ total_amount: "0", total_count: "0" }] }, // 7) listPayments total
     ]);
 
     const result = await service.getMySummary(clientActor);
@@ -4516,6 +4603,89 @@ describe("CrmService", () => {
     expect(familyQuery).toContain("'parent', 'payer'");
     expect(familyQuery).toContain("child_m.entity_type = 'student'");
     expect(query.mock.calls[1][1]).toEqual(["parent-user-a"]);
+  });
+
+  it("getMySummary includes manually linked students", async () => {
+    const clientActor = { userId: "client-linked", role: "client" as const };
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // 1) own students
+      { rows: [] }, // 2) family-linked students
+      {
+        rows: [
+          {
+            id: "student-linked",
+            lead_id: null,
+            status: "active",
+            custom_data: null,
+            profile_id: "profile-student",
+            profile_user_id: null,
+            first_name: "Анна",
+            last_name: "Связанная",
+            email: null,
+            phone: "+79990000001",
+            teacher_user_ids: [],
+            created_at: "2026-06-22T00:00:00.000Z",
+          },
+        ],
+      },
+      { rows: [] }, // 4) listLessons
+      { rows: [] }, // 5) listTasks
+      { rows: [] }, // 6) listPayments items
+      { rows: [{ total_amount: "0", total_count: "0" }] }, // 7) listPayments total
+    ]);
+
+    const result = await service.getMySummary(clientActor);
+
+    expect(result.students.map((s) => s.id)).toEqual(["student-linked"]);
+    const linkedQuery = String(query.mock.calls[2][0]);
+    expect(linkedQuery).toContain("app.user_crm_links");
+    expect(linkedQuery).toContain("link.user_id = $1");
+    expect(linkedQuery).toContain("link.entity_type = 'student'");
+    expect(query.mock.calls[2][1]).toEqual(["client-linked"]);
+  });
+
+  it("getMySummary still returns students when optional summary sections are forbidden", async () => {
+    const clientActor = { userId: "client-a", role: "client" as const };
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "student-a",
+            lead_id: null,
+            status: "active",
+            custom_data: null,
+            profile_id: "profile-a",
+            profile_user_id: "client-a",
+            first_name: "Анна",
+            last_name: "Клиент",
+            email: null,
+            phone: null,
+            teacher_user_ids: [],
+            created_at: "2026-06-22T00:00:00.000Z",
+          },
+        ],
+      },
+      { rows: [] }, // family-linked students
+      { rows: [] }, // manually linked students
+    ]);
+    jest.spyOn(service, "listLessons").mockResolvedValue({ items: [] } as never);
+    jest.spyOn(service, "listTasks").mockRejectedValue(
+      new ForbiddenException("Недостаточно прав для просмотра справочников CRM."),
+    );
+    jest.spyOn(service, "listPayments").mockResolvedValue({
+      items: [],
+      totalAmount: 0,
+      totalCount: 0,
+    } as never);
+
+    await expect(service.getMySummary(clientActor)).resolves.toEqual(
+      expect.objectContaining({
+        students: [expect.objectContaining({ id: "student-a" })],
+        upcomingLessons: [],
+        tasks: [],
+        recentPayments: [],
+      }),
+    );
   });
 
   const createMergeService = (results: { rows: Record<string, unknown>[] }[]) => {

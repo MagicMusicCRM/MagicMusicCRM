@@ -57,6 +57,51 @@ const noteRow = {
   author_last_name: "Петрова",
 };
 
+describe("ProfileService profile list performance", () => {
+  it("lists profiles with batched link counts and indexed normalized phone", async () => {
+    const { service, database, policy } = createService({
+      database: {
+        query: jest.fn().mockResolvedValueOnce({
+          rows: [
+            {
+              ...profileRow,
+              is_app_account: true,
+              phone_verified_at: null,
+              linked_students_count: "2",
+              linked_leads_count: "1",
+              linked_teachers_count: "0",
+              linked_staff_count: "0",
+              candidate_students_count: "1",
+              candidate_leads_count: "0",
+              candidate_teachers_count: "0",
+              candidate_staff_count: "0",
+              total: "1",
+            },
+          ],
+        }),
+      },
+    });
+
+    await expect(service.listProfiles(actor, { limit: 20 })).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          id: "profile-a",
+          linkedStudents: 2,
+          candidateStudents: 1,
+        }),
+      ],
+      total: 1,
+    });
+
+    const sql = String((database.query as jest.Mock).mock.calls[0][0]);
+    expect(policy.assertCanListProfiles).toHaveBeenCalledWith(actor);
+    expect(sql).toContain("limited_profiles");
+    expect(sql).toContain("p.phone_normalized as normalized_phone");
+    expect(sql).toContain("linked_students_count");
+    expect(sql).not.toContain("regexp_replace");
+  });
+});
+
 describe("ProfileService profile notes", () => {
   it("lists profile notes for manager/admin actors", async () => {
     const { service, database, policy } = createService({

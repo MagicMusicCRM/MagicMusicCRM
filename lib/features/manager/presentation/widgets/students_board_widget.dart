@@ -401,6 +401,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
       if (event == null || event.entity != 'student' || !mounted) return;
+      if (event.isFallbackPoll) return;
       // Don't refetch while an optimistic move is in flight — a mid-flight
       // reload would clobber the in-place patch (the move refetches on completion).
       if (_pendingStudentIds.isNotEmpty) return;

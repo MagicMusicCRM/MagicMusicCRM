@@ -10,7 +10,11 @@ describe('MigrationRunner', () => {
     await fs.writeFile(path.join(dir, '0001_tx.down.sql'), 'drop table t;');
     await fs.writeFile(
       path.join(dir, '0002_idx.up.sql'),
-      '-- migrate:no-transaction\ncreate index concurrently if not exists t_id_idx on t (id);'
+      [
+        '-- migrate:no-transaction',
+        'create index concurrently if not exists t_id_idx on t (id);',
+        'create index concurrently if not exists t_id_idx_2 on t (id);'
+      ].join('\n')
     );
     await fs.writeFile(
       path.join(dir, '0002_idx.down.sql'),
@@ -33,11 +37,12 @@ describe('MigrationRunner', () => {
 
       const idx = calls.findIndex((c) => /create index concurrently/i.test(c));
       expect(idx).toBeGreaterThan(-1);
+      expect(calls.filter((c) => /create index concurrently/i.test(c))).toHaveLength(2);
       // The CONCURRENTLY statement must NOT be wrapped: the call right before it
       // is not "begin".
       expect(calls[idx - 1]).not.toMatch(/^begin$/i);
       // ...and there is no "commit" right after it either (autocommit path).
-      expect(calls[idx + 1]).toMatch(/insert into app_schema_migrations/i);
+      expect(calls[idx + 2]).toMatch(/insert into app_schema_migrations/i);
       // The normal migration WAS wrapped in a transaction.
       expect(calls.some((c) => /^begin$/i.test(c))).toBe(true);
       expect(calls.some((c) => /^commit$/i.test(c))).toBe(true);

@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="launch_background">#F7F3EA</color>
-    <color name="launch_gold">#C5A059</color>
+    <color name="launch_background">#101114</color>
 </resources>

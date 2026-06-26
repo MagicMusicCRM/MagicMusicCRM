@@ -2,16 +2,4 @@
 <!-- Modify this file to customize your launch splash screen -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/launch_background" />
-    <item android:gravity="center">
-        <shape android:shape="oval">
-            <size android:width="96dp" android:height="96dp" />
-            <solid android:color="#C5A059" />
-        </shape>
-    </item>
-    <item android:gravity="center">
-        <shape android:shape="oval">
-            <size android:width="42dp" android:height="42dp" />
-            <solid android:color="@color/launch_background" />
-        </shape>
-    </item>
 </layer-list>

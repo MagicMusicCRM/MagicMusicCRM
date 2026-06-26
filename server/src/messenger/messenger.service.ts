@@ -481,15 +481,19 @@ export class MessengerService implements OnModuleInit {
     });
 
     const payload = this.toMessageDto(message);
-    // Privacy: in an administration chat the client (a member of the chat room)
-    // must never receive staff identity on the wire. When the author is staff,
-    // publish the MASKED DTO to the chat room. Non-staff (the client) is
-    // published unmasked so staff see the real client identity in realtime.
-    const roomPayload =
+    // Privacy: administration chat audiences need different sender views.
+    // Clients receive masked staff authors; staff receive the real author.
+    const maskedPayload =
       chat.type === "administration" && isStaffRole(actor.role)
         ? this.toMessageDto(message, { maskStaffSender: true })
         : payload;
-    this.realtime.publishChatEvent(chatId, "message.created", roomPayload);
+    await this.publishMessageEventForAudience(
+      chat,
+      chatId,
+      "message.created",
+      payload,
+      maskedPayload,
+    );
     await this.fanoutChatListUpdate(chat, chatId, payload, {
       maskStaffSenderForMembers:
         chat.type === "administration" && isStaffRole(actor.role),
@@ -782,14 +786,18 @@ export class MessengerService implements OnModuleInit {
     for (const message of readUpdates) {
       // Privacy: in an administration chat the client must never receive a
       // staff author's real identity. Mask when the message author is staff.
-      this.realtime.publishChatEvent(
+      const payload = this.toMessageDto(message);
+      const maskedPayload = this.toMessageDto(message, {
+        maskStaffSender:
+          chat.type === "administration" &&
+          isStaffRole((message.sender_role ?? "") as never),
+      });
+      await this.publishMessageEventForAudience(
+        chat,
         chatId,
         "message.updated",
-        this.toMessageDto(message, {
-          maskStaffSender:
-            chat.type === "administration" &&
-            isStaffRole((message.sender_role ?? "") as never),
-        }),
+        payload,
+        maskedPayload,
       );
     }
     return { success: true };
@@ -1007,12 +1015,19 @@ export class MessengerService implements OnModuleInit {
       [messageId, actor.userId],
     );
     const row = result.rows[0];
-    const payload = this.toMessageDto(row, {
+    const payload = this.toMessageDto(row);
+    const maskedPayload = this.toMessageDto(row, {
       maskStaffSender:
         chat.type === "administration" &&
         isStaffRole((row?.sender_role ?? "") as never),
     });
-    this.realtime.publishChatEvent(message.chat_id, "message.updated", payload);
+    await this.publishMessageEventForAudience(
+      chat,
+      message.chat_id,
+      "message.updated",
+      payload,
+      maskedPayload,
+    );
     return payload;
   }
 
@@ -1036,12 +1051,19 @@ export class MessengerService implements OnModuleInit {
       [messageId],
     );
     const row = result.rows[0];
-    const payload = this.toMessageDto(row, {
+    const payload = this.toMessageDto(row);
+    const maskedPayload = this.toMessageDto(row, {
       maskStaffSender:
         chat.type === "administration" &&
         isStaffRole((row?.sender_role ?? "") as never),
     });
-    this.realtime.publishChatEvent(message.chat_id, "message.updated", payload);
+    await this.publishMessageEventForAudience(
+      chat,
+      message.chat_id,
+      "message.updated",
+      payload,
+      maskedPayload,
+    );
     return payload;
   }
 
@@ -1072,7 +1094,8 @@ export class MessengerService implements OnModuleInit {
       [messageId, mode],
     );
     const row = result.rows[0];
-    const payload = this.toMessageDto(row, {
+    const payload = this.toMessageDto(row);
+    const maskedPayload = this.toMessageDto(row, {
       maskStaffSender:
         chat.type === "administration" &&
         isStaffRole((row?.sender_role ?? "") as never),
@@ -1084,7 +1107,13 @@ export class MessengerService implements OnModuleInit {
       entityId: messageId,
       metadata: { mode },
     });
-    this.realtime.publishChatEvent(message.chat_id, "message.updated", payload);
+    await this.publishMessageEventForAudience(
+      chat,
+      message.chat_id,
+      "message.updated",
+      payload,
+      maskedPayload,
+    );
     return payload;
   }
 
@@ -1132,7 +1161,8 @@ export class MessengerService implements OnModuleInit {
       [messageId, content],
     );
     const row = result.rows[0];
-    const payload = this.toMessageDto(row, {
+    const payload = this.toMessageDto(row);
+    const maskedPayload = this.toMessageDto(row, {
       maskStaffSender:
         chat.type === "administration" &&
         isStaffRole((row?.sender_role ?? "") as never),
@@ -1143,7 +1173,13 @@ export class MessengerService implements OnModuleInit {
       entityType: "message",
       entityId: messageId,
     });
-    this.realtime.publishChatEvent(message.chat_id, "message.updated", payload);
+    await this.publishMessageEventForAudience(
+      chat,
+      message.chat_id,
+      "message.updated",
+      payload,
+      maskedPayload,
+    );
     return payload;
   }
 
@@ -1370,7 +1406,10 @@ export class MessengerService implements OnModuleInit {
       const memberPreview = opts?.maskStaffSenderForMembers
         ? { ...preview, senderId: null }
         : preview;
-      const memberIds = await this.getChatMemberUserIds(chatId);
+      const memberIds =
+        chat.type === "administration"
+          ? await this.getAdministrationNonStaffMemberUserIds(chatId)
+          : await this.getChatMemberUserIds(chatId);
       for (const userId of memberIds) {
         this.realtime.publishUserEvent(userId, "chat.updated", memberPreview);
       }
@@ -1382,9 +1421,55 @@ export class MessengerService implements OnModuleInit {
     }
   }
 
+  /**
+   * Administration chats intentionally have two realtime views over the same
+   * message: clients see staff as "Администрация", staff see the real author.
+   * Do not publish sender-sensitive payloads to the shared chat room for this
+   * chat type, or both audiences will receive conflicting versions.
+   */
+  private async publishMessageEventForAudience(
+    chat: { type: string },
+    chatId: string,
+    event: "message.created" | "message.updated",
+    staffPayload: unknown,
+    memberPayload: unknown = staffPayload,
+  ): Promise<void> {
+    if (chat.type !== "administration") {
+      this.realtime.publishChatEvent(chatId, event, staffPayload);
+      return;
+    }
+
+    try {
+      const memberIds = await this.getAdministrationNonStaffMemberUserIds(chatId);
+      for (const userId of memberIds) {
+        this.realtime.publishUserEvent(userId, event, memberPayload);
+      }
+      this.realtime.publishAdminInboxEvent(event, staffPayload);
+    } catch (err) {
+      this.logger.warn(`publishMessageEventForAudience failed: ${String(err)}`);
+    }
+  }
+
   private async getChatMemberUserIds(chatId: string): Promise<string[]> {
     const result = await this.database.query<{ user_id: string }>(
       `select user_id from app.chat_members where chat_id = $1 and left_at is null`,
+      [chatId],
+    );
+    return (result?.rows ?? []).map((row) => row.user_id);
+  }
+
+  private async getAdministrationNonStaffMemberUserIds(
+    chatId: string,
+  ): Promise<string[]> {
+    const result = await this.database.query<{ user_id: string }>(
+      `
+        select cm.user_id
+        from app.chat_members cm
+        join app.users u on u.id = cm.user_id and u.deleted_at is null
+        where cm.chat_id = $1
+          and cm.left_at is null
+          and u.role not in ('admin', 'manager', 'system_admin')
+      `,
       [chatId],
     );
     return (result?.rows ?? []).map((row) => row.user_id);

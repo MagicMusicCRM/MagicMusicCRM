@@ -380,6 +380,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
       if (event == null || !mounted) return;
+      if (event.isFallbackPoll) return;
       if (event.entity != 'payment' && event.entity != 'expense') return;
       // Skip while a load or an add (payment/expense) is in flight — those
       // refetch themselves on completion.

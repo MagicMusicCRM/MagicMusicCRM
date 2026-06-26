@@ -1131,6 +1131,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
       if (event == null || event.entity != 'lead' || !mounted) return;
+      if (event.isFallbackPoll) return;
       _refreshBoard();
     });
     final boardAsync = ref.watch(leadBoardProvider(_filters));

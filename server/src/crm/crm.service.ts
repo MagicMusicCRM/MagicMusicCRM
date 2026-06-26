@@ -529,22 +529,36 @@ export class CrmService {
     const ownStudents = await this.listClientStudents(actor.userId);
     // KVA-156: a parent/payer account also sees children linked via Families.
     const familyStudents = await this.listFamilyLinkedStudents(actor.userId);
-    // Union own + family-linked students; dedup by student id (own wins).
+    // Manual app-account links are the CRM source of truth for imported/existing
+    // students whose profile owner is not the signed-in app user.
+    const linkedStudents = await this.listManuallyLinkedStudents(actor.userId);
+    // Union own + family/manual-linked students; dedup by student id (own wins).
     const byId = new Map<string, StudentRow>();
     for (const row of ownStudents) byId.set(row.id, row);
     for (const row of familyStudents) {
       if (!byId.has(row.id)) byId.set(row.id, row);
     }
+    for (const row of linkedStudents) {
+      if (!byId.has(row.id)) byId.set(row.id, row);
+    }
     const students = Array.from(byId.values());
-    const lessons = await this.listLessons(actor, { limit: 20 });
-    const tasks = await this.listTasks(actor, { limit: 20 });
-    const payments = await this.listPayments(actor, { limit: 20 });
+    const studentIds = students.map((student) => student.id);
+    let lessons: LessonRow[] = [];
+    let tasks: TaskRow[] = [];
+    let payments: PaymentRow[] = [];
+    if (studentIds.length) {
+      [lessons, tasks, payments] = await Promise.all([
+        this.listClientSummaryLessons(studentIds).catch(() => []),
+        this.listClientSummaryTasks(studentIds).catch(() => []),
+        this.listClientSummaryPayments(studentIds).catch(() => []),
+      ]);
+    }
 
     return {
       students: students.map((row) => this.toStudentDto(row)),
-      upcomingLessons: lessons.items,
-      tasks: tasks.items,
-      recentPayments: payments.items,
+      upcomingLessons: lessons.map((row) => this.toLessonDto(row)),
+      tasks: tasks.map((row) => this.toTaskDto(row)),
+      recentPayments: payments.map((row) => this.toPaymentDto(row)),
     };
   }
 
@@ -2337,13 +2351,15 @@ export class CrmService {
           order by b.name nulls last, r.name asc, r.id asc
           limit $8
         ),
-        lesson_rows as (
+        bounded_lessons as (
           select l.id, l.room_id, l.teacher_id, l.branch_id, l.scheduled_at,
             l.duration_minutes, l.status, l.is_trial,
             trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
             trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
-            g.name as group_name
+            g.name as group_name,
+            l.group_id
           from app.lessons l
+          join room_rows rr on rr.room_id = l.room_id
           left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
           left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
           left join app.students s on s.id = l.student_id and s.deleted_at is null
@@ -2351,36 +2367,49 @@ export class CrmService {
           left join app.groups g on g.id = l.group_id and g.deleted_at is null
           where l.deleted_at is null
             and l.room_id is not null
-            and l.scheduled_at >= $3::timestamptz
+            and l.scheduled_at + l.duration_minutes * interval '1 minute' > $3::timestamptz
             and l.scheduled_at < $4::timestamptz
+        ),
+        slot_lessons as (
+          select *
+          from bounded_lessons
+          where status <> 'cancelled'
+            and scheduled_at < $6::timestamptz
+            and scheduled_at + duration_minutes * interval '1 minute' > $5::timestamptz
+        ),
+        room_overlap_conflicts as (
+          select distinct a.room_id
+          from slot_lessons a
+          join slot_lessons b
+            on b.room_id = a.room_id
+           and b.id <> a.id
+           and (a.group_id is null or b.group_id is null or a.group_id <> b.group_id)
+           and b.scheduled_at < a.scheduled_at + a.duration_minutes * interval '1 minute'
+           and b.scheduled_at + b.duration_minutes * interval '1 minute' > a.scheduled_at
         )
         select rr.room_id, rr.branch_id, rr.branch_name, rr.room_name,
           rr.capacity,
           coalesce(
             jsonb_agg(
               jsonb_build_object(
-                'id', lr.id,
-                'teacherId', lr.teacher_id,
-                'teacherName', nullif(lr.teacher_name, ''),
-                'studentName', nullif(lr.student_name, ''),
-                'groupName', lr.group_name,
-                'scheduledAt', lr.scheduled_at,
-                'durationMinutes', lr.duration_minutes,
-                'status', lr.status,
-                'isTrial', lr.is_trial
+                'id', bl.id,
+                'teacherId', bl.teacher_id,
+                'teacherName', nullif(bl.teacher_name, ''),
+                'studentName', nullif(bl.student_name, ''),
+                'groupName', bl.group_name,
+                'scheduledAt', bl.scheduled_at,
+                'durationMinutes', bl.duration_minutes,
+                'status', bl.status,
+                'isTrial', bl.is_trial
               )
-              order by lr.scheduled_at asc, lr.id asc
-            ) filter (where lr.id is not null),
+              order by bl.scheduled_at asc, bl.id asc
+            ) filter (where bl.id is not null),
             '[]'::jsonb
           ) as lessons,
           not exists (
             select 1
-            from app.lessons overlap_lesson
-            where overlap_lesson.deleted_at is null
-              and overlap_lesson.status <> 'cancelled'
-              and overlap_lesson.room_id = rr.room_id
-              and overlap_lesson.scheduled_at < $6::timestamptz
-              and overlap_lesson.scheduled_at + overlap_lesson.duration_minutes * interval '1 minute' > $5::timestamptz
+            from slot_lessons overlap_lesson
+            where overlap_lesson.room_id = rr.room_id
           ) as is_available,
           array_remove(array[
             -- room_overlap = TWO lessons actually overlapping each other in the
@@ -2388,34 +2417,17 @@ export class CrmService {
             -- the queried window (which a whole-day window would always be).
             case when exists (
               select 1
-              from app.lessons a
-              join app.lessons b
-                on b.room_id = a.room_id
-                and b.id <> a.id
-                and b.deleted_at is null
-                and b.status <> 'cancelled'
-                and (a.group_id is null or b.group_id is null
-                     or a.group_id <> b.group_id)
-                and b.scheduled_at < a.scheduled_at + a.duration_minutes * interval '1 minute'
-                and b.scheduled_at + b.duration_minutes * interval '1 minute' > a.scheduled_at
-              where a.room_id = rr.room_id
-                and a.deleted_at is null
-                and a.status <> 'cancelled'
-                and a.scheduled_at < $6::timestamptz
-                and a.scheduled_at + a.duration_minutes * interval '1 minute' > $5::timestamptz
+              from room_overlap_conflicts roc
+              where roc.room_id = rr.room_id
             ) then 'room_overlap' end,
             case when $7::uuid is not null and exists (
               select 1
-              from app.lessons teacher_lesson
-              where teacher_lesson.deleted_at is null
-                and teacher_lesson.status <> 'cancelled'
-                and teacher_lesson.teacher_id = $7
-                and teacher_lesson.scheduled_at < $6::timestamptz
-                and teacher_lesson.scheduled_at + teacher_lesson.duration_minutes * interval '1 minute' > $5::timestamptz
+              from slot_lessons teacher_lesson
+              where teacher_lesson.teacher_id = $7
             ) then 'teacher_overlap' end
           ], null) as conflict_types
         from room_rows rr
-        left join lesson_rows lr on lr.room_id = rr.room_id
+        left join bounded_lessons bl on bl.room_id = rr.room_id
         group by rr.room_id, rr.branch_id, rr.branch_name, rr.room_name, rr.capacity
         order by rr.branch_name nulls last, rr.room_name asc, rr.room_id asc
       `,
@@ -4301,6 +4313,17 @@ export class CrmService {
           and (
             $1::text in ('manager', 'admin', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
+            or (
+              $1::text = 'client'
+              and exists (
+                select 1
+                from app.user_crm_links link
+                where link.entity_type = 'student'
+                  and link.entity_id = s.id
+                  and link.user_id = $2
+                  and link.deleted_at is null
+              )
+            )
           )
         order by pay.payment_date desc, pay.id desc
         limit $6
@@ -4333,6 +4356,17 @@ export class CrmService {
           and (
             $1::text in ('manager', 'admin', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
+            or (
+              $1::text = 'client'
+              and exists (
+                select 1
+                from app.user_crm_links link
+                where link.entity_type = 'student'
+                  and link.entity_id = s.id
+                  and link.user_id = $2
+                  and link.deleted_at is null
+              )
+            )
           )
       `,
       [
@@ -4468,6 +4502,17 @@ export class CrmService {
           and (
             $1::text in ('manager', 'admin', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
+            or (
+              $1::text = 'client'
+              and exists (
+                select 1
+                from app.user_crm_links link
+                where link.entity_type = 'student'
+                  and link.entity_id = s.id
+                  and link.user_id = $2
+                  and link.deleted_at is null
+              )
+            )
           )
         order by sub.expires_at desc nulls last, sub.created_at desc, sub.id desc
         limit $4
@@ -6519,6 +6564,106 @@ export class CrmService {
     return (result?.rows ?? []).map((row) => this.toTimelineDto(row));
   }
 
+  private async listClientSummaryLessons(
+    studentIds: string[],
+  ): Promise<LessonRow[]> {
+    const result = await this.database.query<LessonRow>(
+      `
+        select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
+          l.duration_minutes, l.status, l.is_trial, l.notes,
+          sp.user_id as student_user_id, tp.user_id as teacher_user_id,
+          trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
+          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
+          b.name as branch_name,
+          r.name as room_name,
+          g.name as group_name,
+          g.price_per_lesson as group_price_per_lesson
+        from app.lessons l
+        left join app.students s on s.id = l.student_id and s.deleted_at is null
+        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        left join app.branches b on b.id = l.branch_id and b.deleted_at is null
+        left join app.rooms r on r.id = l.room_id and r.deleted_at is null
+        left join app.groups g on g.id = l.group_id and g.deleted_at is null
+        where l.deleted_at is null
+          and l.scheduled_at >= now()
+          and (
+            l.student_id = any($1::uuid[])
+            or exists (
+              select 1
+              from app.group_students gs
+              where gs.group_id = l.group_id
+                and gs.student_id = any($1::uuid[])
+                and gs.left_at is null
+            )
+          )
+        order by l.scheduled_at asc, l.id asc
+        limit 20
+      `,
+      [studentIds],
+    );
+    return result?.rows ?? [];
+  }
+
+  private async listClientSummaryTasks(
+    studentIds: string[],
+  ): Promise<TaskRow[]> {
+    const result = await this.database.query<TaskRow>(
+      `
+        select task.id, task.entity_type, task.entity_id, task.assigned_to,
+          assigned_profile.first_name as assigned_first_name,
+          assigned_profile.last_name as assigned_last_name,
+          assigned_profile.id as assigned_profile_id,
+          creator_profile.first_name as creator_first_name,
+          creator_profile.last_name as creator_last_name,
+          creator_profile.id as creator_profile_id,
+          student_profile.first_name as entity_first_name,
+          student_profile.last_name as entity_last_name,
+          null::text as entity_name,
+          task.title, task.description, task.status, task.due_at,
+          task.created_by, task.created_at
+        from app.tasks task
+        left join app.users assigned_user on assigned_user.id = task.assigned_to and assigned_user.deleted_at is null
+        left join app.profiles assigned_profile on assigned_profile.user_id = assigned_user.id and assigned_profile.deleted_at is null
+        left join app.users creator_user on creator_user.id = task.created_by and creator_user.deleted_at is null
+        left join app.profiles creator_profile on creator_profile.user_id = creator_user.id and creator_profile.deleted_at is null
+        left join app.students student on student.id = task.entity_id and student.deleted_at is null
+        left join app.profiles student_profile on student_profile.id = student.profile_id and student_profile.deleted_at is null
+        where task.deleted_at is null
+          and task.entity_type = 'student'
+          and task.entity_id = any($1::uuid[])
+          and task.status not in ('done', 'completed', 'cancelled')
+        order by task.due_at nulls last, task.created_at desc, task.id desc
+        limit 20
+      `,
+      [studentIds],
+    );
+    return result?.rows ?? [];
+  }
+
+  private async listClientSummaryPayments(
+    studentIds: string[],
+  ): Promise<PaymentRow[]> {
+    const result = await this.database.query<PaymentRow>(
+      `
+        select pay.id, pay.student_id, p.user_id as student_user_id,
+          p.first_name as student_first_name, p.last_name as student_last_name,
+          pay.amount, pay.currency, pay.payment_date, pay.method,
+          pay.external_id, pay.notes, pay.created_by, pay.created_at
+        from app.payments pay
+        join app.students s on s.id = pay.student_id and s.deleted_at is null
+        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+        where pay.deleted_at is null
+          and pay.student_id = any($1::uuid[])
+        order by pay.payment_date desc, pay.id desc
+        limit 20
+      `,
+      [studentIds],
+    );
+    return result?.rows ?? [];
+  }
+
   private async listClientStudents(userId: string): Promise<StudentRow[]> {
     const result = await this.database.query<StudentRow>(
       `
@@ -6570,6 +6715,29 @@ export class CrmService {
         join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
         where acct.user_id = $1 and acct.deleted_at is null
+        order by s.created_at desc
+      `,
+      [userId],
+    );
+    return result.rows;
+  }
+
+  private async listManuallyLinkedStudents(
+    userId: string,
+  ): Promise<StudentRow[]> {
+    const result = await this.database.query<StudentRow>(
+      `
+        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          '{}'::uuid[] as teacher_user_ids
+        from app.user_crm_links link
+        join app.students s
+          on s.id = link.entity_id and s.deleted_at is null
+        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+        left join app.users u on u.id = p.user_id and u.deleted_at is null
+        where link.user_id = $1
+          and link.entity_type = 'student'
+          and link.deleted_at is null
         order by s.created_at desc
       `,
       [userId],

@@ -80,11 +80,16 @@ class SubscriptionStatusCard extends ConsumerWidget {
             ? remainingNum.toInt()
             : remainingNum;
         final endDateStr = subscription['valid_until'] as String?;
-        if (endDateStr == null) return const SizedBox.shrink();
-        final endDate = DateTime.parse(endDateStr).toLocal();
-        final daysLeft = endDate.difference(DateTime.now()).inDays;
+        final endDate = endDateStr == null
+            ? null
+            : DateTime.parse(endDateStr).toLocal();
+        final daysLeft = endDate?.difference(DateTime.now()).inDays;
+        final validityText = endDate == null
+            ? 'Действует: бессрочно'
+            : 'Действует до: ${DateFormat('d MMMM yyyy', 'ru').format(endDate)}';
 
-        bool isExpiringSoon = daysLeft <= 7 || remainingClasses <= 2;
+        bool isExpiringSoon =
+            (daysLeft != null && daysLeft <= 7) || remainingClasses <= 2;
 
         return Card(
           margin: const EdgeInsets.all(16.0),
@@ -139,7 +144,7 @@ class SubscriptionStatusCard extends ConsumerWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Действует до: ${DateFormat('d MMMM yyyy', 'ru').format(endDate)}',
+                      validityText,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),

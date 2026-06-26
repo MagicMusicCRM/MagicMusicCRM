@@ -74,9 +74,15 @@ void main() {
       expect(smoke, isNot(contains('MIGRATION_DATABASE_URL')));
     });
 
-    test('Android launch theme avoids a black pre-frame screen', () {
+    test('Android launch theme matches the Flutter boot gate', () {
       final colors = readProjectFile(
         'android/app/src/main/res/values/colors.xml',
+      );
+      final launchBackground = readProjectFile(
+        'android/app/src/main/res/drawable/launch_background.xml',
+      );
+      final launchBackgroundV21 = readProjectFile(
+        'android/app/src/main/res/drawable-v21/launch_background.xml',
       );
       final styles = readProjectFile(
         'android/app/src/main/res/values/styles.xml',
@@ -84,17 +90,47 @@ void main() {
       final stylesV31 = readProjectFile(
         'android/app/src/main/res/values-v31/styles.xml',
       );
+      final nightStylesV31 = readProjectFile(
+        'android/app/src/main/res/values-night-v31/styles.xml',
+      );
       final nightStyles = readProjectFile(
         'android/app/src/main/res/values-night/styles.xml',
       );
 
       expect(
         colors,
-        contains('<color name="launch_background">#F7F3EA</color>'),
+        contains('<color name="launch_background">#101114</color>'),
       );
+      expect(colors, isNot(contains('#F7F3EA')));
+      expect(launchBackground, isNot(contains('android:gravity="center"')));
+      expect(launchBackground, isNot(contains('android:shape="oval"')));
+      expect(launchBackgroundV21, isNot(contains('android:gravity="center"')));
+      expect(launchBackgroundV21, isNot(contains('android:shape="oval"')));
       expect(styles, contains('@color/launch_background'));
       expect(stylesV31, contains('windowSplashScreenBackground'));
       expect(stylesV31, contains('@color/launch_background'));
+      expect(
+        stylesV31,
+        contains(
+          'android:windowSplashScreenAnimatedIcon">@drawable/launch_transparent_icon',
+        ),
+      );
+      expect(stylesV31, isNot(contains('@mipmap/ic_launcher')));
+      expect(
+        stylesV31,
+        isNot(contains('windowSplashScreenIconBackgroundColor')),
+      );
+      expect(
+        nightStylesV31,
+        contains(
+          'android:windowSplashScreenAnimatedIcon">@drawable/launch_transparent_icon',
+        ),
+      );
+      expect(nightStylesV31, isNot(contains('@mipmap/ic_launcher')));
+      expect(
+        nightStylesV31,
+        isNot(contains('windowSplashScreenIconBackgroundColor')),
+      );
       expect(nightStyles, isNot(contains('Theme.Black.NoTitleBar')));
     });
   });
