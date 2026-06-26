@@ -1,146 +1,149 @@
 # Magic Music CRM
 
-Flutter CRM for Magic Music school operations: clients, teachers, managers,
-admins, schedules, leads, payments, messenger, files, notifications, legal
-consent and account deletion.
+Magic Music CRM is a private Flutter + NestJS CRM for music-school operations:
+clients, leads, teachers, schedules, lessons, payments, subscriptions, homework,
+messenger, files, notifications, legal consent and account deletion.
 
-## Current State
+The app UI is Russian-first. The active runtime is the owned v3 backend:
+Flutter talks to the Magic Music API, not directly to Supabase.
 
-- Client: Flutter / Dart, Riverpod, Russian UI.
-- Backend: owned NestJS API, PostgreSQL, Redis, private file storage and
-  Socket.IO realtime.
-- Staging API: `https://api.phantom-net.ru/api`.
-- Android package: `magic.crm`.
-- Active architecture docs: `.anws/v3`.
-- Active Linear context: `Magic Music CRM`, `KVA-117` stabilization and cutover.
+## Status Snapshot
 
-Supabase runtime access has been removed from the active Flutter app. The client
-uses the v3 API through `MagicApiClient`, `MagicAuthService`,
-`MagicCrmService`, `MagicMessengerService`, `MagicRealtimeService`,
-`MagicNotificationsService` and the private v3 File API.
+Updated: 2026-06-26.
+
+- App version: `1.1.23+134`.
+- Current public v3 API: `https://api.phantom-net.ru/api`.
+- Client: Flutter/Dart, Riverpod, GoRouter, Dio, Socket.IO client, Sentry,
+  Firebase Messaging and Syncfusion widgets.
+- Backend: NestJS 11, TypeScript, PostgreSQL, Redis, Socket.IO realtime,
+  private local file storage and encrypted backups.
+- Active architecture: `.anws/v3` (Backend Independence).
+- Active product track: v7 redesign migration onto the existing app, reskin
+  and reflow first, no backend rewrite.
+- Current database migration chain: `0001` through `0049`.
+- Supabase is retained only as legacy export/import tooling. It is not a
+  Flutter runtime dependency.
+- HolliHop is a backend-only import/reference source. Keys never belong in
+  Flutter, Git, Linear, logs or public docs.
+
+## What Is Implemented
+
+Core product:
+
+- Email/password auth, OTP, password reset, refresh-token rotation, logout-all
+  and optional Google OAuth backend boundary.
+- Release/legal gate, current legal documents, consent capture and account
+  deletion request lifecycle.
+- Role-aware CRM for `client`, `teacher`, `admin`, `manager` and
+  `system_admin`.
+- Profiles, students, leads, teachers, staff, rooms, branches, groups,
+  lessons, attendance, comments, tasks, families and data-quality tools.
+- Lead board, lead-to-student conversion, student/lead client card, duplicate
+  detection, merge/undo merge and phone review queue.
+- Payments, expected payments, expenses, student balances, subscriptions,
+  subscription-package catalog and hour-based subscription consumption.
+- Homework with files, teacher assignment, client submission and file-backed
+  attachments.
+- Messenger REST plus Socket.IO realtime for direct/admin/group/channel flows,
+  typing/presence, reactions, pinning, delete, forwarding and chat work history.
+- Private file uploads and one-time download tokens for chat, voice, avatars
+  and homework attachments.
+- Notifications, device registration, in-app notification list, broadcast and
+  provider fallback.
+- Analytics namespace for overview, dashboards, funnel, branches, loss reasons,
+  debts, forecast, churn risk, chat SLA, sources, data quality, responsible
+  distribution, weekly report and monthly finance exports.
+
+Operational state from the latest audits:
+
+- Backend was deployed to the current API endpoint on 2026-06-25.
+- Staging health and realtime smoke passed after the latest migrations.
+- Latest recorded full backend suite: 43 suites / 432 tests passed.
+- Latest recorded Flutter gate: `flutter analyze` clean and 233 tests passed.
+- Windows release and Android debug builds were produced during the 2026-06-25
+  business/realtime audit.
+- The performance audit did not confirm 10-20 second latency for single REST
+  endpoints; the main issues are screen waterfalls, heavy DTOs, two SQL hot
+  paths and broad realtime refetch.
+
+## v7 Redesign Track
+
+The approved v7 prototype is `docs/prototypes/crm-redesign-v7.html`. It is a
+design and interaction spec, not the application.
+
+The migration rule is strict: rebind v7 screens to the existing Flutter
+services and backend endpoints. Pure frontend phases must keep `server/`
+untouched, and every backend endpoint must keep a UI home.
+
+Key tracking docs:
+
+- `docs/migration/REDESIGN-MIGRATION-PLAN.md`
+- `docs/migration/WIRE-TO-SERVICE-CHECKLIST.md`
+- `docs/migration/P7-REGRESSION-EVIDENCE.md`
+- `docs/audit/REDESIGN-COVERAGE-REPORT.md`
+- `docs/audits/business-realtime-2026-06-25/report.md`
+- `docs/audits/performance-2026-06-25/report.md`
+
+Current notable remaining work:
+
+- Complete runtime/device validation for v7 gesture-heavy and media-heavy
+  surfaces: schedule drag/sticky headers, voice playback, gallery attachment
+  and Windows manager re-audit.
+- Run the P6 data-cleanup track against real data with dry-run evidence before
+  apply: overlaps, fake emails, phone normalization, lesson split and missing
+  comments.
+- Continue performance hardening: lighter DTOs, fewer screen waterfalls,
+  targeted realtime invalidation, `/admin/profiles` and room-availability SQL
+  rewrites.
+- Owner per-window acceptance against the v7 prototype.
 
 ## Repository Layout
 
 ```text
-lib/                  Flutter client
-server/               NestJS v3 backend
-server/db/migrations  PostgreSQL migrations
-infra/                Docker Compose, Caddy, backup and restore scripts
-docs/                 runbooks and import notes
-.anws/v3/             architecture, ADRs, tasks and release evidence
-scripts/              smoke/import helper scripts
-integration_test/     Flutter integration smoke
+lib/                         Flutter client
+lib/core/api/                Magic API client, token store and API providers
+lib/core/services/           v3 service layer for CRM, messenger, files, etc.
+lib/features/                Role and feature UI: auth, CRM, manager, client...
+server/                      NestJS backend
+server/src/                  API modules, services, smoke scripts and workers
+server/db/migrations/        PostgreSQL migrations
+infra/                       Docker, Caddy, deploy, backup and monitor scripts
+docs/                        Runbooks, audits, migration plans and evidence
+.anws/v3/                    Architecture, ADRs, tasks and release evidence
+scripts/                     Helper scripts for Android, imports and staging
+integration_test/            Flutter integration smoke
+test/                        Flutter unit/widget tests
 ```
 
-## Backend
-
-The staging backend runs on Selectel under Docker Compose:
+## Runtime Architecture
 
 ```text
-api.phantom-net.ru -> Caddy -> NestJS API -> PostgreSQL / Redis
+Flutter app
+  -> HTTPS REST: NestJS API
+  -> Socket.IO: /realtime gateway
+
+NestJS API
+  -> PostgreSQL app schema
+  -> Redis
+  -> private file storage
+  -> notification providers
+  -> audit and security gates
 ```
 
-Core backend capabilities:
-
-- password signup/login, email OTP verification, password reset and refresh
-  rotation with reuse detection;
-- RBAC and audit events;
-- CRM APIs for profiles, students, teachers, staff, rooms, groups, lessons,
-  leads, payments, reports, balances, tasks and comments;
-- messenger REST plus Socket.IO realtime at `/realtime`;
-- private file uploads and one-time download tokens;
-- notifications device registration, in-app notifications and provider fallback;
-- legal document gate and account deletion flow;
-- HolliHop metadata/read/import path owned by the backend.
-
-## Frontend
-
-Default API base URL:
-
-```text
-https://api.phantom-net.ru/api
-```
-
-Override for local builds:
-
-```powershell
-flutter run --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
-```
-
-The app displays a branded loading gate while auth/session/legal state is being
-checked. Login clears stale local sessions before storing a new v3 session, and
-API token refresh is single-flight to avoid invalidating refresh token families
-with parallel requests.
-
-## Staging Deploy
-
-Ignored server env files are required on the host:
-
-```text
-/opt/magicmusiccrm/infra/staging/.env
-/opt/magicmusiccrm/infra/staging/.backup.env
-```
-
-Deploy from the staging host:
-
-```bash
-cd /opt/magicmusiccrm/infra/staging
-docker compose --env-file .env config -q
-docker compose --env-file .env up -d --build
-docker compose --env-file .env ps
-```
-
-Apply/check migrations:
-
-```bash
-docker compose --env-file .env exec api node dist/db/migrate.js up
-```
-
-Health checks:
-
-```bash
-curl -fsS https://api.phantom-net.ru/api/health
-curl -fsS https://api.phantom-net.ru/api/health/ready
-```
-
-Create an encrypted staging backup before DB-affecting deploy/import work:
-
-```bash
-cd /opt/magicmusiccrm/infra/staging
-bash /opt/magicmusiccrm/infra/scripts/backup-staging.sh
-```
-
-Latest verified staging sync in this branch:
-
-- backup: `magicmusiccrm-staging-20260615T232343Z.tgz.enc`;
-- backup SHA-256:
-  `3cc61a3400b05d761392a8e5ef395f19eb204b494c5e151656ab22a619b0bfb6`;
-- applied migrations through `0020_runtime_migration_read_grant`;
-- `/api/health` and `/api/health/ready` returned `ok`;
-- public realtime smoke passed against `https://api.phantom-net.ru/api`.
-
-## HolliHop Import
-
-HolliHop access is backend-only. Keys must stay in ignored env files or transient
-process env, never in Flutter, Git, Linear or logs.
-
-Run guarded archive/live dry-runs from the repo root:
-
-```powershell
-.\scripts\hollihop_staging_dry_run.ps1 `
-  -BackupEvidencePath .supergoal\hollihop-crm-import-adaptation-loading-ux-Guw3IO\evidence\<backup-evidence-file>
-```
-
-The staging live apply completed with:
-
-- source counts: `1025` students, `1946` leads, `3167` payments;
-- stored HolliHop counts after apply: `1946` students, `1946` leads,
-  `3166` payments, `2330` duplicate candidates;
-- known warnings: `tasks_source_missing` and `timeline_sources_missing`.
+The backend is the authorization source of truth. Files are referenced by
+backend file IDs and downloaded through one-time tokens. Realtime room joins are
+server-authorized. Flutter stores v3 session tokens in platform secure storage.
 
 ## Local Development
 
-Install Flutter and Node.js, then:
+Prerequisites:
+
+- Flutter SDK compatible with Dart `^3.11.1`
+- Node.js and npm
+- PostgreSQL/Redis when running the backend locally
+- Android Studio or Windows build tooling when building platform artifacts
+
+Install dependencies:
 
 ```powershell
 flutter pub get
@@ -148,14 +151,33 @@ cd server
 npm install
 ```
 
-Run Flutter checks:
+Run the Flutter app against the current API:
+
+```powershell
+flutter run --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
+```
+
+Optional runtime/build defines:
+
+```text
+MAGIC_API_BASE_URL          API base URL, defaults to https://api.phantom-net.ru/api
+MAGIC_PROFILE               local secure-storage namespace for multi-window sessions
+SENTRY_DSN                  enables Sentry when non-empty
+SENTRY_ENVIRONMENT          defaults to production
+SENTRY_RELEASE              release label
+SENTRY_TRACES_SAMPLE_RATE   defaults to 0
+```
+
+## Verification
+
+Flutter:
 
 ```powershell
 flutter analyze
 flutter test
 ```
 
-Run backend checks:
+Backend:
 
 ```powershell
 cd server
@@ -165,54 +187,120 @@ npm run build
 npm audit --audit-level=moderate
 ```
 
-Run realtime smoke against staging:
+Staging realtime smoke:
 
 ```powershell
 cd server
 npm run smoke:realtime
 ```
 
-For users created by the smoke script, email verification may need a staging DB
-test helper or a real OTP flow before login.
-
-## Release Artifacts
-
-Windows release ZIPs are built from:
+Security gate:
 
 ```powershell
-flutter build windows --release
+cd server
+npm run security:gate
 ```
 
-Current verified local Windows ZIP:
+For documentation-only changes, at minimum run:
 
-```text
-build/releases/MagicMusicCRM-Windows-x64-auth-session-racefix-20260616-032014.zip
-SHA256 4B8D2340DB67D9EC93CA394887F54450AF721B7511E58BC1848A9274F6A29E99
+```powershell
+git diff --check
 ```
 
-Android debug smoke artifact:
+## Backend And Migrations
 
-```text
-build/app/outputs/flutter-apk/app-debug.apk
+Common backend scripts:
+
+```powershell
+cd server
+npm run start:dev
+npm run db:migrate
+npm run db:rollback
+npm run migration:import
+npm run hollihop:import
+npm run storage:import
 ```
 
-Build outputs are intentionally ignored by Git.
+Production/staging scripts use the compiled `dist/` commands:
 
-## Remaining Launch Gates
+```bash
+node dist/db/migrate.js up
+node dist/migration/v3-import.js
+node dist/migration/hollihop-import.js
+node dist/migration/storage-import.js
+```
 
-- Real Android device smoke for private file upload/download.
-- Real Android device smoke for account deletion.
-- Production host hardening evidence.
-- Credential rotation for exposed migration-era credentials.
-- History-aware secret scan, external SAST and container scan.
-- Production cutover rehearsal and production cutover window.
+Real env files are ignored. Do not commit secrets, database URLs, service-role
+keys, HolliHop keys, Firebase private keys, Telegram tokens, backup archives,
+storage objects or generated release binaries.
+
+## Staging Operations
+
+Staging runtime lives under `infra/staging/` and is driven by ignored env files.
+Use `infra/staging/README.md` and the runbooks before deploying.
+
+Basic host flow:
+
+```bash
+cd /opt/magicmusiccrm/infra/staging
+docker compose --env-file .env config -q
+docker compose --env-file .env up -d --build
+docker compose --env-file .env exec api node dist/db/migrate.js up
+docker compose --env-file .env ps
+```
+
+Health checks:
+
+```bash
+curl -fsS https://api.phantom-net.ru/api/health
+curl -fsS https://api.phantom-net.ru/api/health/ready
+```
+
+Create an encrypted backup before DB-affecting deploy/import work:
+
+```bash
+cd /opt/magicmusiccrm/infra/staging
+bash /opt/magicmusiccrm/infra/scripts/backup-staging.sh
+```
+
+Rollback runbook: `docs/runbooks/v3-staging-rollback.md`.
+
+## Release Builds
+
+Windows:
+
+```powershell
+flutter build windows --release --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
+```
+
+Android APK:
+
+```powershell
+flutter build apk --release --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
+```
+
+Android App Bundle:
+
+```powershell
+flutter build appbundle --release --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
+```
+
+Build outputs under `build/` are intentionally ignored.
 
 ## Documentation Index
 
-- `.anws/v3/05_TASKS.md` - v3 task blueprint.
-- `.anws/v3/09_S7_RELEASE_EVIDENCE.md` - release evidence.
-- `docs/runbooks/hollihop-staging-dry-run.md` - guarded HolliHop dry-run.
-- `docs/runbooks/android-real-device-smoke.md` - remaining Android smoke.
-- `docs/runbooks/v3-staging-rollback.md` - staging rollback.
-- `docs/import/` - HolliHop import mapping and gap reports.
+- `AGENTS.md` - current agent protocol, project state and active priorities.
+- `.anws/v3/01_PRD.md` - v3 requirements.
+- `.anws/v3/02_ARCHITECTURE_OVERVIEW.md` - backend independence architecture.
+- `.anws/v3/03_ADR/` - architecture decisions.
+- `.anws/v3/05_TASKS.md` - v3 task and acceptance ledger.
+- `.anws/v3/09_S7_RELEASE_EVIDENCE.md` - pre-release evidence.
+- `docs/migration/REDESIGN-MIGRATION-PLAN.md` - v7-to-prod plan.
+- `docs/migration/P7-REGRESSION-EVIDENCE.md` - redesign regression ledger.
+- `docs/audits/` - latest business, UX, realtime and performance audits.
+- `docs/runbooks/` - operational runbooks.
 - `infra/staging/README.md` - staging deployment notes.
+
+Agent note: read `AGENTS.md` first. The existing `.nexus-map/` was generated
+before the v3 backend cutover and is useful as historical context, not as the
+current source of truth.
