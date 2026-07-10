@@ -68,6 +68,10 @@ import { CreateLossReasonDto } from "./dto/create-loss-reason.dto";
 import { UpsertBranchDisciplineDto } from "./dto/upsert-branch-discipline.dto";
 import { ReorderBranchDisciplinesDto } from "./dto/reorder-branch-disciplines.dto";
 import { UpsertGroupDto } from "./dto/upsert-group.dto";
+import { UpdateGroupDto } from "./dto/update-group.dto";
+import { CreateTeacherPayoutDto } from "./dto/create-teacher-payout.dto";
+import { SetTeacherRateDto } from "./dto/set-teacher-rate.dto";
+import { TeacherStatsQuery } from "./dto/teacher-stats.query";
 import { UpsertRoomDto } from "./dto/upsert-room.dto";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
 import { CreateFamilyDto } from "./dto/create-family.dto";
@@ -306,6 +310,42 @@ export class CrmController {
     return this.crm.updateTeacher(actor, id, dto);
   }
 
+  // ── KVA-238: зарплатный модуль педагогов ──────────────────────────────────
+
+  @Get("teachers/:id/payroll")
+  getTeacherPayroll(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.getTeacherPayroll(actor, id);
+  }
+
+  @Post("teachers/:id/payouts")
+  createTeacherPayout(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: CreateTeacherPayoutDto,
+  ) {
+    return this.crm.createTeacherPayout(actor, id, dto);
+  }
+
+  @Post("teachers/:id/rates")
+  setTeacherRate(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: SetTeacherRateDto,
+  ) {
+    return this.crm.setTeacherRate(actor, id, dto);
+  }
+
+  @Get("reports/teacher-stats")
+  getTeacherStats(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: TeacherStatsQuery,
+  ) {
+    return this.crm.getTeacherStatsReport(actor, query);
+  }
+
   @Get("staff")
   listStaff(
     @CurrentActor() actor: ActorContext,
@@ -405,6 +445,16 @@ export class CrmController {
     @Body() dto: UpsertGroupDto,
   ) {
     return this.crm.createGroup(actor, dto);
+  }
+
+  // KVA-238: PATCH группы (в т.ч. ставка педагога из drill-down отчёта).
+  @Patch("groups/:id")
+  updateGroup(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateGroupDto,
+  ) {
+    return this.crm.updateGroup(actor, id, dto);
   }
 
   @Get("groups/:id/students")

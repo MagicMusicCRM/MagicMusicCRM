@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 
 class CreateGroupDialog extends ConsumerStatefulWidget {
   const CreateGroupDialog({super.key});
@@ -23,6 +24,8 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
   String? _teacherId;
   String? _branchId;
   String? _roomId;
+  // KVA-238: переопределение ставки педагога; null = брать ставку педагога.
+  num? _teacherRate;
 
   @override
   void initState() {
@@ -75,6 +78,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
             branchId: _branchId,
             roomId: _roomId,
             pricePerLesson: rawPrice.isEmpty ? null : num.parse(rawPrice),
+            teacherRate: _teacherRate,
           );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -228,6 +232,13 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
                           }
                           return null;
                         },
+                      ),
+                      const SizedBox(height: 12),
+                      // KVA-238: ставка педагога по группе (переопределение).
+                      TeacherRateSelector(
+                        allowInherit: true,
+                        label: 'Ставка педагога по группе',
+                        onChanged: (rate) => _teacherRate = rate,
                       ),
                     ],
                   ),

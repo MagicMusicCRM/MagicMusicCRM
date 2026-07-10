@@ -353,6 +353,12 @@ class MagicCrmService {
     String? email,
     String? specialization,
     String? status,
+    // KVA-238: патч custom-полей (birthday, workStartDate, level, category,
+    // isPartTime, isBlacklisted), оклад и явные связи карточки педагога.
+    Map<String, dynamic>? customDataPatch,
+    num? salary,
+    List<String>? disciplineIds,
+    List<String>? branchIds,
   }) async {
     final data = <String, dynamic>{};
     if (firstName != null) data['firstName'] = firstName.trim();
@@ -363,12 +369,77 @@ class MagicCrmService {
       data['specialization'] = specialization.trim();
     }
     if (status != null) data['status'] = status.trim();
+    if (customDataPatch != null && customDataPatch.isNotEmpty) {
+      data['customDataPatch'] = customDataPatch;
+    }
+    if (salary != null) data['salary'] = salary;
+    if (disciplineIds != null) data['disciplineIds'] = disciplineIds;
+    if (branchIds != null) data['branchIds'] = branchIds;
 
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/teachers/$id',
       data: data,
     );
     return _legacyTeacher(response);
+  }
+
+  /// KVA-238: сводка по зарплате педагога — начислено/выплачено/задолженность,
+  /// актуальная ставка, история ставок и список выплат.
+  Future<Map<String, dynamic>> getTeacherPayroll(String teacherId) {
+    return _api.get<Map<String, dynamic>>('/crm/teachers/$teacherId/payroll');
+  }
+
+  /// KVA-238: выплата преподавателю. kind: payout — выплата задолженности,
+  /// bonus — доплата, deduction — вычет. amount всегда положительный.
+  Future<Map<String, dynamic>> createTeacherPayout({
+    required String teacherId,
+    required String kind,
+    required num amount,
+    String? comment,
+  }) async {
+    final data = <String, dynamic>{'kind': kind, 'amount': amount};
+    final trimmed = comment?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) data['comment'] = trimmed;
+    return _api.post<Map<String, dynamic>>(
+      '/crm/teachers/$teacherId/payouts',
+      data: data,
+    );
+  }
+
+  /// KVA-238: новая ставка педагога (₽ за астр. час, 0 = «входит в оклад»)
+  /// с датой начала действия; история сохраняется на бекенде.
+  Future<Map<String, dynamic>> setTeacherHourRate({
+    required String teacherId,
+    required num rate,
+    String? effectiveFrom,
+  }) async {
+    final data = <String, dynamic>{'rate': rate};
+    if (effectiveFrom != null) data['effectiveFrom'] = effectiveFrom;
+    return _api.post<Map<String, dynamic>>(
+      '/crm/teachers/$teacherId/rates',
+      data: data,
+    );
+  }
+
+  /// KVA-238: отчёт «Статистика преподавателей» — учебные единицы, дни, часы,
+  /// ставка, начислено/оплачено. unitType: individual | group | trial.
+  Future<Map<String, dynamic>> getTeacherStatsReport({
+    String? from,
+    String? to,
+    String? branchId,
+    String? teacherId,
+    String? unitType,
+  }) {
+    final queryParameters = <String, dynamic>{};
+    if (from != null) queryParameters['from'] = from;
+    if (to != null) queryParameters['to'] = to;
+    if (branchId != null) queryParameters['branchId'] = branchId;
+    if (teacherId != null) queryParameters['teacherId'] = teacherId;
+    if (unitType != null) queryParameters['unitType'] = unitType;
+    return _api.get<Map<String, dynamic>>(
+      '/crm/reports/teacher-stats',
+      queryParameters: queryParameters,
+    );
   }
 
   Future<Map<String, dynamic>> createStaff({
@@ -687,6 +758,8 @@ class MagicCrmService {
     String? branchId,
     String? roomId,
     num? pricePerLesson,
+    // KVA-238: переопределение ставки педагога (0 = «входит в оклад»).
+    num? teacherRate,
   }) async {
     final data = <String, dynamic>{'name': name.trim()};
     if (teacherId != null && teacherId.trim().isNotEmpty) {
@@ -699,9 +772,38 @@ class MagicCrmService {
       data['roomId'] = roomId.trim();
     }
     if (pricePerLesson != null) data['pricePerLesson'] = pricePerLesson;
+    if (teacherRate != null) data['teacherRate'] = teacherRate;
 
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/groups',
+      data: data,
+    );
+    return _legacyGroup(response);
+  }
+
+  /// KVA-238: частичное обновление группы. [teacherRate] отправляется только
+  /// при [setTeacherRate] = true; null при выставленном флаге сбрасывает
+  /// переопределение («брать ставку педагога»), 0 — «входит в оклад».
+  Future<Map<String, dynamic>> updateGroup(
+    String id, {
+    String? name,
+    String? teacherId,
+    String? branchId,
+    String? roomId,
+    num? pricePerLesson,
+    num? teacherRate,
+    bool setTeacherRate = false,
+  }) async {
+    final data = <String, dynamic>{};
+    if (name != null && name.trim().isNotEmpty) data['name'] = name.trim();
+    if (teacherId != null) data['teacherId'] = teacherId;
+    if (branchId != null) data['branchId'] = branchId;
+    if (roomId != null) data['roomId'] = roomId;
+    if (pricePerLesson != null) data['pricePerLesson'] = pricePerLesson;
+    if (setTeacherRate) data['teacherRate'] = teacherRate;
+
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/groups/$id',
       data: data,
     );
     return _legacyGroup(response);
@@ -2382,6 +2484,11 @@ class MagicCrmService {
       'students_count': item['studentsCount'] ?? 0,
       'lessons_count': item['lessonsCount'] ?? 0,
       'rating': item['rating'],
+      // KVA-238: зарплатные поля и явные связи карточки педагога.
+      'salary': item['salary'],
+      'current_rate': item['currentRate'],
+      'disciplines': item['disciplines'] ?? const [],
+      'assigned_branches': item['assignedBranches'] ?? const [],
       'created_at': item['createdAt'],
       'profiles': {
         'first_name': firstName,
@@ -2505,6 +2612,8 @@ class MagicCrmService {
       'room_id': item['roomId'],
       'name': item['name'],
       'price_per_lesson': item['pricePerLesson'],
+      // KVA-238: null = брать ставку педагога, 0 = «входит в оклад».
+      'teacher_rate': item['teacherRate'],
       'created_at': item['createdAt'],
       'teachers': {
         'id': item['teacherId'],

@@ -80,6 +80,20 @@ export class CrmPolicy {
     );
   }
 
+  /**
+   * KVA-238: зарплатный модуль педагогов (ставки/начисления/выплаты) — только
+   * Управляющий и Администратор системы; Администратору зарплаты не видны
+   * (в отличие от assertManagerOnly). Роли перечислены строками, чтобы
+   * включить 'director' (добавляется параллельно в KVA-239) без зависимости
+   * от enum UserRole.
+   */
+  assertCanReadPayroll(actor: ActorContext): void {
+    if (["manager", "system_admin", "director"].includes(actor.role)) return;
+    throw new ForbiddenException(
+      "Недостаточно прав для зарплатного раздела.",
+    );
+  }
+
   assertCanReadFinance(actor: ActorContext, ownerUserId: string | null): void {
     // Staff finance: admin/manager/system_admin. Client sees only own rows.
     if (isManagerOrAdminRole(actor.role)) return;

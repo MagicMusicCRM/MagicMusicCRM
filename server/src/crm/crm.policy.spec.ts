@@ -100,4 +100,30 @@ describe("CrmPolicy", () => {
       policy.assertCanReadFinance({ userId: "a", role: "admin" }, "client-b"),
     ).not.toThrow();
   });
+
+  // KVA-238: payroll — только manager/system_admin (+ 'director' строкой,
+  // роль добавляется параллельно); admin зарплаты не видит.
+  it("restricts payroll to manager, system_admin and director", () => {
+    expect(() =>
+      policy.assertCanReadPayroll({ userId: "m", role: "manager" }),
+    ).not.toThrow();
+    expect(() =>
+      policy.assertCanReadPayroll({ userId: "s", role: "system_admin" }),
+    ).not.toThrow();
+    expect(() =>
+      policy.assertCanReadPayroll({
+        userId: "d",
+        role: "director" as never,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      policy.assertCanReadPayroll({ userId: "a", role: "admin" }),
+    ).toThrow(ForbiddenException);
+    expect(() =>
+      policy.assertCanReadPayroll({ userId: "t", role: "teacher" }),
+    ).toThrow(ForbiddenException);
+    expect(() =>
+      policy.assertCanReadPayroll({ userId: "c", role: "client" }),
+    ).toThrow(ForbiddenException);
+  });
 });
