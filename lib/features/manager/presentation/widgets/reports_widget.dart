@@ -12,6 +12,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/subscription_catalog_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 
 class ReportsWidget extends ConsumerStatefulWidget {
   final int initialTab;
@@ -50,9 +51,9 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 5,
+      length: 6,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 4),
+      initialIndex: widget.initialTab.clamp(0, 5),
     );
     _loadReports();
   }
@@ -60,7 +61,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   @override
   void didUpdateWidget(covariant ReportsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextTab = widget.initialTab.clamp(0, 4);
+    final nextTab = widget.initialTab.clamp(0, 5);
     if (nextTab != _tabController.index) {
       _tabController.index = nextTab;
     }
@@ -216,6 +217,8 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             Tab(text: 'Активность'),
             Tab(text: 'Управление'),
             Tab(text: 'Абонементы'),
+            // KVA-238: отчёт «Статистика преподавателей» (зарплатный модуль).
+            Tab(text: 'Преподаватели'),
           ],
         ),
         Expanded(
@@ -227,6 +230,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               const _ActivityLogTab(),
               const ManagementDashboardWidget(),
               const SubscriptionCatalogWidget(),
+              const TeacherStatsWidget(),
             ],
           ),
         ),

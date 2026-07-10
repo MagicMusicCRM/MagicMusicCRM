@@ -59,6 +59,10 @@ import { TeacherListQuery } from "./dto/teacher-list.query";
 import { UpdateStudentDto } from "./dto/update-student.dto";
 import { UpdateStaffDto } from "./dto/update-staff.dto";
 import { UpdateTeacherDto } from "./dto/update-teacher.dto";
+import { UpdateGroupDto } from "./dto/update-group.dto";
+import { CreateTeacherPayoutDto } from "./dto/create-teacher-payout.dto";
+import { SetTeacherRateDto } from "./dto/set-teacher-rate.dto";
+import { TeacherStatsQuery } from "./dto/teacher-stats.query";
 import { UpsertAttendanceDto } from "./dto/upsert-attendance.dto";
 import { UpsertGroupDto } from "./dto/upsert-group.dto";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
@@ -116,6 +120,11 @@ interface TeacherRow {
   lessons_count?: string | number | null;
   rating?: string | number | null;
   created_at?: Date | string;
+  // KVA-238: оклад, актуальная ставка и явные связи (дисциплины/филиалы).
+  salary?: string | number | null;
+  current_rate?: string | number | null;
+  disciplines?: Array<{ id: string; name: string }> | null;
+  assigned_branches?: Array<{ id: string; name: string }> | null;
 }
 
 interface StaffRow {
@@ -494,10 +503,48 @@ interface GroupRow {
   room_id: string | null;
   name: string;
   price_per_lesson: string | null;
+  // KVA-238: переопределение ставки педагога (null = брать ставку педагога).
+  teacher_rate?: string | number | null;
   teacher_name: string | null;
   branch_name: string | null;
   room_name: string | null;
   created_at: Date | string;
+}
+
+// ── KVA-238: зарплатный модуль педагогов ────────────────────────────────────
+
+/** Проведённое занятие для расчёта начисления (проекция, не материализуется). */
+interface PayrollLessonRow {
+  id: string;
+  teacher_id: string;
+  student_id: string | null;
+  group_id: string | null;
+  group_name: string | null;
+  student_name: string | null;
+  scheduled_at: Date | string;
+  duration_minutes: number | string;
+  is_trial: boolean;
+  group_rate: string | number | null;
+  attendance_kind: string | null;
+  charge_share: string | number | null;
+}
+
+interface TeacherRateRow {
+  id?: string;
+  teacher_id: string;
+  rate: string | number;
+  effective_from: Date | string;
+}
+
+interface TeacherPayoutRow {
+  id: string;
+  teacher_id: string;
+  amount: string | number;
+  kind: string;
+  comment: string | null;
+  paid_at: Date | string;
+  author_first_name?: string | null;
+  author_last_name?: string | null;
 }
 
 interface LeadStatusRow {
@@ -1708,6 +1755,33 @@ export class CrmService {
           agg.branches,
           agg.students_count,
           agg.lessons_count,
+          -- KVA-238: оклад, актуальная ставка и явные связи для карточки.
+          t.salary,
+          (
+            select tr.rate
+            from app.teacher_rates tr
+            where tr.teacher_id = t.id and tr.effective_from <= current_date
+            order by tr.effective_from desc, tr.created_at desc
+            limit 1
+          ) as current_rate,
+          (
+            select coalesce(
+              jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name) order by d.name),
+              '[]'::jsonb
+            )
+            from app.teacher_disciplines td
+            join app.disciplines d on d.id = td.discipline_id and d.deleted_at is null
+            where td.teacher_id = t.id
+          ) as disciplines,
+          (
+            select coalesce(
+              jsonb_agg(jsonb_build_object('id', tb_branch.id, 'name', tb_branch.name) order by tb_branch.name),
+              '[]'::jsonb
+            )
+            from app.teacher_branches tb
+            join app.branches tb_branch on tb_branch.id = tb.branch_id and tb_branch.deleted_at is null
+            where tb.teacher_id = t.id
+          ) as assigned_branches,
           case
             when t.custom_data->>'rating' ~ '^-?[0-9]+(\\.[0-9]+)?$'
               then (t.custom_data->>'rating')::numeric
@@ -1984,6 +2058,11 @@ export class CrmService {
     dto: UpdateTeacherDto,
   ) {
     this.policy.assertCanWriteCrm(actor);
+    // KVA-238: оклад — зарплатное поле, правится только ролями payroll.
+    if (dto.salary !== undefined) this.policy.assertCanReadPayroll(actor);
+    // KVA-238: custom-поля карточки (birthday, workStartDate, level, category,
+    // isPartTime, isBlacklisted) патчатся merge'ем — по образцу updateStudent.
+    const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
     const result = await this.database.query<TeacherRow>(
       `
         with target as (
@@ -2015,12 +2094,16 @@ export class CrmService {
           update app.teachers t
           set status = coalesce($6, t.status),
             specialization = coalesce($7, t.specialization),
+            custom_data = coalesce(t.custom_data, '{}'::jsonb) || $8::jsonb,
+            salary = coalesce($9::numeric, t.salary),
             updated_at = now()
           from target
           where t.id = target.id
-          returning t.id, t.status, t.specialization, t.profile_id
+          returning t.id, t.status, t.specialization, t.custom_data, t.salary,
+            t.profile_id
         )
-        select ut.id, ut.status, ut.specialization, ut.profile_id,
+        select ut.id, ut.status, ut.specialization, ut.custom_data, ut.salary,
+          ut.profile_id,
           coalesce(updated_profile_dependency.user_id, p.user_id) as profile_user_id,
           coalesce(updated_profile_dependency.first_name, p.first_name) as first_name,
           coalesce(updated_profile_dependency.last_name, p.last_name) as last_name,
@@ -2041,10 +2124,44 @@ export class CrmService {
         this.trimOptional(dto.email)?.toLowerCase() ?? null,
         this.trimOptional(dto.status),
         this.trimOptional(dto.specialization),
+        JSON.stringify(customDataPatch),
+        dto.salary ?? null,
       ],
     );
     const teacher = result.rows[0];
     if (!teacher) throw new NotFoundException("Преподаватель не найден.");
+    // KVA-238: полная замена m2m-связей, если списки переданы. delete+insert
+    // идемпотентен и проще диффа; объёмы — единицы строк на педагога.
+    if (dto.disciplineIds) {
+      await this.database.query(
+        `delete from app.teacher_disciplines
+         where teacher_id = $1 and not (discipline_id = any($2::uuid[]))`,
+        [teacherId, dto.disciplineIds],
+      );
+      if (dto.disciplineIds.length) {
+        await this.database.query(
+          `insert into app.teacher_disciplines (teacher_id, discipline_id)
+           select $1, unnest($2::uuid[])
+           on conflict do nothing`,
+          [teacherId, dto.disciplineIds],
+        );
+      }
+    }
+    if (dto.branchIds) {
+      await this.database.query(
+        `delete from app.teacher_branches
+         where teacher_id = $1 and not (branch_id = any($2::uuid[]))`,
+        [teacherId, dto.branchIds],
+      );
+      if (dto.branchIds.length) {
+        await this.database.query(
+          `insert into app.teacher_branches (teacher_id, branch_id)
+           select $1, unnest($2::uuid[])
+           on conflict do nothing`,
+          [teacherId, dto.branchIds],
+        );
+      }
+    }
     await this.audit.record({
       actor,
       action: "crm.teacher_updated",
@@ -2594,7 +2711,7 @@ export class CrmService {
     const result = await this.database.query<GroupRow>(
       `
         select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-          g.price_per_lesson,
+          g.price_per_lesson, g.teacher_rate,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
           b.name as branch_name,
           r.name as room_name,
@@ -2630,13 +2747,15 @@ export class CrmService {
             branch_id,
             room_id,
             name,
-            price_per_lesson
+            price_per_lesson,
+            teacher_rate
           )
-          values ($1, $2, $3, $4, $5)
-          returning id, teacher_id, branch_id, room_id, name, price_per_lesson, created_at
+          values ($1, $2, $3, $4, $5, $6)
+          returning id, teacher_id, branch_id, room_id, name, price_per_lesson,
+            teacher_rate, created_at
         )
         select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-          g.price_per_lesson,
+          g.price_per_lesson, g.teacher_rate,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
           b.name as branch_name,
           r.name as room_name,
@@ -2654,6 +2773,7 @@ export class CrmService {
         dto.roomId ?? null,
         name,
         dto.pricePerLesson ?? null,
+        dto.teacherRate ?? null,
       ],
     );
     const group = result.rows[0];
@@ -2667,6 +2787,80 @@ export class CrmService {
     this.realtime.emitCrmChanged({
       entity: "group",
       action: "created",
+      id: group.id,
+      branchId: group.branch_id ?? null,
+      affectedUserIds,
+    });
+    return this.toGroupDto(group);
+  }
+
+  /**
+   * KVA-238: частичное обновление группы (PATCH), в т.ч. ставка педагога по
+   * группе из drill-down отчёта «Статистика преподавателей». teacherRate:
+   * null сбрасывает переопределение (брать ставку педагога), 0 — «входит в
+   * оклад»; поле применяется только если передано (dto.teacherRate !== undefined).
+   */
+  async updateGroup(actor: ActorContext, groupId: string, dto: UpdateGroupDto) {
+    this.policy.assertCanWriteCrm(actor);
+    const name =
+      dto.name === undefined
+        ? null
+        : this.requiredTrim(dto.name, "Название группы обязательно.");
+    const teacherRateProvided = dto.teacherRate !== undefined;
+    const result = await this.database.query<GroupRow>(
+      `
+        with updated_group as (
+          update app.groups g
+          set name = coalesce($2, g.name),
+            teacher_id = coalesce($3::uuid, g.teacher_id),
+            branch_id = coalesce($4::uuid, g.branch_id),
+            room_id = coalesce($5::uuid, g.room_id),
+            price_per_lesson = coalesce($6::numeric, g.price_per_lesson),
+            teacher_rate = case when $7::boolean then $8::numeric else g.teacher_rate end,
+            updated_at = now()
+          where g.id = $1 and g.deleted_at is null
+          returning g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
+            g.price_per_lesson, g.teacher_rate, g.created_at
+        )
+        select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
+          g.price_per_lesson, g.teacher_rate,
+          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
+          b.name as branch_name,
+          r.name as room_name,
+          g.created_at
+        from updated_group g
+        left join app.teachers t on t.id = g.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        left join app.branches b on b.id = g.branch_id and b.deleted_at is null
+        left join app.rooms r on r.id = g.room_id and r.deleted_at is null
+        limit 1
+      `,
+      [
+        groupId,
+        name,
+        dto.teacherId ?? null,
+        dto.branchId ?? null,
+        dto.roomId ?? null,
+        dto.pricePerLesson ?? null,
+        teacherRateProvided,
+        teacherRateProvided ? dto.teacherRate : null,
+      ],
+    );
+    const group = result.rows[0];
+    if (!group) throw new NotFoundException("Группа не найдена.");
+    await this.audit.record({
+      actor,
+      action: "crm.group_updated",
+      entityType: "group",
+      entityId: group.id,
+      metadata: teacherRateProvided
+        ? { teacherRate: dto.teacherRate ?? null }
+        : undefined,
+    });
+    const affectedUserIds = await this.affectedUserIdsForGroup(group.id);
+    this.realtime.emitCrmChanged({
+      entity: "group",
+      action: "updated",
       id: group.id,
       branchId: group.branch_id ?? null,
       affectedUserIds,
@@ -5121,6 +5315,463 @@ export class CrmService {
       metadata: { kind: dto.kind, amount: signedAmount },
     });
     return { id: result.rows[0].id, amount: signedAmount, kind: dto.kind };
+  }
+
+  // ── KVA-238: зарплатный модуль педагогов ──────────────────────────────────
+  // Начисления НЕ материализуются: это проекция по проведённым занятиям
+  // (паттерн ledger из KVA-235). Начислено = Σ (длительность в астр. часах ×
+  // эффективная ставка × коэффициент статуса посещения). Смена ставки или
+  // статуса задним числом пересчитывает всё автоматически.
+
+  /** Дата в формате yyyy-mm-dd без сдвига часового пояса для date-колонок PG. */
+  private toDateOnly(value: Date | string): string {
+    if (value instanceof Date) {
+      const y = value.getFullYear();
+      const m = String(value.getMonth() + 1).padStart(2, "0");
+      const d = String(value.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+    return String(value).slice(0, 10);
+  }
+
+  /**
+   * Эффективная ставка и коэффициент занятия.
+   * Ставка: переопределение группы (groups.teacher_rate) ?? последняя ставка
+   * педагога с effective_from <= даты занятия ?? 0 (0 = «входит в оклад»).
+   * Коэффициент (KVA-237, lesson_participation.attendance_kind): unpaid_miss →
+   * 0, partially_paid → charge_share, прочие статусы, занятия без
+   * participation и групповые занятия → 1.
+   */
+  private computeLessonAccrual(
+    lesson: PayrollLessonRow,
+    ratesByTeacher: Map<string, Array<{ rate: number; effectiveFrom: string }>>,
+  ): { hours: number; rate: number; coefficient: number; amount: number } {
+    const hours = Number(lesson.duration_minutes ?? 0) / 60;
+    let rate: number;
+    if (lesson.group_rate !== null && lesson.group_rate !== undefined) {
+      rate = Number(lesson.group_rate);
+    } else {
+      const lessonDate = this.toDateOnly(lesson.scheduled_at);
+      // История отсортирована по effective_from по возрастанию — берём
+      // последнюю запись, начавшую действовать не позже даты занятия.
+      let effective = 0;
+      for (const entry of ratesByTeacher.get(lesson.teacher_id) ?? []) {
+        if (entry.effectiveFrom <= lessonDate) effective = entry.rate;
+        else break;
+      }
+      rate = effective;
+    }
+    let coefficient = 1;
+    if (lesson.student_id && lesson.attendance_kind === "unpaid_miss") {
+      coefficient = 0;
+    } else if (
+      lesson.student_id &&
+      lesson.attendance_kind === "partially_paid"
+    ) {
+      coefficient = Number(lesson.charge_share ?? 1);
+    }
+    return { hours, rate, coefficient, amount: hours * rate * coefficient };
+  }
+
+  /** Проведённые занятия педагога(ов) для проекции начислений. */
+  private async loadPayrollLessons(filters: {
+    teacherId?: string | null;
+    branchId?: string | null;
+    from?: string | null;
+    to?: string | null;
+  }): Promise<PayrollLessonRow[]> {
+    // ponytail: без пагинации — проекция за период/по педагогу, объёмы школы
+    // (сотни строк). При росте добавить помесячный материализованный снапшот.
+    const result = await this.database.query<PayrollLessonRow>(
+      `
+        select l.id, l.teacher_id, l.student_id, l.group_id,
+          l.scheduled_at, l.duration_minutes, l.is_trial,
+          g.teacher_rate as group_rate, g.name as group_name,
+          trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
+          lp.attendance_kind, lp.charge_share
+        from app.lessons l
+        left join app.groups g on g.id = l.group_id and g.deleted_at is null
+        left join app.students s on s.id = l.student_id and s.deleted_at is null
+        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        left join app.lesson_participation lp
+          on lp.lesson_id = l.id and lp.student_id = l.student_id
+        where l.deleted_at is null
+          and l.teacher_id is not null
+          and l.status in ('completed', 'done')
+          and ($1::uuid is null or l.teacher_id = $1)
+          and ($2::uuid is null or l.branch_id = $2)
+          and ($3::timestamptz is null or l.scheduled_at >= $3::timestamptz)
+          and ($4::timestamptz is null or l.scheduled_at < $4::timestamptz)
+        order by l.scheduled_at asc, l.id asc
+      `,
+      [
+        filters.teacherId ?? null,
+        filters.branchId ?? null,
+        filters.from ?? null,
+        filters.to ?? null,
+      ],
+    );
+    return result.rows;
+  }
+
+  /** История ставок педагогов, отсортированная по effective_from. */
+  private async loadTeacherRates(
+    teacherIds: string[],
+  ): Promise<Map<string, Array<{ rate: number; effectiveFrom: string }>>> {
+    const map = new Map<string, Array<{ rate: number; effectiveFrom: string }>>();
+    if (!teacherIds.length) return map;
+    const result = await this.database.query<TeacherRateRow>(
+      `
+        select teacher_id, rate, effective_from
+        from app.teacher_rates
+        where teacher_id = any($1::uuid[])
+        order by teacher_id, effective_from asc, created_at asc
+      `,
+      [teacherIds],
+    );
+    for (const row of result.rows) {
+      const list = map.get(row.teacher_id) ?? [];
+      list.push({
+        rate: Number(row.rate),
+        effectiveFrom: this.toDateOnly(row.effective_from),
+      });
+      map.set(row.teacher_id, list);
+    }
+    return map;
+  }
+
+  private round2(value: number): number {
+    return Math.round(value * 100) / 100;
+  }
+
+  /**
+   * Сводка по зарплате педагога: начислено/выплачено/задолженность + история
+   * ставок и список выплат. Задолженность = начислено + доплаты (bonus) −
+   * вычеты (deduction) − выплачено (payout).
+   */
+  async getTeacherPayroll(actor: ActorContext, teacherId: string) {
+    this.policy.assertCanReadPayroll(actor);
+    const lessons = await this.loadPayrollLessons({ teacherId });
+    const rates = await this.loadTeacherRates([teacherId]);
+    let accruedTotal = 0;
+    let hoursTotal = 0;
+    for (const lesson of lessons) {
+      const { hours, amount } = this.computeLessonAccrual(lesson, rates);
+      hoursTotal += hours;
+      accruedTotal += amount;
+    }
+    const payoutsResult = await this.database.query<TeacherPayoutRow>(
+      `
+        select tp.id, tp.teacher_id, tp.amount, tp.kind, tp.comment, tp.paid_at,
+          author.first_name as author_first_name,
+          author.last_name as author_last_name
+        from app.teacher_payouts tp
+        left join app.users u on u.id = tp.created_by and u.deleted_at is null
+        left join app.profiles author on author.user_id = u.id and author.deleted_at is null
+        where tp.deleted_at is null and tp.teacher_id = $1
+        order by tp.paid_at desc, tp.id desc
+      `,
+      [teacherId],
+    );
+    let paidTotal = 0;
+    let bonusTotal = 0;
+    let deductionTotal = 0;
+    for (const row of payoutsResult.rows) {
+      const amount = Number(row.amount);
+      if (row.kind === "payout") paidTotal += amount;
+      else if (row.kind === "bonus") bonusTotal += amount;
+      else deductionTotal += amount;
+    }
+    const rateHistory = rates.get(teacherId) ?? [];
+    const today = this.toDateOnly(new Date());
+    let currentRate: number | null = null;
+    for (const entry of rateHistory) {
+      if (entry.effectiveFrom <= today) currentRate = entry.rate;
+      else break;
+    }
+    return {
+      teacherId,
+      hoursTotal: this.round2(hoursTotal),
+      accruedTotal: this.round2(accruedTotal),
+      bonusTotal: this.round2(bonusTotal),
+      deductionTotal: this.round2(deductionTotal),
+      paidTotal: this.round2(paidTotal),
+      debt: this.round2(accruedTotal + bonusTotal - deductionTotal - paidTotal),
+      currentRate,
+      rateHistory,
+      payouts: payoutsResult.rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        amount: Number(row.amount),
+        comment: row.comment,
+        paidAt: row.paid_at,
+        authorName:
+          [row.author_first_name, row.author_last_name]
+            .filter(Boolean)
+            .join(" ") || null,
+      })),
+    };
+  }
+
+  /** KVA-238: выплата/доплата/вычет преподавателю. */
+  async createTeacherPayout(
+    actor: ActorContext,
+    teacherId: string,
+    dto: CreateTeacherPayoutDto,
+  ) {
+    this.policy.assertCanReadPayroll(actor);
+    const teacher = await this.database.query<{ id: string }>(
+      `select id from app.teachers where id = $1 and deleted_at is null`,
+      [teacherId],
+    );
+    if (!teacher.rows[0]) {
+      throw new NotFoundException("Преподаватель не найден.");
+    }
+    const result = await this.database.query<TeacherPayoutRow>(
+      `
+        insert into app.teacher_payouts
+          (teacher_id, amount, kind, comment, paid_at, created_by)
+        values ($1, $2, $3, $4, coalesce($5::timestamptz, now()), $6)
+        returning id, teacher_id, amount, kind, comment, paid_at
+      `,
+      [
+        teacherId,
+        dto.amount,
+        dto.kind,
+        this.trimOptional(dto.comment),
+        dto.paidAt ?? null,
+        actor.userId,
+      ],
+    );
+    const payout = result.rows[0];
+    await this.audit.record({
+      actor,
+      action: "crm.teacher_payout_created",
+      entityType: "teacher",
+      entityId: teacherId,
+      metadata: { kind: dto.kind, amount: dto.amount },
+    });
+    return {
+      id: payout.id,
+      teacherId: payout.teacher_id,
+      kind: payout.kind,
+      amount: Number(payout.amount),
+      comment: payout.comment,
+      paidAt: payout.paid_at,
+    };
+  }
+
+  /** KVA-238: новая ставка педагога (история сохраняется, 0 = «входит в оклад»). */
+  async setTeacherRate(
+    actor: ActorContext,
+    teacherId: string,
+    dto: SetTeacherRateDto,
+  ) {
+    this.policy.assertCanReadPayroll(actor);
+    const teacher = await this.database.query<{ id: string }>(
+      `select id from app.teachers where id = $1 and deleted_at is null`,
+      [teacherId],
+    );
+    if (!teacher.rows[0]) {
+      throw new NotFoundException("Преподаватель не найден.");
+    }
+    const result = await this.database.query<TeacherRateRow>(
+      `
+        insert into app.teacher_rates (teacher_id, rate, effective_from, created_by)
+        values ($1, $2, coalesce($3::date, current_date), $4)
+        returning id, teacher_id, rate, effective_from
+      `,
+      [teacherId, dto.rate, dto.effectiveFrom ?? null, actor.userId],
+    );
+    const rate = result.rows[0];
+    await this.audit.record({
+      actor,
+      action: "crm.teacher_rate_set",
+      entityType: "teacher",
+      entityId: teacherId,
+      metadata: { rate: dto.rate, effectiveFrom: dto.effectiveFrom ?? null },
+    });
+    return {
+      id: rate.id,
+      teacherId: rate.teacher_id,
+      rate: Number(rate.rate),
+      effectiveFrom: this.toDateOnly(rate.effective_from),
+    };
+  }
+
+  /**
+   * KVA-238: отчёт «Статистика преподавателей». Учебная единица — группа или
+   * индивидуальный ученик; trial — пробные занятия (lessons.is_trial).
+   * По каждой единице: дни (дата + часы), часы всего, ставка за астр. час,
+   * начислено; по педагогу — итоги и выплачено (payout) за период.
+   */
+  async getTeacherStatsReport(actor: ActorContext, query: TeacherStatsQuery) {
+    this.policy.assertCanReadPayroll(actor);
+    // Период по умолчанию — текущий месяц (процесс заказчика: закрытие месяца).
+    const now = new Date();
+    const from =
+      query.from ??
+      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    const to = query.to ?? null;
+    const lessons = (
+      await this.loadPayrollLessons({
+        teacherId: query.teacherId,
+        branchId: query.branchId,
+        from,
+        to,
+      })
+    ).filter((lesson) => {
+      if (!query.unitType) return true;
+      if (query.unitType === "trial") return lesson.is_trial;
+      if (query.unitType === "group")
+        return !!lesson.group_id && !lesson.is_trial;
+      return !lesson.group_id && !lesson.is_trial;
+    });
+    const teacherIds = [...new Set(lessons.map((l) => l.teacher_id))];
+    if (!teacherIds.length) {
+      return {
+        from,
+        to,
+        items: [],
+        totals: { hoursTotal: 0, accruedTotal: 0, paidTotal: 0 },
+      };
+    }
+    const rates = await this.loadTeacherRates(teacherIds);
+    const namesResult = await this.database.query<{ id: string; name: string }>(
+      `
+        select t.id,
+          trim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')) as name
+        from app.teachers t
+        left join app.profiles p on p.id = t.profile_id and p.deleted_at is null
+        where t.id = any($1::uuid[])
+      `,
+      [teacherIds],
+    );
+    const teacherNames = new Map(
+      namesResult.rows.map((row) => [row.id, row.name || "Без имени"]),
+    );
+    const payoutsResult = await this.database.query<{
+      teacher_id: string;
+      paid_total: string | number;
+    }>(
+      `
+        select teacher_id,
+          sum(case when kind = 'payout' then amount else 0 end) as paid_total
+        from app.teacher_payouts
+        where deleted_at is null
+          and teacher_id = any($1::uuid[])
+          and ($2::timestamptz is null or paid_at >= $2::timestamptz)
+          and ($3::timestamptz is null or paid_at < $3::timestamptz)
+        group by teacher_id
+      `,
+      [teacherIds, from, to],
+    );
+    const paidByTeacher = new Map(
+      payoutsResult.rows.map((row) => [row.teacher_id, Number(row.paid_total)]),
+    );
+
+    interface UnitAcc {
+      unitType: "group" | "individual" | "trial";
+      groupId: string | null;
+      studentId: string | null;
+      unitName: string;
+      teacherRate: number | null;
+      days: Map<string, number>;
+      hoursTotal: number;
+      accruedTotal: number;
+      hasRegular: boolean;
+    }
+    const teachers = new Map<
+      string,
+      { hoursTotal: number; accruedTotal: number; units: Map<string, UnitAcc> }
+    >();
+    for (const lesson of lessons) {
+      const { hours, amount } = this.computeLessonAccrual(lesson, rates);
+      const teacher = teachers.get(lesson.teacher_id) ?? {
+        hoursTotal: 0,
+        accruedTotal: 0,
+        units: new Map<string, UnitAcc>(),
+      };
+      teachers.set(lesson.teacher_id, teacher);
+      const unitKey = lesson.group_id
+        ? `g:${lesson.group_id}`
+        : `s:${lesson.student_id ?? "trial"}`;
+      const unit = teacher.units.get(unitKey) ?? {
+        unitType: lesson.group_id ? ("group" as const) : ("trial" as const),
+        groupId: lesson.group_id,
+        studentId: lesson.group_id ? null : lesson.student_id,
+        unitName: lesson.group_id
+          ? (lesson.group_name ?? "Группа")
+          : lesson.student_name?.trim() || "Пробное занятие",
+        teacherRate:
+          lesson.group_rate === null || lesson.group_rate === undefined
+            ? null
+            : Number(lesson.group_rate),
+        days: new Map<string, number>(),
+        hoursTotal: 0,
+        accruedTotal: 0,
+        hasRegular: false,
+      };
+      teacher.units.set(unitKey, unit);
+      if (!lesson.is_trial) unit.hasRegular = true;
+      const day = this.toDateOnly(lesson.scheduled_at);
+      unit.days.set(day, (unit.days.get(day) ?? 0) + hours);
+      unit.hoursTotal += hours;
+      unit.accruedTotal += amount;
+      teacher.hoursTotal += hours;
+      teacher.accruedTotal += amount;
+    }
+
+    const totals = { hoursTotal: 0, accruedTotal: 0, paidTotal: 0 };
+    const items = [...teachers.entries()].map(([teacherId, teacher]) => {
+      const paidTotal = paidByTeacher.get(teacherId) ?? 0;
+      totals.hoursTotal += teacher.hoursTotal;
+      totals.accruedTotal += teacher.accruedTotal;
+      totals.paidTotal += paidTotal;
+      // Актуальная ставка педагога — для колонки «ставка», когда у единицы
+      // нет переопределения группы.
+      const today = this.toDateOnly(new Date());
+      let currentRate = 0;
+      for (const entry of rates.get(teacherId) ?? []) {
+        if (entry.effectiveFrom <= today) currentRate = entry.rate;
+        else break;
+      }
+      return {
+        teacherId,
+        teacherName: teacherNames.get(teacherId) ?? "Без имени",
+        hoursTotal: this.round2(teacher.hoursTotal),
+        accruedTotal: this.round2(teacher.accruedTotal),
+        paidTotal: this.round2(paidTotal),
+        units: [...teacher.units.values()].map((unit) => ({
+          unitType:
+            unit.unitType === "group"
+              ? "group"
+              : unit.hasRegular
+                ? "individual"
+                : "trial",
+          groupId: unit.groupId,
+          studentId: unit.studentId,
+          unitName: unit.unitName,
+          rate: unit.teacherRate ?? currentRate,
+          days: [...unit.days.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, hours]) => ({ date, hours: this.round2(hours) })),
+          hoursTotal: this.round2(unit.hoursTotal),
+          accruedTotal: this.round2(unit.accruedTotal),
+        })),
+      };
+    });
+    items.sort((a, b) => a.teacherName.localeCompare(b.teacherName, "ru"));
+    return {
+      from,
+      to,
+      items,
+      totals: {
+        hoursTotal: this.round2(totals.hoursTotal),
+        accruedTotal: this.round2(totals.accruedTotal),
+        paidTotal: this.round2(totals.paidTotal),
+      },
+    };
   }
 
   async listSubscriptions(actor: ActorContext, query: CrmListQuery) {
@@ -7861,6 +8512,20 @@ export class CrmService {
     if (row.created_at !== undefined) {
       teacher.createdAt = row.created_at;
     }
+    // KVA-238: зарплатные поля и явные связи карточки педагога.
+    if (row.salary !== undefined) {
+      teacher.salary = row.salary === null ? null : Number(row.salary);
+    }
+    if (row.current_rate !== undefined) {
+      teacher.currentRate =
+        row.current_rate === null ? null : Number(row.current_rate);
+    }
+    if (row.disciplines !== undefined) {
+      teacher.disciplines = row.disciplines ?? [];
+    }
+    if (row.assigned_branches !== undefined) {
+      teacher.assignedBranches = row.assigned_branches ?? [];
+    }
     return teacher;
   }
 
@@ -8360,6 +9025,11 @@ export class CrmService {
       name: row.name,
       pricePerLesson:
         row.price_per_lesson === null ? null : Number(row.price_per_lesson),
+      // KVA-238: null = брать ставку педагога, 0 = «входит в оклад».
+      teacherRate:
+        row.teacher_rate === null || row.teacher_rate === undefined
+          ? null
+          : Number(row.teacher_rate),
       teacherName: row.teacher_name || null,
       branchName: row.branch_name,
       roomName: row.room_name,
