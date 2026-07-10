@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/top_up_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
@@ -51,6 +52,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // Тип нового комментария (0037): admin_comment | teacher_note. Переключатель
   // виден staff-ролям и только когда комментарий уйдёт на ученик-половину.
   String _commentKind = 'admin_comment';
+  // Личный счёт (KVA-235): 0 = Приход, 1 = Расход; ключ перегружает FutureBuilder.
+  int _ledgerTab = 0;
+  int _ledgerRefreshKey = 0;
   // Resolved status list: either the one passed in or self-fetched.
   List<StatusRecord> _statuses = const [];
   bool _saving = false;
@@ -1268,6 +1272,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
                   ),
               ]),
             ],
+            if (_balance != null) ...[
+              const SizedBox(height: AppSpace.lg),
+              _buildLedgerSection(cs),
+            ],
             const SizedBox(height: AppSpace.lg),
             _buildStudentGroupsInfoCard(cs),
           ],
@@ -2003,6 +2011,282 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final status = s['status']?.toString();
     final suffix = status == 'active' ? '' : ' · ${_formatStatus(status)}';
     return 'Остаток: ${hours(left)} из ${hours(total)} астр.ч.$money$suffix';
+  }
+
+  // ── Личный счёт (KVA-235, формат HolliHop: вкладки Приход/Расход) ────────
+  Widget _buildLedgerSection(ColorScheme cs) {
+    return FutureBuilder<Map<String, dynamic>>(
+      key: ValueKey('ledger-$_ledgerRefreshKey'),
+      future: ref.read(magicCrmServiceProvider).getStudentLedger(_studentId),
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+            child: LinearProgressIndicator(color: AppColor.gold),
+          );
+        }
+        if (snap.hasError) {
+          return Text(
+            'Личный счёт недоступен',
+            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+          );
+        }
+        final data = snap.data ?? const {};
+        num toNum(Object? v) =>
+            v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
+        final income = toNum(data['income_total']);
+        final outcome = toNum(data['outcome_total']);
+        final items = _list(data['items']);
+        final visible = items
+            .where(
+              (r) => _ledgerTab == 0
+                  ? toNum(r['amount']) > 0
+                  : toNum(r['amount']) < 0,
+            )
+            .take(8)
+            .toList();
+        String rub(num v) => '${v.round()} ₽';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Личный счёт: ${rub(income)} − ${rub(outcome)} = '
+                    '${rub(income - outcome)}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _openTopUpDialog,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColor.gold,
+                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                  child: const Text('Добавить'),
+                ),
+                TextButton(
+                  onPressed: _openRefundDialog,
+                  style: TextButton.styleFrom(
+                    foregroundColor: cs.error,
+                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                  child: const Text('Возврат'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Wrap(
+              spacing: AppSpace.sm,
+              children: [
+                for (final (index, label) in const [
+                  (0, 'Приход'),
+                  (1, 'Расход'),
+                ])
+                  ChoiceChip(
+                    label: Text(label, style: const TextStyle(fontSize: 12)),
+                    selected: _ledgerTab == index,
+                    selectedColor: AppColor.goldSoft,
+                    onSelected: (_) => setState(() => _ledgerTab = index),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.sm),
+            if (visible.isEmpty)
+              Text(
+                'Операций нет',
+                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+              )
+            else
+              ...visible.map((r) {
+                final amount = toNum(r['amount']);
+                final dt = DateTime.tryParse(
+                  r['occurred_at']?.toString() ?? '',
+                )?.toLocal();
+                final meta = [
+                  if (dt != null) DateFormat('dd.MM.yy', 'ru').format(dt),
+                  r['method'],
+                  r['author_name'],
+                ].where((v) => v != null && '$v'.isNotEmpty).join(' · ');
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 78,
+                        child: Text(
+                          '${amount > 0 ? '+' : ''}${amount.round()} ₽',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: amount > 0 ? AppTheme.success : cs.error,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              r['description']?.toString().trim().isNotEmpty ==
+                                      true
+                                  ? r['description'].toString()
+                                  : _ledgerKindLabel(r['kind']),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12.5),
+                            ),
+                            if (meta.isNotEmpty)
+                              Text(
+                                meta,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+          ],
+        );
+      },
+    );
+  }
+
+  String _ledgerKindLabel(Object? kind) {
+    return switch (kind?.toString()) {
+      'payment' => 'Платёж',
+      'lesson_charge' => 'Списание за занятие',
+      'refund' => 'Возврат',
+      'adjustment' => 'Корректировка',
+      'transfer_in' => 'Перенос (зачисление)',
+      'transfer_out' => 'Перенос (списание)',
+      _ => 'Операция',
+    };
+  }
+
+  void _refreshLedger() {
+    setState(() => _ledgerRefreshKey++);
+    _fetchStudentData();
+  }
+
+  Future<void> _openTopUpDialog() async {
+    if (_student == null) return;
+    final added = await TopUpDialog.show(context, _student!);
+    if (added == true) _refreshLedger();
+  }
+
+  Future<void> _openRefundDialog() async {
+    final cs = Theme.of(context).colorScheme;
+    final amountCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    final confirmed = await showMagicSheet<bool>(
+      context,
+      title: 'Возврат средств',
+      subtitle: 'Сумма спишется с личного счёта клиента',
+      icon: Icons.undo_rounded,
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: amountCtrl,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: _inputDecoration(cs, label: 'Сумма (₽)', isDense: true),
+          ),
+          const SizedBox(height: AppSpace.md),
+          TextField(
+            controller: descCtrl,
+            decoration: _inputDecoration(
+              cs,
+              label: 'Комментарий',
+              hint: 'Например: возврат за отменённые занятия',
+              isDense: true,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: FilledButton.styleFrom(
+            backgroundColor: cs.error,
+            foregroundColor: cs.onError,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            ),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          child: const Text('Вернуть'),
+        ),
+      ],
+    );
+    final amount = num.tryParse(amountCtrl.text.trim().replaceAll(',', '.'));
+    final description = descCtrl.text.trim();
+    amountCtrl.dispose();
+    descCtrl.dispose();
+    if (confirmed != true) return;
+    if (amount == null || amount <= 0) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Введите корректную сумму',
+          type: MagicToastType.danger,
+        );
+      }
+      return;
+    }
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .createAdjustment(
+            studentId: _studentId,
+            kind: 'refund',
+            amount: amount,
+            description: description.isEmpty ? null : description,
+          );
+      _dirty = true;
+      _refreshLedger();
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Возврат оформлен',
+          type: MagicToastType.success,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Ошибка возврата',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
+    }
   }
 
   /// Возраст «N лет» из custom-поля birthday (ISO или дд.мм.гггг).

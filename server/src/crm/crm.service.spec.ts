@@ -2246,6 +2246,120 @@ describe("CrmService", () => {
     ]);
   });
 
+  it("lists the student ledger with signed amounts, totals and direction filter", async () => {
+    const { service, query, policy } = createService([
+      {
+        id: "pay-1",
+        kind: "payment",
+        amount: "5000",
+        description: "Оплата абонемента",
+        method: "Безналичные",
+        branch_name: "Сокол",
+        author_first_name: "Мария",
+        author_last_name: "Менеджер",
+        occurred_at: "2026-07-01T00:00:00.000Z",
+        income_total: "5000",
+        outcome_total: "1500",
+      },
+      {
+        id: "adj-1",
+        kind: "refund",
+        amount: "-1500",
+        description: "Возврат",
+        method: null,
+        branch_name: "Сокол",
+        author_first_name: null,
+        author_last_name: null,
+        occurred_at: "2026-07-02T00:00:00.000Z",
+        income_total: "5000",
+        outcome_total: "1500",
+      },
+    ]);
+
+    await expect(
+      service.listStudentLedger(actor, "student-a", {
+        direction: "income",
+        limit: 50,
+      }),
+    ).resolves.toEqual({
+      items: [
+        {
+          id: "pay-1",
+          kind: "payment",
+          amount: 5000,
+          description: "Оплата абонемента",
+          method: "Безналичные",
+          branchName: "Сокол",
+          authorName: "Мария Менеджер",
+          occurredAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          id: "adj-1",
+          kind: "refund",
+          amount: -1500,
+          description: "Возврат",
+          method: null,
+          branchName: "Сокол",
+          authorName: null,
+          occurredAt: "2026-07-02T00:00:00.000Z",
+        },
+      ],
+      incomeTotal: 5000,
+      outcomeTotal: 1500,
+    });
+    expect(policy.assertCanReadStudentFinance).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][1]).toEqual(["student-a", "income", 50]);
+  });
+
+  it("creates a refund adjustment as a negative amount and audits it", async () => {
+    const { service, query, audit, policy } = createServiceWithQueryResults([
+      { rows: [{ id: "student-a", profile_user_id: "client-a" }] }, // findStudent
+      { rows: [{ id: "adj-new" }] }, // insert returning
+    ]);
+
+    await expect(
+      service.createAccountAdjustment(actor, "student-a", {
+        kind: "refund",
+        amount: 2000,
+        description: "Возврат за отменённые занятия",
+      }),
+    ).resolves.toEqual({ id: "adj-new", amount: -2000, kind: "refund" });
+
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    // Знак выставлен сервисом: возврат хранится отрицательным.
+    expect(query.mock.calls[1][1]).toEqual([
+      "student-a",
+      "refund",
+      -2000,
+      "Возврат за отменённые занятия",
+      null,
+      null,
+      "manager-a",
+    ]);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.account_adjustment_created",
+        entityId: "student-a",
+      }),
+    );
+  });
+
+  it("keeps a positive amount for an income adjustment", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [{ id: "student-a" }] },
+      { rows: [{ id: "adj-plus" }] },
+    ]);
+
+    await expect(
+      service.createAccountAdjustment(actor, "student-a", {
+        kind: "adjustment",
+        amount: 300,
+        direction: "income",
+      }),
+    ).resolves.toEqual({ id: "adj-plus", amount: 300, kind: "adjustment" });
+    expect(query.mock.calls[1][1]).toContain(300);
+  });
+
   it("allows a client to list subscriptions for a manually linked student", async () => {
     const { service, query } = createService([
       {
@@ -2410,6 +2524,7 @@ describe("CrmService", () => {
           balance: -3000,
           totalPaid: 2000,
           totalCost: 5000,
+          totalAdjustments: 0,
           updatedAt: "2026-06-12T12:00:00.000Z",
           student: {
             firstName: "Анна",

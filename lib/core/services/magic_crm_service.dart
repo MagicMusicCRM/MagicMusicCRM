@@ -1542,6 +1542,59 @@ class MagicCrmService {
     return _items(response).map(_legacySubscription).toList();
   }
 
+  /// KVA-235: лента личного счёта (платежи + списания за занятия + ручные
+  /// операции) с итогами прихода/расхода.
+  Future<Map<String, dynamic>> getStudentLedger(
+    String studentId, {
+    String? direction,
+    int limit = 100,
+  }) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    if (direction != null) queryParameters['direction'] = direction;
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/students/$studentId/ledger',
+      queryParameters: queryParameters,
+    );
+    return {
+      'items': _items(response)
+          .map(
+            (item) => {
+              'id': item['id'],
+              'kind': item['kind'],
+              'amount': item['amount'],
+              'description': item['description'],
+              'method': item['method'],
+              'branch_name': item['branchName'],
+              'author_name': item['authorName'],
+              'occurred_at': item['occurredAt'],
+            },
+          )
+          .toList(),
+      'income_total': response['incomeTotal'],
+      'outcome_total': response['outcomeTotal'],
+    };
+  }
+
+  /// KVA-235: ручная операция личного счёта (возврат/корректировка).
+  Future<Map<String, dynamic>> createAdjustment({
+    required String studentId,
+    required String kind,
+    required num amount,
+    String? direction,
+    String? description,
+    String? method,
+  }) async {
+    final data = <String, dynamic>{'kind': kind, 'amount': amount};
+    if (direction != null) data['direction'] = direction;
+    final trimmed = description?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) data['description'] = trimmed;
+    if (method != null) data['method'] = method;
+    return _api.post<Map<String, dynamic>>(
+      '/crm/students/$studentId/adjustments',
+      data: data,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> listPayments({
     String? studentId,
     String? from,

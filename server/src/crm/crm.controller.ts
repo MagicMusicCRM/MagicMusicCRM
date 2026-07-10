@@ -16,6 +16,7 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { CrmService } from "./crm.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
+import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
 import { CreateCommentDto } from "./dto/create-comment.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { ExpenseQuery } from "./dto/expense.query";
@@ -146,6 +147,28 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
   ) {
     return this.crm.getStudentCard(actor, id);
+  }
+
+  @Get("students/:id/ledger")
+  listStudentLedger(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query("direction") direction?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.crm.listStudentLedger(actor, id, {
+      direction,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Post("students/:id/adjustments")
+  createAccountAdjustment(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: CreateAdjustmentDto,
+  ) {
+    return this.crm.createAccountAdjustment(actor, id, dto);
   }
 
   @Get("students/:id")

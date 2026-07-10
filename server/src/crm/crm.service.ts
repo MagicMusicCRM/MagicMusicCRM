@@ -23,6 +23,7 @@ import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { CreateCommentDto } from "./dto/create-comment.dto";
 import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
 import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
+import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { ExpenseQuery } from "./dto/expense.query";
 import { UpsertExpenseDto } from "./dto/upsert-expense.dto";
@@ -340,8 +341,21 @@ interface StudentBalanceRow {
   phone: string | null;
   total_paid: string | number;
   total_cost: string | number;
+  total_adjustments?: string | number;
   balance: string | number;
   updated_at: Date | string;
+}
+
+interface LedgerRow {
+  id: string;
+  kind: string;
+  amount: string | number;
+  description: string | null;
+  method: string | null;
+  branch_name: string | null;
+  author_first_name: string | null;
+  author_last_name: string | null;
+  occurred_at: Date | string;
 }
 
 interface SubscriptionRow {
@@ -3792,12 +3806,29 @@ export class CrmService {
             from app.lessons where id = $1
           ),
           pick as (
+            -- KVA-235: сначала свой активный абонемент, затем абонемент члена
+            -- семьи (занятие ребёнка можно списать с абонемента родителя).
             select s.id
             from app.subscriptions s, part
             where part.subscription_id is null
-              and s.student_id = $2 and s.status = 'active'
+              and s.status = 'active'
               and s.lessons_used < s.lessons_total
-            order by s.expires_at asc nulls last, s.created_at asc
+              and (
+                s.student_id = $2
+                or s.student_id in (
+                  select fm2.entity_id
+                  from app.family_members fm1
+                  join app.family_members fm2
+                    on fm2.family_id = fm1.family_id
+                    and fm2.entity_type = 'student'
+                    and fm2.deleted_at is null
+                  where fm1.entity_type = 'student'
+                    and fm1.entity_id = $2
+                    and fm1.deleted_at is null
+                )
+              )
+            order by (s.student_id = $2) desc,
+              s.expires_at asc nulls last, s.created_at asc
             limit 1
           ),
           dec as (
@@ -4463,6 +4494,15 @@ export class CrmService {
           where p.deleted_at is null
           group by p.student_id
         ),
+        adjustment_totals as (
+          select
+            adj.student_id,
+            sum(adj.amount) as total_adjustments,
+            max(adj.occurred_at) as updated_at
+          from app.account_adjustments adj
+          where adj.deleted_at is null
+          group by adj.student_id
+        ),
         balances as (
           select
             s.id as student_id,
@@ -4471,16 +4511,20 @@ export class CrmService {
             profile.phone,
             coalesce(pay.total_paid, 0) as total_paid,
             coalesce(cost.total_cost, 0) as total_cost,
-            coalesce(pay.total_paid, 0) - coalesce(cost.total_cost, 0) as balance,
+            coalesce(adj.total_adjustments, 0) as total_adjustments,
+            coalesce(pay.total_paid, 0) - coalesce(cost.total_cost, 0)
+              + coalesce(adj.total_adjustments, 0) as balance,
             greatest(
               coalesce(pay.updated_at, 'epoch'::timestamptz),
               coalesce(cost.updated_at, 'epoch'::timestamptz),
+              coalesce(adj.updated_at, 'epoch'::timestamptz),
               s.updated_at
             ) as updated_at
           from app.students s
           left join app.profiles profile on profile.id = s.profile_id and profile.deleted_at is null
           left join payment_totals pay on pay.student_id = s.id
           left join lesson_costs cost on cost.student_id = s.id
+          left join adjustment_totals adj on adj.student_id = s.id
           where s.deleted_at is null
             and ($1::uuid is null or s.id = $1)
         )
@@ -4493,6 +4537,159 @@ export class CrmService {
       [query.studentId ?? null, query.debtOnly === true, limit],
     );
     return { items: result.rows.map((row) => this.toStudentBalanceDto(row)) };
+  }
+
+  /**
+   * KVA-235: личный счёт клиента — единая лента операций (ledger-проекция).
+   * Приход = app.payments, расход = проведённые занятия по их стоимости,
+   * плюс ручные операции app.account_adjustments (возврат/корректировка).
+   * Знак: приход > 0, расход < 0 — баланс равен сумме ленты и сходится с
+   * listStudentBalances по построению.
+   */
+  async listStudentLedger(
+    actor: ActorContext,
+    studentId: string,
+    query: { direction?: string; limit?: number },
+  ) {
+    this.policy.assertCanReadStudentFinance(actor);
+    const limit = Math.min(query.limit ?? 100, 300);
+    const direction =
+      query.direction === "income" || query.direction === "outcome"
+        ? query.direction
+        : null;
+    const result = await this.database.query<LedgerRow>(
+      `
+        with ledger as (
+          select p.id, 'payment' as kind, p.amount as amount,
+            p.notes as description, p.method,
+            b.name as branch_name,
+            author.first_name as author_first_name,
+            author.last_name as author_last_name,
+            coalesce(p.payment_date, p.created_at) as occurred_at
+          from app.payments p
+          left join app.students st on st.id = p.student_id
+          left join app.branches b on b.id = st.branch_id
+          left join app.users u on u.id = p.created_by and u.deleted_at is null
+          left join app.profiles author on author.user_id = u.id and author.deleted_at is null
+          where p.deleted_at is null and p.student_id = $1
+
+          union all
+
+          select l.id, 'lesson_charge' as kind,
+            -coalesce(
+              g.price_per_lesson,
+              case
+                when s.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
+                  then (s.custom_data->>'individualPrice')::numeric
+                when s.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
+                  then (s.custom_data->>'individual_price')::numeric
+                else null
+              end,
+              0
+            ) as amount,
+            trim(concat('Занятие', ' ', coalesce(g.name, 'индивидуально'))) as description,
+            null as method,
+            b.name as branch_name,
+            null as author_first_name,
+            null as author_last_name,
+            l.scheduled_at as occurred_at
+          from app.lessons l
+          left join app.lesson_participation lp on lp.lesson_id = l.id and lp.student_id = $1
+          join app.students s on s.id = coalesce(l.student_id, lp.student_id)
+          left join app.groups g on g.id = l.group_id and g.deleted_at is null
+          left join app.branches b on b.id = l.branch_id
+          where l.deleted_at is null
+            and l.status in ('completed', 'done')
+            and coalesce(l.student_id, lp.student_id) = $1
+
+          union all
+
+          select adj.id, adj.kind, adj.amount, adj.description, adj.method,
+            b.name as branch_name,
+            author.first_name as author_first_name,
+            author.last_name as author_last_name,
+            adj.occurred_at
+          from app.account_adjustments adj
+          left join app.branches b on b.id = adj.branch_id
+          left join app.users u on u.id = adj.created_by and u.deleted_at is null
+          left join app.profiles author on author.user_id = u.id and author.deleted_at is null
+          where adj.deleted_at is null and adj.student_id = $1
+        )
+        select *,
+          sum(case when amount > 0 then amount else 0 end) over () as income_total,
+          sum(case when amount < 0 then -amount else 0 end) over () as outcome_total
+        from ledger
+        where ($2::text is null
+          or ($2 = 'income' and amount > 0)
+          or ($2 = 'outcome' and amount < 0))
+        order by occurred_at desc, id desc
+        limit $3
+      `,
+      [studentId, direction, limit],
+    );
+    type LedgerRowWithTotals = LedgerRow & {
+      income_total?: string | number;
+      outcome_total?: string | number;
+    };
+    const first = result.rows[0] as LedgerRowWithTotals | undefined;
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        amount: Number(row.amount),
+        description: row.description,
+        method: row.method,
+        branchName: row.branch_name,
+        authorName:
+          [row.author_first_name, row.author_last_name]
+            .filter(Boolean)
+            .join(" ") || null,
+        occurredAt: row.occurred_at,
+      })),
+      incomeTotal: Number(first?.income_total ?? 0),
+      outcomeTotal: Number(first?.outcome_total ?? 0),
+    };
+  }
+
+  /** KVA-235: ручная операция личного счёта (возврат/корректировка). */
+  async createAccountAdjustment(
+    actor: ActorContext,
+    studentId: string,
+    dto: CreateAdjustmentDto,
+  ) {
+    this.policy.assertManagerOnly(actor);
+    const student = await this.findStudent(studentId);
+    if (!student) throw new NotFoundException("Ученик не найден.");
+    // Возврат — всегда расход; корректировка — по direction (по умолч. приход).
+    const outcome =
+      dto.kind === "refund" || dto.direction === "outcome";
+    const signedAmount = outcome ? -Math.abs(dto.amount) : Math.abs(dto.amount);
+    const result = await this.database.query<{ id: string }>(
+      `
+        insert into app.account_adjustments
+          (student_id, branch_id, kind, amount, description, method, occurred_at, created_by)
+        values ($1, (select branch_id from app.students where id = $1), $2, $3, $4, $5,
+          coalesce($6::timestamptz, now()), $7)
+        returning id
+      `,
+      [
+        studentId,
+        dto.kind,
+        signedAmount,
+        dto.description ?? null,
+        dto.method ?? null,
+        dto.occurredAt ?? null,
+        actor.userId,
+      ],
+    );
+    await this.audit.record({
+      actor,
+      action: "crm.account_adjustment_created",
+      entityType: "student",
+      entityId: studentId,
+      metadata: { kind: dto.kind, amount: signedAmount },
+    });
+    return { id: result.rows[0].id, amount: signedAmount, kind: dto.kind };
   }
 
   async listSubscriptions(actor: ActorContext, query: CrmListQuery) {
@@ -7548,6 +7745,7 @@ export class CrmService {
       balance: Number(row.balance),
       totalPaid: Number(row.total_paid),
       totalCost: Number(row.total_cost),
+      totalAdjustments: Number(row.total_adjustments ?? 0),
       updatedAt: row.updated_at,
       student: {
         firstName: row.first_name,
