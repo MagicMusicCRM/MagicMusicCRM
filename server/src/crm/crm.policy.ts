@@ -60,6 +60,25 @@ export class CrmPolicy {
     throw new NotFoundException("Платежи не найдены.");
   }
 
+  /**
+   * ОБЩЕШКОЛЬНЫЕ финансы и финансовая аналитика (отчёт по выручке, расходы,
+   * помесячные финансы, долги, прогноз выручки): ТОЛЬКО Директор (director)
+   * и Администратор системы (system_admin). Управляющий (manager) и
+   * Администратор (admin) ИСКЛЮЧЕНЫ — решение владельца (KVA-239).
+   * Финансы в КАРТОЧКЕ клиента (история оплат, баланс, личный счёт) у
+   * Управляющего остаются — см. canReadStudentFinance выше.
+   */
+  canReadSchoolFinance(actor: ActorContext): boolean {
+    return actor.role === "director" || actor.role === "system_admin";
+  }
+
+  assertCanReadSchoolFinance(actor: ActorContext): void {
+    if (this.canReadSchoolFinance(actor)) return;
+    throw new ForbiddenException(
+      "Недостаточно прав для общешкольных финансов.",
+    );
+  }
+
   // Operational CRM work: administrators must be able to cover each other's
   // shifts. Role management stays separate in ProfilePolicy/canAssignRole.
   assertManagerOnly(actor: ActorContext): void {

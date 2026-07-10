@@ -324,7 +324,7 @@ export class MessengerService implements OnModuleInit {
           and ($3::timestamptz is null or c.updated_at < $3)
           and (
             cm.user_id = $2
-            or ($1::text in ('manager', 'admin', 'system_admin') and c.type = 'administration')
+            or ($1::text in ('manager', 'director', 'admin', 'system_admin') and c.type = 'administration')
           )
         order by c.updated_at desc, c.id desc
         limit $4
@@ -1265,7 +1265,7 @@ export class MessengerService implements OnModuleInit {
         left join app.channel_permissions cp on cp.channel_id = c.id
         where c.deleted_at is null
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'director', 'admin', 'system_admin')
             or (cp.can_read = true and (cp.user_id = $2 or cp.role = $1::app.user_role))
           )
         order by c.created_at desc, c.id desc
@@ -1541,7 +1541,7 @@ export class MessengerService implements OnModuleInit {
         join app.users u on u.id = cm.user_id and u.deleted_at is null
         where cm.chat_id = $1
           and cm.left_at is null
-          and u.role not in ('admin', 'manager', 'system_admin')
+          and u.role not in ('admin', 'manager', 'director', 'system_admin')
       `,
       [chatId],
     );

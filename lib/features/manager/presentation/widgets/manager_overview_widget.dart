@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 
 enum _DashboardPeriod { week, month, quarter }
 
@@ -64,7 +65,14 @@ extension _DashboardPeriodBounds on _DashboardPeriod {
 
 class ManagerOverviewWidget extends ConsumerStatefulWidget {
   final Function(int index, int? subIndex)? onTabChange;
-  const ManagerOverviewWidget({super.key, this.onTabChange});
+  /// Реальная роль текущего пользователя (KVA-239): общешкольные денежные
+  /// KPI (Выручка/Ожидаемые платежи) видны только director/system_admin.
+  final String role;
+  const ManagerOverviewWidget({
+    super.key,
+    this.onTabChange,
+    required this.role,
+  });
 
   @override
   ConsumerState<ManagerOverviewWidget> createState() =>
@@ -72,6 +80,10 @@ class ManagerOverviewWidget extends ConsumerStatefulWidget {
 }
 
 class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
+  // KVA-239: общешкольные денежные показатели (Выручка/Ожидаемые платежи)
+  // видят только director/system_admin; у manager сервер отдаёт их null.
+  bool get _canSeeFinance => crmHasSchoolFinanceAccess(widget.role);
+
   _DashboardPeriod _period = _DashboardPeriod.month;
   String? _branchId;
   late Future<List<Map<String, dynamic>>> _branchesFuture;
@@ -197,7 +209,9 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
                       overdueTasks: _asNum(kpis['overdue_tasks']),
                       scheduleIssues: _asNum(kpis['schedule_issues']),
                       debtStudents: _asNum(kpis['debt_students']),
-                      expectedPayments: _asNum(kpis['expected_payments']),
+                      expectedPayments: _canSeeFinance
+                          ? _asNum(kpis['expected_payments'])
+                          : null,
                       onTasksTap: () => widget.onTabChange?.call(6, null),
                       onScheduleTap: () => widget.onTabChange?.call(2, null),
                       onDebtsTap: () => widget.onTabChange?.call(5, null),
@@ -241,24 +255,26 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
 
   List<_KpiSpec> _kpiSpecs(Map<String, dynamic> sources) {
     return [
-      _KpiSpec(
-        key: 'revenue',
-        label: 'Выручка',
-        icon: Icons.account_balance_wallet_rounded,
-        accent: AppTheme.success,
-        sourceLabel: _sourceLabel(sources['revenue'], 'Финансы'),
-        format: _money,
-        onTap: () => widget.onTabChange?.call(7, null),
-      ),
-      _KpiSpec(
-        key: 'expected_payments',
-        label: 'Ожидаемые платежи',
-        icon: Icons.event_available_rounded,
-        accent: AppTheme.secondaryGold,
-        sourceLabel: _sourceLabel(sources['expectedPayments'], 'Платежи'),
-        format: _money,
-        onTap: () => widget.onTabChange?.call(5, null),
-      ),
+      if (_canSeeFinance)
+        _KpiSpec(
+          key: 'revenue',
+          label: 'Выручка',
+          icon: Icons.account_balance_wallet_rounded,
+          accent: AppTheme.success,
+          sourceLabel: _sourceLabel(sources['revenue'], 'Финансы'),
+          format: _money,
+          onTap: () => widget.onTabChange?.call(7, null),
+        ),
+      if (_canSeeFinance)
+        _KpiSpec(
+          key: 'expected_payments',
+          label: 'Ожидаемые платежи',
+          icon: Icons.event_available_rounded,
+          accent: AppTheme.secondaryGold,
+          sourceLabel: _sourceLabel(sources['expectedPayments'], 'Платежи'),
+          format: _money,
+          onTap: () => widget.onTabChange?.call(5, null),
+        ),
       _KpiSpec(
         key: 'debt_students',
         label: 'Ученики с долгом',
@@ -463,7 +479,9 @@ class _AttentionPanel extends StatelessWidget {
   final num overdueTasks;
   final num scheduleIssues;
   final num debtStudents;
-  final num expectedPayments;
+  /// null — у роли нет доступа к общешкольным финансам (KVA-239): строка
+  /// «Ожидаемые платежи» скрывается.
+  final num? expectedPayments;
   final VoidCallback? onTasksTap;
   final VoidCallback? onScheduleTap;
   final VoidCallback? onDebtsTap;
@@ -502,13 +520,14 @@ class _AttentionPanel extends StatelessWidget {
         accent: debtStudents > 0 ? AppTheme.warning : AppTheme.success,
         onTap: onDebtsTap,
       ),
-      _AttentionRowData(
-        icon: Icons.event_available_rounded,
-        label: 'Ожидаемые платежи',
-        value: _money(expectedPayments),
-        accent: AppTheme.secondaryGold,
-        onTap: onDebtsTap,
-      ),
+      if (expectedPayments != null)
+        _AttentionRowData(
+          icon: Icons.event_available_rounded,
+          label: 'Ожидаемые платежи',
+          value: _money(expectedPayments),
+          accent: AppTheme.secondaryGold,
+          onTap: onDebtsTap,
+        ),
     ];
 
     return Material(

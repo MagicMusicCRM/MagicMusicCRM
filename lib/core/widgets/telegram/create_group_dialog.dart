@@ -109,6 +109,8 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
         return 'Администратор системы';
       case 'manager':
         return 'Управляющий';
+      case 'director':
+        return 'Директор';
       case 'teacher':
         return 'Преподаватель';
       case 'client':

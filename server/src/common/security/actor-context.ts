@@ -3,6 +3,7 @@ export type UserRole =
   | 'teacher'
   | 'manager'
   | 'admin'
+  | 'director'
   | 'system_admin';
 
 export interface ActorContext {
@@ -21,7 +22,12 @@ export interface AuthenticatedRequest {
 }
 
 export function isStaffRole(role: UserRole): boolean {
-  return role === 'admin' || role === 'manager' || role === 'system_admin';
+  return (
+    role === 'admin' ||
+    role === 'manager' ||
+    role === 'director' ||
+    role === 'system_admin'
+  );
 }
 
 export function isAdminRole(role: UserRole): boolean {
@@ -29,22 +35,24 @@ export function isAdminRole(role: UserRole): boolean {
 }
 
 export function isManagerOrAdminRole(role: UserRole): boolean {
-  return role === 'manager' || isAdminRole(role);
+  return role === 'manager' || role === 'director' || isAdminRole(role);
 }
 
 // Иерархия ролей (бизнес-правило владельца): Управляющий (manager) ВЫШЕ
-// Администратора (admin). client < teacher < admin < manager < system_admin.
+// Администратора (admin), Директор (director) ВЫШЕ Управляющего.
+// client < teacher < admin < manager < director < system_admin.
 export const ROLE_LEVEL: Record<UserRole, number> = {
   client: 0,
   teacher: 1,
   admin: 2,
   manager: 3,
-  system_admin: 4,
+  director: 4,
+  system_admin: 5,
 };
 
-// Управляющий или Администратор системы (но НЕ Администратор).
+// Управляющий/Директор или Администратор системы (но НЕ Администратор).
 export function isManagerRole(role: UserRole): boolean {
-  return role === 'manager' || role === 'system_admin';
+  return role === 'manager' || role === 'director' || role === 'system_admin';
 }
 
 /**
@@ -53,7 +61,10 @@ export function isManagerRole(role: UserRole): boolean {
  *
  * - system_admin: полный контроль (может назначить любую роль, включая
  *   system_admin); защита последнего system_admin реализована в сервисе.
- * - manager (Управляющий): только роли СТРОГО НИЖЕ себя (client/teacher/admin).
+ * - director (Директор): только роли СТРОГО НИЖЕ себя
+ *   (client/teacher/admin/manager).
+ * - manager (Управляющий): только роли СТРОГО НИЖЕ себя (client/teacher/admin);
+ *   в частности НЕ может назначать director и system_admin.
  * - admin и ниже: НЕ управляют ролями вообще.
  */
 export function canAssignRole(
@@ -61,6 +72,8 @@ export function canAssignRole(
   targetRole: UserRole
 ): boolean {
   if (actorRole === 'system_admin') return true;
-  if (actorRole === 'manager') return ROLE_LEVEL[targetRole] < ROLE_LEVEL.manager;
+  if (actorRole === 'manager' || actorRole === 'director') {
+    return ROLE_LEVEL[targetRole] < ROLE_LEVEL[actorRole];
+  }
   return false;
 }

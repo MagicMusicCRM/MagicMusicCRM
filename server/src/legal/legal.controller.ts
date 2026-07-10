@@ -67,7 +67,7 @@ export class AdminDeletionRequestsController {
   constructor(private readonly legal: LegalService) {}
 
   @Get()
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   list(@CurrentActor() actor: ActorContext, @Query() query: ListDeletionRequestsQuery) {
     return this.legal.listDeletionRequests(actor, query);
   }

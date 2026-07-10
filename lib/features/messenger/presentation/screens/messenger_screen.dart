@@ -121,16 +121,22 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   bool get _isAdminRole =>
       widget.role == 'admin' || widget.role == 'system_admin';
 
-  bool get _isManagerOrAdminRole => _isAdminRole || widget.role == 'manager';
+  bool get _isManagerOrAdminRole =>
+      _isAdminRole || widget.role == 'manager' || widget.role == 'director';
 
   /// Manager-tier may clear assignment markers created by others. Claiming is
   /// advisory and available to every staff role.
   bool get _isManagerTier =>
-      widget.role == 'manager' || widget.role == 'system_admin';
+      widget.role == 'manager' ||
+      widget.role == 'director' ||
+      widget.role == 'system_admin';
 
   /// Operational CRM access. Role editing itself remains backend-limited to
   /// manager/system_admin via canAssignRole/ProfilePolicy.
   bool get _hasManagerAccess => crmHasManagerAccess(widget.role);
+
+  /// KVA-239: общешкольные финансы (таб «Финансы») — только director/system_admin.
+  bool get _hasSchoolFinanceAccess => crmHasSchoolFinanceAccess(widget.role);
 
   bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';
   String _currentUserDisplayName = 'Пользователь';
@@ -580,6 +586,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
             (profile) =>
                 profile['role'] == 'admin' ||
                 profile['role'] == 'manager' ||
+                profile['role'] == 'director' ||
                 profile['role'] == 'system_admin',
           )
           .map((profile) => profile['user_id']?.toString() ?? '')
@@ -2175,6 +2182,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                 ),
               )
             : ManagerOverviewWidget(
+                role: widget.role,
                 onTabChange: (index, subIndex) => _handleOverviewTabChange(
                   index,
                   subIndex,
@@ -2187,9 +2195,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         currentRole: widget.role,
         initialSearch: _userRolesInitialSearch,
       ),
-      5 when isDesktop && _hasManagerAccess => const FinanceWidget(),
+      5 when isDesktop && _hasSchoolFinanceAccess => const FinanceWidget(),
       6 when isDesktop && _hasManagerAccess => const TasksWidget(),
       7 when isDesktop && _hasManagerAccess => ReportsWidget(
+        role: widget.role,
         initialTab: _selectedReportsTab,
       ),
       _ => _buildMessengerShell(context),
@@ -3542,6 +3551,7 @@ class _MessageListViewState extends State<_MessageListView> {
   bool get _canSeeAdministrationAuthors {
     return widget.role == 'admin' ||
         widget.role == 'manager' ||
+        widget.role == 'director' ||
         widget.role == 'system_admin';
   }
 
@@ -3588,6 +3598,7 @@ class _MessageListViewState extends State<_MessageListView> {
     final canAdminDelete =
         widget.role == 'admin' ||
         widget.role == 'manager' ||
+        widget.role == 'director' ||
         widget.role == 'system_admin';
 
     return Stack(

@@ -25,7 +25,7 @@ export class AdminSendNotificationDto {
   userIds?: string[];
 
   @ValidateIf((dto: AdminSendNotificationDto) => dto.target === 'role')
-  @IsIn(['client', 'teacher', 'manager', 'admin', 'system_admin'])
+  @IsIn(['client', 'teacher', 'manager', 'admin', 'director', 'system_admin'])
   role?: UserRole;
 
   @IsString()

@@ -133,7 +133,7 @@ export class MessengerPolicy {
       `
         select c.id,
           (
-            $2::text in ('manager', 'admin', 'system_admin')
+            $2::text in ('manager', 'director', 'admin', 'system_admin')
             or exists (
               select 1 from app.channel_permissions cp
               where cp.channel_id = c.id
@@ -142,7 +142,7 @@ export class MessengerPolicy {
             )
           ) as "canRead",
           (
-            $2::text in ('manager', 'admin', 'system_admin')
+            $2::text in ('manager', 'director', 'admin', 'system_admin')
             or exists (
               select 1 from app.channel_permissions cp
               where cp.channel_id = c.id

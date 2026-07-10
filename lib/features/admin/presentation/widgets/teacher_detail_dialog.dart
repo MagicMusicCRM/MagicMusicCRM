@@ -298,6 +298,7 @@ String _roleLabel(String role) {
   return switch (role) {
     'admin' => 'Администратор',
     'manager' => 'Управляющий',
+    'director' => 'Директор',
     'teacher' => 'Преподаватель',
     'system_admin' => 'Администратор системы',
     _ => role.isEmpty ? 'Нет' : role,

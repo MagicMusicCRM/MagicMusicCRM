@@ -540,6 +540,8 @@ class MagicMessengerService {
         ? 'Администраторы'
         : role == 'manager'
         ? 'Управляющие'
+        : role == 'director'
+        ? 'Директора'
         : role == 'teacher'
         ? 'Преподаватели'
         : role == 'client'

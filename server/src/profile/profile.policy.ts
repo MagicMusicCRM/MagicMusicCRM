@@ -37,10 +37,12 @@ export class ProfilePolicy {
     // является manager/system_admin. system_admin имеет полный контроль; защита
     // от потери последнего активного system_admin реализована в сервисе.
     if (actor.role === 'system_admin') return;
+    // KVA-239: director управляет ролями строго ниже себя (включая manager);
+    // manager — строго ниже себя (и НЕ может назначать director/system_admin).
     if (
-      actor.role === 'manager' &&
-      (currentRole === undefined || canAssignRole('manager', currentRole)) &&
-      (newRole === undefined || canAssignRole('manager', newRole))
+      (actor.role === 'manager' || actor.role === 'director') &&
+      (currentRole === undefined || canAssignRole(actor.role, currentRole)) &&
+      (newRole === undefined || canAssignRole(actor.role, newRole))
     ) {
       return;
     }

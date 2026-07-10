@@ -512,6 +512,7 @@ String _staffRoleLabel(String role) {
   return switch (role) {
     'admin' => 'Администратор',
     'manager' => 'Управляющий',
+    'director' => 'Директор',
     'teacher' => 'Преподаватель',
     'system_admin' => 'Администратор системы',
     _ => role.isEmpty ? 'Сотрудник' : role,
@@ -1200,6 +1201,8 @@ class _EmployeesList extends ConsumerWidget {
               final roleLabel = _staffRoleLabel(role);
               final roleColor = role == 'manager'
                   ? const Color(0xFF8B5CF6)
+                  : role == 'director'
+                  ? const Color(0xFFEF4444)
                   : role == 'teacher'
                   ? const Color(0xFF3B82F6)
                   : AppTheme.primaryGold;

@@ -100,4 +100,46 @@ describe("CrmPolicy", () => {
       policy.assertCanReadFinance({ userId: "a", role: "admin" }, "client-b"),
     ).not.toThrow();
   });
+
+  // KVA-239: общешкольные финансы — только director/system_admin.
+  describe("assertCanReadSchoolFinance — общешкольные финансы", () => {
+    it("allows director and system_admin", () => {
+      expect(() =>
+        policy.assertCanReadSchoolFinance({ userId: "d", role: "director" }),
+      ).not.toThrow();
+      expect(() =>
+        policy.assertCanReadSchoolFinance({
+          userId: "s",
+          role: "system_admin",
+        }),
+      ).not.toThrow();
+    });
+
+    it("forbids manager, admin, teacher and client", () => {
+      for (const role of ["manager", "admin", "teacher", "client"] as const) {
+        expect(() =>
+          policy.assertCanReadSchoolFinance({ userId: "u", role }),
+        ).toThrow(ForbiddenException);
+      }
+    });
+
+    it("director keeps manager-tier card finance access (director >= manager)", () => {
+      expect(() =>
+        policy.assertCanReadStudentFinance({ userId: "d", role: "director" }),
+      ).not.toThrow();
+      expect(() => policy.assertManagerOnly({ userId: "d", role: "director" }))
+        .not.toThrow();
+      expect(() => policy.assertCanWriteCrm({ userId: "d", role: "director" }))
+        .not.toThrow();
+    });
+
+    it("manager keeps card finance access (карточные финансы не отрезаны)", () => {
+      expect(() =>
+        policy.assertCanReadStudentFinance({ userId: "m", role: "manager" }),
+      ).not.toThrow();
+      expect(() =>
+        policy.assertCanReadFinance({ userId: "m", role: "manager" }, "x"),
+      ).not.toThrow();
+    });
+  });
 });

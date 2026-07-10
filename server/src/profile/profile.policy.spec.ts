@@ -6,6 +6,7 @@ describe('ProfilePolicy', () => {
 
   const sys = { userId: 'sys-a', role: 'system_admin' as const };
   const manager = { userId: 'mgr-a', role: 'manager' as const };
+  const director = { userId: 'dir-a', role: 'director' as const };
   const admin = { userId: 'adm-a', role: 'admin' as const };
   const teacher = { userId: 'tch-a', role: 'teacher' as const };
   const client = { userId: 'cli-a', role: 'client' as const };
@@ -37,6 +38,7 @@ describe('ProfilePolicy', () => {
         'teacher',
         'admin',
         'manager',
+        'director',
         'system_admin',
       ] as const) {
         expect(() =>
@@ -61,12 +63,44 @@ describe('ProfilePolicy', () => {
       ).not.toThrow();
     });
 
-    it('manager may NOT grant manager or system_admin', () => {
+    it('manager may NOT grant manager, director or system_admin', () => {
       expect(() =>
         policy.assertCanUpdateRole(manager, 'client', 'manager')
       ).toThrow(ForbiddenException);
       expect(() =>
+        policy.assertCanUpdateRole(manager, 'client', 'director')
+      ).toThrow(ForbiddenException);
+      expect(() =>
         policy.assertCanUpdateRole(manager, 'client', 'system_admin')
+      ).toThrow(ForbiddenException);
+    });
+
+    it('director may assign roles strictly below director (incl. manager)', () => {
+      for (const target of ['client', 'teacher', 'admin', 'manager'] as const) {
+        expect(() =>
+          policy.assertCanUpdateRole(director, 'client', target)
+        ).not.toThrow();
+      }
+    });
+
+    it('director may NOT grant director or system_admin, nor modify them', () => {
+      expect(() =>
+        policy.assertCanUpdateRole(director, 'client', 'director')
+      ).toThrow(ForbiddenException);
+      expect(() =>
+        policy.assertCanUpdateRole(director, 'client', 'system_admin')
+      ).toThrow(ForbiddenException);
+      expect(() =>
+        policy.assertCanUpdateRole(director, 'director', 'manager')
+      ).toThrow(ForbiddenException);
+      expect(() =>
+        policy.assertCanUpdateRole(director, 'system_admin', 'client')
+      ).toThrow(ForbiddenException);
+    });
+
+    it('manager may NOT modify a user who currently holds director', () => {
+      expect(() =>
+        policy.assertCanUpdateRole(manager, 'director', 'client')
       ).toThrow(ForbiddenException);
     });
 

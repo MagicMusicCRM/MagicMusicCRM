@@ -24,6 +24,7 @@ const VALID_ROLES = new Set<UserRole>([
   'teacher',
   'manager',
   'admin',
+  'director',
   'system_admin'
 ]);
 

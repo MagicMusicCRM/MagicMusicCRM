@@ -4096,8 +4096,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
   /// Staff может выбрать поток комментария; педагог всегда пишет teacher_note.
   bool get _canPickCommentKind {
     final role = ref.read(releaseGateStatusProvider).asData?.value.role;
-    final isStaff =
-        role == 'admin' || role == 'manager' || role == 'system_admin';
+    final isStaff = role == 'admin' ||
+        role == 'manager' ||
+        role == 'director' ||
+        role == 'system_admin';
     final targetIsStudent = _isConverted || widget.entityType == 'student';
     return isStaff && targetIsStudent;
   }
