@@ -7,10 +7,11 @@ function str(v: unknown): string {
 
 export function parseRuDate(raw: unknown): string | null {
   const s = str(raw);
-  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+  // Час бывает однозначным, разделитель — в т.ч. переносом строки («18.03.2026\n9:55»).
+  const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
   if (!m) return null;
   const [, dd, mm, yyyy, hh, mi] = m;
-  const iso = `${yyyy}-${mm}-${dd}T${hh ?? "00"}:${mi ?? "00"}:00.000Z`;
+  const iso = `${yyyy}-${mm}-${dd}T${(hh ?? "0").padStart(2, "0")}:${mi ?? "00"}:00.000Z`;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   if (d.getUTCFullYear() !== Number(yyyy) || d.getUTCMonth() + 1 !== Number(mm) || d.getUTCDate() !== Number(dd)) return null;
