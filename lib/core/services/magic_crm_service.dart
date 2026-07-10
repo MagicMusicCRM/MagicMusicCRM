@@ -1324,8 +1324,9 @@ class MagicCrmService {
 
   Future<Map<String, dynamic>> saveLessonAttendance(
     String lessonId,
-    List<Map<String, dynamic>> participations,
-  ) async {
+    List<Map<String, dynamic>> participations, {
+    bool notifyClient = false,
+  }) async {
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/lessons/$lessonId/attendance',
       data: {
@@ -1333,11 +1334,17 @@ class MagicCrmService {
             .map(
               (item) => {
                 'studentId': item['student_id'],
+                // KVA-237: kind — источник истины; status оставлен для
+                // обратной совместимости бекенда.
+                'kind': item['kind'] ?? 'attended',
+                if (item['kind'] == 'partially_paid')
+                  'chargeShare': item['charge_share'] ?? 0.5,
                 'status': item['is_present'] == false ? 'absent' : 'present',
                 'passReason': item['pass_reason']?.toString().trim() ?? '',
               },
             )
             .toList(),
+        if (notifyClient) 'notifyClient': true,
       },
     );
     return _legacyAttendance(response);
@@ -1573,6 +1580,108 @@ class MagicCrmService {
       'income_total': response['incomeTotal'],
       'outcome_total': response['outcomeTotal'],
     };
+  }
+
+  /// KVA-236: серии постоянного расписания.
+  Future<List<Map<String, dynamic>>> listScheduleSeries({
+    String? studentId,
+    String? groupId,
+    bool includeExpired = false,
+  }) async {
+    final queryParameters = <String, dynamic>{};
+    if (studentId != null) queryParameters['studentId'] = studentId;
+    if (groupId != null) queryParameters['groupId'] = groupId;
+    if (includeExpired) queryParameters['includeExpired'] = 'true';
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/schedule-series',
+      queryParameters: queryParameters,
+    );
+    return _items(response)
+        .map(
+          (item) => {
+            'id': item['id'],
+            'student_id': item['studentId'],
+            'group_id': item['groupId'],
+            'teacher_id': item['teacherId'],
+            'teacher_name': item['teacherName'],
+            'room_id': item['roomId'],
+            'room_name': item['roomName'],
+            'branch_id': item['branchId'],
+            'branch_name': item['branchName'],
+            'weekday': item['weekday'],
+            'begin_time': item['beginTime'],
+            'duration_minutes': item['durationMinutes'],
+            'valid_from': item['validFrom'],
+            'valid_until': item['validUntil'],
+            'notes': item['notes'],
+          },
+        )
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createScheduleSeries({
+    String? studentId,
+    String? groupId,
+    String? teacherId,
+    String? roomId,
+    String? branchId,
+    required int weekday,
+    required String beginTime,
+    int? durationMinutes,
+    required String validFrom,
+    String? validUntil,
+    String? notes,
+  }) async {
+    final data = <String, dynamic>{
+      'weekday': weekday,
+      'beginTime': beginTime,
+      'validFrom': validFrom,
+    };
+    if (studentId != null) data['studentId'] = studentId;
+    if (groupId != null) data['groupId'] = groupId;
+    if (teacherId != null) data['teacherId'] = teacherId;
+    if (roomId != null) data['roomId'] = roomId;
+    if (branchId != null) data['branchId'] = branchId;
+    if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
+    if (validUntil != null) data['validUntil'] = validUntil;
+    if (notes != null && notes.trim().isNotEmpty) data['notes'] = notes.trim();
+    return _api.post<Map<String, dynamic>>('/crm/schedule-series', data: data);
+  }
+
+  Future<Map<String, dynamic>> updateScheduleSeries(
+    String id, {
+    String? teacherId,
+    String? roomId,
+    int? weekday,
+    String? beginTime,
+    int? durationMinutes,
+    String? validUntil,
+    String? effectiveFrom,
+    String? notes,
+  }) async {
+    final data = <String, dynamic>{};
+    if (teacherId != null) data['teacherId'] = teacherId;
+    if (roomId != null) data['roomId'] = roomId;
+    if (weekday != null) data['weekday'] = weekday;
+    if (beginTime != null) data['beginTime'] = beginTime;
+    if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
+    if (validUntil != null) data['validUntil'] = validUntil;
+    if (effectiveFrom != null) data['effectiveFrom'] = effectiveFrom;
+    if (notes != null) data['notes'] = notes;
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/schedule-series/$id',
+      data: data,
+    );
+  }
+
+  Future<Map<String, dynamic>> deleteScheduleSeries(
+    String id, {
+    String? from,
+  }) async {
+    return _api.delete<Map<String, dynamic>>(
+      '/crm/schedule-series/$id',
+      queryParameters: from != null ? {'from': from} : null,
+    );
   }
 
   /// KVA-235: ручная операция личного счёта (возврат/корректировка).
@@ -2529,6 +2638,11 @@ class MagicCrmService {
         'lesson_id': item['lessonId'],
         'student_id': studentId,
         'is_present': status != 'absent',
+        // KVA-237: 5 типов посещения; для легаси-строк выводим из status.
+        'kind':
+            raw['kind'] ?? (status == 'absent' ? 'unpaid_miss' : 'attended'),
+        'charge_share': raw['chargeShare'] ?? 1,
+        'charged_hours': raw['chargedHours'],
         'pass_reason': raw['passReason'] ?? '',
       });
     }

@@ -8,11 +8,12 @@ import { CrmController } from './crm.controller';
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
 import { CrmPolicy } from './crm.policy';
 import { CrmService } from './crm.service';
+import { ScheduleSeriesWorker } from './schedule-series.worker';
 
 @Module({
   imports: [AuditModule, DatabaseModule, JwtModule.register({}), NotificationsModule],
   controllers: [CrmController],
-  providers: [CrmService, CrmPolicy, HolliHopMetadataService, JwtAuthGuard],
+  providers: [CrmService, CrmPolicy, HolliHopMetadataService, ScheduleSeriesWorker, JwtAuthGuard],
   exports: [CrmService, CrmPolicy]
 })
 export class CrmModule {}

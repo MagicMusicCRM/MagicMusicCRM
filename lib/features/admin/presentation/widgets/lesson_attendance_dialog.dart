@@ -4,12 +4,12 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 
-/// v7 attendance sheet (P2-5 / v7p2-3). Theme-aware (in-app screen): surfaces
-/// follow the app theme, accents use the v7 gold/success/danger tokens.
+/// v7 attendance sheet (P2-5 / v7p2-3 / KVA-237). Theme-aware (in-app screen):
+/// surfaces follow the app theme, accents use the v7 tokens.
 ///
-/// Contract is LOCKED — `show()` API, `getLessonAttendance`/`saveLessonAttendance`
-/// and the participation shape (`is_present`/`pass_reason`) are unchanged; the
-/// backend only accepts present/absent, so the chips are binary.
+/// `show()` API and the participation shape are backward-compatible; KVA-237
+/// added the 5 HolliHop-статусов (`kind`), долю списания для частично
+/// оплачиваемого и чекбокс «Уведомить об изменениях».
 class LessonAttendanceDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> lesson;
 
@@ -30,10 +30,38 @@ class LessonAttendanceDialog extends ConsumerStatefulWidget {
       _LessonAttendanceDialogState();
 }
 
+// KVA-237: 5 типов посещения (модель HolliHop) — (kind, подпись, цвет).
+const List<(String, String)> kAttendanceKinds = [
+  ('attended', 'Занятие'),
+  ('unpaid_miss', 'Неоплачиваемый пропуск'),
+  ('free_lesson', 'Бесплатное занятие'),
+  ('paid_miss', 'Оплачиваемый пропуск'),
+  ('partially_paid', 'Частично оплачиваемое'),
+];
+
+Color attendanceKindColor(String kind) {
+  return switch (kind) {
+    'attended' => AppColor.success,
+    'unpaid_miss' => AppColor.danger,
+    'free_lesson' => AppColor.gold,
+    'paid_miss' => const Color(0xFFB8860B),
+    'partially_paid' => const Color(0xFF8E6BC9),
+    _ => AppColor.gold,
+  };
+}
+
+String attendanceKindLabel(String kind) {
+  for (final (k, label) in kAttendanceKinds) {
+    if (k == kind) return label;
+  }
+  return kind;
+}
+
 class _LessonAttendanceDialogState
     extends ConsumerState<LessonAttendanceDialog> {
   bool _loading = true;
   bool _saving = false;
+  bool _notifyClient = false;
   List<Map<String, dynamic>> _participations = [];
   List<Map<String, dynamic>> _students = [];
   final Map<String, TextEditingController> _reasonControllers = {};
@@ -89,7 +117,11 @@ class _LessonAttendanceDialogState
       final lessonId = widget.lesson['id'];
       await ref
           .read(magicCrmServiceProvider)
-          .saveLessonAttendance(lessonId, _participations);
+          .saveLessonAttendance(
+            lessonId,
+            _participations,
+            notifyClient: _notifyClient,
+          );
 
       if (mounted) {
         Navigator.pop(context);
@@ -113,7 +145,13 @@ class _LessonAttendanceDialogState
     final cs = Theme.of(context).colorScheme;
     final media = MediaQuery.of(context);
     final present = _participations
-        .where((p) => p['is_present'] == true)
+        .where(
+          (p) => const [
+            'attended',
+            'free_lesson',
+            'partially_paid',
+          ].contains(p['kind']),
+        )
         .length;
     final absent = _participations.length - present;
 
@@ -227,6 +265,23 @@ class _LessonAttendanceDialogState
                         ),
                 ),
                 const Divider(height: 1),
+                // «Уведомить об изменениях» (модалка HolliHop, image5).
+                if (!_loading)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
+                    child: CheckboxListTile(
+                      value: _notifyClient,
+                      onChanged: (v) =>
+                          setState(() => _notifyClient = v ?? false),
+                      dense: true,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      activeColor: AppColor.gold,
+                      title: const Text(
+                        'Уведомить об изменениях',
+                        style: TextStyle(fontSize: 13.5),
+                      ),
+                    ),
+                  ),
                 // Footer.
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
@@ -291,7 +346,12 @@ class _LessonAttendanceDialogState
     final participation = _participations.firstWhere(
       (p) => p['student_id'] == student['id'],
     );
-    final present = participation['is_present'] == true;
+    final kind = (participation['kind'] ?? 'attended').toString();
+    final shareRaw = participation['charge_share'];
+    final share = shareRaw is num
+        ? shareRaw.toDouble()
+        : double.tryParse(shareRaw?.toString() ?? '') ?? 0.5;
+    final kindColor = attendanceKindColor(kind);
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -314,80 +374,126 @@ class _LessonAttendanceDialogState
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
-              _attChip(
-                label: 'Был',
-                color: AppColor.success,
-                selected: present,
-                onTap: () => setState(() => participation['is_present'] = true),
-              ),
-              const SizedBox(width: 6),
-              _attChip(
-                label: 'Н/Б',
-                color: AppColor.danger,
-                selected: !present,
-                onTap: () => setState(() => participation['is_present'] = false),
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: kindColor,
+                  shape: BoxShape.circle,
+                ),
               ),
             ],
           ),
-          if (!present) ...[
-            const SizedBox(height: 10),
-            TextField(
-              controller: _reasonControllers[id],
-              onChanged: (val) => participation['pass_reason'] = val,
-              style: const TextStyle(fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Причина отсутствия…',
-                isDense: true,
-                filled: true,
-                fillColor: cs.surface,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  borderSide: BorderSide(color: cs.outlineVariant),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  borderSide: const BorderSide(color: AppColor.gold, width: 2),
-                ),
+          const SizedBox(height: 10),
+          // KVA-237: статус занятия — 5 типов HolliHop.
+          DropdownButtonFormField<String>(
+            initialValue: kind,
+            isExpanded: true,
+            style: TextStyle(fontSize: 13.5, color: cs.onSurface),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: cs.surface,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                borderSide: BorderSide(color: cs.outlineVariant),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                borderSide: const BorderSide(color: AppColor.gold, width: 2),
               ),
             ),
+            items: [
+              for (final (value, label) in kAttendanceKinds)
+                DropdownMenuItem(
+                  value: value,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: attendanceKindColor(value),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(label, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+            onChanged: (v) => setState(() {
+              participation['kind'] = v;
+              participation['is_present'] = const [
+                'attended',
+                'free_lesson',
+                'partially_paid',
+              ].contains(v);
+            }),
+          ),
+          if (kind == 'partially_paid') ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Slider(
+                    value: share.clamp(0.05, 1.0),
+                    min: 0.05,
+                    max: 1.0,
+                    divisions: 19,
+                    activeColor: attendanceKindColor(kind),
+                    label: '${(share * 100).round()}%',
+                    onChanged: (v) => setState(
+                      () => participation['charge_share'] =
+                          (v * 100).round() / 100,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 44,
+                  child: Text(
+                    '${(share * 100).round()}%',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
+          const SizedBox(height: 10),
+          TextField(
+            controller: _reasonControllers[id],
+            onChanged: (val) => participation['pass_reason'] = val,
+            style: const TextStyle(fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Заметки к занятию…',
+              isDense: true,
+              filled: true,
+              fillColor: cs.surface,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                borderSide: BorderSide(color: cs.outlineVariant),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                borderSide: const BorderSide(color: AppColor.gold, width: 2),
+              ),
+            ),
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _attChip({
-    required String label,
-    required Color color,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.chip),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.chip),
-          border: Border.all(
-            color: selected ? color : Theme.of(context).dividerColor,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            color: selected
-                ? Colors.white
-                : Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
       ),
     );
   }

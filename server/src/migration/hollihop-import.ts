@@ -1758,6 +1758,9 @@ async function upsertLessons(
           lesson_id: lessonId,
           student_id: studentId,
           status: participationStatus,
+          // KVA-237: absent из HolliHop — неоплачиваемый пропуск (час сохранён).
+          attendance_kind:
+            participationStatus === "absent" ? "unpaid_miss" : "attended",
         },
         ["lesson_id", "student_id"],
       );

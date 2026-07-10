@@ -2360,6 +2360,144 @@ describe("CrmService", () => {
     expect(query.mock.calls[1][1]).toContain(300);
   });
 
+  it("creates a schedule series and materializes lessons up to the horizon (KVA-236)", async () => {
+    const { service, query, audit } = createServiceWithQueryResults([
+      { rows: [{ id: "series-a" }] }, // insert series
+      { rows: [] }, // materialize insert..select
+    ]);
+
+    await expect(
+      service.createScheduleSeries(actor, {
+        studentId: "student-a",
+        weekday: 2,
+        beginTime: "15:00",
+        durationMinutes: 60,
+        validFrom: "2026-07-15",
+        // validUntil отсутствует — «до бесконечности»
+      }),
+    ).resolves.toEqual({ id: "series-a", lessonsCreated: 0 });
+
+    const materializeSql = String(query.mock.calls[1][0]);
+    expect(materializeSql).toContain("generate_series");
+    expect(materializeSql).toContain("extract(isodow from d) = s.weekday");
+    // Идемпотентность: занятая series_date (вкл. перенесённые/отменённые) не пересоздаётся.
+    expect(materializeSql).toContain("l.series_id = s.id and l.series_date = d::date");
+    expect(query.mock.calls[1][1]).toEqual(["series-a", 60]);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "crm.schedule_series_created" }),
+    );
+  });
+
+  it("applies a series edit from the effective date and keeps moved lessons (KVA-236)", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "series-a",
+            student_id: "student-a",
+            group_id: null,
+            teacher_id: "teacher-a",
+            room_id: "room-a",
+            branch_id: "branch-a",
+            weekday: 2,
+            begin_time: "15:00:00",
+            duration_minutes: 60,
+            valid_from: "2026-07-15",
+            valid_until: null,
+            notes: null,
+            created_at: "2026-07-10",
+            updated_at: "2026-07-10",
+          },
+        ],
+      },
+      { rows: [] }, // close old series
+      { rows: [] }, // remove future untouched lessons
+      { rows: [{ id: "series-b" }] }, // continuation insert
+      { rows: [] }, // materialize continuation
+    ]);
+
+    await expect(
+      service.updateScheduleSeries(actor, "series-a", {
+        teacherId: "teacher-b",
+        beginTime: "16:00",
+        effectiveFrom: "2026-08-01",
+      }),
+    ).resolves.toEqual({
+      id: "series-b",
+      previousId: "series-a",
+      lessonsCreated: 0,
+    });
+
+    // Будущие занятия снимаются ТОЛЬКО нетронутые: scheduled и не перенесённые.
+    const removeSql = String(query.mock.calls[2][0]);
+    expect(removeSql).toContain("original_scheduled_at is null");
+    expect(removeSql).toContain("status = 'scheduled'");
+    expect(query.mock.calls[2][1]).toEqual(["series-a", "2026-08-01"]);
+    // Продолжение наследует незатронутые параметры и берёт новые.
+    expect(query.mock.calls[3][1]).toEqual([
+      "student-a",
+      null,
+      "teacher-b",
+      "room-a",
+      "branch-a",
+      2,
+      "16:00",
+      60,
+      "2026-08-01",
+      null,
+      null,
+      "manager-a",
+    ]);
+  });
+
+  it("stamps original_scheduled_at when a series lesson is moved (KVA-236)", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // assertCanUpdateLesson lookup (manager: no query? see below)
+      { rows: [{ teacher_id: null, room_id: null, scheduled_at: "2026-07-15T15:00:00Z", teacher_user_id: null }] },
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            lead_id: null,
+            teacher_id: null,
+            branch_id: null,
+            room_id: null,
+            scheduled_at: "2026-07-16T15:00:00Z",
+            duration_minutes: 60,
+            status: "scheduled",
+            is_trial: false,
+            notes: null,
+            student_user_id: null,
+            teacher_user_id: null,
+            student_name: null,
+            teacher_name: null,
+            branch_name: null,
+            room_name: null,
+            group_name: null,
+            group_price_per_lesson: null,
+          },
+        ],
+      },
+      { rows: [] }, // lesson_reminders cleanup
+      { rows: [] }, // reschedule notification lookup (best-effort)
+    ]);
+
+    await service.updateLesson(actor, "lesson-a", {
+      scheduledAt: "2026-07-16T15:00:00Z",
+    });
+
+    // Первый перенос занятия серии фиксирует исходное время в САМОМ UPDATE.
+    const updateCall = query.mock.calls.find((c) =>
+      String(c[0]).includes("update app.lessons"),
+    );
+    expect(String(updateCall?.[0])).toContain(
+      "coalesce(original_scheduled_at, scheduled_at)",
+    );
+    expect(String(updateCall?.[0])).toContain("series_id is not null");
+  });
+
   it("allows a client to list subscriptions for a manually linked student", async () => {
     const { service, query } = createService([
       {
@@ -2644,12 +2782,18 @@ describe("CrmService", () => {
           studentId: "student-a",
           studentName: "Анна Иванова",
           status: "present",
+          kind: null,
+          chargeShare: null,
+          chargedHours: null,
           passReason: "",
         },
         {
           studentId: "student-b",
           studentName: "Олег Петров",
           status: "absent",
+          kind: null,
+          chargeShare: null,
+          chargedHours: null,
           passReason: "Болеет",
         },
       ],
@@ -2732,16 +2876,22 @@ describe("CrmService", () => {
           studentId: "student-a",
           studentName: "Анна Иванова",
           status: "absent",
+          kind: null,
+          chargeShare: null,
+          chargedHours: null,
           passReason: "Болеет",
         },
       ],
     });
 
+    // KVA-237: легаси-absent маппится в kind unpaid_miss с полной долей.
     expect(query.mock.calls[2][1]).toEqual([
       "lesson-a",
       "student-a",
       "absent",
       "Болеет",
+      "unpaid_miss",
+      1,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -5314,7 +5464,7 @@ describe("CrmService", () => {
     );
   });
 
-  it("counts a subscription lesson when a student is marked present (P5b-4)", async () => {
+  it("counts a subscription lesson when a student is marked present (P5b-4/KVA-237)", async () => {
     const { service, query } = createServiceWithQueryResults([
       {
         rows: [
@@ -5331,9 +5481,21 @@ describe("CrmService", () => {
           { student_id: "student-a", first_name: "Анна", last_name: "Иванова" },
         ],
       },
-      { rows: [] },
-      { rows: [] },
-      { rows: [] },
+      { rows: [] }, // participation insert
+      // reconcile state: attended, ничего ещё не списано, урок = 1 час
+      {
+        rows: [
+          {
+            attendance_kind: "attended",
+            charge_share: 1,
+            charged_hours: 0,
+            subscription_id: null,
+            hours: 1,
+          },
+        ],
+      },
+      { rows: [] }, // charge query (pick + dec)
+      { rows: [] }, // lesson complete update
       {
         rows: [
           {
@@ -5360,13 +5522,71 @@ describe("CrmService", () => {
       items: [{ studentId: "student-a", status: "present" }],
     });
 
-    // The reconciliation query (call index 3) consumes the lesson's hours from
-    // an active subscription (KVA: subscriptions are tracked in hours).
-    const reconcileSql = String(query.mock.calls[3][0]);
-    expect(reconcileSql).toContain(
-      "lessons_used = lessons_used + (select hours from lesson)",
-    );
-    expect(query.mock.calls[3][1]).toEqual(["lesson-a", "student-a"]);
+    // Дельта-списание: charged 0 → target 1, списывается ровно 1 час.
+    const chargeSql = String(query.mock.calls[4][0]);
+    expect(chargeSql).toContain("lessons_used = lessons_used + $4::numeric");
+    expect(query.mock.calls[4][1]).toEqual([
+      "lesson-a",
+      "student-a",
+      null,
+      1,
+      1,
+    ]);
+  });
+
+  it("refunds only the delta when a charged lesson becomes partially paid (KVA-237)", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      },
+      {
+        rows: [
+          { student_id: "student-a", first_name: "Анна", last_name: "Иванова" },
+        ],
+      },
+      { rows: [] }, // participation upsert
+      // Ранее списан полный час, статус меняется задним числом на partially_paid 0.5
+      {
+        rows: [
+          {
+            attendance_kind: "partially_paid",
+            charge_share: 0.5,
+            charged_hours: 1,
+            subscription_id: "sub-a",
+            hours: 1,
+          },
+        ],
+      },
+      { rows: [] }, // refund query
+      { rows: [] }, // lesson complete update
+      { rows: [{ id: "lesson-a", student_id: "student-a", group_id: null, teacher_user_id: "t" }] },
+      { rows: [{ student_id: "student-a", first_name: "Анна", last_name: "Иванова" }] },
+      { rows: [] },
+    ]);
+
+    await service.upsertLessonAttendance(actor, "lesson-a", {
+      items: [
+        { studentId: "student-a", kind: "partially_paid", chargeShare: 0.5 },
+      ],
+    });
+
+    // Возврат ровно дельты: −0.5 часа; charged_hours станет 0.5, связь остаётся.
+    const refundSql = String(query.mock.calls[4][0]);
+    expect(refundSql).toContain("greatest(lessons_used + $4::numeric, 0)");
+    expect(query.mock.calls[4][1]).toEqual([
+      "lesson-a",
+      "student-a",
+      "sub-a",
+      -0.5,
+      0.5,
+    ]);
   });
 
   it("creates a homework through operational-data policy and audit (P5c)", async () => {

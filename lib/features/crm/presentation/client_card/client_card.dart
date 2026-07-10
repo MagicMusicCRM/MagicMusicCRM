@@ -19,6 +19,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'client_card_aggregation.dart';
+import 'student_schedule_section.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
 /// Инфо / Задачи / Комментарии / Семья / История). Behaviour is equivalent to
@@ -1271,6 +1272,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
                     value: _subscriptionRemainder(s),
                   ),
               ]),
+            ],
+            if (_studentId.isNotEmpty) ...[
+              const SizedBox(height: AppSpace.lg),
+              StudentScheduleSection(
+                studentId: _studentId,
+                lessons: _lessons,
+                onChanged: _fetchStudentData,
+              ),
             ],
             if (_balance != null) ...[
               const SizedBox(height: AppSpace.lg),

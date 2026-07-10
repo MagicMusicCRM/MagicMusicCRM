@@ -19,6 +19,10 @@ import { CommentQuery } from "./dto/comment.query";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
 import { CreateCommentDto } from "./dto/create-comment.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
+import {
+  CreateScheduleSeriesDto,
+  UpdateScheduleSeriesDto,
+} from "./dto/schedule-series.dto";
 import { ExpenseQuery } from "./dto/expense.query";
 import { UpsertExpenseDto } from "./dto/upsert-expense.dto";
 import { UpdateExpenseDto } from "./dto/update-expense.dto";
@@ -169,6 +173,46 @@ export class CrmController {
     @Body() dto: CreateAdjustmentDto,
   ) {
     return this.crm.createAccountAdjustment(actor, id, dto);
+  }
+
+  @Get("schedule-series")
+  listScheduleSeries(
+    @CurrentActor() actor: ActorContext,
+    @Query("studentId") studentId?: string,
+    @Query("groupId") groupId?: string,
+    @Query("includeExpired") includeExpired?: string,
+  ) {
+    return this.crm.listScheduleSeries(actor, {
+      studentId,
+      groupId,
+      includeExpired: includeExpired === "true",
+    });
+  }
+
+  @Post("schedule-series")
+  createScheduleSeries(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: CreateScheduleSeriesDto,
+  ) {
+    return this.crm.createScheduleSeries(actor, dto);
+  }
+
+  @Patch("schedule-series/:id")
+  updateScheduleSeries(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateScheduleSeriesDto,
+  ) {
+    return this.crm.updateScheduleSeries(actor, id, dto);
+  }
+
+  @Delete("schedule-series/:id")
+  deleteScheduleSeries(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query("from") from?: string,
+  ) {
+    return this.crm.deleteScheduleSeries(actor, id, from);
   }
 
   @Get("students/:id")

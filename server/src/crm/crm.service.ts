@@ -25,6 +25,10 @@ import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
 import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
+import {
+  CreateScheduleSeriesDto,
+  UpdateScheduleSeriesDto,
+} from "./dto/schedule-series.dto";
 import { ExpenseQuery } from "./dto/expense.query";
 import { UpsertExpenseDto } from "./dto/upsert-expense.dto";
 import { UpdateExpenseDto } from "./dto/update-expense.dto";
@@ -206,6 +210,9 @@ interface AttendanceParticipationRow {
   student_id: string;
   status: string;
   pass_reason: string | null;
+  attendance_kind?: string | null;
+  charge_share?: string | number | null;
+  charged_hours?: string | number | null;
 }
 
 interface TaskRow {
@@ -356,6 +363,26 @@ interface LedgerRow {
   author_first_name: string | null;
   author_last_name: string | null;
   occurred_at: Date | string;
+}
+
+interface ScheduleSeriesRow {
+  id: string;
+  student_id: string | null;
+  group_id: string | null;
+  teacher_id: string | null;
+  room_id: string | null;
+  branch_id: string | null;
+  weekday: number | string;
+  begin_time: string;
+  duration_minutes: number | string;
+  valid_from: Date | string;
+  valid_until: Date | string | null;
+  notes: string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+  teacher_name?: string | null;
+  room_name?: string | null;
+  branch_name?: string | null;
 }
 
 interface SubscriptionRow {
@@ -3451,6 +3478,296 @@ export class CrmService {
     return this.toLessonDto(lesson);
   }
 
+  // ── KVA-236: постоянное расписание (серии) ────────────────────────────────
+
+  /** Горизонт материализации занятий серии, дней вперёд. */
+  private static readonly SERIES_HORIZON_DAYS = 60;
+
+  /**
+   * Догенерировать занятия серии до горизонта. Идемпотентно: дата серии,
+   * уже закрытая строкой lessons.series_date (включая перенесённые и
+   * отменённые), повторно не создаётся.
+   */
+  private async materializeSeries(seriesId: string): Promise<number> {
+    const result = await this.database.query(
+      `
+        insert into app.lessons (
+          student_id, group_id, teacher_id, branch_id, room_id,
+          scheduled_at, duration_minutes, status, is_trial,
+          series_id, series_date, created_by
+        )
+        select s.student_id, s.group_id, s.teacher_id, s.branch_id, s.room_id,
+          (d::date + s.begin_time) at time zone 'Europe/Moscow',
+          s.duration_minutes, 'scheduled', false,
+          s.id, d::date, s.created_by
+        from app.schedule_series s
+        cross join lateral generate_series(
+          greatest(s.valid_from, current_date)::timestamp,
+          least(
+            coalesce(s.valid_until, current_date + $2::int),
+            current_date + $2::int
+          )::timestamp,
+          interval '1 day'
+        ) as d
+        where s.id = $1 and s.deleted_at is null
+          and extract(isodow from d) = s.weekday
+          and not exists (
+            select 1 from app.lessons l
+            where l.series_id = s.id and l.series_date = d::date
+          )
+      `,
+      [seriesId, CrmService.SERIES_HORIZON_DAYS],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  /** Продлить все живые серии (вкл. «до бесконечности») — вызывается воркером. */
+  async extendAllSeriesHorizon(): Promise<{ series: number; created: number }> {
+    const rows = await this.database.query<{ id: string }>(
+      `
+        select id from app.schedule_series
+        where deleted_at is null
+          and (valid_until is null or valid_until >= current_date)
+      `,
+    );
+    let created = 0;
+    for (const row of rows.rows) {
+      created += await this.materializeSeries(row.id);
+    }
+    return { series: rows.rows.length, created };
+  }
+
+  async listScheduleSeries(
+    actor: ActorContext,
+    query: { studentId?: string; groupId?: string; includeExpired?: boolean },
+  ) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<ScheduleSeriesRow>(
+      `
+        select s.id, s.student_id, s.group_id, s.teacher_id, s.room_id,
+          s.branch_id, s.weekday, s.begin_time, s.duration_minutes,
+          s.valid_from, s.valid_until, s.notes, s.created_at, s.updated_at,
+          concat_ws(' ', tp.first_name, tp.last_name) as teacher_name,
+          r.name as room_name, b.name as branch_name
+        from app.schedule_series s
+        left join app.teachers t on t.id = s.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        left join app.rooms r on r.id = s.room_id
+        left join app.branches b on b.id = s.branch_id
+        where s.deleted_at is null
+          and ($1::uuid is null or s.student_id = $1)
+          and ($2::uuid is null or s.group_id = $2)
+          and ($3::boolean or s.valid_until is null or s.valid_until >= current_date)
+        order by s.weekday, s.begin_time
+      `,
+      [
+        query.studentId ?? null,
+        query.groupId ?? null,
+        query.includeExpired === true,
+      ],
+    );
+    return { items: result.rows.map((row) => this.toScheduleSeriesDto(row)) };
+  }
+
+  async createScheduleSeries(actor: ActorContext, dto: CreateScheduleSeriesDto) {
+    this.policy.assertCanWriteCrm(actor);
+    if (!dto.studentId && !dto.groupId) {
+      throw new BadRequestException("Укажите ученика или группу.");
+    }
+    const result = await this.database.query<{ id: string }>(
+      `
+        insert into app.schedule_series (
+          student_id, group_id, teacher_id, room_id, branch_id,
+          weekday, begin_time, duration_minutes, valid_from, valid_until,
+          notes, created_by
+        )
+        values ($1, $2, $3, $4, $5, $6, $7::time, $8, $9::date, $10::date, $11, $12)
+        returning id
+      `,
+      [
+        dto.studentId ?? null,
+        dto.groupId ?? null,
+        dto.teacherId ?? null,
+        dto.roomId ?? null,
+        dto.branchId ?? null,
+        dto.weekday,
+        dto.beginTime,
+        dto.durationMinutes ?? 60,
+        dto.validFrom,
+        dto.validUntil ?? null,
+        dto.notes?.trim() || null,
+        actor.userId,
+      ],
+    );
+    const seriesId = result.rows[0].id;
+    const created = await this.materializeSeries(seriesId);
+    await this.audit.record({
+      actor,
+      action: "crm.schedule_series_created",
+      entityType: "schedule_series",
+      entityId: seriesId,
+      metadata: { lessonsCreated: created },
+    });
+    this.realtime.emitCrmChanged({
+      entity: "lesson",
+      action: "created",
+      id: seriesId,
+    });
+    return { id: seriesId, lessonsCreated: created };
+  }
+
+  /**
+   * «Карандаш»: правка серии применяется «со следующей даты» (effectiveFrom):
+   * старая серия закрывается (valid_until = effectiveFrom - 1), создаётся
+   * продолжение с новыми параметрами; будущие НЕтронутые занятия старой серии
+   * (scheduled, не перенесённые) с series_date >= effectiveFrom снимаются.
+   */
+  async updateScheduleSeries(
+    actor: ActorContext,
+    seriesId: string,
+    dto: UpdateScheduleSeriesDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const existing = await this.database.query<ScheduleSeriesRow>(
+      `select * from app.schedule_series where id = $1 and deleted_at is null`,
+      [seriesId],
+    );
+    const series = existing.rows[0];
+    if (!series) throw new NotFoundException("Серия расписания не найдена.");
+
+    const effectiveFrom =
+      dto.effectiveFrom ??
+      new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
+
+    // Закрываем старую серию накануне effectiveFrom (если она уже шла).
+    await this.database.query(
+      `
+        update app.schedule_series
+        set valid_until = least(
+            coalesce(valid_until, ($2::date - 1)::date),
+            ($2::date - 1)::date
+          ),
+          updated_at = now()
+        where id = $1
+      `,
+      [seriesId, effectiveFrom],
+    );
+    // Снимаем будущие нетронутые занятия старой серии.
+    await this.database.query(
+      `
+        update app.lessons
+        set deleted_at = now(), updated_at = now()
+        where series_id = $1 and series_date >= $2::date
+          and status = 'scheduled' and original_scheduled_at is null
+          and deleted_at is null
+      `,
+      [seriesId, effectiveFrom],
+    );
+    // Продолжение с новыми параметрами.
+    const inserted = await this.database.query<{ id: string }>(
+      `
+        insert into app.schedule_series (
+          student_id, group_id, teacher_id, room_id, branch_id,
+          weekday, begin_time, duration_minutes, valid_from, valid_until,
+          notes, created_by
+        )
+        values ($1, $2, $3, $4, $5, $6, $7::time, $8, $9::date, $10::date, $11, $12)
+        returning id
+      `,
+      [
+        series.student_id,
+        series.group_id,
+        dto.teacherId ?? series.teacher_id,
+        dto.roomId ?? series.room_id,
+        series.branch_id,
+        dto.weekday ?? series.weekday,
+        dto.beginTime ?? String(series.begin_time).slice(0, 5),
+        dto.durationMinutes ?? series.duration_minutes,
+        effectiveFrom,
+        dto.validUntil ?? series.valid_until,
+        dto.notes?.trim() ?? series.notes,
+        actor.userId,
+      ],
+    );
+    const newSeriesId = inserted.rows[0].id;
+    const created = await this.materializeSeries(newSeriesId);
+    await this.audit.record({
+      actor,
+      action: "crm.schedule_series_updated",
+      entityType: "schedule_series",
+      entityId: seriesId,
+      metadata: { continuationId: newSeriesId, effectiveFrom },
+    });
+    this.realtime.emitCrmChanged({
+      entity: "lesson",
+      action: "updated",
+      id: newSeriesId,
+    });
+    return { id: newSeriesId, previousId: seriesId, lessonsCreated: created };
+  }
+
+  /** Остановить серию: с from занятия снимаются, серия закрывается. */
+  async deleteScheduleSeries(
+    actor: ActorContext,
+    seriesId: string,
+    from?: string,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const stopFrom = from ?? new Date().toISOString().slice(0, 10);
+    const result = await this.database.query(
+      `
+        update app.schedule_series
+        set valid_until = ($2::date - 1)::date,
+          deleted_at = case when valid_from >= $2::date then now() else deleted_at end,
+          updated_at = now()
+        where id = $1 and deleted_at is null
+      `,
+      [seriesId, stopFrom],
+    );
+    if (!result.rowCount) throw new NotFoundException("Серия расписания не найдена.");
+    await this.database.query(
+      `
+        update app.lessons
+        set deleted_at = now(), updated_at = now()
+        where series_id = $1 and series_date >= $2::date
+          and status = 'scheduled' and original_scheduled_at is null
+          and deleted_at is null
+      `,
+      [seriesId, stopFrom],
+    );
+    await this.audit.record({
+      actor,
+      action: "crm.schedule_series_stopped",
+      entityType: "schedule_series",
+      entityId: seriesId,
+      metadata: { from: stopFrom },
+    });
+    this.realtime.emitCrmChanged({ entity: "lesson", action: "deleted", id: seriesId });
+    return { id: seriesId, stoppedFrom: stopFrom };
+  }
+
+  private toScheduleSeriesDto(row: ScheduleSeriesRow) {
+    return {
+      id: row.id,
+      studentId: row.student_id,
+      groupId: row.group_id,
+      teacherId: row.teacher_id,
+      teacherName: row.teacher_name?.trim() || null,
+      roomId: row.room_id,
+      roomName: row.room_name ?? null,
+      branchId: row.branch_id,
+      branchName: row.branch_name ?? null,
+      weekday: Number(row.weekday),
+      beginTime: String(row.begin_time).slice(0, 5),
+      durationMinutes: Number(row.duration_minutes),
+      validFrom: row.valid_from,
+      validUntil: row.valid_until,
+      notes: row.notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
   async updateLesson(
     actor: ActorContext,
     lessonId: string,
@@ -3484,6 +3801,15 @@ export class CrmService {
           teacher_id = coalesce($5, teacher_id),
           branch_id = coalesce($6, branch_id),
           room_id = coalesce($7, room_id),
+          -- KVA-236: первый перенос занятия серии запоминает исходное время
+          -- («перенесено с …»); SET читает СТАРОЕ значение scheduled_at.
+          original_scheduled_at = case
+            when $8::timestamptz is not null
+              and $8::timestamptz <> scheduled_at
+              and series_id is not null
+            then coalesce(original_scheduled_at, scheduled_at)
+            else original_scheduled_at
+          end,
           scheduled_at = coalesce($8::timestamptz, scheduled_at),
           duration_minutes = coalesce($9, duration_minutes),
           status = coalesce($10, status),
@@ -3694,7 +4020,8 @@ export class CrmService {
     const participations =
       await this.database.query<AttendanceParticipationRow>(
         `
-        select student_id, status, pass_reason
+        select student_id, status, pass_reason,
+          attendance_kind, charge_share, charged_hours
         from app.lesson_participation
         where lesson_id = $1
       `,
@@ -3714,6 +4041,15 @@ export class CrmService {
             `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim() ||
             "Без имени",
           status: this.toAttendanceStatus(participation?.status),
+          kind: participation?.attendance_kind ?? null,
+          chargeShare:
+            participation?.charge_share != null
+              ? Number(participation.charge_share)
+              : null,
+          chargedHours:
+            participation?.charged_hours != null
+              ? Number(participation.charged_hours)
+              : null,
           passReason: participation?.pass_reason ?? "",
         };
       }),
@@ -3736,34 +4072,51 @@ export class CrmService {
     }
 
     for (const item of items) {
+      // KVA-237: kind — источник истины; легаси-status маппится в kind,
+      // бинарный status выводится из kind (present = клиент был на занятии).
+      const kind =
+        item.kind ??
+        (item.status === "absent" ? "unpaid_miss" : "attended");
+      const status = ["attended", "free_lesson", "partially_paid"].includes(
+        kind,
+      )
+        ? "present"
+        : "absent";
+      const chargeShare =
+        kind === "partially_paid" ? (item.chargeShare ?? 0.5) : 1;
       await this.database.query(
         `
           insert into app.lesson_participation (
-            lesson_id, student_id, status, pass_reason
+            lesson_id, student_id, status, pass_reason, attendance_kind, charge_share
           )
-          values ($1, $2, $3, $4)
+          values ($1, $2, $3, $4, $5, $6)
           on conflict (lesson_id, student_id)
           do update set status = excluded.status,
-            pass_reason = excluded.pass_reason
+            pass_reason = excluded.pass_reason,
+            attendance_kind = excluded.attendance_kind,
+            charge_share = excluded.charge_share
         `,
         [
           lessonId,
           item.studentId,
-          item.status,
+          status,
           item.passReason?.trim() || null,
+          kind,
+          chargeShare,
         ],
       );
     }
 
-    // P5b-4: keep each student's subscription lessons_used in sync with their
-    // attendance — count one lesson on the first «present» mark, refund it if
-    // they are switched back to «absent». Idempotent per participation row.
+    // KVA-237: списание с абонемента по таблице правил (доля от типа
+    // посещения), идемпотентно по дельте — смена статуса задним числом
+    // пересчитывает уже списанные часы.
     for (const item of items) {
-      await this.reconcileSubscriptionUsage(
-        lessonId,
-        item.studentId,
-        item.status,
-      );
+      await this.reconcileSubscriptionUsage(lessonId, item.studentId);
+    }
+
+    // «Уведомить об изменениях» (модалка HolliHop): in-app+push клиенту.
+    if (dto.notifyClient) {
+      await this.notifyAttendanceChanged(lessonId, items.map((i) => i.studentId));
     }
 
     await this.database.query(
@@ -3783,95 +4136,173 @@ export class CrmService {
     return this.getLessonAttendance(actor, lessonId);
   }
 
+  /** KVA-237: доля списания часа с абонемента по типу посещения. */
+  private static chargeShareForKind(kind: string, share: number): number {
+    switch (kind) {
+      case "attended":
+      case "paid_miss":
+        return 1;
+      case "partially_paid":
+        return share;
+      default: // unpaid_miss, free_lesson — час клиента сохраняется
+        return 0;
+    }
+  }
+
   /**
-   * P5b-4: idempotent subscription lessons_used reconciliation for one
-   * participation. On «present» (and not yet counted) it decrements an active
-   * subscription's balance once; on «absent» (if previously counted) it
-   * refunds that subscription. Re-applying the same status is a no-op.
+   * KVA-237 (растёт из P5b-4): идемпотентная сверка списания per-participation
+   * по ДЕЛЬТЕ. charged_hours хранит фактически списанное; target считается из
+   * типа посещения (см. chargeShareForKind). Повтор того же статуса — no-op;
+   * смена статуса задним числом дописывает/возвращает ровно разницу.
+   * Выбор абонемента: свой активный, иначе — члена семьи (KVA-235).
    */
-  private async reconcileSubscriptionUsage(
-    lessonId: string,
-    studentId: string,
-    status: string,
-  ) {
-    if (status === "present") {
+  private async reconcileSubscriptionUsage(lessonId: string, studentId: string) {
+    const state = await this.database.query<{
+      attendance_kind: string;
+      charge_share: string | number;
+      charged_hours: string | number;
+      subscription_id: string | null;
+      hours: string | number;
+    }>(
+      `
+        select lp.attendance_kind, lp.charge_share, lp.charged_hours,
+          lp.subscription_id,
+          coalesce(l.duration_minutes, 60)::numeric / 60 as hours
+        from app.lesson_participation lp
+        join app.lessons l on l.id = lp.lesson_id
+        where lp.lesson_id = $1 and lp.student_id = $2
+      `,
+      [lessonId, studentId],
+    );
+    const row = state.rows[0];
+    if (!row) return;
+    const hours = Number(row.hours);
+    const target =
+      Math.round(
+        hours *
+          CrmService.chargeShareForKind(
+            row.attendance_kind,
+            Number(row.charge_share),
+          ) *
+          100,
+      ) / 100;
+    const charged = Number(row.charged_hours);
+    const delta = Math.round((target - charged) * 100) / 100;
+    if (delta === 0) return;
+
+    if (delta > 0) {
+      // Дописываем: на уже привязанный абонемент, иначе подбираем (свой →
+      // семейный). Если абонемента нет — списывать не с чего, charged не растёт.
       await this.database.query(
         `
-          with part as (
-            select subscription_id from app.lesson_participation
-            where lesson_id = $1 and student_id = $2
-          ),
-          lesson as (
-            select coalesce(duration_minutes, 60)::numeric / 60 as hours
-            from app.lessons where id = $1
-          ),
-          pick as (
-            -- KVA-235: сначала свой активный абонемент, затем абонемент члена
-            -- семьи (занятие ребёнка можно списать с абонемента родителя).
+          with pick as (
             select s.id
-            from app.subscriptions s, part
-            where part.subscription_id is null
-              and s.status = 'active'
-              and s.lessons_used < s.lessons_total
-              and (
-                s.student_id = $2
-                or s.student_id in (
-                  select fm2.entity_id
-                  from app.family_members fm1
-                  join app.family_members fm2
-                    on fm2.family_id = fm1.family_id
-                    and fm2.entity_type = 'student'
-                    and fm2.deleted_at is null
-                  where fm1.entity_type = 'student'
-                    and fm1.entity_id = $2
-                    and fm1.deleted_at is null
+            from app.subscriptions s
+            where s.id = $3::uuid
+            union all
+            (
+              select s.id
+              from app.subscriptions s
+              where $3::uuid is null
+                and s.status = 'active'
+                and s.lessons_used < s.lessons_total
+                and (
+                  s.student_id = $2
+                  or s.student_id in (
+                    select fm2.entity_id
+                    from app.family_members fm1
+                    join app.family_members fm2
+                      on fm2.family_id = fm1.family_id
+                      and fm2.entity_type = 'student'
+                      and fm2.deleted_at is null
+                    where fm1.entity_type = 'student'
+                      and fm1.entity_id = $2
+                      and fm1.deleted_at is null
+                  )
                 )
-              )
-            order by (s.student_id = $2) desc,
-              s.expires_at asc nulls last, s.created_at asc
+              order by (s.student_id = $2) desc,
+                s.expires_at asc nulls last, s.created_at asc
+              limit 1
+            )
             limit 1
           ),
           dec as (
             update app.subscriptions s
-            set lessons_used = lessons_used + (select hours from lesson),
-              updated_at = now()
+            set lessons_used = lessons_used + $4::numeric, updated_at = now()
             from pick where s.id = pick.id
             returning s.id
           )
           update app.lesson_participation lp
-          set subscription_id = (select id from dec)
+          set subscription_id = (select id from dec),
+            charged_hours = $5::numeric
           where lp.lesson_id = $1 and lp.student_id = $2
             and exists (select 1 from dec)
         `,
-        [lessonId, studentId],
+        [lessonId, studentId, row.subscription_id, delta, target],
+      );
+      return;
+    }
+
+    // Возвращаем часть/всё: только на привязанном абонементе.
+    if (!row.subscription_id) {
+      await this.database.query(
+        `update app.lesson_participation set charged_hours = $3
+         where lesson_id = $1 and student_id = $2`,
+        [lessonId, studentId, target],
       );
       return;
     }
     await this.database.query(
       `
-        with part as (
-          select subscription_id from app.lesson_participation
-          where lesson_id = $1 and student_id = $2
-        ),
-        lesson as (
-          select coalesce(duration_minutes, 60)::numeric / 60 as hours
-          from app.lessons where id = $1
-        ),
-        inc as (
+        with inc as (
           update app.subscriptions s
-          set lessons_used = greatest(lessons_used - (select hours from lesson), 0),
+          set lessons_used = greatest(lessons_used + $4::numeric, 0),
             updated_at = now()
-          from part
-          where part.subscription_id is not null and s.id = part.subscription_id
+          where s.id = $3
           returning s.id
         )
         update app.lesson_participation lp
-        set subscription_id = null
+        set charged_hours = $5::numeric,
+          subscription_id = case when $5::numeric = 0 then null else lp.subscription_id end
+        from inc
         where lp.lesson_id = $1 and lp.student_id = $2
-          and exists (select 1 from inc)
       `,
-      [lessonId, studentId],
+      [lessonId, studentId, row.subscription_id, delta, target],
     );
+  }
+
+  /** KVA-237: пуш/in-app «изменение по занятию» клиентам с аккаунтами. */
+  private async notifyAttendanceChanged(lessonId: string, studentIds: string[]) {
+    if (!studentIds.length) return;
+    const users = await this.database.query<{
+      user_id: string;
+      scheduled_at: Date | string;
+    }>(
+      `
+        select p.user_id, l.scheduled_at
+        from app.students s
+        join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+        join app.lessons l on l.id = $1
+        where s.id = any($2::uuid[]) and s.deleted_at is null
+          and p.user_id is not null
+      `,
+      [lessonId, studentIds],
+    );
+    for (const row of users.rows) {
+      const when = new Date(String(row.scheduled_at));
+      const dateLabel = Number.isNaN(when.getTime())
+        ? ""
+        : ` ${when.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "Europe/Moscow" })}`;
+      await this.notifications
+        .notifyUser({
+          userId: row.user_id,
+          title: "Изменение по занятию",
+          body: `Статус вашего занятия${dateLabel} обновлён. Подробности в приложении.`,
+          data: { lessonId },
+          channels: ["in_app", "push"],
+        })
+        .catch(() => undefined); // уведомление не должно ронять посещаемость
+    }
   }
 
   async listTasks(actor: ActorContext, query: TaskBoardQuery) {
