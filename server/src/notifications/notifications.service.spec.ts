@@ -228,4 +228,107 @@ describe('NotificationsService', () => {
       expect(database.transaction).not.toHaveBeenCalled();
     });
   });
+
+  describe('task reminders', () => {
+    it('claims the marker and notifies recipients for a due task', async () => {
+      const { service, database } = createService();
+      database.query
+        // due (day)
+        .mockResolvedValueOnce({
+          rows: [
+            { id: 'task-1', title: 'Позвонить', when_local: '19.06 18:00', user_ids: ['u1', 'u2'] }
+          ]
+        } as never)
+        // claim (task-1, day)
+        .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
+        // due (hour) -> none
+        .mockResolvedValueOnce({ rows: [] } as never);
+      (database.transaction as jest.Mock).mockResolvedValue('notif-1');
+
+      const result = await service.dispatchTaskReminders();
+
+      expect(result.sent).toBe(1);
+      // createNotification runs in a transaction exactly once (the day task).
+      expect(database.transaction).toHaveBeenCalledTimes(1);
+      // The recipients query never casts roles to the enum, so an absent
+      // 'director' role can not break the scan.
+      const dueSql = String(database.query.mock.calls[0][0]);
+      expect(dueSql).toContain("u.role::text in ('admin', 'manager', 'director')");
+      expect(dueSql).not.toContain('::app.user_role');
+      // The claim targets the idempotency table.
+      const claimSql = String(database.query.mock.calls[1][0]);
+      expect(claimSql).toContain('app.task_reminders');
+      expect(claimSql).toContain('on conflict (task_id, kind) do nothing');
+    });
+
+    it('does not send when the marker was already claimed (race)', async () => {
+      const { service, database } = createService();
+      database.query
+        .mockResolvedValueOnce({
+          rows: [{ id: 'task-1', title: 'Позвонить', when_local: '19.06 18:00', user_ids: ['u1'] }]
+        } as never)
+        // claim returns no row -> another tick already claimed it
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 } as never)
+        .mockResolvedValueOnce({ rows: [] } as never);
+
+      const result = await service.dispatchTaskReminders();
+
+      expect(result.sent).toBe(0);
+      expect(database.transaction).not.toHaveBeenCalled();
+    });
+
+    it('claims but does not notify a task with no recipients', async () => {
+      const { service, database } = createService();
+      database.query
+        .mockResolvedValueOnce({
+          rows: [{ id: 'task-1', title: 'Позвонить', when_local: '19.06 18:00', user_ids: [] }]
+        } as never)
+        .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
+        .mockResolvedValueOnce({ rows: [] } as never);
+
+      const result = await service.dispatchTaskReminders();
+
+      expect(result.sent).toBe(0);
+      expect(database.transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('new lead notification', () => {
+    it('targets admin/manager/director by text role and queues in_app+push', async () => {
+      const { service, database, worker } = createService();
+      database.query.mockResolvedValueOnce({
+        rows: [{ id: 'admin-1' }, { id: 'manager-1' }]
+      } as never);
+      const client = {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({ rows: [{ id: 'notification-a' }] })
+          .mockResolvedValue({ rows: [] })
+      };
+      database.transaction.mockImplementationOnce(async (work) => work(client as never));
+
+      await service.notifyNewLead({ leadId: 'lead-1', name: 'Иван', source: 'site' });
+
+      const rolesSql = String(database.query.mock.calls[0][0]);
+      expect(rolesSql).toContain('role::text = any');
+      expect(rolesSql).not.toContain('::app.user_role');
+      expect(database.query.mock.calls[0][1]).toEqual([
+        ['admin', 'manager', 'director']
+      ]);
+      expect(client.query).toHaveBeenCalledWith(
+        expect.stringContaining("'push', 'firebase', 'queued'"),
+        ['notification-a', 'admin-1']
+      );
+      expect(worker.dispatchPendingPush).toHaveBeenCalled();
+    });
+
+    it('is a no-op when no staff users exist', async () => {
+      const { service, database } = createService();
+      database.query.mockResolvedValueOnce({ rows: [] } as never);
+
+      await service.notifyNewLead({ leadId: 'lead-1', name: 'Иван', source: 'site' });
+
+      expect(database.transaction).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -8,10 +8,11 @@ import { CrmController } from './crm.controller';
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
 import { CrmPolicy } from './crm.policy';
 import { CrmService } from './crm.service';
+import { LeadWebhookController } from './lead-webhook.controller';
 
 @Module({
   imports: [AuditModule, DatabaseModule, JwtModule.register({}), NotificationsModule],
-  controllers: [CrmController],
+  controllers: [CrmController, LeadWebhookController],
   providers: [CrmService, CrmPolicy, HolliHopMetadataService, JwtAuthGuard],
   exports: [CrmService, CrmPolicy]
 })

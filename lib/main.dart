@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:magic_music_crm/core/constants/env.dart';
 import 'package:magic_music_crm/core/router/app_router.dart';
+import 'package:magic_music_crm/core/services/lead_notification_listener.dart';
 import 'package:magic_music_crm/core/services/notification_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/providers/theme_provider.dart';
@@ -145,6 +146,13 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
         }
       });
     });
+
+    // KVA-240: app-level «new lead» sound notifications for desktop staff.
+    // Activated only with a live session so the realtime socket is not opened
+    // before login (the listener itself is a no-op outside Windows/Linux).
+    if (ref.watch(magicAuthStateProvider).asData?.value != null) {
+      ref.watch(leadNotificationListenerProvider);
+    }
 
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
