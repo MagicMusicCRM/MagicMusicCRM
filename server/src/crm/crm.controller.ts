@@ -830,6 +830,15 @@ export class CrmController {
     return this.crm.getLeadCard(actor, id);
   }
 
+  // KVA-234: заявки лида (app.lead_applications) — секция «Заявки» в карточке.
+  @Get("leads/:id/applications")
+  listLeadApplications(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.listLeadApplications(actor, id);
+  }
+
   @Get("leads/:leadId/status-history")
   listLeadStatusHistory(
     @CurrentActor() actor: ActorContext,
