@@ -45,6 +45,7 @@ const ALLOWED_TABLES = [
   "app.subscription_packages",
   "app.entity_comments",
   "app.lead_comments",
+  "app.account_adjustments",
 ];
 
 function readJson(name: string): JsonRow[] {
@@ -180,28 +181,30 @@ async function main() {
         if (written) packages.written++;
       }
 
+      // «ИД ученика»/ClientId бывают и Id, и ClientId — готовим обе
+      // интерпретации (нужно секциям 4 и 5).
+      const clientToId = new Map<string, string>();
+      for (const s of readJson("Students.json")) {
+        const id = String(s.Id ?? "").trim();
+        const clientId = String(s.ClientId ?? "").trim();
+        if (id && clientId) clientToId.set(clientId, id);
+      }
+      const resolveStudent = (raw: string): string | null => {
+        if (!raw) return null;
+        const direct = deterministicUuid("hollihop-student", raw);
+        if (studentSet.has(direct)) return direct;
+        const viaClient = clientToId.get(raw);
+        if (viaClient) {
+          const mappedId = deterministicUuid("hollihop-student", viaClient);
+          if (studentSet.has(mappedId)) return mappedId;
+        }
+        return null;
+      };
+
       // ---- 4. communications.json -> timeline comments ---------------------
       const comms = { total: 0, matchedStudent: 0, matchedLeadByName: 0, written: 0, skippedTaskDuplicate: 0, skippedUnmatched: 0, skippedBadDate: 0 };
       const commRows = readJson(join("manual-exports", "communications.json"));
       if (commRows.length) {
-        // «ИД ученика» бывает и Id, и ClientId — готовим обе интерпретации.
-        const clientToId = new Map<string, string>();
-        for (const s of readJson("Students.json")) {
-          const id = String(s.Id ?? "").trim();
-          const clientId = String(s.ClientId ?? "").trim();
-          if (id && clientId) clientToId.set(clientId, id);
-        }
-        const resolveStudent = (raw: string): string | null => {
-          if (!raw) return null;
-          const direct = deterministicUuid("hollihop-student", raw);
-          if (studentSet.has(direct)) return direct;
-          const viaClient = clientToId.get(raw);
-          if (viaClient) {
-            const mappedId = deterministicUuid("hollihop-student", viaClient);
-            if (studentSet.has(mappedId)) return mappedId;
-          }
-          return null;
-        };
         // Имя лида → uuid (только уникальные ФИО из ручного экспорта лидов).
         const nameCounts = new Map<string, number>();
         const nameToLead = new Map<string, string>();
@@ -260,9 +263,53 @@ async function main() {
         }
       }
 
+      // ---- 5. IncomesAndOutgoes -> account_adjustments ----------------------
+      // Исторические СПИСАНИЯ (Income=false) личного счёта из HolliHop.
+      // Приходы (Income=true) НЕ импортируем — они уже лежат в app.payments.
+      const ledger = { clients: 0, charges: 0, written: 0, skippedStudentMissing: 0, skippedBadValue: 0 };
+      // «4 000,00 руб.» (с   в тысячах и «руб.» в хвосте) -> 4000
+      const parseRub = (v: unknown): number | null => {
+        const m = String(v ?? "").match(/\d[\d\s ]*(?:[.,]\d{1,2})?/);
+        if (!m) return null;
+        const n = Number(m[0].replace(/[\s ]/g, "").replace(",", "."));
+        return Number.isFinite(n) && n > 0 ? n : null;
+      };
+      for (const row of readJson("IncomesAndOutgoes.json")) {
+        const clientIdRaw = String(row.ClientId ?? "").trim();
+        const studentId = resolveStudent(clientIdRaw);
+        if (!studentId) { ledger.skippedStudentMissing++; continue; }
+        const study = row.Study as JsonRow | undefined;
+        const items = Array.isArray(study?.Items) ? (study.Items as JsonRow[]) : [];
+        if (!items.length) continue;
+        ledger.clients++;
+        // Ключ идемпотентности стабилен между дампами: одинаковые операции
+        // одного дня нумеруются по порядку появления.
+        const seen = new Map<string, number>();
+        for (const it of items) {
+          if (it.Income !== false) continue;
+          const amount = parseRub(it.Value);
+          if (amount === null) { ledger.skippedBadValue++; continue; }
+          ledger.charges++;
+          const base = `${clientIdRaw}:${it.Begin ?? ""}:${it.EdUnitId ?? ""}:${amount}`;
+          const n = (seen.get(base) ?? 0) + 1;
+          seen.set(base, n);
+          const written = await planInsert(client, "app.account_adjustments", {
+            id: deterministicUuid("hollihop-ledger-charge", `${base}:${n}`),
+            student_id: studentId,
+            kind: "adjustment",
+            amount: -amount,
+            description: ["Списание HolliHop", it.EdUnitName, it.Units]
+              .filter(Boolean)
+              .join(" · "),
+            occurred_at: hhDateTimeToIso(it.Begin) ?? new Date().toISOString(),
+          });
+          if (written) ledger.written++;
+        }
+      }
+
       if (MODE === "apply") await client.query("commit");
       process.stdout.write(
-        JSON.stringify({ mode: MODE, applications, trials, packages, communications: comms }, null, 2) + "\n",
+        JSON.stringify({ mode: MODE, applications, trials, packages, communications: comms, ledger }, null, 2) + "\n",
       );
     } catch (err) {
       if (MODE === "apply") await client.query("rollback");
