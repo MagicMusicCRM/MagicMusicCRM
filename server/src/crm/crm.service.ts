@@ -355,6 +355,8 @@ interface SubscriptionRow {
   status: string;
   created_at: Date | string;
   updated_at: Date | string;
+  package_name?: string | null;
+  package_price?: number | string | null;
 }
 
 interface LeadRow {
@@ -1188,6 +1190,7 @@ export class CrmService {
       comments,
       expectedPayments,
       balances,
+      subscriptions,
       links,
       chatWork,
     ] = await Promise.all([
@@ -1207,6 +1210,9 @@ export class CrmService {
         : Promise.resolve(emptyList),
       canReadFinance
         ? this.listStudentBalances(actor, { studentId, limit: 1 }).catch(() => emptyList)
+        : Promise.resolve(emptyList),
+      canReadFinance
+        ? this.listSubscriptions(actor, { studentId, limit: 50 }).catch(() => emptyList)
         : Promise.resolve(emptyList),
       this.listUserCrmLinks("student", studentId),
       this.listChatWorkTimeline("student", studentId),
@@ -1261,6 +1267,7 @@ export class CrmService {
       comments: comments.items,
       expectedPayments: expectedPayments.items,
       balance: balances.items[0] ?? null,
+      subscriptions: subscriptions.items,
       links,
       timeline,
     };
@@ -4494,9 +4501,11 @@ export class CrmService {
       `
         select sub.id, sub.student_id, p.user_id as student_user_id,
           sub.lessons_total, sub.lessons_used, sub.starts_at, sub.expires_at,
-          sub.status, sub.created_at, sub.updated_at
+          sub.status, sub.created_at, sub.updated_at,
+          pkg.name as package_name, pkg.price as package_price
         from app.subscriptions sub
         join app.students s on s.id = sub.student_id and s.deleted_at is null
+        left join app.subscription_packages pkg on pkg.id = sub.package_id
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where ($3::uuid is null or sub.student_id = $3)
           and (
@@ -7559,6 +7568,8 @@ export class CrmService {
       status: row.status,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      packageName: row.package_name ?? null,
+      packagePrice: row.package_price != null ? Number(row.package_price) : null,
     };
   }
 

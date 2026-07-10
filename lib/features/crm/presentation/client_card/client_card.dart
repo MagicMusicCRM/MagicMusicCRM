@@ -10,6 +10,7 @@ import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
@@ -47,6 +48,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
   late Map<String, dynamic> _leadData;
   late TextEditingController _notesCtrl;
   late TextEditingController _commentCtrl;
+  // Тип нового комментария (0037): admin_comment | teacher_note. Переключатель
+  // виден staff-ролям и только когда комментарий уйдёт на ученик-половину.
+  String _commentKind = 'admin_comment';
   // Resolved status list: either the one passed in or self-fetched.
   List<StatusRecord> _statuses = const [];
   bool _saving = false;
@@ -144,6 +148,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // a single failed call never blanks the whole card.
   Map<String, dynamic>? _student;
   Map<String, dynamic>? _balance;
+  List<Map<String, dynamic>> _subscriptions = [];
   List<Map<String, dynamic>> _payments = [];
   List<Map<String, dynamic>> _lessons = [];
   List<Map<String, dynamic>> _studentTasks = [];
@@ -441,6 +446,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
         _balance = card['balance'] is Map<String, dynamic>
             ? card['balance'] as Map<String, dynamic>
             : null;
+        _subscriptions = _list(card['subscriptions']);
         _payments = _list(card['payments']);
         _lessons = _list(card['lessons']);
         _studentTasks = _list(card['tasks']);
@@ -963,7 +969,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          'Клиент · Лид · ${curStatus.$2}',
+                          [
+                            'Клиент · Лид · ${curStatus.$2}',
+                            ?_ageLabel(),
+                          ].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1243,11 +1252,37 @@ class _ClientCardState extends ConsumerState<ClientCard>
                 ),
               ]),
             ],
+            if (_subscriptions.isNotEmpty) ...[
+              const SizedBox(height: AppSpace.lg),
+              _buildInfoCard('Абонементы', [
+                for (final s in _subscriptions.take(5))
+                  _InfoRow(
+                    icon: s['status'] == 'active'
+                        ? Icons.confirmation_number_outlined
+                        : Icons.history_toggle_off_rounded,
+                    label: (s['package_name']?.toString().trim().isNotEmpty ??
+                            false)
+                        ? s['package_name'].toString()
+                        : 'Абонемент',
+                    value: _subscriptionRemainder(s),
+                  ),
+              ]),
+            ],
             const SizedBox(height: AppSpace.lg),
             _buildStudentGroupsInfoCard(cs),
           ],
 
           if (_mode.hasLeadHalf) ...[
+            if (_leadCreatedAtLabel() != null) ...[
+              const SizedBox(height: AppSpace.lg),
+              _buildInfoCard('Обращение', [
+                _InfoRow(
+                  icon: Icons.event_outlined,
+                  label: 'Дата обращения',
+                  value: _leadCreatedAtLabel()!,
+                ),
+              ]),
+            ],
             const SizedBox(height: AppSpace.lg),
             _sectionTitle('Заметки'),
             TextField(
@@ -1359,6 +1394,15 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final cs = Theme.of(context).colorScheme;
     final titleCtrl = TextEditingController();
     DateTime? due;
+    String? assignedTo;
+    // Сотрудники для поля «Исполнитель»; сбой загрузки не блокирует задачу.
+    var staff = const <Map<String, dynamic>>[];
+    try {
+      staff = List<Map<String, dynamic>>.from(
+        await ref.read(magicCrmServiceProvider).listStaff(limit: 100),
+      );
+    } catch (_) {}
+    if (!mounted) return;
 
     final confirmed = await showMagicSheet<bool>(
       context,
@@ -1438,6 +1482,34 @@ class _ClientCardState extends ConsumerState<ClientCard>
                     ),
                   ),
                 ),
+                if (staff.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.md),
+                  DropdownButtonFormField<String?>(
+                    initialValue: assignedTo,
+                    isExpanded: true,
+                    decoration: _inputDecoration(
+                      cs,
+                      label: 'Исполнитель',
+                      isDense: true,
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Не назначен'),
+                      ),
+                      for (final s in staff)
+                        if (s['profile_user_id'] != null)
+                          DropdownMenuItem<String?>(
+                            value: s['profile_user_id'].toString(),
+                            child: Text(
+                              '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                  .trim(),
+                            ),
+                          ),
+                    ],
+                    onChanged: (v) => setSheetState(() => assignedTo = v),
+                  ),
+                ],
               ],
             );
           },
@@ -1494,6 +1566,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
             entityId: targetId,
             title: title,
             dueAt: dueAt,
+            assignedTo: assignedTo,
           );
       _dirty = true;
       if (_mode.hasStudentHalf) {
@@ -1520,6 +1593,166 @@ class _ClientCardState extends ConsumerState<ClientCard>
       }
     } finally {
       if (mounted) setState(() => _addingTask = false);
+    }
+  }
+
+  /// «Записать на пробный урок» прямо из карточки лида — тот же диалог, что в
+  /// меню канбан-доски (leads_widget._scheduleTrial).
+  Future<void> _scheduleTrialFromCard() async {
+    final crm = ref.read(magicCrmServiceProvider);
+    List<Map<String, dynamic>> teachers;
+    List<Map<String, dynamic>> rooms;
+    try {
+      final [teachersRes, roomsRes] = await Future.wait([
+        crm.listTeachers(limit: 100),
+        crm.listRooms(limit: 100),
+      ]);
+      teachers = List<Map<String, dynamic>>.from(teachersRes);
+      rooms = List<Map<String, dynamic>>.from(roomsRes);
+    } catch (e) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Не удалось загрузить данные',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    if (teachers.isEmpty) {
+      MagicToast.show(
+        context,
+        'Нет доступных преподавателей',
+        type: MagicToastType.danger,
+      );
+      return;
+    }
+
+    String? selectedTeacher = teachers.first['id']?.toString();
+    String? selectedRoom = rooms.isNotEmpty ? rooms.first['id']?.toString() : null;
+    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
+    TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocalState) => AlertDialog(
+          title: const Text('Пробное занятие'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: selectedTeacher,
+                decoration: const InputDecoration(labelText: 'Учитель'),
+                items: teachers
+                    .map(
+                      (t) => DropdownMenuItem(
+                        value: t['id'].toString(),
+                        child: Text('${t['first_name']} ${t['last_name']}'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setLocalState(() => selectedTeacher = v),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: selectedRoom,
+                decoration: const InputDecoration(labelText: 'Кабинет'),
+                items: rooms
+                    .map(
+                      (r) => DropdownMenuItem(
+                        value: r['id'].toString(),
+                        child: Text(r['name']),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setLocalState(() => selectedRoom = v),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                title: Text(
+                  'Дата: ${DateFormat('dd.MM.yyyy').format(selectedDate)}',
+                ),
+                trailing: const Icon(Icons.calendar_today_rounded),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 90)),
+                  );
+                  if (picked != null) {
+                    setLocalState(() => selectedDate = picked);
+                  }
+                },
+              ),
+              ListTile(
+                title: Text('Время: ${selectedTime.format(ctx)}'),
+                trailing: const Icon(Icons.access_time_rounded),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: ctx,
+                    initialTime: selectedTime,
+                  );
+                  if (picked != null) {
+                    setLocalState(() => selectedTime = picked);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Назначить'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || selectedTeacher == null) return;
+    final scheduledAt = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+    try {
+      await crm.createLesson(
+        leadId: _leadId,
+        teacherId: selectedTeacher,
+        roomId: selectedRoom,
+        scheduledAt: scheduledAt.toIso8601String(),
+        isTrial: true,
+        status: 'scheduled',
+        notes: 'Пробное занятие по лиду: ${_leadData['name'] ?? ''}',
+      );
+      _dirty = true;
+      await _fetchCard();
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Пробное занятие назначено',
+          type: MagicToastType.success,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Ошибка назначения',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
     }
   }
 
@@ -1752,6 +1985,70 @@ class _ClientCardState extends ConsumerState<ClientCard>
     if (_balance == null) return null;
     final raw = _balance!['balance'];
     return raw is num ? raw : num.tryParse(raw?.toString() ?? '');
+  }
+
+  /// «Остаток: 7 астр.ч. / 14 000 ₽» — денежная часть считается по цене пакета
+  /// пропорционально оставшимся часам; без пакета показываем только часы.
+  String _subscriptionRemainder(Map<String, dynamic> s) {
+    num toNum(Object? v) =>
+        v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
+    String hours(num v) =>
+        v == v.truncate() ? v.toInt().toString() : v.toStringAsFixed(1);
+    final total = toNum(s['lessons_total']);
+    final left = total - toNum(s['lessons_used']);
+    final price = s['package_price'];
+    final money = (price is num && total > 0)
+        ? ' / ${(price / total * left).round()} ₽'
+        : '';
+    final status = s['status']?.toString();
+    final suffix = status == 'active' ? '' : ' · ${_formatStatus(status)}';
+    return 'Остаток: ${hours(left)} из ${hours(total)} астр.ч.$money$suffix';
+  }
+
+  /// Возраст «N лет» из custom-поля birthday (ISO или дд.мм.гггг).
+  String? _ageLabel() {
+    Object? raw;
+    if (_mode.hasStudentHalf && _student != null) {
+      raw = _customDataForEntity('students')['birthday'];
+    }
+    raw ??= _customDataForEntity('leads')['birthday'];
+    final s = raw?.toString().trim() ?? '';
+    if (s.isEmpty) return null;
+    var birth = DateTime.tryParse(s);
+    if (birth == null) {
+      final m = RegExp(r'^(\d{2})\.(\d{2})\.(\d{4})').firstMatch(s);
+      if (m == null) return null;
+      birth = DateTime(
+        int.parse(m.group(3)!),
+        int.parse(m.group(2)!),
+        int.parse(m.group(1)!),
+      );
+    }
+    final now = DateTime.now();
+    var years = now.year - birth.year;
+    if (now.month < birth.month ||
+        (now.month == birth.month && now.day < birth.day)) {
+      years--;
+    }
+    if (years < 0 || years > 120) return null;
+    final mod100 = years % 100;
+    final mod10 = years % 10;
+    final word = (mod100 >= 11 && mod100 <= 14)
+        ? 'лет'
+        : mod10 == 1
+        ? 'год'
+        : (mod10 >= 2 && mod10 <= 4)
+        ? 'года'
+        : 'лет';
+    return '$years $word';
+  }
+
+  String? _leadCreatedAtLabel() {
+    final dt = DateTime.tryParse(
+      _leadData['created_at']?.toString() ?? '',
+    )?.toLocal();
+    if (dt == null) return null;
+    return DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt);
   }
 
   Color _studentBalanceColor(ColorScheme cs) {
@@ -2057,7 +2354,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
-          'Преп.: $teacherName • ${l['groups']?['name'] ?? 'Инд.'}',
+          [
+            'Преп.: $teacherName',
+            '${l['groups']?['name'] ?? 'Инд.'}',
+            if ((l['rooms']?['name']?.toString() ?? '').isNotEmpty)
+              'Ауд.: ${l['rooms']['name']}',
+          ].join(' • '),
         ),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -3498,31 +3800,67 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
   }
 
+  /// Staff может выбрать поток комментария; педагог всегда пишет teacher_note.
+  bool get _canPickCommentKind {
+    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    final isStaff =
+        role == 'admin' || role == 'manager' || role == 'system_admin';
+    final targetIsStudent = _isConverted || widget.entityType == 'student';
+    return isStaff && targetIsStudent;
+  }
+
   Widget _buildCommentInput(ColorScheme cs) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: TextField(
-            controller: _commentCtrl,
-            decoration: _inputDecoration(
-              cs,
-              hint: 'Написать комментарий...',
-              isDense: true,
-            ),
+        if (_canPickCommentKind) ...[
+          Wrap(
+            spacing: AppSpace.sm,
+            children: [
+              for (final (kind, label) in const [
+                ('admin_comment', 'Комментарий админа'),
+                ('teacher_note', 'Для педагога'),
+              ])
+                ChoiceChip(
+                  label: Text(label, style: const TextStyle(fontSize: 12)),
+                  selected: _commentKind == kind,
+                  selectedColor: AppColor.goldSoft,
+                  onSelected: (_) => setState(() => _commentKind = kind),
+                ),
+            ],
           ),
-        ),
-        const SizedBox(width: AppSpace.sm),
-        Material(
-          color: AppColor.gold,
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            onTap: _addComment,
-            child: const Padding(
-              padding: EdgeInsets.all(AppSpace.md),
-              child: Icon(Icons.send_rounded, color: AppColor.onGold, size: 18),
+          const SizedBox(height: AppSpace.sm),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _commentCtrl,
+                decoration: _inputDecoration(
+                  cs,
+                  hint: 'Написать комментарий...',
+                  isDense: true,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: AppSpace.sm),
+            Material(
+              color: AppColor.gold,
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                onTap: _addComment,
+                child: const Padding(
+                  padding: EdgeInsets.all(AppSpace.md),
+                  child: Icon(
+                    Icons.send_rounded,
+                    color: AppColor.onGold,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -3608,6 +3946,21 @@ class _ClientCardState extends ConsumerState<ClientCard>
             row['teacher_name'],
             row['room_name'],
           ].where((value) => value != null && '$value'.isNotEmpty).join(' · '),
+          action: _mode.hasLeadHalf
+              ? TextButton.icon(
+                  onPressed: _scheduleTrialFromCard,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColor.gold,
+                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                  icon: const Icon(Icons.add_rounded, size: 15),
+                  label: const Text('На пробный'),
+                )
+              : null,
         ),
         _miniSection(
           cs,
@@ -4232,15 +4585,26 @@ class _ClientCardState extends ConsumerState<ClientCard>
     required List<Map<String, dynamic>> rows,
     required String Function(Map<String, dynamic>) titleBuilder,
     required String? Function(Map<String, dynamic>) subtitleBuilder,
+    Widget? action,
   }) {
     return Padding(
       padding: const EdgeInsets.only(top: AppSpace.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              ?action,
+            ],
           ),
           const SizedBox(height: 6),
           if (rows.isEmpty)
@@ -4310,6 +4674,16 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final targetType = _isConverted ? 'student' : widget.entityType;
     final targetId = _isConverted ? _studentId : _entityId;
     if (targetId.isEmpty) return;
+    // kind существует только у entity_comments (ученик): staff выбирает поток,
+    // педагог всегда пишет teacher_note (admin_comment ему запрещён RBAC'ом).
+    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    final kind = targetType != 'student'
+        ? null
+        : _canPickCommentKind
+        ? _commentKind
+        : role == 'teacher'
+        ? 'teacher_note'
+        : null;
     try {
       await ref
           .read(magicCrmServiceProvider)
@@ -4317,6 +4691,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
             entityType: targetType,
             entityId: targetId,
             body: text,
+            kind: kind,
           );
       _commentCtrl.clear();
       if (mounted) {

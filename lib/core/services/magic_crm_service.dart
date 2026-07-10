@@ -213,6 +213,7 @@ class MagicCrmService {
       'balance': response['balance'] is Map<String, dynamic>
           ? _legacyStudentBalance(response['balance'] as Map<String, dynamic>)
           : null,
+      'subscriptions': _mapList(response['subscriptions'], _legacySubscription),
       'links': _mapList(response['links'], _legacyCrmLink),
       'timeline': _mapList(response['timeline'], _legacyTimelineItem),
     };
@@ -2661,6 +2662,8 @@ class MagicCrmService {
       'type': item['status'] == 'active' ? 'Абонемент' : item['status'],
       'created_at': item['createdAt'],
       'updated_at': item['updatedAt'],
+      'package_name': item['packageName'],
+      'package_price': item['packagePrice'],
     };
   }
 
