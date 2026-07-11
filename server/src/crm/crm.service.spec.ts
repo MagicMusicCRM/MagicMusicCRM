@@ -6384,6 +6384,10 @@ describe("CrmService", () => {
       expect(rate.effectiveFrom).toBe("2026-08-01");
       expect(audit.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: "crm.teacher_rate_set" }),
+      );
+    });
+  });
+
   describe("new lead notifications (KVA-240)", () => {
     it("createLead notifies staff about the new lead", async () => {
       const { service, notifications } = createServiceWithQueryResults([
