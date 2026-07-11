@@ -26,6 +26,7 @@ describe("CrmService", () => {
     const notifications = {
       sendEmail: jest.fn().mockResolvedValue({ queued: true }),
       notifyUser: jest.fn().mockResolvedValue({ notificationId: "notif-test" }),
+      notifyNewLead: jest.fn().mockResolvedValue(undefined),
     };
     const policy = {
       assertCanReadOperationalData: jest.fn(),
@@ -82,6 +83,7 @@ describe("CrmService", () => {
     const notifications = {
       sendEmail: jest.fn().mockResolvedValue({ queued: true }),
       notifyUser: jest.fn().mockResolvedValue({ notificationId: "notif-test" }),
+      notifyNewLead: jest.fn().mockResolvedValue(undefined),
     };
     const policy = {
       assertCanReadOperationalData: jest.fn(),
@@ -6348,6 +6350,69 @@ describe("CrmService", () => {
       expect(rate.effectiveFrom).toBe("2026-08-01");
       expect(audit.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: "crm.teacher_rate_set" }),
+  describe("new lead notifications (KVA-240)", () => {
+    it("createLead notifies staff about the new lead", async () => {
+      const { service, notifications } = createServiceWithQueryResults([
+        {
+          rows: [
+            { id: "lead-1", first_name: "Иван", last_name: "Петров", source: "site" },
+          ],
+        },
+      ]);
+      await service.createLead(actor, { firstName: "Иван" } as never);
+      expect(notifications.notifyNewLead).toHaveBeenCalledWith({
+        leadId: "lead-1",
+        name: "Иван Петров",
+        source: "site",
+      });
+    });
+
+    it("createLead succeeds even when the notification fails", async () => {
+      const { service, notifications } = createServiceWithQueryResults([
+        { rows: [{ id: "lead-1", first_name: "Иван" }] },
+      ]);
+      notifications.notifyNewLead.mockRejectedValueOnce(new Error("boom"));
+      await expect(
+        service.createLead(actor, { firstName: "Иван" } as never),
+      ).resolves.toMatchObject({ id: "lead-1" });
+      expect(notifications.notifyNewLead).toHaveBeenCalledTimes(1);
+    });
+
+    it("webhook lead normalizes phone, stamps «Новый» and notifies staff", async () => {
+      const { service, query, notifications, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "status-new" }] }, // lead_statuses «Новый»
+        { rows: [{ id: "lead-web" }] }, // insert into app.leads
+      ]);
+      const result = await service.createLeadFromSiteWebhook({
+        name: "Мария",
+        phone: "8 (999) 123-45-67",
+        discipline: "Вокал",
+        comment: "Хочу пробное занятие",
+      });
+      expect(result).toEqual({ leadId: "lead-web" });
+      const insert = query.mock.calls.find((c) =>
+        String(c[0]).includes("insert into app.leads"),
+      );
+      expect(insert![1]).toEqual([
+        "Мария",
+        "+79991234567",
+        null,
+        "site",
+        "Дисциплина: Вокал\nХочу пробное занятие",
+        "status-new",
+      ]);
+      expect(notifications.notifyNewLead).toHaveBeenCalledWith({
+        leadId: "lead-web",
+        name: "Мария",
+        source: "site",
+      });
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "crm.lead_created",
+          entityType: "lead",
+          entityId: "lead-web",
+          metadata: expect.objectContaining({ fromSiteWebhook: true }),
+        }),
       );
     });
   });

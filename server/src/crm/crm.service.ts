@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
@@ -606,6 +607,8 @@ interface FinanceReportRoomRow {
 
 @Injectable()
 export class CrmService {
+  private readonly logger = new Logger(CrmService.name);
+
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
@@ -7073,7 +7076,30 @@ export class CrmService {
       id: lead.id,
       branchId: branchId ?? null,
     });
+    this.notifyNewLeadSafe(
+      lead.id,
+      [lead.first_name, lead.last_name].filter(Boolean).join(" ").trim() || "Без имени",
+      lead.source?.trim() || "CRM",
+    );
     return this.toLeadDto(lead);
+  }
+
+  // Fire-and-forget staff notification about a new lead. A notification
+  // failure (sync or async) must NEVER break lead creation — log and move on.
+  private notifyNewLeadSafe(leadId: string, name: string, source: string): void {
+    try {
+      void this.notifications
+        .notifyNewLead({ leadId, name, source })
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `New lead notification failed for ${leadId}: ${String(error)}`,
+          );
+        });
+    } catch (error: unknown) {
+      this.logger.warn(
+        `New lead notification failed for ${leadId}: ${String(error)}`,
+      );
+    }
   }
 
   async updateLead(actor: ActorContext, leadId: string, dto: UpsertLeadDto) {
@@ -9379,7 +9405,7 @@ export class CrmService {
     type Sentinel =
       | { linkedLeadId: string | null }
       | { noProfile: true }
-      | { createdLeadId: string };
+      | { createdLeadId: string; leadName: string };
 
     const sentinel = await this.database.transaction<Sentinel>(async (client) => {
       // 1. Acquire an advisory lock scoped to this transaction — serializes
@@ -9441,7 +9467,12 @@ export class CrmService {
          on conflict do nothing`,
         [senderUserId, createdLeadId, matchedPhone, actor.userId],
       );
-      return { createdLeadId };
+      return {
+        createdLeadId,
+        leadName:
+          [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() ||
+          "Без имени",
+      };
     });
 
     if ("linkedLeadId" in sentinel) {
@@ -9459,7 +9490,61 @@ export class CrmService {
       entityId: sentinel.createdLeadId,
       metadata: { fromApp: true, userId: senderUserId },
     });
+    this.notifyNewLeadSafe(sentinel.createdLeadId, sentinel.leadName, "Через приложение");
     return { leadId: sentinel.createdLeadId, created: true };
+  }
+
+  // Public site form → lead. No actor: the caller is the webhook endpoint
+  // authenticated by a shared secret, so created_by stays null and the funnel
+  // entry status «Новый» is stamped like the chat-created leads do.
+  async createLeadFromSiteWebhook(dto: {
+    name: string;
+    phone: string;
+    email?: string;
+    discipline?: string;
+    comment?: string;
+    source?: string;
+  }): Promise<{ leadId: string }> {
+    // Keep the canonical +7 form when the phone normalizes, otherwise store
+    // the raw value — losing a site lead over formatting is worse than a
+    // messy phone that a manager can fix by hand.
+    const phone = normalizePhoneRu(dto.phone).canonical ?? dto.phone.trim();
+    const source = dto.source?.trim() || "site";
+    const notes =
+      [
+        dto.discipline?.trim() ? `Дисциплина: ${dto.discipline.trim()}` : null,
+        dto.comment?.trim() || null,
+      ]
+        .filter(Boolean)
+        .join("\n") || null;
+    const statusRow = await this.database.query<{ id: string }>(
+      `select id from app.lead_statuses where lower(btrim(name)) = 'новый' limit 1`,
+    );
+    const inserted = await this.database.query<{ id: string }>(
+      `
+        insert into app.leads (first_name, phone, email, source, notes, status_id)
+        values ($1, $2, $3, $4, $5, $6)
+        returning id
+      `,
+      [
+        dto.name.trim(),
+        phone,
+        dto.email?.trim().toLowerCase() || null,
+        source,
+        notes,
+        statusRow.rows[0]?.id ?? null,
+      ],
+    );
+    const leadId = inserted.rows[0].id;
+    await this.audit.record({
+      action: "crm.lead_created",
+      entityType: "lead",
+      entityId: leadId,
+      metadata: { fromSiteWebhook: true, source },
+    });
+    this.realtime.emitCrmChanged({ entity: "lead", action: "created", id: leadId });
+    this.notifyNewLeadSafe(leadId, dto.name.trim(), source);
+    return { leadId };
   }
 
   async countAppLeads(actor: ActorContext): Promise<{ count: number }> {
