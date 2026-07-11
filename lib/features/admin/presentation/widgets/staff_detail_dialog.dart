@@ -36,6 +36,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
 
   static const _roleLabels = {
     'manager': 'Управляющий',
+    'director': 'Директор',
     'admin': 'Администратор',
     'system_admin': 'Администратор системы',
   };
@@ -407,6 +408,7 @@ String _staffRoleLabel(String role) {
   return switch (role) {
     'admin' => 'Администратор',
     'manager' => 'Управляющий',
+    'director' => 'Директор',
     'teacher' => 'Преподаватель',
     'system_admin' => 'Администратор системы',
     _ => role.isEmpty ? 'Сотрудник' : role,

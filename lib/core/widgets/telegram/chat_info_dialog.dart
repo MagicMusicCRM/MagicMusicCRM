@@ -68,6 +68,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
   bool get _isManagerOrAdminRole =>
       widget.userRole == 'admin' ||
       widget.userRole == 'manager' ||
+      widget.userRole == 'director' ||
       widget.userRole == 'system_admin';
 
   Map<String, dynamic>? get _conversationPartner {
@@ -979,6 +980,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       'system_admin' => 'Администратор системы',
       'admin' => 'Администратор',
       'manager' => 'Управляющий',
+      'director' => 'Директор',
       'teacher' => 'Преподаватель',
       _ => 'Клиент',
     };
@@ -1253,6 +1255,7 @@ class _AddMembersDialogState extends ConsumerState<_AddMembersDialog> {
       'system_admin' => 'Администратор системы',
       'admin' => 'Администратор',
       'manager' => 'Управляющий',
+      'director' => 'Директор',
       'teacher' => 'Преподаватель',
       _ => 'Клиент',
     };

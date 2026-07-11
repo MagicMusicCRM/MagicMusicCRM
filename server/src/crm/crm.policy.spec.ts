@@ -101,29 +101,62 @@ describe("CrmPolicy", () => {
     ).not.toThrow();
   });
 
-  // KVA-238: payroll — только manager/system_admin (+ 'director' строкой,
-  // роль добавляется параллельно); admin зарплаты не видит.
-  it("restricts payroll to manager, system_admin and director", () => {
-    expect(() =>
-      policy.assertCanReadPayroll({ userId: "m", role: "manager" }),
-    ).not.toThrow();
+  // KVA-238 + KVA-239: зарплатный модуль — часть общешкольных финансов,
+  // доступ унифицирован: только director/system_admin (manager отрезан
+  // решением заказчика 2026-07-10).
+  it("restricts payroll to director and system_admin only", () => {
     expect(() =>
       policy.assertCanReadPayroll({ userId: "s", role: "system_admin" }),
     ).not.toThrow();
     expect(() =>
-      policy.assertCanReadPayroll({
-        userId: "d",
-        role: "director" as never,
-      }),
+      policy.assertCanReadPayroll({ userId: "d", role: "director" }),
     ).not.toThrow();
-    expect(() =>
-      policy.assertCanReadPayroll({ userId: "a", role: "admin" }),
-    ).toThrow(ForbiddenException);
-    expect(() =>
-      policy.assertCanReadPayroll({ userId: "t", role: "teacher" }),
-    ).toThrow(ForbiddenException);
-    expect(() =>
-      policy.assertCanReadPayroll({ userId: "c", role: "client" }),
-    ).toThrow(ForbiddenException);
+    for (const role of ["manager", "admin", "teacher", "client"] as const) {
+      expect(() =>
+        policy.assertCanReadPayroll({ userId: "u", role }),
+      ).toThrow(ForbiddenException);
+    }
+  });
+
+  // KVA-239: общешкольные финансы — только director/system_admin.
+  describe("assertCanReadSchoolFinance — общешкольные финансы", () => {
+    it("allows director and system_admin", () => {
+      expect(() =>
+        policy.assertCanReadSchoolFinance({ userId: "d", role: "director" }),
+      ).not.toThrow();
+      expect(() =>
+        policy.assertCanReadSchoolFinance({
+          userId: "s",
+          role: "system_admin",
+        }),
+      ).not.toThrow();
+    });
+
+    it("forbids manager, admin, teacher and client", () => {
+      for (const role of ["manager", "admin", "teacher", "client"] as const) {
+        expect(() =>
+          policy.assertCanReadSchoolFinance({ userId: "u", role }),
+        ).toThrow(ForbiddenException);
+      }
+    });
+
+    it("director keeps manager-tier card finance access (director >= manager)", () => {
+      expect(() =>
+        policy.assertCanReadStudentFinance({ userId: "d", role: "director" }),
+      ).not.toThrow();
+      expect(() => policy.assertManagerOnly({ userId: "d", role: "director" }))
+        .not.toThrow();
+      expect(() => policy.assertCanWriteCrm({ userId: "d", role: "director" }))
+        .not.toThrow();
+    });
+
+    it("manager keeps card finance access (карточные финансы не отрезаны)", () => {
+      expect(() =>
+        policy.assertCanReadStudentFinance({ userId: "m", role: "manager" }),
+      ).not.toThrow();
+      expect(() =>
+        policy.assertCanReadFinance({ userId: "m", role: "manager" }, "x"),
+      ).not.toThrow();
+    });
   });
 });

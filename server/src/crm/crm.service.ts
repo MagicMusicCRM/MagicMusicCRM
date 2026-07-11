@@ -714,7 +714,11 @@ export class CrmService {
       ),
       openTasks: this.toNumericStat(row?.open_tasks_count),
       newLeads: this.toNumericStat(row?.new_leads_count),
-      revenueMonth: this.toNumericStat(row?.revenue_month),
+      // KVA-239: общешкольная выручка скрыта от ролей без доступа к
+      // общешкольным финансам (manager/admin видят null).
+      revenueMonth: this.policy.canReadSchoolFinance(actor)
+        ? this.toNumericStat(row?.revenue_month)
+        : null,
     };
   }
 
@@ -844,8 +848,13 @@ export class CrmService {
       to: bounds.to,
       branchId: query.branchId ?? null,
       kpis: {
-        revenue: this.toNumericStat(row?.revenue),
-        expectedPayments: this.toNumericStat(row?.expected_payments),
+        // KVA-239: общешкольные денежные суммы видят только director/system_admin.
+        revenue: this.policy.canReadSchoolFinance(actor)
+          ? this.toNumericStat(row?.revenue)
+          : null,
+        expectedPayments: this.policy.canReadSchoolFinance(actor)
+          ? this.toNumericStat(row?.expected_payments)
+          : null,
         debtStudents: this.toNumericStat(row?.debt_students),
         activeStudents: this.toNumericStat(row?.active_students),
         newLeads: this.toNumericStat(row?.new_leads),
@@ -869,7 +878,8 @@ export class CrmService {
   }
 
   async getFinanceReport(actor: ActorContext, query: ReportQuery) {
-    this.policy.assertManagerOnly(actor);
+    // KVA-239: общешкольный финансовый отчёт — только director/system_admin.
+    this.policy.assertCanReadSchoolFinance(actor);
     const bounds = this.reportBounds(query);
     const monthly = await this.database.query<FinanceReportMonthlyRow>(
       `
@@ -1051,7 +1061,7 @@ export class CrmService {
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         where s.deleted_at is null
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'director', 'admin', 'system_admin')
             or ($1::text = 'teacher' and tp.user_id = $2)
           )
           and (
@@ -1837,7 +1847,7 @@ export class CrmService {
         ) agg on true
         where t.deleted_at is null
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'director', 'admin', 'system_admin')
             or ($1::text = 'teacher' and p.user_id = $2)
             or ($1::text = 'client' and (
               exists (
@@ -2312,7 +2322,8 @@ export class CrmService {
               case
                 when $4 = 'system_admin' then 'Администратор системы'
                 when $4 = 'admin' then 'Администратор'
-                when $4 = 'manager' then 'Управляющий'
+                                when $4 = 'manager' then 'Управляющий'
+                when $4 = 'director' then 'Директор'
                 else 'Сотрудник'
               end,
               'working'
@@ -3569,7 +3580,7 @@ export class CrmService {
           and ($6::timestamptz is null or l.scheduled_at <= $6)
           and ($7::boolean is null or l.is_trial = $7)
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'director', 'admin', 'system_admin')
             or ($1::text = 'teacher' and tp.user_id = $2)
             or ($1::text = 'client' and sp.user_id = $2)
             or (
@@ -4548,7 +4559,7 @@ export class CrmService {
         ) and branch.deleted_at is null
         where task.deleted_at is null
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'director', 'admin', 'system_admin')
             or task.assigned_to = $2
             or exists (
               select 1
@@ -4974,7 +4985,7 @@ export class CrmService {
           and ($4::timestamptz is null or pay.payment_date >= $4)
           and ($5::timestamptz is null or pay.payment_date < $5)
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'director', 'admin', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
             or (
               $1::text = 'client'
@@ -5017,7 +5028,7 @@ export class CrmService {
           and ($4::timestamptz is null or pay.payment_date >= $4)
           and ($5::timestamptz is null or pay.payment_date < $5)
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'director', 'admin', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
             or (
               $1::text = 'client'
@@ -5788,7 +5799,7 @@ export class CrmService {
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where ($3::uuid is null or sub.student_id = $3)
           and (
-            $1::text in ('manager', 'admin', 'system_admin')
+            $1::text in ('manager', 'director', 'admin', 'system_admin')
             or ($1::text = 'client' and p.user_id = $2)
             or (
               $1::text = 'client'
@@ -5894,7 +5905,8 @@ export class CrmService {
   }
 
   async listExpenses(actor: ActorContext, query: ExpenseQuery) {
-    this.policy.assertManagerOnly(actor);
+    // KVA-239: расходы школы — общешкольные финансы, только director/system_admin.
+    this.policy.assertCanReadSchoolFinance(actor);
     const conditions: string[] = ["e.deleted_at is null"];
     const params: unknown[] = [];
     if (query.branchId) {
@@ -5942,7 +5954,7 @@ export class CrmService {
   }
 
   async createExpense(actor: ActorContext, dto: UpsertExpenseDto) {
-    this.policy.assertManagerOnly(actor);
+    this.policy.assertCanReadSchoolFinance(actor);
     const result = await this.database.query<ExpenseRow>(
       `
         insert into app.expenses (amount, category, description, branch_id)
@@ -5979,7 +5991,7 @@ export class CrmService {
     expenseId: string,
     dto: UpdateExpenseDto,
   ) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanReadSchoolFinance(actor);
     const result = await this.database.query<ExpenseRow>(
       `
         update app.expenses
@@ -6018,7 +6030,7 @@ export class CrmService {
   }
 
   async deleteExpense(actor: ActorContext, expenseId: string) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanReadSchoolFinance(actor);
     const result = await this.database.query<{ id: string }>(
       `
         update app.expenses
@@ -7352,7 +7364,7 @@ export class CrmService {
     const userId = add(actor.userId);
     filters.push(`
       (
-        ${role}::text in ('manager', 'admin', 'system_admin')
+        ${role}::text in ('manager', 'director', 'admin', 'system_admin')
         or (${role}::text = 'teacher' and tp.user_id = ${userId})
       )
     `);

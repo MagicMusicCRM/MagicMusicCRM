@@ -85,6 +85,8 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
         return 'Преподаватель';
       case 'manager':
         return 'Управляющий';
+      case 'director':
+        return 'Директор';
       case 'admin':
         return 'Администратор';
       case 'system_admin':

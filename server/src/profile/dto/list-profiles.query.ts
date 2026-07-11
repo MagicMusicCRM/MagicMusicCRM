@@ -4,7 +4,7 @@ import { UserRole } from '../../common/security/actor-context';
 
 export class ListProfilesQuery {
   @IsOptional()
-  @IsIn(['client', 'teacher', 'manager', 'admin', 'system_admin'])
+  @IsIn(['client', 'teacher', 'manager', 'admin', 'director', 'system_admin'])
   role?: UserRole;
 
   @IsOptional()

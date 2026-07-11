@@ -33,6 +33,9 @@ describe("CrmService", () => {
       assertManagerOnly: jest.fn(),
       assertCanReadStudentFinance: jest.fn(),
       canReadStudentFinance: jest.fn().mockReturnValue(true),
+      // KVA-239: общешкольные финансы (director/system_admin)
+      assertCanReadSchoolFinance: jest.fn(),
+      canReadSchoolFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
@@ -86,6 +89,9 @@ describe("CrmService", () => {
       assertManagerOnly: jest.fn(),
       assertCanReadStudentFinance: jest.fn(),
       canReadStudentFinance: jest.fn().mockReturnValue(true),
+      // KVA-239: общешкольные финансы (director/system_admin)
+      assertCanReadSchoolFinance: jest.fn(),
+      canReadSchoolFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
@@ -307,7 +313,7 @@ describe("CrmService", () => {
       ],
     });
 
-    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(actor);
     expect(query).toHaveBeenCalledTimes(3);
     expect(query.mock.calls[0][1]).toEqual([
       "2026-06-01T00:00:00.000Z",
@@ -4975,6 +4981,9 @@ describe("CrmService", () => {
       assertManagerOnly: jest.fn(),
       assertCanReadStudentFinance: jest.fn(),
       canReadStudentFinance: jest.fn().mockReturnValue(true),
+      // KVA-239: общешкольные финансы (director/system_admin)
+      assertCanReadSchoolFinance: jest.fn(),
+      canReadSchoolFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
@@ -5088,6 +5097,9 @@ describe("CrmService", () => {
       assertManagerOnly: jest.fn(),
       assertCanReadStudentFinance: jest.fn(),
       canReadStudentFinance: jest.fn().mockReturnValue(true),
+      // KVA-239: общешкольные финансы (director/system_admin)
+      assertCanReadSchoolFinance: jest.fn(),
+      canReadSchoolFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
@@ -5139,6 +5151,9 @@ describe("CrmService", () => {
       assertManagerOnly: jest.fn(),
       assertCanReadStudentFinance: jest.fn(),
       canReadStudentFinance: jest.fn().mockReturnValue(true),
+      // KVA-239: общешкольные финансы (director/system_admin)
+      assertCanReadSchoolFinance: jest.fn(),
+      canReadSchoolFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
@@ -5206,6 +5221,9 @@ describe("CrmService", () => {
       assertManagerOnly: jest.fn(),
       assertCanReadStudentFinance: jest.fn(),
       canReadStudentFinance: jest.fn().mockReturnValue(true),
+      // KVA-239: общешкольные финансы (director/system_admin)
+      assertCanReadSchoolFinance: jest.fn(),
+      canReadSchoolFinance: jest.fn().mockReturnValue(true),
       assertCanListStudents: jest.fn(),
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
@@ -5266,7 +5284,7 @@ describe("CrmService", () => {
       createdAt: "2026-06-22T00:00:00.000Z",
     });
 
-    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual([1500, "rent", "Аренда", "branch-a"]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -5340,7 +5358,7 @@ describe("CrmService", () => {
       limit: 50,
     });
 
-    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(actor);
     expect(result.total).toBe(1500);
     expect(result.items).toEqual([
       {

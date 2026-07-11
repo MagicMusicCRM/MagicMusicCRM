@@ -23,7 +23,9 @@ export class AnalyticsService {
   }
 
   async financeMonthly(actor: ActorContext, query: { from?: string; to?: string }) {
-    this.policy.assertManagerOnly(actor);
+    // KVA-239: помесячные финансы школы — только director/system_admin
+    // (закрывает и CSV/XLSX-экспорт через financeMonthlyRows).
+    this.policy.assertCanReadSchoolFinance(actor);
     const result = await this.database.query<{
       month_start: string;
       lessons: number;
@@ -93,7 +95,8 @@ export class AnalyticsService {
   }
 
   async branchComparison(actor: ActorContext, query: { from?: string; to?: string }) {
-    this.policy.assertManagerOnly(actor);
+    // KVA-239: выручка по филиалам — общешкольные финансы.
+    this.policy.assertCanReadSchoolFinance(actor);
     const { from, to } = this.rangeBounds(query);
     // Mirror of CrmService.branchIdExpr (column preferred, custom_data fallback).
     const branchOf = (a: string) =>
@@ -186,7 +189,8 @@ export class AnalyticsService {
   }
 
   async debts(actor: ActorContext, query: { branchId?: string }) {
-    this.policy.assertManagerOnly(actor);
+    // KVA-239: суммы долгов по школе — общешкольные финансы.
+    this.policy.assertCanReadSchoolFinance(actor);
     const branchOf = (a: string) =>
       `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
     const result = await this.database.query<{ bucket: string; students: string; amount: string }>(
@@ -233,7 +237,8 @@ export class AnalyticsService {
   }
 
   async revenueForecast(actor: ActorContext, query: { branchId?: string }) {
-    this.policy.assertManagerOnly(actor);
+    // KVA-239: прогноз выручки — общешкольные финансы.
+    this.policy.assertCanReadSchoolFinance(actor);
     const branchOf = (a: string) =>
       `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
     const result = await this.database.query<{ next7: string; next14: string; next30: string }>(
@@ -316,7 +321,7 @@ export class AnalyticsService {
     }>(
       `with classified as (
          select m.id, m.chat_id, m.created_at,
-                case when u.role in ('admin', 'manager', 'system_admin') then 'staff' else 'client' end as cls
+                case when u.role in ('admin', 'manager', 'director', 'system_admin') then 'staff' else 'client' end as cls
            from app.messages m
            join app.chats c on c.id = m.chat_id and c.type = 'administration' and c.deleted_at is null
            left join app.users u on u.id = m.sender_id and u.deleted_at is null

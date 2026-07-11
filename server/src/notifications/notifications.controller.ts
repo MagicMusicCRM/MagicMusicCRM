@@ -46,7 +46,7 @@ export class AdminNotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
   @Post()
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   send(@CurrentActor() actor: ActorContext, @Body() dto: AdminSendNotificationDto) {
     return this.notifications.adminSend(actor, dto);
   }

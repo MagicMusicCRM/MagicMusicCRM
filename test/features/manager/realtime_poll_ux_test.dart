@@ -147,7 +147,12 @@ void main() {
     addTearDown(realtime.close);
 
     await tester.pumpWidget(
-      _host(api: api, realtime: realtime.stream, child: const ReportsWidget()),
+      _host(
+        api: api,
+        realtime: realtime.stream,
+        // KVA-239: финансовая аналитика в Отчётах доступна director.
+        child: const ReportsWidget(role: 'director'),
+      ),
     );
     await tester.pumpAndSettle();
 

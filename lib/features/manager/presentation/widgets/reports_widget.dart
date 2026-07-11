@@ -10,13 +10,18 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/subscription_catalog_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 
 class ReportsWidget extends ConsumerStatefulWidget {
   final int initialTab;
-  const ReportsWidget({super.key, this.initialTab = 0});
+
+  /// Реальная роль текущего пользователя (KVA-239): гейтит финансовую
+  /// аналитику (саб-табы «Аналитика»/«Финансы») — только director/system_admin.
+  final String role;
+  const ReportsWidget({super.key, this.initialTab = 0, required this.role});
 
   @override
   ConsumerState<ReportsWidget> createState() => _ReportsWidgetState();
@@ -47,21 +52,41 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   // ── Realtime invalidation (crm.changed) ───────────────────────────────────
   Timer? _realtimeDebounce;
 
+  // KVA-239: финансовая аналитика (саб-табы «Аналитика»/«Финансы») — только
+  // director/system_admin. Управляющий видит Активность/Управление/Абонементы.
+  bool get _canSeeFinance => crmHasSchoolFinanceAccess(widget.role);
+
+  /// Canonical sub-tab indices (0 Аналитика · 1 Финансы · 2 Активность ·
+  /// 3 Управление · 4 Абонементы · 5 Преподаватели/ЗП) visible to the current
+  /// role. «Преподаватели» — зарплатный модуль (KVA-238), по KVA-239 это
+  /// общешкольные финансы: только director/system_admin.
+  List<int> get _visibleReportTabs =>
+      _canSeeFinance ? const [0, 1, 2, 3, 4, 5] : const [2, 3, 4];
+
+  int _positionForCanonicalTab(int canonical) {
+    final pos = _visibleReportTabs.indexOf(canonical.clamp(0, 5));
+    return pos < 0 ? 0 : pos;
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 6,
+      length: _visibleReportTabs.length,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 5),
+      initialIndex: _positionForCanonicalTab(widget.initialTab),
     );
-    _loadReports();
+    if (_canSeeFinance) {
+      _loadReports();
+    } else {
+      _loading = false;
+    }
   }
 
   @override
   void didUpdateWidget(covariant ReportsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextTab = widget.initialTab.clamp(0, 5);
+    final nextTab = _positionForCanonicalTab(widget.initialTab);
     if (nextTab != _tabController.index) {
       _tabController.index = nextTab;
     }
@@ -75,6 +100,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   }
 
   Future<void> _loadReports() async {
+    if (!_canSeeFinance) return;
     setState(() {
       _loading = true;
       _loadError = null;
@@ -211,26 +237,27 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           labelColor: AppColor.gold,
           unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
           indicatorColor: AppColor.gold,
-          tabs: const [
-            Tab(text: 'Аналитика'),
-            Tab(text: 'Финансы'),
-            Tab(text: 'Активность'),
-            Tab(text: 'Управление'),
-            Tab(text: 'Абонементы'),
-            // KVA-238: отчёт «Статистика преподавателей» (зарплатный модуль).
-            Tab(text: 'Преподаватели'),
+          tabs: [
+            if (_canSeeFinance) const Tab(text: 'Аналитика'),
+            if (_canSeeFinance) const Tab(text: 'Финансы'),
+            const Tab(text: 'Активность'),
+            const Tab(text: 'Управление'),
+            const Tab(text: 'Абонементы'),
+            // KVA-238: «Статистика преподавателей» (зарплатный модуль);
+            // по KVA-239 — общешкольные финансы, только director/system_admin.
+            if (_canSeeFinance) const Tab(text: 'Преподаватели'),
           ],
         ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
             children: [
-              _buildOverviewTab(),
-              const FinancialDashboardWidget(),
+              if (_canSeeFinance) _buildOverviewTab(),
+              if (_canSeeFinance) const FinancialDashboardWidget(),
               const _ActivityLogTab(),
-              const ManagementDashboardWidget(),
+              ManagementDashboardWidget(role: widget.role),
               const SubscriptionCatalogWidget(),
-              const TeacherStatsWidget(),
+              if (_canSeeFinance) const TeacherStatsWidget(),
             ],
           ),
         ),
@@ -1701,6 +1728,7 @@ String _activityRoleLabel(String role) {
     'admin' => 'Администратор',
     'system_admin' => 'Администратор системы',
     'manager' => 'Управляющий',
+    'director' => 'Директор',
     'teacher' => 'Учитель',
     'client' => 'Клиент',
     _ => role,

@@ -34,6 +34,9 @@ String _roleToRoute(String role) {
     case 'admin':
       return '/admin';
     case 'manager':
+    case 'director':
+      // KVA-239: Директор использует manager-оболочку CRM (с полным доступом
+      // к общешкольным финансам — гейтится по реальной роли внутри).
       return '/manager';
     case 'teacher':
       return '/teacher';
@@ -188,7 +191,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           role != 'system_admin') {
         return roleRoute;
       }
-      if (loc.startsWith('/manager') && role != 'manager') return roleRoute;
+      if (loc.startsWith('/manager') &&
+          role != 'manager' &&
+          role != 'director') {
+        return roleRoute;
+      }
       if (loc.startsWith('/teacher') && role != 'teacher') return roleRoute;
       if (loc.startsWith('/client') && role != 'client') return roleRoute;
 

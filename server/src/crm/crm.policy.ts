@@ -60,6 +60,25 @@ export class CrmPolicy {
     throw new NotFoundException("Платежи не найдены.");
   }
 
+  /**
+   * ОБЩЕШКОЛЬНЫЕ финансы и финансовая аналитика (отчёт по выручке, расходы,
+   * помесячные финансы, долги, прогноз выручки): ТОЛЬКО Директор (director)
+   * и Администратор системы (system_admin). Управляющий (manager) и
+   * Администратор (admin) ИСКЛЮЧЕНЫ — решение владельца (KVA-239).
+   * Финансы в КАРТОЧКЕ клиента (история оплат, баланс, личный счёт) у
+   * Управляющего остаются — см. canReadStudentFinance выше.
+   */
+  canReadSchoolFinance(actor: ActorContext): boolean {
+    return actor.role === "director" || actor.role === "system_admin";
+  }
+
+  assertCanReadSchoolFinance(actor: ActorContext): void {
+    if (this.canReadSchoolFinance(actor)) return;
+    throw new ForbiddenException(
+      "Недостаточно прав для общешкольных финансов.",
+    );
+  }
+
   // Operational CRM work: administrators must be able to cover each other's
   // shifts. Role management stays separate in ProfilePolicy/canAssignRole.
   assertManagerOnly(actor: ActorContext): void {
@@ -81,14 +100,13 @@ export class CrmPolicy {
   }
 
   /**
-   * KVA-238: зарплатный модуль педагогов (ставки/начисления/выплаты) — только
-   * Управляющий и Администратор системы; Администратору зарплаты не видны
-   * (в отличие от assertManagerOnly). Роли перечислены строками, чтобы
-   * включить 'director' (добавляется параллельно в KVA-239) без зависимости
-   * от enum UserRole.
+   * KVA-238 + KVA-239: зарплатный модуль педагогов (ставки/начисления/
+   * выплаты) — часть ОБЩЕШКОЛЬНЫХ финансов, поэтому доступ идентичен
+   * canReadSchoolFinance: только Директор и Администратор системы
+   * (Управляющий отрезан решением заказчика 2026-07-10).
    */
   assertCanReadPayroll(actor: ActorContext): void {
-    if (["manager", "system_admin", "director"].includes(actor.role)) return;
+    if (this.canReadSchoolFinance(actor)) return;
     throw new ForbiddenException(
       "Недостаточно прав для зарплатного раздела.",
     );

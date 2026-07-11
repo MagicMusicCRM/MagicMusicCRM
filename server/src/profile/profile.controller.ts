@@ -33,19 +33,19 @@ export class AdminProfilesController {
   constructor(private readonly profiles: ProfileService) {}
 
   @Get()
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   list(@CurrentActor() actor: ActorContext, @Query() query: ListProfilesQuery) {
     return this.profiles.listProfiles(actor, query);
   }
 
   @Get(':id')
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   get(@CurrentActor() actor: ActorContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.profiles.getProfile(actor, id);
   }
 
   @Get(':id/notes')
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   listNotes(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string
@@ -54,7 +54,7 @@ export class AdminProfilesController {
   }
 
   @Get(':id/links')
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   listLinks(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string
@@ -63,7 +63,7 @@ export class AdminProfilesController {
   }
 
   @Post(':id/notes')
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   createNote(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -73,7 +73,7 @@ export class AdminProfilesController {
   }
 
   @Get(':id/link-candidates')
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   listLinkCandidates(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string
@@ -82,7 +82,7 @@ export class AdminProfilesController {
   }
 
   @Post(':id/links/auto')
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   autoLinkByPhone(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string
@@ -91,7 +91,7 @@ export class AdminProfilesController {
   }
 
   @Post(':id/links')
-  @Roles('manager', 'admin', 'system_admin')
+  @Roles('manager', 'director', 'admin', 'system_admin')
   linkCrmEntity(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -101,7 +101,7 @@ export class AdminProfilesController {
   }
 
   @Patch(':id/role')
-  @Roles('manager', 'system_admin')
+  @Roles('manager', 'director', 'system_admin')
   updateRole(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string,

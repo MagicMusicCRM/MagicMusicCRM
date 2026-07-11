@@ -38,6 +38,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
     'teacher',
     'manager',
     'admin',
+    'director',
     'system_admin',
   ];
   static const _roleFilterValues = [
@@ -46,6 +47,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
     'teacher',
     'manager',
     'admin',
+    'director',
     'system_admin',
   ];
 
@@ -55,6 +57,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
     'teacher': 'Преподаватель',
     'manager': 'Управляющий',
     'admin': 'Администратор',
+    'director': 'Директор',
     'system_admin': 'Администратор системы',
   };
 
@@ -63,6 +66,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
     'teacher': Color(0xFF3B82F6),
     'manager': Color(0xFF8B5CF6),
     'admin': Color(0xFFF59E0B),
+    'director': Color(0xFFEF4444),
     'system_admin': Color(0xFFC5A059),
   };
 
@@ -425,6 +429,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
     // Администратор (`admin`) is intentionally excluded (manager > admin).
     final canUpdateRoles =
         widget.currentRole == 'manager' ||
+        widget.currentRole == 'director' ||
         widget.currentRole == 'system_admin';
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -837,6 +842,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
     // могут сменить роль в любой момент. Администратор (`admin`) — НЕ может
     // менять роли (бизнес-иерархия: Управляющий > Администратор).
     if (widget.currentRole == 'manager' ||
+        widget.currentRole == 'director' ||
         widget.currentRole == 'system_admin') {
       return _availableRoles;
     }

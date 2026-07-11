@@ -4,16 +4,23 @@ import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/analytics_providers.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 
 // ────────────────────────────────────────────────────────────
 // Public entry-point
 // ────────────────────────────────────────────────────────────
 
 class ManagementDashboardWidget extends ConsumerWidget {
-  const ManagementDashboardWidget({super.key});
+  /// Реальная роль текущего пользователя (KVA-239): «Сравнение филиалов»
+  /// (выручка) видно только director/system_admin.
+  final String role;
+  const ManagementDashboardWidget({super.key, required this.role});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // KVA-239: «Сравнение филиалов» содержит выручку по школе — раздел виден
+    // только ролям с доступом к общешкольным финансам (director/system_admin).
+    final canSeeFinance = crmHasSchoolFinanceAccess(role);
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
@@ -22,15 +29,17 @@ class ManagementDashboardWidget extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: const [
-              _FunnelSection(),
-              SizedBox(height: 16),
-              _BranchesSection(),
-              SizedBox(height: 16),
-              _SlaSection(),
-              SizedBox(height: 16),
-              _LossReasonsSection(),
-              SizedBox(height: 24),
+            children: [
+              const _FunnelSection(),
+              if (canSeeFinance) ...const [
+                SizedBox(height: 16),
+                _BranchesSection(),
+              ],
+              const SizedBox(height: 16),
+              const _SlaSection(),
+              const SizedBox(height: 16),
+              const _LossReasonsSection(),
+              const SizedBox(height: 24),
             ],
           ),
         ),

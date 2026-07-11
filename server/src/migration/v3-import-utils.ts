@@ -55,9 +55,10 @@ export function nullableUuid(value: unknown): string | null {
   return isUuid(value) ? value : null;
 }
 
-export function normalizeRole(value: unknown): 'client' | 'teacher' | 'manager' | 'admin' | 'system_admin' {
+export function normalizeRole(value: unknown): 'client' | 'teacher' | 'manager' | 'admin' | 'director' | 'system_admin' {
   const normalized = asString(value)?.toLowerCase();
   if (normalized === 'system_admin' || normalized === 'system-admin' || normalized === 'superadmin' || normalized === 'super_admin') return 'system_admin';
+  if (normalized === 'director') return 'director';
   if (normalized === 'admin' || normalized === 'administrator' || normalized === 'owner') return 'admin';
   if (normalized === 'manager' || normalized === 'staff' || normalized === 'moderator') return 'manager';
   if (normalized === 'teacher' || normalized === 'instructor') return 'teacher';

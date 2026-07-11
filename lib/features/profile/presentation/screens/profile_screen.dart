@@ -125,6 +125,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       'system_admin' => 'Администратор системы',
       'admin' => 'Администратор',
       'manager' => 'Управляющий',
+      'director' => 'Директор',
       'teacher' => 'Преподаватель',
       'client' => 'Клиент',
       _ => 'Клиент',

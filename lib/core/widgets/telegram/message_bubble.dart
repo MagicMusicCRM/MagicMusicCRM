@@ -466,6 +466,7 @@ class MessageBubble extends StatelessWidget {
       'teacher' => 'Преподаватель',
       'admin' => 'Администратор',
       'manager' => 'Управляющий',
+      'director' => 'Директор',
       'system_admin' => 'Администратор системы',
       _ => null,
     };
