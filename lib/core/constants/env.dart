@@ -2,9 +2,11 @@ import 'runtime_env_stub.dart'
     if (dart.library.io) 'runtime_env_io.dart';
 
 class Env {
+  // Домен сменён 2026-07-10: доступ к phantom-net.ru утрачен, новый постоянный
+  // домен — magicmusiccrm.ru (KVA: пересоздание staging-сервера).
   static const String magicApiBaseUrl = String.fromEnvironment(
     'MAGIC_API_BASE_URL',
-    defaultValue: 'https://api.phantom-net.ru/api',
+    defaultValue: 'https://api.magicmusiccrm.ru/api',
   );
 
   /// Isolates per-instance local state (secure-storage token keys) so the same
