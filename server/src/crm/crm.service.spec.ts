@@ -4679,6 +4679,40 @@ describe("CrmService", () => {
     expect(query.mock.calls[0][1]).toEqual(["lead-1"]);
   });
 
+  it("lists a lead's applications newest-first (KVA-234)", async () => {
+    const { service, query, policy } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "app-1",
+            applied_at: "2026-06-20T10:00:00.000Z",
+            channel: "Заявка с сайта",
+            office: "Сокол",
+            discipline: "Вокал",
+            status: "Новая",
+            utm: { Source: "yandex", Medium: "cpc", Campaign: "brand", Referrer: null },
+          },
+        ],
+      },
+    ]);
+    const result = await service.listLeadApplications(actor, "lead-1");
+    expect(result.items).toEqual([
+      {
+        id: "app-1",
+        appliedAt: "2026-06-20T10:00:00.000Z",
+        channel: "Заявка с сайта",
+        office: "Сокол",
+        discipline: "Вокал",
+        status: "Новая",
+        utm: { Source: "yandex", Medium: "cpc", Campaign: "brand", Referrer: null },
+      },
+    ]);
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("app.lead_applications");
+    expect(query.mock.calls[0][0]).toContain("order by applied_at desc");
+    expect(query.mock.calls[0][1]).toEqual(["lead-1"]);
+  });
+
   it("creates a family", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       { rows: [{ id: "fam-1", name: "Ивановы", branch_id: "b1" }] },

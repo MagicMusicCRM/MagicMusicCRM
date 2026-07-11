@@ -2554,6 +2554,40 @@ void main() {
     );
 
     test(
+      'listLeadApplications requests /crm/leads/{id}/applications and maps items',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/leads/lead-a/applications',
+            statusCode: 200,
+            body: {
+              'items': [
+                {
+                  'id': 'app-1',
+                  'appliedAt': '2026-06-20T10:00:00.000Z',
+                  'channel': 'Заявка с сайта',
+                  'office': 'Сокол',
+                  'discipline': 'Вокал',
+                  'status': 'Новая',
+                  'utm': {'Source': 'yandex', 'Medium': 'cpc'},
+                },
+              ],
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        final items = await service.listLeadApplications('lead-a');
+
+        expect(adapter.requests.single, isNotNull);
+        expect(items.single['applied_at'], '2026-06-20T10:00:00.000Z');
+        expect(items.single['channel'], 'Заявка с сайта');
+        expect(items.single['discipline'], 'Вокал');
+        expect(items.single['utm'], {'Source': 'yandex', 'Medium': 'cpc'});
+      },
+    );
+
+    test(
       'getFamilyForEntity requests /crm/families/by-entity/{type}/{id} and maps family + members',
       () async {
         final adapter = _FakeAdapter([

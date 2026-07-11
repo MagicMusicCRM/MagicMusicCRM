@@ -6780,6 +6780,38 @@ export class CrmService {
     };
   }
 
+  // KVA-234: заявки лида из app.lead_applications (импорт HolliHop
+  // GetStudyRequests, миграция 0050) — секция «Заявки» в карточке лида.
+  async listLeadApplications(actor: ActorContext, leadId: string) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{
+      id: string;
+      applied_at: string;
+      channel: string | null;
+      office: string | null;
+      discipline: string | null;
+      status: string | null;
+      utm: Record<string, unknown> | null;
+    }>(
+      `select id, applied_at, channel, office, discipline, status, utm
+         from app.lead_applications
+        where lead_id = $1 and deleted_at is null
+        order by applied_at desc`,
+      [leadId],
+    );
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        appliedAt: row.applied_at,
+        channel: row.channel,
+        office: row.office,
+        discipline: row.discipline,
+        status: row.status,
+        utm: row.utm,
+      })),
+    };
+  }
+
   async listLeads(actor: ActorContext, query: CrmListQuery) {
     this.policy.assertCanWriteCrm(actor);
     const limit = Math.min(query.limit ?? 50, 100);

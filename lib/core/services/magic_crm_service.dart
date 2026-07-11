@@ -933,6 +933,26 @@ class MagicCrmService {
     return _mapList(response['items'], _legacyStatusHistoryItem);
   }
 
+  /// KVA-234: заявки лида (app.lead_applications) — секция «Заявки».
+  Future<List<Map<String, dynamic>>> listLeadApplications(String leadId) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/leads/$leadId/applications',
+    );
+    return _items(response).map((item) {
+      return {
+        'id': item['id'],
+        'applied_at': item['appliedAt'],
+        'channel': item['channel'],
+        'office': item['office'],
+        'discipline': item['discipline'],
+        'status': item['status'],
+        'utm': item['utm'] is Map
+            ? Map<String, dynamic>.from(item['utm'] as Map)
+            : const <String, dynamic>{},
+      };
+    }).toList();
+  }
+
   Future<Map<String, dynamic>> getFamilyForEntity({
     required String entityType,
     required String entityId,
