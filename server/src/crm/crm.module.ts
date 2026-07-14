@@ -10,13 +10,14 @@ import { CrmPolicy } from './crm.policy';
 import { CrmService } from './crm.service';
 import { HomeworkService } from './homework.service';
 import { ReferenceDataService } from './reference-data.service';
+import { SubscriptionsService } from './subscriptions.service';
 import { LeadWebhookController } from './lead-webhook.controller';
 import { ScheduleSeriesWorker } from './schedule-series.worker';
 
 @Module({
   imports: [AuditModule, DatabaseModule, JwtModule.register({}), NotificationsModule],
   controllers: [CrmController, LeadWebhookController],
-  providers: [CrmService, HomeworkService, ReferenceDataService, CrmPolicy, HolliHopMetadataService, ScheduleSeriesWorker, JwtAuthGuard],
+  providers: [CrmService, HomeworkService, ReferenceDataService, SubscriptionsService, CrmPolicy, HolliHopMetadataService, ScheduleSeriesWorker, JwtAuthGuard],
   exports: [CrmService, CrmPolicy]
 })
 export class CrmModule {}

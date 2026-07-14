@@ -7,7 +7,7 @@ import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
-import { HolliHopMetadataService } from "./hollihop-metadata.service";
+import { SubscriptionsService } from "./subscriptions.service";
 import { CrmPolicy } from "./crm.policy";
 import { CrmService } from "./crm.service";
 
@@ -41,29 +41,20 @@ describe("CrmService", () => {
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
-    const hollihop = {
-      listDisciplines: jest
-        .fn()
-        .mockResolvedValue({ configured: false, items: [] }),
-      listLevels: jest.fn().mockResolvedValue({ configured: false, items: [] }),
-      listCategories: jest
-        .fn()
-        .mockResolvedValue({ configured: false, items: [] }),
-      listLeadStatuses: jest
-        .fn()
-        .mockResolvedValue({ configured: false, items: [] }),
+    const subscriptions = {
+      listSubscriptions: jest.fn().mockResolvedValue({ items: [] }),
     };
 
     const service = new CrmService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      hollihop as unknown as HolliHopMetadataService,
+      subscriptions as unknown as SubscriptionsService,
       notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
-    return { service, query, audit, policy, hollihop, notifications, database };
+    return { service, query, audit, policy, subscriptions, notifications, database };
   };
 
   const createServiceWithQueryResults = (
@@ -98,29 +89,20 @@ describe("CrmService", () => {
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
-    const hollihop = {
-      listDisciplines: jest
-        .fn()
-        .mockResolvedValue({ configured: false, items: [] }),
-      listLevels: jest.fn().mockResolvedValue({ configured: false, items: [] }),
-      listCategories: jest
-        .fn()
-        .mockResolvedValue({ configured: false, items: [] }),
-      listLeadStatuses: jest
-        .fn()
-        .mockResolvedValue({ configured: false, items: [] }),
+    const subscriptions = {
+      listSubscriptions: jest.fn().mockResolvedValue({ items: [] }),
     };
 
     const service = new CrmService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      hollihop as unknown as HolliHopMetadataService,
+      subscriptions as unknown as SubscriptionsService,
       notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
-    return { service, query, audit, policy, hollihop, notifications, database };
+    return { service, query, audit, policy, subscriptions, notifications, database };
   };
 
   it("lists branches through operational-data policy", async () => {
@@ -2103,53 +2085,6 @@ describe("CrmService", () => {
     expect(query).toHaveBeenCalledTimes(7);
   });
 
-  it("lists subscriptions with actor-scoped query and safe DTO", async () => {
-    const { service, query } = createService([
-      {
-        id: "sub-a",
-        student_id: "student-a",
-        student_user_id: "client-a",
-        lessons_total: 8,
-        lessons_used: 3,
-        starts_at: "2026-06-01",
-        expires_at: "2026-07-01",
-        status: "active",
-        created_at: "2026-06-01T00:00:00.000Z",
-        updated_at: "2026-06-12T00:00:00.000Z",
-      },
-    ]);
-
-    await expect(
-      service.listSubscriptions(
-        { userId: "client-a", role: "client" },
-        { studentId: "student-a", limit: 1 },
-      ),
-    ).resolves.toEqual({
-      items: [
-        {
-          id: "sub-a",
-          studentId: "student-a",
-          lessonsTotal: 8,
-          lessonsUsed: 3,
-          startsAt: "2026-06-01",
-          expiresAt: "2026-07-01",
-          status: "active",
-          createdAt: "2026-06-01T00:00:00.000Z",
-          updatedAt: "2026-06-12T00:00:00.000Z",
-          packageName: null,
-          packagePrice: null,
-        },
-      ],
-    });
-
-    expect(query.mock.calls[0][1]).toEqual([
-      "client",
-      "client-a",
-      "student-a",
-      1,
-    ]);
-  });
-
   it("lists the student ledger with signed amounts, totals and direction filter", async () => {
     const { service, query, policy } = createService([
       {
@@ -2400,43 +2335,6 @@ describe("CrmService", () => {
       "coalesce(original_scheduled_at, scheduled_at)",
     );
     expect(String(updateCall?.[0])).toContain("series_id is not null");
-  });
-
-  it("allows a client to list subscriptions for a manually linked student", async () => {
-    const { service, query } = createService([
-      {
-        id: "sub-linked",
-        student_id: "student-linked",
-        student_user_id: null,
-        lessons_total: 12,
-        lessons_used: 0,
-        starts_at: "2026-06-22",
-        expires_at: "2026-08-22",
-        status: "active",
-        created_at: "2026-06-22T00:00:00.000Z",
-        updated_at: "2026-06-22T00:00:00.000Z",
-      },
-    ]);
-
-    await expect(
-      service.listSubscriptions(
-        { userId: "client-linked", role: "client" },
-        { studentId: "student-linked", limit: 1 },
-      ),
-    ).resolves.toEqual({
-      items: [
-        expect.objectContaining({
-          id: "sub-linked",
-          studentId: "student-linked",
-          lessonsTotal: 12,
-        }),
-      ],
-    });
-
-    const sql = String(query.mock.calls[0][0]);
-    expect(sql).toContain("app.user_crm_links");
-    expect(sql).toContain("link.user_id = $2");
-    expect(sql).toContain("link.entity_type = 'student'");
   });
 
   it("lists payments with date filters and student summary", async () => {
@@ -4326,7 +4224,7 @@ describe("CrmService", () => {
       { query, transaction } as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      {} as unknown as HolliHopMetadataService,
+      {} as unknown as SubscriptionsService,
       {} as unknown as NotificationsService,
       {} as unknown as RealtimeBus,
     );
@@ -4833,17 +4731,14 @@ describe("CrmService", () => {
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
-    const hollihop = {
-      listDisciplines: jest.fn().mockResolvedValue({ configured: false, items: [] }),
-      listLevels: jest.fn().mockResolvedValue({ configured: false, items: [] }),
-      listCategories: jest.fn().mockResolvedValue({ configured: false, items: [] }),
-      listLeadStatuses: jest.fn().mockResolvedValue({ configured: false, items: [] }),
+    const subscriptions = {
+      listSubscriptions: jest.fn().mockResolvedValue({ items: [] }),
     };
     const service = new CrmService(
       { query, transaction } as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      hollihop as unknown as HolliHopMetadataService,
+      subscriptions as unknown as SubscriptionsService,
       notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
@@ -4953,7 +4848,7 @@ describe("CrmService", () => {
       { transaction } as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      {} as unknown as HolliHopMetadataService,
+      {} as unknown as SubscriptionsService,
       {} as unknown as NotificationsService,
       {} as unknown as RealtimeBus,
     );
@@ -5007,7 +4902,7 @@ describe("CrmService", () => {
       { transaction } as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      {} as unknown as HolliHopMetadataService,
+      {} as unknown as SubscriptionsService,
       {} as unknown as NotificationsService,
       {} as unknown as RealtimeBus,
     );
@@ -5077,7 +4972,7 @@ describe("CrmService", () => {
       { transaction } as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      {} as unknown as HolliHopMetadataService,
+      {} as unknown as SubscriptionsService,
       {} as unknown as NotificationsService,
       {} as unknown as RealtimeBus,
     );
@@ -5236,105 +5131,6 @@ describe("CrmService", () => {
     await expect(
       missing.service.deleteExpense(actor, "exp-x"),
     ).rejects.toBeInstanceOf(NotFoundException);
-  });
-
-  it("creates subscription packages through CRM write policy and audit (P5b)", async () => {
-    const { service, query, audit, policy } = createService([
-      {
-        id: "pkg-a",
-        name: "8 уроков",
-        discipline_id: null,
-        branch_id: "branch-a",
-        lessons_total: 8,
-        price: "8000.00",
-        validity_days: 60,
-        is_active: true,
-        sort_order: 0,
-        created_at: "2026-06-22T00:00:00.000Z",
-      },
-    ]);
-
-    await expect(
-      service.createSubscriptionPackage(actor, {
-        name: " 8 уроков ",
-        branchId: "branch-a",
-        lessonsTotal: 8,
-        price: 8000,
-        validityDays: 60,
-      }),
-    ).resolves.toEqual({
-      id: "pkg-a",
-      name: "8 уроков",
-      disciplineId: null,
-      branchId: "branch-a",
-      lessonsTotal: 8,
-      price: 8000,
-      validityDays: 60,
-      isActive: true,
-      sortOrder: 0,
-      createdAt: "2026-06-22T00:00:00.000Z",
-    });
-
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual([
-      "8 уроков",
-      null,
-      "branch-a",
-      8,
-      8000,
-      60,
-      null,
-      null,
-    ]);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.subscription_package_created",
-        entityType: "subscription_package",
-        entityId: "pkg-a",
-      }),
-    );
-  });
-
-  it("issues a subscription from a package atomically with audit (P5b)", async () => {
-    const { service, query, audit, policy } = createService([
-      {
-        id: "sub-a",
-        lessons_total: 8,
-        lessons_used: 0,
-        starts_at: "2026-06-22",
-        expires_at: "2026-08-21",
-        status: "active",
-        package_id: "pkg-a",
-        payment_id: "pay-a",
-      },
-    ]);
-
-    await expect(
-      service.issueSubscription(actor, "student-a", { packageId: "pkg-a" }),
-    ).resolves.toEqual({
-      id: "sub-a",
-      studentId: "student-a",
-      lessonsTotal: 8,
-      lessonsUsed: 0,
-      startsAt: "2026-06-22",
-      expiresAt: "2026-08-21",
-      status: "active",
-      packageId: "pkg-a",
-      paymentId: "pay-a",
-    });
-
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    const sql = String(query.mock.calls[0][0]);
-    expect(sql).toContain("insert into app.payments");
-    expect(sql).toContain("insert into app.subscriptions");
-    expect(query.mock.calls[0][1]).toEqual(["student-a", "pkg-a", "manager-a"]);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.subscription_issued",
-        entityType: "student",
-        entityId: "student-a",
-      }),
-    );
   });
 
   it("counts a subscription lesson when a student is marked present (P5b-4/KVA-237)", async () => {

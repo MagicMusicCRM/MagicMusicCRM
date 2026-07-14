@@ -16,6 +16,7 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { CrmService } from "./crm.service";
 import { HomeworkService } from "./homework.service";
 import { ReferenceDataService } from "./reference-data.service";
+import { SubscriptionsService } from "./subscriptions.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
@@ -87,6 +88,7 @@ export class CrmController {
     private readonly crm: CrmService,
     private readonly homework: HomeworkService,
     private readonly referenceData: ReferenceDataService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   @Get("me")
@@ -742,7 +744,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: CrmListQuery,
   ) {
-    return this.crm.listSubscriptions(actor, query);
+    return this.subscriptions.listSubscriptions(actor, query);
   }
 
   @Post("payments")
@@ -791,7 +793,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: CrmListQuery,
   ) {
-    return this.crm.listSubscriptionPackages(actor, query);
+    return this.subscriptions.listSubscriptionPackages(actor, query);
   }
 
   @Post("subscription-packages")
@@ -799,7 +801,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: UpsertSubscriptionPackageDto,
   ) {
-    return this.crm.createSubscriptionPackage(actor, dto);
+    return this.subscriptions.createSubscriptionPackage(actor, dto);
   }
 
   @Patch("subscription-packages/:id")
@@ -808,7 +810,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateSubscriptionPackageDto,
   ) {
-    return this.crm.updateSubscriptionPackage(actor, id, dto);
+    return this.subscriptions.updateSubscriptionPackage(actor, id, dto);
   }
 
   @Delete("subscription-packages/:id")
@@ -816,7 +818,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.deleteSubscriptionPackage(actor, id);
+    return this.subscriptions.deleteSubscriptionPackage(actor, id);
   }
 
   @Post("students/:id/subscriptions/issue")
@@ -825,7 +827,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: IssueSubscriptionDto,
   ) {
-    return this.crm.issueSubscription(actor, id, dto);
+    return this.subscriptions.issueSubscription(actor, id, dto);
   }
 
   @Get("homeworks")
