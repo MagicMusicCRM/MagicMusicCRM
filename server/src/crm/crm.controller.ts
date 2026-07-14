@@ -20,6 +20,7 @@ import { SubscriptionsService } from "./subscriptions.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
+import { PayrollService } from "./payroll.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
@@ -95,6 +96,7 @@ export class CrmController {
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
+    private readonly payroll: PayrollService,
   ) {}
 
   @Get("me")
@@ -332,7 +334,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.getTeacherPayroll(actor, id);
+    return this.payroll.getTeacherPayroll(actor, id);
   }
 
   @Post("teachers/:id/payouts")
@@ -341,7 +343,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: CreateTeacherPayoutDto,
   ) {
-    return this.crm.createTeacherPayout(actor, id, dto);
+    return this.payroll.createTeacherPayout(actor, id, dto);
   }
 
   @Post("teachers/:id/rates")
@@ -350,7 +352,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: SetTeacherRateDto,
   ) {
-    return this.crm.setTeacherRate(actor, id, dto);
+    return this.payroll.setTeacherRate(actor, id, dto);
   }
 
   @Get("reports/teacher-stats")
@@ -358,7 +360,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: TeacherStatsQuery,
   ) {
-    return this.crm.getTeacherStatsReport(actor, query);
+    return this.payroll.getTeacherStatsReport(actor, query);
   }
 
   @Get("staff")

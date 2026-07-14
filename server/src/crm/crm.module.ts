@@ -14,13 +14,14 @@ import { SubscriptionsService } from './subscriptions.service';
 import { RoomsService } from './rooms.service';
 import { BranchesService } from './branches.service';
 import { GroupsService } from './groups.service';
+import { PayrollService } from './payroll.service';
 import { LeadWebhookController } from './lead-webhook.controller';
 import { ScheduleSeriesWorker } from './schedule-series.worker';
 
 @Module({
   imports: [AuditModule, DatabaseModule, JwtModule.register({}), NotificationsModule],
   controllers: [CrmController, LeadWebhookController],
-  providers: [CrmService, HomeworkService, ReferenceDataService, SubscriptionsService, RoomsService, BranchesService, GroupsService, CrmPolicy, HolliHopMetadataService, ScheduleSeriesWorker, JwtAuthGuard],
+  providers: [CrmService, HomeworkService, ReferenceDataService, SubscriptionsService, RoomsService, BranchesService, GroupsService, PayrollService, CrmPolicy, HolliHopMetadataService, ScheduleSeriesWorker, JwtAuthGuard],
   exports: [CrmService, CrmPolicy]
 })
 export class CrmModule {}
