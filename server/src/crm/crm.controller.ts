@@ -21,6 +21,7 @@ import { FinanceService } from "./finance.service";
 import { TasksService } from "./tasks.service";
 import { AttendanceService } from "./attendance.service";
 import { StaffService } from "./staff.service";
+import { TeachersService } from "./teachers.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -101,6 +102,7 @@ export class CrmController {
     private readonly tasks: TasksService,
     private readonly attendance: AttendanceService,
     private readonly staff: StaffService,
+    private readonly teachers: TeachersService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -315,7 +317,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: TeacherListQuery,
   ) {
-    return this.crm.listTeachers(actor, query);
+    return this.teachers.listTeachers(actor, query);
   }
 
   @Post("teachers")
@@ -323,7 +325,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreateTeacherDto,
   ) {
-    return this.crm.createTeacher(actor, dto);
+    return this.teachers.createTeacher(actor, dto);
   }
 
   @Patch("teachers/:id")
@@ -332,7 +334,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateTeacherDto,
   ) {
-    return this.crm.updateTeacher(actor, id, dto);
+    return this.teachers.updateTeacher(actor, id, dto);
   }
 
   // ── KVA-238: зарплатный модуль педагогов ──────────────────────────────────
