@@ -10,6 +10,12 @@ import { createHash } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import { LeadIntakePort } from "../common/lead-intake.port";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
+import {
+  rethrowCreatePersonError,
+  requiredTrim,
+  sanitizeJsonObject,
+  trimOptional,
+} from "./crm-util";
 import { audienceForLesson, audienceForStudent } from "./audience";
 import { StudentRow, findStudent } from "./student-read";
 import {
@@ -944,17 +950,17 @@ export class CrmService implements LeadIntakePort {
 
   async createStudent(actor: ActorContext, dto: CreateStudentDto) {
     this.policy.assertCanWriteCrm(actor);
-    const firstName = this.requiredTrim(
+    const firstName = requiredTrim(
       dto.firstName,
       "Имя ученика обязательно.",
     );
-    const lastName = this.trimOptional(dto.lastName);
-    const phone = this.trimOptional(dto.phone);
-    const email = this.trimOptional(dto.email)?.toLowerCase() ?? null;
-    const status = this.trimOptional(dto.status) ?? "active";
+    const lastName = trimOptional(dto.lastName);
+    const phone = trimOptional(dto.phone);
+    const email = trimOptional(dto.email)?.toLowerCase() ?? null;
+    const status = trimOptional(dto.status) ?? "active";
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
     const leadId = dto.leadId ?? null;
-    const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
+    const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
     const branchId = extractBranchId(dto.customDataPatch);
 
     if (leadId) {
@@ -1033,7 +1039,7 @@ export class CrmService implements LeadIntakePort {
       });
       return this.toStudentDto(student);
     } catch (error) {
-      this.rethrowCreatePersonError(error);
+      rethrowCreatePersonError(error);
     }
   }
 
@@ -1308,7 +1314,7 @@ export class CrmService implements LeadIntakePort {
     dto: UpdateStudentDto,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
+    const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
     const branchId = extractBranchId(dto.customDataPatch);
     const beforeStudent = (
       await this.database.query<{ status: string | null; branch_id: string | null }>(
@@ -1381,11 +1387,11 @@ export class CrmService implements LeadIntakePort {
       `,
       [
         studentId,
-        this.trimOptional(dto.firstName),
-        this.trimOptional(dto.lastName),
-        this.trimOptional(dto.phone),
-        this.trimOptional(dto.email)?.toLowerCase() ?? null,
-        this.trimOptional(dto.status),
+        trimOptional(dto.firstName),
+        trimOptional(dto.lastName),
+        trimOptional(dto.phone),
+        trimOptional(dto.email)?.toLowerCase() ?? null,
+        trimOptional(dto.status),
         JSON.stringify(customDataPatch),
         branchId,
       ],
@@ -1419,7 +1425,7 @@ export class CrmService implements LeadIntakePort {
     const student = await findStudent(this.database, studentId);
     if (!student) throw new NotFoundException("Ученик не найден.");
 
-    const email = this.trimOptional(student.email ?? undefined)?.toLowerCase();
+    const email = trimOptional(student.email ?? undefined)?.toLowerCase();
     if (!email || !this.isDeliverableEmail(email)) {
       throw new BadRequestException("У ученика нет email для приглашения.");
     }
@@ -1789,15 +1795,15 @@ export class CrmService implements LeadIntakePort {
 
   async createTeacher(actor: ActorContext, dto: CreateTeacherDto) {
     this.policy.assertCanWriteCrm(actor);
-    const firstName = this.requiredTrim(
+    const firstName = requiredTrim(
       dto.firstName,
       "Имя преподавателя обязательно.",
     );
-    const lastName = this.trimOptional(dto.lastName);
-    const phone = this.trimOptional(dto.phone);
-    const email = this.trimOptional(dto.email)?.toLowerCase() ?? null;
-    const specialization = this.trimOptional(dto.specialization);
-    const status = this.trimOptional(dto.status) ?? "active";
+    const lastName = trimOptional(dto.lastName);
+    const phone = trimOptional(dto.phone);
+    const email = trimOptional(dto.email)?.toLowerCase() ?? null;
+    const specialization = trimOptional(dto.specialization);
+    const status = trimOptional(dto.status) ?? "active";
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
 
     try {
@@ -1842,7 +1848,7 @@ export class CrmService implements LeadIntakePort {
       });
       return this.toTeacherDto(teacher);
     } catch (error) {
-      this.rethrowCreatePersonError(error);
+      rethrowCreatePersonError(error);
     }
   }
 
@@ -1856,7 +1862,7 @@ export class CrmService implements LeadIntakePort {
     if (dto.salary !== undefined) this.policy.assertCanReadPayroll(actor);
     // KVA-238: custom-поля карточки (birthday, workStartDate, level, category,
     // isPartTime, isBlacklisted) патчатся merge'ем — по образцу updateStudent.
-    const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
+    const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
     const result = await this.database.query<TeacherRow>(
       `
         with target as (
@@ -1912,12 +1918,12 @@ export class CrmService implements LeadIntakePort {
       `,
       [
         teacherId,
-        this.trimOptional(dto.firstName),
-        this.trimOptional(dto.lastName),
-        this.trimOptional(dto.phone),
-        this.trimOptional(dto.email)?.toLowerCase() ?? null,
-        this.trimOptional(dto.status),
-        this.trimOptional(dto.specialization),
+        trimOptional(dto.firstName),
+        trimOptional(dto.lastName),
+        trimOptional(dto.phone),
+        trimOptional(dto.email)?.toLowerCase() ?? null,
+        trimOptional(dto.status),
+        trimOptional(dto.specialization),
         JSON.stringify(customDataPatch),
         dto.salary ?? null,
       ],
@@ -2069,19 +2075,19 @@ export class CrmService implements LeadIntakePort {
         "Недостаточно прав для назначения этой роли сотруднику.",
       );
     }
-    const firstName = this.requiredTrim(
+    const firstName = requiredTrim(
       dto.firstName,
       "Имя сотрудника обязательно.",
     );
-    const lastName = this.requiredTrim(
+    const lastName = requiredTrim(
       dto.lastName,
       "Фамилия сотрудника обязательна.",
     );
-    const email = this.requiredTrim(
+    const email = requiredTrim(
       dto.email,
       "Email сотрудника обязателен.",
     ).toLowerCase();
-    const phone = this.trimOptional(dto.phone);
+    const phone = trimOptional(dto.phone);
     const fullName = [firstName, lastName].join(" ");
 
     try {
@@ -2136,7 +2142,7 @@ export class CrmService implements LeadIntakePort {
       });
       return staff;
     } catch (error) {
-      this.rethrowCreatePersonError(error);
+      rethrowCreatePersonError(error);
     }
   }
 
@@ -2146,7 +2152,7 @@ export class CrmService implements LeadIntakePort {
         "Только администратор может редактировать сотрудников.",
       );
     }
-    const customDataPatch = this.sanitizeJsonObject(dto.customDataPatch);
+    const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
 
     try {
       const result = await this.database.query<StaffRow>(
@@ -2221,13 +2227,13 @@ export class CrmService implements LeadIntakePort {
         `,
         [
           staffId,
-          this.trimOptional(dto.firstName),
-          this.trimOptional(dto.lastName),
-          this.trimOptional(dto.phone),
-          this.trimOptional(dto.email)?.toLowerCase() ?? null,
-          this.trimOptional(dto.role),
-          this.trimOptional(dto.position),
-          this.trimOptional(dto.status),
+          trimOptional(dto.firstName),
+          trimOptional(dto.lastName),
+          trimOptional(dto.phone),
+          trimOptional(dto.email)?.toLowerCase() ?? null,
+          trimOptional(dto.role),
+          trimOptional(dto.position),
+          trimOptional(dto.status),
           JSON.stringify(customDataPatch),
         ],
       );
@@ -2241,7 +2247,7 @@ export class CrmService implements LeadIntakePort {
       });
       return this.toStaffDto(staff);
     } catch (error) {
-      this.rethrowCreatePersonError(error);
+      rethrowCreatePersonError(error);
     }
   }
 
@@ -4114,7 +4120,7 @@ export class CrmService implements LeadIntakePort {
         dto.source?.trim() || null,
         dto.notes?.trim() || null,
         dto.assignedTo ?? null,
-        this.sanitizeJsonObject(dto.customDataPatch),
+        sanitizeJsonObject(dto.customDataPatch),
         actor.userId,
         branchId,
       ],
@@ -4200,7 +4206,7 @@ export class CrmService implements LeadIntakePort {
         dto.source?.trim() || null,
         dto.notes?.trim() || null,
         dto.assignedTo ?? null,
-        this.sanitizeJsonObject(dto.customDataPatch),
+        sanitizeJsonObject(dto.customDataPatch),
         dto.clearStatus ?? false,
         branchId,
       ],
@@ -5228,78 +5234,6 @@ export class CrmService implements LeadIntakePort {
     if (!result.rows[0]?.exists) {
       throw new NotFoundException("Объект комментария не найден.");
     }
-  }
-
-  private sanitizeJsonObject(value: unknown): Record<string, unknown> {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    // Defense-in-depth on customData (JSONB): bound depth/breadth/string size so
-    // a pathological patch can't bloat the row or DoS queries (KVA).
-    this.assertJsonWithinLimits(value, 0);
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).filter(
-        ([, entryValue]) => entryValue !== undefined,
-      ),
-    );
-  }
-
-  private assertJsonWithinLimits(value: unknown, depth: number): void {
-    const MAX_DEPTH = 6;
-    const MAX_KEYS = 100;
-    const MAX_STRING = 10_000;
-    if (depth > MAX_DEPTH) {
-      throw new BadRequestException("customData: слишком глубокая вложенность.");
-    }
-    if (typeof value === "string") {
-      if (value.length > MAX_STRING) {
-        throw new BadRequestException("customData: слишком длинное значение.");
-      }
-      return;
-    }
-    if (Array.isArray(value)) {
-      if (value.length > MAX_KEYS) {
-        throw new BadRequestException("customData: слишком большой массив.");
-      }
-      for (const item of value) this.assertJsonWithinLimits(item, depth + 1);
-      return;
-    }
-    if (value && typeof value === "object") {
-      const keys = Object.keys(value as Record<string, unknown>);
-      if (keys.length > MAX_KEYS) {
-        throw new BadRequestException("customData: слишком много полей.");
-      }
-      for (const key of keys) {
-        this.assertJsonWithinLimits(
-          (value as Record<string, unknown>)[key],
-          depth + 1,
-        );
-      }
-    }
-  }
-
-  private requiredTrim(value: string | undefined, message: string): string {
-    const trimmed = value?.trim();
-    if (!trimmed) throw new BadRequestException(message);
-    return trimmed;
-  }
-
-  private rethrowCreatePersonError(error: unknown): never {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      (error as { code?: string }).code === "23505"
-    ) {
-      throw new BadRequestException(
-        "Пользователь с таким email уже существует.",
-      );
-    }
-    throw error;
-  }
-
-  private trimOptional(value: string | undefined): string | null {
-    if (value === undefined) return null;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
   }
 
   private isDeliverableEmail(value: string): boolean {

@@ -6,6 +6,7 @@ import { CreateTeacherPayoutDto } from "./dto/create-teacher-payout.dto";
 import { SetTeacherRateDto } from "./dto/set-teacher-rate.dto";
 import { TeacherStatsQuery } from "./dto/teacher-stats.query";
 import { CrmPolicy } from "./crm.policy";
+import { trimOptional } from "./crm-util";
 
 /** Проведённое занятие для расчёта начисления (проекция, не материализуется). */
 interface PayrollLessonRow {
@@ -71,14 +72,6 @@ export class PayrollService {
 
   private round2(value: number): number {
     return Math.round(value * 100) / 100;
-  }
-
-  // ponytail: copied from CrmService (shared trim helper used across many
-  // domains). Lift into a shared string helper when the mappers consolidate.
-  private trimOptional(value: string | undefined): string | null {
-    if (value === undefined) return null;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
   }
 
   /**
@@ -285,7 +278,7 @@ export class PayrollService {
         teacherId,
         dto.amount,
         dto.kind,
-        this.trimOptional(dto.comment),
+        trimOptional(dto.comment),
         dto.paidAt ?? null,
         actor.userId,
       ],

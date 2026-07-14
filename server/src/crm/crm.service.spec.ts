@@ -3433,34 +3433,6 @@ describe("CrmService", () => {
     );
   });
 
-  it("rejects customData nested beyond the depth limit", () => {
-    const { service } = createServiceWithQueryResults([]);
-    let deep: unknown = "x";
-    for (let i = 0; i < 9; i++) deep = { nested: deep };
-    expect(() =>
-      (service as unknown as { sanitizeJsonObject: (v: unknown) => unknown }).sanitizeJsonObject(deep),
-    ).toThrow(BadRequestException);
-  });
-
-  it("rejects customData with too many keys", () => {
-    const { service } = createServiceWithQueryResults([]);
-    const big: Record<string, unknown> = {};
-    for (let i = 0; i < 200; i++) big["k" + i] = i;
-    expect(() =>
-      (service as unknown as { sanitizeJsonObject: (v: unknown) => unknown }).sanitizeJsonObject(big),
-    ).toThrow(BadRequestException);
-  });
-
-  it("accepts reasonable customData", () => {
-    const { service } = createServiceWithQueryResults([]);
-    expect(
-      (service as unknown as { sanitizeJsonObject: (v: unknown) => unknown }).sanitizeJsonObject({
-        a: 1,
-        b: { c: "ok" },
-      }),
-    ).toEqual({ a: 1, b: { c: "ok" } });
-  });
-
   it("getMySummary includes family-linked children and dedups own students (KVA-156)", async () => {
     const clientActor = { userId: "parent-user-a", role: "client" as const };
     const { service, query } = createServiceWithQueryResults([

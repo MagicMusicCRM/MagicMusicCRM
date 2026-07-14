@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
@@ -12,6 +8,7 @@ import { UpdateGroupDto } from "./dto/update-group.dto";
 import { UpsertGroupDto } from "./dto/upsert-group.dto";
 import { CrmPolicy } from "./crm.policy";
 import { audienceForGroup, audienceForStudent } from "./audience";
+import { requiredTrim } from "./crm-util";
 
 interface GroupRow {
   id: string;
@@ -46,8 +43,7 @@ export class GroupsService {
   ) {}
 
   // ponytail: toGroupDto/GroupRow are duplicated from CrmService, which still
-  // uses them for listStudentGroups; requiredTrim is a small shared helper copied
-  // here. Both fold into shared mappers in B5.
+  // uses them for listStudentGroups. Fold into a shared mapper in B5.
   private toGroupDto(row: GroupRow) {
     return {
       id: row.id,
@@ -67,12 +63,6 @@ export class GroupsService {
       roomName: row.room_name,
       createdAt: row.created_at,
     };
-  }
-
-  private requiredTrim(value: string | undefined, message: string): string {
-    const trimmed = value?.trim();
-    if (!trimmed) throw new BadRequestException(message);
-    return trimmed;
   }
 
   async listGroups(actor: ActorContext, query: CrmListQuery) {
@@ -109,7 +99,7 @@ export class GroupsService {
 
   async createGroup(actor: ActorContext, dto: UpsertGroupDto) {
     this.policy.assertCanWriteCrm(actor);
-    const name = this.requiredTrim(dto.name, "Название группы обязательно.");
+    const name = requiredTrim(dto.name, "Название группы обязательно.");
     const result = await this.database.query<GroupRow>(
       `
         with inserted_group as (
@@ -176,7 +166,7 @@ export class GroupsService {
     const name =
       dto.name === undefined
         ? null
-        : this.requiredTrim(dto.name, "Название группы обязательно.");
+        : requiredTrim(dto.name, "Название группы обязательно.");
     const teacherRateProvided = dto.teacherRate !== undefined;
     const result = await this.database.query<GroupRow>(
       `
