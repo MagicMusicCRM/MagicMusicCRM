@@ -19,6 +19,7 @@ import { ReferenceDataService } from "./reference-data.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
 import { TasksService } from "./tasks.service";
+import { AttendanceService } from "./attendance.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -97,6 +98,7 @@ export class CrmController {
     private readonly subscriptions: SubscriptionsService,
     private readonly finance: FinanceService,
     private readonly tasks: TasksService,
+    private readonly attendance: AttendanceService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -668,7 +670,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.getLessonAttendance(actor, id);
+    return this.attendance.getLessonAttendance(actor, id);
   }
 
   @Patch("lessons/:id/attendance")
@@ -677,7 +679,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpsertAttendanceDto,
   ) {
-    return this.crm.upsertLessonAttendance(actor, id, dto);
+    return this.attendance.upsertLessonAttendance(actor, id, dto);
   }
 
   @Get("tasks")
