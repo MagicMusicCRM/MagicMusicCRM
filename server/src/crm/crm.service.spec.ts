@@ -2143,13 +2143,12 @@ describe("CrmService", () => {
   };
 
   it("opens the student card for a non-finance role (teacher) without finance and never crashes", async () => {
-    const { service, policy } = createService();
+    // findStudent is now a shared db read (student-read.ts) — seed its row via
+    // the query mock instead of spying a method.
+    const { service, policy } = createService([
+      { id: "student-a", profile_user_id: "user-a", teacher_user_ids: ["teacher-a"] },
+    ]);
     (policy.canReadStudentFinance as jest.Mock).mockReturnValue(false);
-    jest.spyOn(service as unknown as { findStudent: () => Promise<unknown> }, "findStudent").mockResolvedValue({
-      id: "student-a",
-      profile_user_id: "user-a",
-      teacher_user_ids: ["teacher-a"],
-    });
     stubCardSections(service);
     const balances = jest.spyOn(service, "listStudentBalances");
     const payments = jest.spyOn(service, "listPayments");
@@ -2169,13 +2168,10 @@ describe("CrmService", () => {
   });
 
   it("never lets a forbidden/failed balance crash the student card for a finance reader (admin)", async () => {
-    const { service, policy } = createService();
+    const { service, policy } = createService([
+      { id: "student-a", profile_user_id: "user-a", teacher_user_ids: [] },
+    ]);
     (policy.canReadStudentFinance as jest.Mock).mockReturnValue(true);
-    jest.spyOn(service as unknown as { findStudent: () => Promise<unknown> }, "findStudent").mockResolvedValue({
-      id: "student-a",
-      profile_user_id: "user-a",
-      teacher_user_ids: [],
-    });
     stubCardSections(service);
     jest.spyOn(service, "listPayments").mockResolvedValue({ items: [] } as never);
     jest.spyOn(service, "listExpectedPayments").mockResolvedValue({ items: [] } as never);
