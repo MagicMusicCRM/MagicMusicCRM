@@ -14,6 +14,7 @@ import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { CrmService } from "./crm.service";
+import { HomeworkService } from "./homework.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
@@ -81,7 +82,10 @@ import { AddFamilyMemberDto } from "./dto/add-family-member.dto";
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
 export class CrmController {
-  constructor(private readonly crm: CrmService) {}
+  constructor(
+    private readonly crm: CrmService,
+    private readonly homework: HomeworkService,
+  ) {}
 
   @Get("me")
   getMe(@CurrentActor() actor: ActorContext) {
@@ -827,7 +831,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: HomeworkQuery,
   ) {
-    return this.crm.listHomeworks(actor, query);
+    return this.homework.listHomeworks(actor, query);
   }
 
   @Post("homeworks")
@@ -835,7 +839,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreateHomeworkDto,
   ) {
-    return this.crm.createHomework(actor, dto);
+    return this.homework.createHomework(actor, dto);
   }
 
   @Patch("homeworks/:id")
@@ -844,7 +848,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateHomeworkDto,
   ) {
-    return this.crm.updateHomework(actor, id, dto);
+    return this.homework.updateHomework(actor, id, dto);
   }
 
   @Post("homeworks/:id/submit")
@@ -852,7 +856,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.submitHomework(actor, id);
+    return this.homework.submitHomework(actor, id);
   }
 
   @Post("homeworks/:id/attachments")
@@ -861,7 +865,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: AddHomeworkAttachmentDto,
   ) {
-    return this.crm.addHomeworkAttachment(actor, id, dto);
+    return this.homework.addHomeworkAttachment(actor, id, dto);
   }
 
   @Get("leads")
