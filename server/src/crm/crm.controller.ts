@@ -17,6 +17,7 @@ import { CrmService } from "./crm.service";
 import { HomeworkService } from "./homework.service";
 import { ReferenceDataService } from "./reference-data.service";
 import { SubscriptionsService } from "./subscriptions.service";
+import { FinanceService } from "./finance.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -93,6 +94,7 @@ export class CrmController {
     private readonly homework: HomeworkService,
     private readonly referenceData: ReferenceDataService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly finance: FinanceService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -154,7 +156,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: StudentBalanceQuery,
   ) {
-    return this.crm.listStudentBalances(actor, query);
+    return this.finance.listStudentBalances(actor, query);
   }
 
   @Get("students/:id/groups")
@@ -181,7 +183,7 @@ export class CrmController {
     @Query("direction") direction?: string,
     @Query("limit") limit?: string,
   ) {
-    return this.crm.listStudentLedger(actor, id, {
+    return this.finance.listStudentLedger(actor, id, {
       direction,
       limit: limit ? Number(limit) : undefined,
     });
@@ -193,7 +195,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: CreateAdjustmentDto,
   ) {
-    return this.crm.createAccountAdjustment(actor, id, dto);
+    return this.finance.createAccountAdjustment(actor, id, dto);
   }
 
   @Get("schedule-series")
@@ -736,7 +738,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: PaymentQuery,
   ) {
-    return this.crm.listPayments(actor, query);
+    return this.finance.listPayments(actor, query);
   }
 
   @Get("expected-payments")
@@ -744,7 +746,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: CrmListQuery,
   ) {
-    return this.crm.listExpectedPayments(actor, query);
+    return this.finance.listExpectedPayments(actor, query);
   }
 
   @Get("subscriptions")
@@ -760,7 +762,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreatePaymentDto,
   ) {
-    return this.crm.createPayment(actor, dto);
+    return this.finance.createPayment(actor, dto);
   }
 
   @Get("expenses")
@@ -768,7 +770,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ExpenseQuery,
   ) {
-    return this.crm.listExpenses(actor, query);
+    return this.finance.listExpenses(actor, query);
   }
 
   @Post("expenses")
@@ -776,7 +778,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: UpsertExpenseDto,
   ) {
-    return this.crm.createExpense(actor, dto);
+    return this.finance.createExpense(actor, dto);
   }
 
   @Patch("expenses/:id")
@@ -785,7 +787,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateExpenseDto,
   ) {
-    return this.crm.updateExpense(actor, id, dto);
+    return this.finance.updateExpense(actor, id, dto);
   }
 
   @Delete("expenses/:id")
@@ -793,7 +795,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.deleteExpense(actor, id);
+    return this.finance.deleteExpense(actor, id);
   }
 
   @Get("subscription-packages")

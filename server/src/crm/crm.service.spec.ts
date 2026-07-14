@@ -8,6 +8,7 @@ import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { SubscriptionsService } from "./subscriptions.service";
+import { FinanceService } from "./finance.service";
 import { CrmPolicy } from "./crm.policy";
 import { CrmService } from "./crm.service";
 
@@ -44,17 +45,25 @@ describe("CrmService", () => {
     const subscriptions = {
       listSubscriptions: jest.fn().mockResolvedValue({ items: [] }),
     };
+    const finance = {
+      listPayments: jest
+        .fn()
+        .mockResolvedValue({ items: [], totalAmount: 0, totalCount: 0 }),
+      listExpectedPayments: jest.fn().mockResolvedValue({ items: [] }),
+      listStudentBalances: jest.fn().mockResolvedValue({ items: [] }),
+    };
 
     const service = new CrmService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       subscriptions as unknown as SubscriptionsService,
+      finance as unknown as FinanceService,
       notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
-    return { service, query, audit, policy, subscriptions, notifications, database };
+    return { service, query, audit, policy, subscriptions, finance, notifications, database };
   };
 
   const createServiceWithQueryResults = (
@@ -92,17 +101,25 @@ describe("CrmService", () => {
     const subscriptions = {
       listSubscriptions: jest.fn().mockResolvedValue({ items: [] }),
     };
+    const finance = {
+      listPayments: jest
+        .fn()
+        .mockResolvedValue({ items: [], totalAmount: 0, totalCount: 0 }),
+      listExpectedPayments: jest.fn().mockResolvedValue({ items: [] }),
+      listStudentBalances: jest.fn().mockResolvedValue({ items: [] }),
+    };
 
     const service = new CrmService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       subscriptions as unknown as SubscriptionsService,
+      finance as unknown as FinanceService,
       notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
-    return { service, query, audit, policy, subscriptions, notifications, database };
+    return { service, query, audit, policy, subscriptions, finance, notifications, database };
   };
 
   it("returns manager overview stats through CRM write policy", async () => {
@@ -1739,120 +1756,6 @@ describe("CrmService", () => {
     expect(query).toHaveBeenCalledTimes(7);
   });
 
-  it("lists the student ledger with signed amounts, totals and direction filter", async () => {
-    const { service, query, policy } = createService([
-      {
-        id: "pay-1",
-        kind: "payment",
-        amount: "5000",
-        description: "Оплата абонемента",
-        method: "Безналичные",
-        branch_name: "Сокол",
-        author_first_name: "Мария",
-        author_last_name: "Менеджер",
-        occurred_at: "2026-07-01T00:00:00.000Z",
-        income_total: "5000",
-        outcome_total: "1500",
-      },
-      {
-        id: "adj-1",
-        kind: "refund",
-        amount: "-1500",
-        description: "Возврат",
-        method: null,
-        branch_name: "Сокол",
-        author_first_name: null,
-        author_last_name: null,
-        occurred_at: "2026-07-02T00:00:00.000Z",
-        income_total: "5000",
-        outcome_total: "1500",
-      },
-    ]);
-
-    await expect(
-      service.listStudentLedger(actor, "student-a", {
-        direction: "income",
-        limit: 50,
-      }),
-    ).resolves.toEqual({
-      items: [
-        {
-          id: "pay-1",
-          kind: "payment",
-          amount: 5000,
-          description: "Оплата абонемента",
-          method: "Безналичные",
-          branchName: "Сокол",
-          authorName: "Мария Менеджер",
-          occurredAt: "2026-07-01T00:00:00.000Z",
-        },
-        {
-          id: "adj-1",
-          kind: "refund",
-          amount: -1500,
-          description: "Возврат",
-          method: null,
-          branchName: "Сокол",
-          authorName: null,
-          occurredAt: "2026-07-02T00:00:00.000Z",
-        },
-      ],
-      incomeTotal: 5000,
-      outcomeTotal: 1500,
-    });
-    expect(policy.assertCanReadStudentFinance).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual(["student-a", "income", 50]);
-  });
-
-  it("creates a refund adjustment as a negative amount and audits it", async () => {
-    const { service, query, audit, policy } = createServiceWithQueryResults([
-      { rows: [{ id: "student-a", profile_user_id: "client-a" }] }, // findStudent
-      { rows: [{ id: "adj-new" }] }, // insert returning
-    ]);
-
-    await expect(
-      service.createAccountAdjustment(actor, "student-a", {
-        kind: "refund",
-        amount: 2000,
-        description: "Возврат за отменённые занятия",
-      }),
-    ).resolves.toEqual({ id: "adj-new", amount: -2000, kind: "refund" });
-
-    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
-    // Знак выставлен сервисом: возврат хранится отрицательным.
-    expect(query.mock.calls[1][1]).toEqual([
-      "student-a",
-      "refund",
-      -2000,
-      "Возврат за отменённые занятия",
-      null,
-      null,
-      "manager-a",
-    ]);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.account_adjustment_created",
-        entityId: "student-a",
-      }),
-    );
-  });
-
-  it("keeps a positive amount for an income adjustment", async () => {
-    const { service, query } = createServiceWithQueryResults([
-      { rows: [{ id: "student-a" }] },
-      { rows: [{ id: "adj-plus" }] },
-    ]);
-
-    await expect(
-      service.createAccountAdjustment(actor, "student-a", {
-        kind: "adjustment",
-        amount: 300,
-        direction: "income",
-      }),
-    ).resolves.toEqual({ id: "adj-plus", amount: 300, kind: "adjustment" });
-    expect(query.mock.calls[1][1]).toContain(300);
-  });
-
   it("creates a schedule series and materializes lessons up to the horizon (KVA-236)", async () => {
     const { service, query, audit } = createServiceWithQueryResults([
       { rows: [{ id: "series-a" }] }, // insert series
@@ -1991,148 +1894,6 @@ describe("CrmService", () => {
     expect(String(updateCall?.[0])).toContain("series_id is not null");
   });
 
-  it("lists payments with date filters and student summary", async () => {
-    const { service, query } = createService([
-      {
-        id: "payment-a",
-        student_id: "student-a",
-        student_user_id: "client-a",
-        student_first_name: "Анна",
-        student_last_name: "Иванова",
-        amount: "5000.00",
-        currency: "RUB",
-        payment_date: "2026-06-12T12:00:00.000Z",
-        method: "subscription",
-        external_id: null,
-        notes: null,
-        created_by: "manager-a",
-        created_at: "2026-06-12T12:00:00.000Z",
-      },
-    ]);
-
-    await expect(
-      service.listPayments(actor, {
-        from: "2026-06-01T00:00:00.000Z",
-        to: "2026-07-01T00:00:00.000Z",
-        limit: 10,
-      }),
-    ).resolves.toEqual({
-      items: [
-        expect.objectContaining({
-          id: "payment-a",
-          studentId: "student-a",
-          studentName: "Анна Иванова",
-          amount: 5000,
-          method: "subscription",
-        }),
-      ],
-      // Totals come from a separate aggregate query (mocked with the same row,
-      // which has no total_* fields, so they resolve to 0 here).
-      totalAmount: 0,
-      totalCount: 0,
-    });
-
-    expect(query.mock.calls[0][1]).toEqual([
-      "manager",
-      "manager-a",
-      null,
-      "2026-06-01T00:00:00.000Z",
-      "2026-07-01T00:00:00.000Z",
-      10,
-    ]);
-  });
-
-  it("allows a client to list payments for a manually linked student", async () => {
-    const { service, query } = createServiceWithQueryResults([
-      {
-        rows: [
-          {
-            id: "payment-linked",
-            student_id: "student-linked",
-            student_user_id: null,
-            student_first_name: "Анна",
-            student_last_name: "Связанная",
-            amount: "9000.00",
-            currency: "RUB",
-            payment_date: "2026-06-22T12:00:00.000Z",
-            method: "subscription",
-            external_id: null,
-            notes: "Покупка абонемента",
-            created_by: "manager-a",
-            created_at: "2026-06-22T12:00:00.000Z",
-          },
-        ],
-      },
-      { rows: [{ total_amount: "9000", total_count: "1" }] },
-    ]);
-
-    await expect(
-      service.listPayments(
-        { userId: "client-linked", role: "client" },
-        { studentId: "student-linked", limit: 10 },
-      ),
-    ).resolves.toEqual({
-      items: [
-        expect.objectContaining({
-          id: "payment-linked",
-          studentId: "student-linked",
-          amount: 9000,
-        }),
-      ],
-      totalAmount: 9000,
-      totalCount: 1,
-    });
-
-    for (const call of query.mock.calls.slice(0, 2)) {
-      const sql = String(call[0]);
-      expect(sql).toContain("app.user_crm_links");
-      expect(sql).toContain("link.user_id = $2");
-      expect(sql).toContain("link.entity_type = 'student'");
-    }
-  });
-
-  it("lists computed student balances for CRM writers", async () => {
-    const { service, query, policy } = createService([
-      {
-        student_id: "student-a",
-        first_name: "Анна",
-        last_name: "Иванова",
-        phone: "+79990000000",
-        total_paid: "2000.00",
-        total_cost: "5000.00",
-        balance: "-3000.00",
-        updated_at: "2026-06-12T12:00:00.000Z",
-      },
-    ]);
-
-    await expect(
-      service.listStudentBalances(actor, {
-        studentId: "student-a",
-        debtOnly: true,
-        limit: 20,
-      }),
-    ).resolves.toEqual({
-      items: [
-        {
-          studentId: "student-a",
-          balance: -3000,
-          totalPaid: 2000,
-          totalCost: 5000,
-          totalAdjustments: 0,
-          updatedAt: "2026-06-12T12:00:00.000Z",
-          student: {
-            firstName: "Анна",
-            lastName: "Иванова",
-            phone: "+79990000000",
-          },
-        },
-      ],
-    });
-
-    expect(policy.assertCanReadStudentFinance).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual(["student-a", true, 20]);
-  });
-
   const stubCardSections = (service: CrmService) => {
     jest.spyOn(service as unknown as { toStudentDto: () => unknown }, "toStudentDto").mockReturnValue({ id: "student-a" });
     jest.spyOn(service, "listStudentGroups").mockResolvedValue({ items: [] } as never);
@@ -2145,14 +1906,11 @@ describe("CrmService", () => {
   it("opens the student card for a non-finance role (teacher) without finance and never crashes", async () => {
     // findStudent is now a shared db read (student-read.ts) — seed its row via
     // the query mock instead of spying a method.
-    const { service, policy } = createService([
+    const { service, policy, finance } = createService([
       { id: "student-a", profile_user_id: "user-a", teacher_user_ids: ["teacher-a"] },
     ]);
     (policy.canReadStudentFinance as jest.Mock).mockReturnValue(false);
     stubCardSections(service);
-    const balances = jest.spyOn(service, "listStudentBalances");
-    const payments = jest.spyOn(service, "listPayments");
-    const expected = jest.spyOn(service, "listExpectedPayments");
 
     const card = await service.getStudentCard(
       { userId: "teacher-a", role: "teacher" },
@@ -2161,23 +1919,21 @@ describe("CrmService", () => {
 
     expect(card.balance).toBeNull();
     expect(card.payments).toEqual([]);
-    // Finance sections are never queried for a non-finance role.
-    expect(balances).not.toHaveBeenCalled();
-    expect(payments).not.toHaveBeenCalled();
-    expect(expected).not.toHaveBeenCalled();
+    // Finance sections (now on FinanceService) are never queried for a non-finance role.
+    expect(finance.listStudentBalances).not.toHaveBeenCalled();
+    expect(finance.listPayments).not.toHaveBeenCalled();
+    expect(finance.listExpectedPayments).not.toHaveBeenCalled();
   });
 
   it("never lets a forbidden/failed balance crash the student card for a finance reader (admin)", async () => {
-    const { service, policy } = createService([
+    const { service, policy, finance } = createService([
       { id: "student-a", profile_user_id: "user-a", teacher_user_ids: [] },
     ]);
     (policy.canReadStudentFinance as jest.Mock).mockReturnValue(true);
     stubCardSections(service);
-    jest.spyOn(service, "listPayments").mockResolvedValue({ items: [] } as never);
-    jest.spyOn(service, "listExpectedPayments").mockResolvedValue({ items: [] } as never);
-    jest
-      .spyOn(service, "listStudentBalances")
-      .mockRejectedValue(new Error("balance forbidden"));
+    (finance.listStudentBalances as jest.Mock).mockRejectedValue(
+      new Error("balance forbidden"),
+    );
 
     const card = await service.getStudentCard(
       { userId: "admin-a", role: "admin" },
@@ -2407,70 +2163,6 @@ describe("CrmService", () => {
     expect(policy.assertCanReadStudent).toHaveBeenCalledWith(actor, {
       profileUserId: "client-a",
       teacherUserIds: ["teacher-user-a"],
-    });
-    expect(query.mock.calls[1][1]).toEqual(["student-a", 10]);
-  });
-
-  it("lists expected payments after student read authorization", async () => {
-    const { service, query, policy } = createServiceWithQueryResults([
-      {
-        rows: [
-          {
-            id: "student-a",
-            status: "active",
-            custom_data: {},
-            profile_id: "profile-a",
-            profile_user_id: "client-a",
-            first_name: "Анна",
-            last_name: "Иванова",
-            email: "anna@example.com",
-            phone: null,
-            created_at: "2026-06-01T00:00:00.000Z",
-            teacher_user_ids: [],
-          },
-        ],
-      },
-      {
-        rows: [
-          {
-            id: "expected-a",
-            student_id: "student-a",
-            student_user_id: "client-a",
-            student_first_name: "Анна",
-            student_last_name: "Иванова",
-            amount: "5000.00",
-            due_date: "2026-06-30",
-            status: "pending",
-            description: "Абонемент за июнь",
-            created_at: "2026-06-12T00:00:00.000Z",
-            updated_at: "2026-06-12T00:00:00.000Z",
-          },
-        ],
-      },
-    ]);
-
-    await expect(
-      service.listExpectedPayments(actor, {
-        studentId: "student-a",
-        limit: 10,
-      }),
-    ).resolves.toEqual({
-      items: [
-        expect.objectContaining({
-          id: "expected-a",
-          studentId: "student-a",
-          studentName: "Анна Иванова",
-          amount: 5000,
-          dueDate: "2026-06-30",
-          status: "pending",
-          description: "Абонемент за июнь",
-        }),
-      ],
-    });
-
-    expect(policy.assertCanReadStudent).toHaveBeenCalledWith(actor, {
-      profileUserId: "client-a",
-      teacherUserIds: [],
     });
     expect(query.mock.calls[1][1]).toEqual(["student-a", 10]);
   });
@@ -3689,24 +3381,6 @@ describe("CrmService", () => {
     expect(result).toEqual({ studentId: "student-9", leadId: null });
   });
 
-  it("returns payments with a correct server-side period total (not the page fold)", async () => {
-    const { service } = createServiceWithQueryResults([
-      {
-        rows: [
-          { id: "pay-1", student_id: "s1", amount: "500", currency: "RUB" },
-          { id: "pay-2", student_id: "s1", amount: "700", currency: "RUB" },
-        ],
-      },
-      { rows: [{ total_amount: "12345", total_count: "37" }] },
-    ]);
-    const result = await service.listPayments(actor, {});
-    expect(result.items).toHaveLength(2);
-    // The total reflects the full filtered set (37 payments / 12345), not the
-    // sum of the returned page (1200).
-    expect(result.totalAmount).toBe(12345);
-    expect(result.totalCount).toBe(37);
-  });
-
   it("save-from-chat returns the existing lead when already linked", async () => {
     const { service } = createServiceWithQueryResults([
       {
@@ -3782,6 +3456,7 @@ describe("CrmService", () => {
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       {} as unknown as SubscriptionsService,
+      {} as unknown as FinanceService,
       {} as unknown as NotificationsService,
       {} as unknown as RealtimeBus,
     );
@@ -4251,11 +3926,8 @@ describe("CrmService", () => {
     jest.spyOn(service, "listTasks").mockRejectedValue(
       new ForbiddenException("Недостаточно прав для просмотра справочников CRM."),
     );
-    jest.spyOn(service, "listPayments").mockResolvedValue({
-      items: [],
-      totalAmount: 0,
-      totalCount: 0,
-    } as never);
+    // recentPayments come from the (unspied) listClientSummaryPayments query,
+    // which errors on the exhausted mock and degrades to [] via getMySummary's catch.
 
     await expect(service.getMySummary(clientActor)).resolves.toEqual(
       expect.objectContaining({
@@ -4291,11 +3963,19 @@ describe("CrmService", () => {
     const subscriptions = {
       listSubscriptions: jest.fn().mockResolvedValue({ items: [] }),
     };
+    const finance = {
+      listPayments: jest
+        .fn()
+        .mockResolvedValue({ items: [], totalAmount: 0, totalCount: 0 }),
+      listExpectedPayments: jest.fn().mockResolvedValue({ items: [] }),
+      listStudentBalances: jest.fn().mockResolvedValue({ items: [] }),
+    };
     const service = new CrmService(
       { query, transaction } as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       subscriptions as unknown as SubscriptionsService,
+      finance as unknown as FinanceService,
       notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
@@ -4406,6 +4086,7 @@ describe("CrmService", () => {
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       {} as unknown as SubscriptionsService,
+      {} as unknown as FinanceService,
       {} as unknown as NotificationsService,
       {} as unknown as RealtimeBus,
     );
@@ -4460,6 +4141,7 @@ describe("CrmService", () => {
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       {} as unknown as SubscriptionsService,
+      {} as unknown as FinanceService,
       {} as unknown as NotificationsService,
       {} as unknown as RealtimeBus,
     );
@@ -4530,6 +4212,7 @@ describe("CrmService", () => {
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       {} as unknown as SubscriptionsService,
+      {} as unknown as FinanceService,
       {} as unknown as NotificationsService,
       {} as unknown as RealtimeBus,
     );
@@ -4549,145 +4232,6 @@ describe("CrmService", () => {
     expect(result).toEqual({ count: 7 });
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("'Через приложение'");
-  });
-
-  it("creates expenses through CRM write policy and audit (P5-5)", async () => {
-    const { service, query, audit, policy } = createService([
-      {
-        id: "exp-a",
-        amount: "1500.00",
-        category: "rent",
-        description: "Аренда",
-        branch_id: "branch-a",
-        branch_name: null,
-        created_at: "2026-06-22T00:00:00.000Z",
-      },
-    ]);
-
-    await expect(
-      service.createExpense(actor, {
-        amount: 1500,
-        category: " rent ",
-        description: " Аренда ",
-        branchId: "branch-a",
-      }),
-    ).resolves.toEqual({
-      id: "exp-a",
-      amount: 1500,
-      category: "rent",
-      description: "Аренда",
-      branchId: "branch-a",
-      branchName: null,
-      createdAt: "2026-06-22T00:00:00.000Z",
-    });
-
-    expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual([1500, "rent", "Аренда", "branch-a"]);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.expense_created",
-        entityType: "expense",
-        entityId: "exp-a",
-      }),
-    );
-  });
-
-  it("is idempotent for duplicate payment submits within the window", async () => {
-    const paymentRow = {
-      id: "pay-a",
-      student_id: "student-a",
-      student_user_id: null,
-      amount: "1500.00",
-      student_first_name: null,
-      student_last_name: null,
-      currency: "RUB",
-      payment_date: "2026-06-23",
-      method: "cash",
-      external_id: null,
-      notes: null,
-      created_by: "manager-a",
-      created_at: "2026-06-23T00:00:00.000Z",
-    };
-    const { service, query } = createServiceWithQueryResults([
-      { rows: [] }, // 1st: dup-check empty
-      { rows: [paymentRow] }, // insert
-      { rows: [] }, // affected client users for realtime fan-out
-      { rows: [paymentRow] }, // 2nd: dup-check returns existing
-    ]);
-    const dto = {
-      studentId: "student-a",
-      amount: 1500,
-      paymentDate: "2026-06-23",
-      method: "cash",
-    } as never;
-
-    const first = await service.createPayment(actor, dto);
-    const second = await service.createPayment(actor, dto);
-
-    expect(first.id).toBe("pay-a");
-    expect(second.id).toBe("pay-a");
-    // dup-check, insert, realtime affected users, dup-check — the second submit
-    // must NOT insert again.
-    expect(query).toHaveBeenCalledTimes(4);
-  });
-
-  it("lists expenses with branch/category filters and a total (P5-5)", async () => {
-    const { service, query, policy } = createServiceWithQueryResults([
-      {
-        rows: [
-          {
-            id: "exp-a",
-            amount: "1500.00",
-            category: "rent",
-            description: null,
-            branch_id: "branch-a",
-            branch_name: "Центр",
-            created_at: "2026-06-22T00:00:00.000Z",
-          },
-        ],
-      },
-      { rows: [{ total: "1500.00" }] },
-    ]);
-
-    const result = await service.listExpenses(actor, {
-      branchId: "branch-a",
-      category: "rent",
-      limit: 50,
-    });
-
-    expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(actor);
-    expect(result.total).toBe(1500);
-    expect(result.items).toEqual([
-      {
-        id: "exp-a",
-        amount: 1500,
-        category: "rent",
-        description: null,
-        branchId: "branch-a",
-        branchName: "Центр",
-        createdAt: "2026-06-22T00:00:00.000Z",
-      },
-    ]);
-    // items query: branch + category filters then the limit param last.
-    expect(query.mock.calls[0][1]).toEqual(["branch-a", "rent", 50]);
-    // total query reuses the filter params WITHOUT the limit.
-    expect(query.mock.calls[1][1]).toEqual(["branch-a", "rent"]);
-  });
-
-  it("soft-deletes expenses and 404s when missing (P5-5)", async () => {
-    const { service, query, audit } = createService([{ id: "exp-a" }]);
-    await expect(service.deleteExpense(actor, "exp-a")).resolves.toEqual({
-      success: true,
-    });
-    expect(query.mock.calls[0][0]).toContain("set deleted_at = now()");
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "crm.expense_deleted" }),
-    );
-
-    const missing = createService([]);
-    await expect(
-      missing.service.deleteExpense(actor, "exp-x"),
-    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("counts a subscription lesson when a student is marked present (P5b-4/KVA-237)", async () => {
