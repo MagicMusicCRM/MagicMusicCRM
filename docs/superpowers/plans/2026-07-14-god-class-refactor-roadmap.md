@@ -43,9 +43,13 @@ CrmService for `getStudentCard`. The dead `HolliHopMetadataService` dep on CrmSe
 dropped when ReferenceData took its only users. Gate held every step: `tsc` + full
 `src/crm` jest green (13 suites, 193 tests), routes unchanged.
 
-**B2 — break module coupling (small step, big lever)**
-`messenger → LeadIntakePort`: a narrow interface instead of injecting the whole
-`CrmService` for one method (`autoCreateLeadFromChat`). Unblocks splitting both modules independently.
+**B2 — break module coupling (small step, big lever)** ✅ **DONE** (`117aa269`)
+`messenger → LeadIntakePort` (`src/common/lead-intake.port.ts`): messenger injects a
+one-method `LEAD_INTAKE_PORT` token instead of the whole `CrmService`; CrmService
+`implements LeadIntakePort`, CrmModule binds `useExisting: CrmService`. Port lives in
+`common/` so the core doesn't import a feature module. MessengerModule still imports
+CrmModule for the token — the win is file-level type decoupling, which unblocks splitting
+messenger.service (B7) and crm.service (B5) independently. Full server suite green.
 
 **B3 — repository layer (prerequisite for the core)**
 Thin per-aggregate repos: `StudentRepository`, `LeadRepository`, `ProfileRepository`,
