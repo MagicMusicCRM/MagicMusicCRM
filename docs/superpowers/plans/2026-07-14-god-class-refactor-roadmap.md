@@ -29,10 +29,19 @@ this is decomposition, not a rewrite.
 `HomeworkService` extracted (commit `9c5521dd`). Pattern for every step below: new
 `@Injectable`, re-inject shared collaborators, move routes (paths unchanged), move tests.
 
-**B1 — leaf domains (low risk, builds confidence)**
-Extract one at a time, ascending coupling: `ReferenceDataService` → `SubscriptionsService`
-→ `RoomsService` → `BranchesService` → `GroupsService` → `PayrollService`.
-Each touches 1–2 tables, calls no shared private helpers. Gate: `tsc` + full `src/crm` jest green, routes unchanged.
+**B1 — leaf domains (low risk, builds confidence)** ✅ **DONE**
+Extracted one at a time: `ReferenceDataService` (`6b630ba7`) → `SubscriptionsService`
+(`485bd782`) → `RoomsService` (`423d0f67`) → `BranchesService` (`231f03f3`) →
+`GroupsService` (`5f298859`) → `PayrollService` (`0a0eea37`). CrmService 9726 → 7956 LOC.
+Reality vs. plan: several "leaves" did call shared helpers — handled per ponytail by
+copying small helpers (`affectedUserIdsForStudent`, `requiredTrim`, `utcDayStart`,
+`trimOptional`, `toLeadStatusDto`) with `ponytail:` notes pointing at the B4/B5
+consolidation (AudienceResolver / shared mappers). Two student-coupled group reads
+(`listStudentGroups`, `listGroupStudents`) stayed in CrmService to avoid dragging the
+core student mapper out early. Subscriptions/Groups needed one back-injection each into
+CrmService for `getStudentCard`. The dead `HolliHopMetadataService` dep on CrmService was
+dropped when ReferenceData took its only users. Gate held every step: `tsc` + full
+`src/crm` jest green (13 suites, 193 tests), routes unchanged.
 
 **B2 — break module coupling (small step, big lever)**
 `messenger → LeadIntakePort`: a narrow interface instead of injecting the whole
