@@ -18,6 +18,7 @@ import { HomeworkService } from "./homework.service";
 import { ReferenceDataService } from "./reference-data.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
+import { TasksService } from "./tasks.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -95,6 +96,7 @@ export class CrmController {
     private readonly referenceData: ReferenceDataService,
     private readonly subscriptions: SubscriptionsService,
     private readonly finance: FinanceService,
+    private readonly tasks: TasksService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -683,7 +685,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: TaskBoardQuery,
   ) {
-    return this.crm.listTasks(actor, query);
+    return this.tasks.listTasks(actor, query);
   }
 
   @Get("timeline")
@@ -721,7 +723,7 @@ export class CrmController {
 
   @Post("tasks")
   createTask(@CurrentActor() actor: ActorContext, @Body() dto: UpsertTaskDto) {
-    return this.crm.createTask(actor, dto);
+    return this.tasks.createTask(actor, dto);
   }
 
   @Patch("tasks/:id")
@@ -730,7 +732,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpsertTaskDto,
   ) {
-    return this.crm.updateTask(actor, id, dto);
+    return this.tasks.updateTask(actor, id, dto);
   }
 
   @Get("payments")

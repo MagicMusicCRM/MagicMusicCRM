@@ -13,6 +13,7 @@ import { HomeworkService } from './homework.service';
 import { ReferenceDataService } from './reference-data.service';
 import { SubscriptionsService } from './subscriptions.service';
 import { FinanceService } from './finance.service';
+import { TasksService } from './tasks.service';
 import { RoomsService } from './rooms.service';
 import { BranchesService } from './branches.service';
 import { GroupsService } from './groups.service';
@@ -29,6 +30,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     ReferenceDataService,
     SubscriptionsService,
     FinanceService,
+    TasksService,
     RoomsService,
     BranchesService,
     GroupsService,
