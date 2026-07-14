@@ -19,6 +19,7 @@ import { ReferenceDataService } from "./reference-data.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
+import { GroupsService } from "./groups.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
@@ -93,6 +94,7 @@ export class CrmController {
     private readonly subscriptions: SubscriptionsService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
+    private readonly groups: GroupsService,
   ) {}
 
   @Get("me")
@@ -449,7 +451,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: CrmListQuery,
   ) {
-    return this.crm.listGroups(actor, query);
+    return this.groups.listGroups(actor, query);
   }
 
   @Post("groups")
@@ -457,7 +459,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: UpsertGroupDto,
   ) {
-    return this.crm.createGroup(actor, dto);
+    return this.groups.createGroup(actor, dto);
   }
 
   // KVA-238: PATCH группы (в т.ч. ставка педагога из drill-down отчёта).
@@ -467,7 +469,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateGroupDto,
   ) {
-    return this.crm.updateGroup(actor, id, dto);
+    return this.groups.updateGroup(actor, id, dto);
   }
 
   @Get("groups/:id/students")
@@ -485,7 +487,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: GroupStudentDto,
   ) {
-    return this.crm.addGroupStudent(actor, id, dto.studentId);
+    return this.groups.addGroupStudent(actor, id, dto.studentId);
   }
 
   @Delete("groups/:id/students/:studentId")
@@ -494,7 +496,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Param("studentId", ParseUUIDPipe) studentId: string,
   ) {
-    return this.crm.removeGroupStudent(actor, id, studentId);
+    return this.groups.removeGroupStudent(actor, id, studentId);
   }
 
   @Get("lead-statuses")

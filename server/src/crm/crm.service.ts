@@ -50,12 +50,10 @@ import { TeacherListQuery } from "./dto/teacher-list.query";
 import { UpdateStudentDto } from "./dto/update-student.dto";
 import { UpdateStaffDto } from "./dto/update-staff.dto";
 import { UpdateTeacherDto } from "./dto/update-teacher.dto";
-import { UpdateGroupDto } from "./dto/update-group.dto";
 import { CreateTeacherPayoutDto } from "./dto/create-teacher-payout.dto";
 import { SetTeacherRateDto } from "./dto/set-teacher-rate.dto";
 import { TeacherStatsQuery } from "./dto/teacher-stats.query";
 import { UpsertAttendanceDto } from "./dto/upsert-attendance.dto";
-import { UpsertGroupDto } from "./dto/upsert-group.dto";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
@@ -2374,170 +2372,6 @@ export class CrmService {
     }
   }
 
-  async listGroups(actor: ActorContext, query: CrmListQuery) {
-    this.policy.assertCanReadOperationalData(actor);
-    const limit = Math.min(query.limit ?? 100, 100);
-    const q = query.q?.trim();
-    const result = await this.database.query<GroupRow>(
-      `
-        select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-          g.price_per_lesson, g.teacher_rate,
-          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
-          b.name as branch_name,
-          r.name as room_name,
-          g.created_at
-        from app.groups g
-        left join app.teachers t on t.id = g.teacher_id and t.deleted_at is null
-        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        left join app.branches b on b.id = g.branch_id and b.deleted_at is null
-        left join app.rooms r on r.id = g.room_id and r.deleted_at is null
-        where g.deleted_at is null
-          and ($1::uuid is null or g.branch_id = $1)
-          and (
-            $2::text is null
-            or lower(coalesce(g.name, '') || ' ' || coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) like lower('%' || $2 || '%')
-          )
-        order by g.name asc, g.id asc
-        limit $3
-      `,
-      [query.branchId ?? null, q || null, limit],
-    );
-
-    return { items: result.rows.map((row) => this.toGroupDto(row)) };
-  }
-
-  async createGroup(actor: ActorContext, dto: UpsertGroupDto) {
-    this.policy.assertCanWriteCrm(actor);
-    const name = this.requiredTrim(dto.name, "Название группы обязательно.");
-    const result = await this.database.query<GroupRow>(
-      `
-        with inserted_group as (
-          insert into app.groups (
-            teacher_id,
-            branch_id,
-            room_id,
-            name,
-            price_per_lesson,
-            teacher_rate
-          )
-          values ($1, $2, $3, $4, $5, $6)
-          returning id, teacher_id, branch_id, room_id, name, price_per_lesson,
-            teacher_rate, created_at
-        )
-        select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-          g.price_per_lesson, g.teacher_rate,
-          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
-          b.name as branch_name,
-          r.name as room_name,
-          g.created_at
-        from inserted_group g
-        left join app.teachers t on t.id = g.teacher_id and t.deleted_at is null
-        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        left join app.branches b on b.id = g.branch_id and b.deleted_at is null
-        left join app.rooms r on r.id = g.room_id and r.deleted_at is null
-        limit 1
-      `,
-      [
-        dto.teacherId ?? null,
-        dto.branchId ?? null,
-        dto.roomId ?? null,
-        name,
-        dto.pricePerLesson ?? null,
-        dto.teacherRate ?? null,
-      ],
-    );
-    const group = result.rows[0];
-    await this.audit.record({
-      actor,
-      action: "crm.group_created",
-      entityType: "group",
-      entityId: group.id,
-    });
-    const affectedUserIds = await this.affectedUserIdsForGroup(group.id);
-    this.realtime.emitCrmChanged({
-      entity: "group",
-      action: "created",
-      id: group.id,
-      branchId: group.branch_id ?? null,
-      affectedUserIds,
-    });
-    return this.toGroupDto(group);
-  }
-
-  /**
-   * KVA-238: частичное обновление группы (PATCH), в т.ч. ставка педагога по
-   * группе из drill-down отчёта «Статистика преподавателей». teacherRate:
-   * null сбрасывает переопределение (брать ставку педагога), 0 — «входит в
-   * оклад»; поле применяется только если передано (dto.teacherRate !== undefined).
-   */
-  async updateGroup(actor: ActorContext, groupId: string, dto: UpdateGroupDto) {
-    this.policy.assertCanWriteCrm(actor);
-    const name =
-      dto.name === undefined
-        ? null
-        : this.requiredTrim(dto.name, "Название группы обязательно.");
-    const teacherRateProvided = dto.teacherRate !== undefined;
-    const result = await this.database.query<GroupRow>(
-      `
-        with updated_group as (
-          update app.groups g
-          set name = coalesce($2, g.name),
-            teacher_id = coalesce($3::uuid, g.teacher_id),
-            branch_id = coalesce($4::uuid, g.branch_id),
-            room_id = coalesce($5::uuid, g.room_id),
-            price_per_lesson = coalesce($6::numeric, g.price_per_lesson),
-            teacher_rate = case when $7::boolean then $8::numeric else g.teacher_rate end,
-            updated_at = now()
-          where g.id = $1 and g.deleted_at is null
-          returning g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-            g.price_per_lesson, g.teacher_rate, g.created_at
-        )
-        select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-          g.price_per_lesson, g.teacher_rate,
-          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
-          b.name as branch_name,
-          r.name as room_name,
-          g.created_at
-        from updated_group g
-        left join app.teachers t on t.id = g.teacher_id and t.deleted_at is null
-        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        left join app.branches b on b.id = g.branch_id and b.deleted_at is null
-        left join app.rooms r on r.id = g.room_id and r.deleted_at is null
-        limit 1
-      `,
-      [
-        groupId,
-        name,
-        dto.teacherId ?? null,
-        dto.branchId ?? null,
-        dto.roomId ?? null,
-        dto.pricePerLesson ?? null,
-        teacherRateProvided,
-        teacherRateProvided ? dto.teacherRate : null,
-      ],
-    );
-    const group = result.rows[0];
-    if (!group) throw new NotFoundException("Группа не найдена.");
-    await this.audit.record({
-      actor,
-      action: "crm.group_updated",
-      entityType: "group",
-      entityId: group.id,
-      metadata: teacherRateProvided
-        ? { teacherRate: dto.teacherRate ?? null }
-        : undefined,
-    });
-    const affectedUserIds = await this.affectedUserIdsForGroup(group.id);
-    this.realtime.emitCrmChanged({
-      entity: "group",
-      action: "updated",
-      id: group.id,
-      branchId: group.branch_id ?? null,
-      affectedUserIds,
-    });
-    return this.toGroupDto(group);
-  }
-
   async listGroupStudents(
     actor: ActorContext,
     groupId: string,
@@ -2567,93 +2401,6 @@ export class CrmService {
       [groupId, limit],
     );
     return { items: result.rows.map((row) => this.toStudentDto(row)) };
-  }
-
-  async addGroupStudent(
-    actor: ActorContext,
-    groupId: string,
-    studentId: string,
-  ) {
-    this.policy.assertCanWriteCrm(actor);
-    const result = await this.database.query<{
-      id: string;
-      student_id: string;
-    }>(
-      `
-        with target_group as (
-          select id from app.groups where id = $1 and deleted_at is null
-        ),
-        target_student as (
-          select id from app.students where id = $2 and deleted_at is null
-        )
-        insert into app.group_students (group_id, student_id, left_at)
-        select target_group.id, target_student.id, null
-        from target_group, target_student
-        on conflict (group_id, student_id)
-        do update set left_at = null
-        returning id, student_id
-      `,
-      [groupId, studentId],
-    );
-    const row = result.rows[0];
-    if (!row) throw new NotFoundException("Группа или ученик не найдены.");
-    await this.audit.record({
-      actor,
-      action: "crm.group_student_added",
-      entityType: "group",
-      entityId: groupId,
-      metadata: { studentId: row.student_id },
-    });
-    const [groupUserIds, studentUserIds] = await Promise.all([
-      this.affectedUserIdsForGroup(groupId),
-      this.affectedUserIdsForStudent(row.student_id),
-    ]);
-    this.realtime.emitCrmChanged({
-      entity: "group",
-      action: "updated",
-      id: groupId,
-      affectedUserIds: Array.from(new Set([...groupUserIds, ...studentUserIds])),
-    });
-    return { success: true };
-  }
-
-  async removeGroupStudent(
-    actor: ActorContext,
-    groupId: string,
-    studentId: string,
-  ) {
-    this.policy.assertCanWriteCrm(actor);
-    const result = await this.database.query<{ id: string }>(
-      `
-        update app.group_students
-        set left_at = now()
-        where group_id = $1
-          and student_id = $2
-          and left_at is null
-        returning id
-      `,
-      [groupId, studentId],
-    );
-    const row = result.rows[0];
-    if (!row) throw new NotFoundException("Ученик не найден в группе.");
-    await this.audit.record({
-      actor,
-      action: "crm.group_student_removed",
-      entityType: "group",
-      entityId: groupId,
-      metadata: { studentId },
-    });
-    const [groupUserIds, studentUserIds] = await Promise.all([
-      this.affectedUserIdsForGroup(groupId),
-      this.affectedUserIdsForStudent(studentId),
-    ]);
-    this.realtime.emitCrmChanged({
-      entity: "group",
-      action: "updated",
-      id: groupId,
-      affectedUserIds: Array.from(new Set([...groupUserIds, ...studentUserIds])),
-    });
-    return { success: true };
   }
 
   async countPhoneReviewQueue(actor: ActorContext): Promise<{ count: number }> {
@@ -7477,38 +7224,6 @@ export class CrmService {
         lesson.group_id,
         lesson.teacher_id,
       ],
-    );
-    return (result?.rows ?? []).map((row) => row.user_id);
-  }
-
-  private async affectedUserIdsForGroup(groupId: string): Promise<string[]> {
-    const result = await this.database.query<{ user_id: string }>(
-      `
-        select distinct user_id
-        from (
-          select tp.user_id
-          from app.groups g
-          join app.teachers t on t.id = g.teacher_id and t.deleted_at is null
-          join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-          where g.id = $1 and g.deleted_at is null and tp.user_id is not null
-          union
-          select sp.user_id
-          from app.group_students gs
-          join app.students s on s.id = gs.student_id and s.deleted_at is null
-          join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
-          where gs.group_id = $1 and gs.left_at is null and sp.user_id is not null
-          union
-          select link.user_id
-          from app.group_students gs
-          join app.user_crm_links link
-            on link.entity_type = 'student'
-           and link.entity_id = gs.student_id
-           and link.deleted_at is null
-          where gs.group_id = $1 and gs.left_at is null
-        ) affected
-        where user_id is not null
-      `,
-      [groupId],
     );
     return (result?.rows ?? []).map((row) => row.user_id);
   }
