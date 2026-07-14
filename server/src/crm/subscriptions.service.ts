@@ -8,6 +8,7 @@ import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { UpdateSubscriptionPackageDto } from "./dto/update-subscription-package.dto";
 import { UpsertSubscriptionPackageDto } from "./dto/upsert-subscription-package.dto";
 import { CrmPolicy } from "./crm.policy";
+import { audienceForStudent } from "./audience";
 
 interface SubscriptionRow {
   id: string;
@@ -313,7 +314,7 @@ export class SubscriptionsService {
         paymentId: sub.payment_id,
       },
     });
-    const affectedUserIds = await this.affectedUserIdsForStudent(studentId);
+    const affectedUserIds = await audienceForStudent(this.database, studentId);
     this.realtime.emitCrmChanged({
       entity: "payment",
       action: "created",
@@ -337,33 +338,5 @@ export class SubscriptionsService {
       packageId: sub.package_id,
       paymentId: sub.payment_id,
     };
-  }
-
-  // ponytail: copied from CrmService (still used by several retained methods).
-  // Lift into the shared AudienceResolver in B4.
-  private async affectedUserIdsForStudent(
-    studentId: string | null | undefined,
-  ): Promise<string[]> {
-    if (!studentId) return [];
-    const result = await this.database.query<{ user_id: string }>(
-      `
-        select distinct user_id
-        from (
-          select p.user_id
-          from app.students s
-          join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-          where s.id = $1 and s.deleted_at is null and p.user_id is not null
-          union
-          select link.user_id
-          from app.user_crm_links link
-          where link.entity_type = 'student'
-            and link.entity_id = $1
-            and link.deleted_at is null
-        ) affected
-        where user_id is not null
-      `,
-      [studentId],
-    );
-    return (result?.rows ?? []).map((row) => row.user_id);
   }
 }

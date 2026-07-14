@@ -11,6 +11,7 @@ import { CrmListQuery } from "./dto/crm-list.query";
 import { UpdateGroupDto } from "./dto/update-group.dto";
 import { UpsertGroupDto } from "./dto/upsert-group.dto";
 import { CrmPolicy } from "./crm.policy";
+import { audienceForGroup, audienceForStudent } from "./audience";
 
 interface GroupRow {
   id: string;
@@ -45,8 +46,8 @@ export class GroupsService {
   ) {}
 
   // ponytail: toGroupDto/GroupRow are duplicated from CrmService, which still
-  // uses them for listStudentGroups. requiredTrim/affectedUserIdsForStudent are
-  // shared helpers copied here. All fold into shared mappers/AudienceResolver in B4/B5.
+  // uses them for listStudentGroups; requiredTrim is a small shared helper copied
+  // here. Both fold into shared mappers in B5.
   private toGroupDto(row: GroupRow) {
     return {
       id: row.id,
@@ -153,7 +154,7 @@ export class GroupsService {
       entityType: "group",
       entityId: group.id,
     });
-    const affectedUserIds = await this.affectedUserIdsForGroup(group.id);
+    const affectedUserIds = await audienceForGroup(this.database, group.id);
     this.realtime.emitCrmChanged({
       entity: "group",
       action: "created",
@@ -227,7 +228,7 @@ export class GroupsService {
         ? { teacherRate: dto.teacherRate ?? null }
         : undefined,
     });
-    const affectedUserIds = await this.affectedUserIdsForGroup(group.id);
+    const affectedUserIds = await audienceForGroup(this.database, group.id);
     this.realtime.emitCrmChanged({
       entity: "group",
       action: "updated",
@@ -274,8 +275,8 @@ export class GroupsService {
       metadata: { studentId: row.student_id },
     });
     const [groupUserIds, studentUserIds] = await Promise.all([
-      this.affectedUserIdsForGroup(groupId),
-      this.affectedUserIdsForStudent(row.student_id),
+      audienceForGroup(this.database, groupId),
+      audienceForStudent(this.database, row.student_id),
     ]);
     this.realtime.emitCrmChanged({
       entity: "group",
@@ -313,8 +314,8 @@ export class GroupsService {
       metadata: { studentId },
     });
     const [groupUserIds, studentUserIds] = await Promise.all([
-      this.affectedUserIdsForGroup(groupId),
-      this.affectedUserIdsForStudent(studentId),
+      audienceForGroup(this.database, groupId),
+      audienceForStudent(this.database, studentId),
     ]);
     this.realtime.emitCrmChanged({
       entity: "group",
@@ -323,65 +324,5 @@ export class GroupsService {
       affectedUserIds: Array.from(new Set([...groupUserIds, ...studentUserIds])),
     });
     return { success: true };
-  }
-
-  private async affectedUserIdsForGroup(groupId: string): Promise<string[]> {
-    const result = await this.database.query<{ user_id: string }>(
-      `
-        select distinct user_id
-        from (
-          select tp.user_id
-          from app.groups g
-          join app.teachers t on t.id = g.teacher_id and t.deleted_at is null
-          join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-          where g.id = $1 and g.deleted_at is null and tp.user_id is not null
-          union
-          select sp.user_id
-          from app.group_students gs
-          join app.students s on s.id = gs.student_id and s.deleted_at is null
-          join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
-          where gs.group_id = $1 and gs.left_at is null and sp.user_id is not null
-          union
-          select link.user_id
-          from app.group_students gs
-          join app.user_crm_links link
-            on link.entity_type = 'student'
-           and link.entity_id = gs.student_id
-           and link.deleted_at is null
-          where gs.group_id = $1 and gs.left_at is null
-        ) affected
-        where user_id is not null
-      `,
-      [groupId],
-    );
-    return (result?.rows ?? []).map((row) => row.user_id);
-  }
-
-  // ponytail: copied from CrmService (also used by its retained student methods).
-  // Lift into the shared AudienceResolver in B4.
-  private async affectedUserIdsForStudent(
-    studentId: string | null | undefined,
-  ): Promise<string[]> {
-    if (!studentId) return [];
-    const result = await this.database.query<{ user_id: string }>(
-      `
-        select distinct user_id
-        from (
-          select p.user_id
-          from app.students s
-          join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-          where s.id = $1 and s.deleted_at is null and p.user_id is not null
-          union
-          select link.user_id
-          from app.user_crm_links link
-          where link.entity_type = 'student'
-            and link.entity_id = $1
-            and link.deleted_at is null
-        ) affected
-        where user_id is not null
-      `,
-      [studentId],
-    );
-    return (result?.rows ?? []).map((row) => row.user_id);
   }
 }

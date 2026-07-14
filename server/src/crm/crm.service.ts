@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import { LeadIntakePort } from "../common/lead-intake.port";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
+import { audienceForLesson, audienceForStudent } from "./audience";
 import {
   ActorContext,
   canAssignRole,
@@ -2780,7 +2781,7 @@ export class CrmService implements LeadIntakePort {
       entityType: "lesson",
       entityId: lesson.id,
     });
-    const affectedUserIds = await this.affectedUserIdsForLesson(lesson);
+    const affectedUserIds = await audienceForLesson(this.database, lesson);
     this.realtime.emitCrmChanged({
       entity: "lesson",
       action: "created",
@@ -3170,7 +3171,7 @@ export class CrmService implements LeadIntakePort {
       entityType: "lesson",
       entityId: lesson.id,
     });
-    const affectedUserIds = await this.affectedUserIdsForLesson(lesson);
+    const affectedUserIds = await audienceForLesson(this.database, lesson);
     this.realtime.emitCrmChanged({
       entity: "lesson",
       action: "updated",
@@ -3318,7 +3319,7 @@ export class CrmService implements LeadIntakePort {
       entityType: "lesson",
       entityId: row.id,
     });
-    const affectedUserIds = await this.affectedUserIdsForLesson(row);
+    const affectedUserIds = await audienceForLesson(this.database, row);
     this.realtime.emitCrmChanged({
       entity: "lesson",
       action: "deleted",
@@ -4567,7 +4568,7 @@ export class CrmService implements LeadIntakePort {
       entityId: payment.student_id,
       metadata: { paymentId: payment.id },
     });
-    const affectedUserIds = await this.affectedUserIdsForStudent(
+    const affectedUserIds = await audienceForStudent(this.database, 
       payment.student_id,
     );
     this.realtime.emitCrmChanged({
@@ -6620,94 +6621,6 @@ export class CrmService implements LeadIntakePort {
   // UI instead of showing noise — never delete the record.
   private presentableEmail(value: string | null | undefined): string | null {
     return value && this.isDeliverableEmail(value) ? value : null;
-  }
-
-  private async affectedUserIdsForStudent(
-    studentId: string | null | undefined,
-  ): Promise<string[]> {
-    if (!studentId) return [];
-    const result = await this.database.query<{ user_id: string }>(
-      `
-        select distinct user_id
-        from (
-          select p.user_id
-          from app.students s
-          join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-          where s.id = $1 and s.deleted_at is null and p.user_id is not null
-          union
-          select link.user_id
-          from app.user_crm_links link
-          where link.entity_type = 'student'
-            and link.entity_id = $1
-            and link.deleted_at is null
-        ) affected
-        where user_id is not null
-      `,
-      [studentId],
-    );
-    return (result?.rows ?? []).map((row) => row.user_id);
-  }
-
-  private async affectedUserIdsForLesson(lesson: {
-    student_id: string | null;
-    group_id: string | null;
-    lead_id: string | null;
-    teacher_id: string | null;
-  }): Promise<string[]> {
-    const result = await this.database.query<{ user_id: string }>(
-      `
-        select distinct user_id
-        from (
-          select p.user_id
-          from app.students s
-          join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-          where s.id = $1 and s.deleted_at is null and p.user_id is not null
-          union
-          select student_link.user_id
-          from app.user_crm_links student_link
-          where student_link.entity_type = 'student'
-            and student_link.entity_id = $1
-            and student_link.deleted_at is null
-          union
-          select lead_link.user_id
-          from app.user_crm_links lead_link
-          where lead_link.entity_type = 'lead'
-            and lead_link.entity_id = $2
-            and lead_link.deleted_at is null
-          union
-          select tp.user_id
-          from app.teachers t
-          join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-          where t.id = $4 and t.deleted_at is null and tp.user_id is not null
-          union
-          select gp.user_id
-          from app.group_students gs
-          join app.students gs_student
-            on gs_student.id = gs.student_id
-           and gs_student.deleted_at is null
-          join app.profiles gp
-            on gp.id = gs_student.profile_id
-           and gp.deleted_at is null
-          where gs.group_id = $3 and gs.left_at is null and gp.user_id is not null
-          union
-          select group_link.user_id
-          from app.group_students gs
-          join app.user_crm_links group_link
-            on group_link.entity_type = 'student'
-           and group_link.entity_id = gs.student_id
-           and group_link.deleted_at is null
-          where gs.group_id = $3 and gs.left_at is null
-        ) affected
-        where user_id is not null
-      `,
-      [
-        lesson.student_id,
-        lesson.lead_id,
-        lesson.group_id,
-        lesson.teacher_id,
-      ],
-    );
-    return (result?.rows ?? []).map((row) => row.user_id);
   }
 
   private toStudentDto(row: StudentRow) {
