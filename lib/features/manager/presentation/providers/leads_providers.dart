@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
@@ -162,58 +159,6 @@ class LeadBoardFilters {
     );
   }
 }
-
-class LeadFilterPreset {
-  final String name;
-  final LeadBoardFilters filters;
-
-  const LeadFilterPreset({required this.name, required this.filters});
-
-  Map<String, dynamic> toJson() {
-    return {'name': name, 'filters': filters.toJson()};
-  }
-
-  factory LeadFilterPreset.fromJson(Map<String, dynamic> json) {
-    final rawFilters = json['filters'];
-    return LeadFilterPreset(
-      name: json['name']?.toString() ?? 'Фильтр',
-      filters: rawFilters is Map<String, dynamic>
-          ? LeadBoardFilters.fromJson(rawFilters)
-          : const LeadBoardFilters(),
-    );
-  }
-}
-
-class LeadFilterPresetStore {
-  static const _storageKey = 'crm.lead_filter_presets.v1';
-
-  final FlutterSecureStorage _storage;
-
-  const LeadFilterPresetStore(this._storage);
-
-  Future<List<LeadFilterPreset>> load() async {
-    final raw = await _storage.read(key: _storageKey);
-    if (raw == null || raw.trim().isEmpty) {
-      return const <LeadFilterPreset>[];
-    }
-    final decoded = jsonDecode(raw);
-    if (decoded is! List) return const <LeadFilterPreset>[];
-    return decoded
-        .whereType<Map<String, dynamic>>()
-        .map(LeadFilterPreset.fromJson)
-        .where((preset) => preset.name.trim().isNotEmpty)
-        .toList();
-  }
-
-  Future<void> save(List<LeadFilterPreset> presets) {
-    final payload = presets.map((preset) => preset.toJson()).toList();
-    return _storage.write(key: _storageKey, value: jsonEncode(payload));
-  }
-}
-
-final leadFilterPresetStoreProvider = Provider<LeadFilterPresetStore>((ref) {
-  return const LeadFilterPresetStore(FlutterSecureStorage());
-});
 
 final leadBoardProvider =
     FutureProvider.family<Map<String, dynamic>, LeadBoardFilters>((

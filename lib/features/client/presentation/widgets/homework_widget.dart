@@ -2,20 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
-
-/// Legacy task-checklist provider — retained so any existing wiring that reads
-/// `homeworkProvider` keeps compiling. The reskinned [HomeworkWidget] now loads
-/// the real lesson-homework feature (see [_studentHomeworksProvider]); the old
-/// togglable-task list lives on in [TasksChecklistWidget] below, unchanged.
-final homeworkProvider = FutureProvider<List<Map<String, dynamic>>>((
-  ref,
-) async {
-  return ref.watch(magicCrmServiceProvider).listTasks();
-});
 
 /// Loads the lesson homeworks for a given student (or, when [studentId] is
 /// null, the caller's own homeworks — the server scopes a `client` actor to the
@@ -23,13 +11,13 @@ final homeworkProvider = FutureProvider<List<Map<String, dynamic>>>((
 /// can be reused across student detail screens without provider collisions.
 final _studentHomeworksProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String?>((
-  ref,
-  studentId,
-) async {
-  return ref
-      .read(magicCrmServiceProvider)
-      .listHomeworks(studentId: studentId);
-});
+      ref,
+      studentId,
+    ) async {
+      return ref
+          .read(magicCrmServiceProvider)
+          .listHomeworks(studentId: studentId);
+    });
 
 /// v7 homework feed.
 ///
@@ -269,10 +257,7 @@ class _SubmitButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.control),
           ),
-          textStyle: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
         ),
         child: busy
             ? const SizedBox(
@@ -477,121 +462,6 @@ class _HomeworkError extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Retained legacy task-checklist UI (the previous body of [HomeworkWidget]).
-///
-/// Preserved verbatim so the togglable-task behavior — reading the legacy
-/// [homeworkProvider] and calling `updateTaskStatus` — is not removed. It is no
-/// longer mounted by [HomeworkWidget] (which now shows real homeworks) but
-/// remains available for any caller that still needs the checklist.
-class TasksChecklistWidget extends ConsumerWidget {
-  const TasksChecklistWidget({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final homeworkAsync = ref.watch(homeworkProvider);
-
-    return homeworkAsync.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.all(12),
-        child: ListSkeleton(count: 5),
-      ),
-      error: (err, _) => Center(
-        child: Text('Ошибка: $err', style: TextStyle(color: AppTheme.danger)),
-      ),
-      data: (tasks) {
-        if (tasks.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.assignment_turned_in_rounded,
-                  size: 64,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurfaceVariant.withAlpha(80),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Нет текущих заданий',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          color: AppTheme.primaryGold,
-          onRefresh: () async => ref.invalidate(homeworkProvider),
-          child: ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: tasks.length,
-            itemBuilder: (context, index) {
-              final task = tasks[index];
-              final isDone = task['status'] == 'done';
-              final dt = DateTime.tryParse(task['created_at'] ?? '');
-              final dateStr = dt != null
-                  ? DateFormat('d MMM', 'ru').format(dt.toLocal())
-                  : '';
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: CheckboxListTile(
-                  value: isDone,
-                  activeColor: AppTheme.success,
-                  checkColor: Colors.white,
-                  title: Text(
-                    task['title'] ?? 'Задание',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      decoration: isDone ? TextDecoration.lineThrough : null,
-                      color: isDone
-                          ? Theme.of(context).colorScheme.onSurfaceVariant
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (task['description'] != null &&
-                          task['description'].toString().isNotEmpty)
-                        Text(
-                          task['description'],
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      Text(
-                        'Назначено: $dateStr',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                  onChanged: (val) async {
-                    if (val == null) return;
-                    await ref
-                        .read(magicCrmServiceProvider)
-                        .updateTaskStatus(
-                          task['id'].toString(),
-                          val ? 'done' : 'open',
-                        );
-                    ref.invalidate(homeworkProvider);
-                  },
-                ),
-              );
-            },
-          ),
-        );
-      },
     );
   }
 }

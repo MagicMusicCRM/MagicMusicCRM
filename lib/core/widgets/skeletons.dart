@@ -117,54 +117,6 @@ class ListSkeleton extends StatelessWidget {
   }
 }
 
-class TableSkeleton extends StatelessWidget {
-  final int rows;
-  final int columns;
-
-  const TableSkeleton({super.key, this.rows = 6, this.columns = 4});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: List.generate(
-            columns,
-            (index) => const Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: 10, bottom: 12),
-                child: Skeleton(height: 16),
-              ),
-            ),
-          ),
-        ),
-        ...List.generate(
-          rows,
-          (row) => Padding(
-            padding: EdgeInsets.only(bottom: row == rows - 1 ? 0 : 10),
-            child: Row(
-              children: List.generate(
-                columns,
-                (index) => Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: Skeleton(
-                      height: 42,
-                      borderRadius: 6,
-                      width: index == 0 ? 180 : null,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class TimelineSkeleton extends StatelessWidget {
   final int count;
 
@@ -357,36 +309,6 @@ class DashboardStatsSkeleton extends StatelessWidget {
               );
             },
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class DetailPageSkeleton extends StatelessWidget {
-  const DetailPageSkeleton({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Skeleton(width: 180, height: 18),
-            SizedBox(height: 8),
-            Skeleton(width: 120, height: 12),
-          ],
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: const [
-          CardSkeleton(),
-          CardSkeleton(),
-          CardSkeleton(),
-          SizedBox(height: 12),
-          TimelineSkeleton(count: 4),
         ],
       ),
     );
