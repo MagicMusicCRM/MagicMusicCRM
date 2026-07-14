@@ -59,18 +59,21 @@ speculatively) and seeded on demand: `student-read.ts` (`4ce09427`) exports
 per-aggregate reads (Lead/Profile/Link) get seeded the same way when the core
 extraction (B5) forces them.
 
-**B4 — mid tier** — 🔶 FOUNDATION DONE
+**B4 — mid tier** — 🔶 MOSTLY DONE (CrmService 7956 → 5616 LOC)
 Shared helpers lifted first (they unblock every mid-tier domain):
 - `BranchScope` (`branch-scope.ts`, `258aadf4`) — pure `branchIdExpr`/`extractBranchId`
   functions; also killed the 5× inline copy in `analytics.service.ts`.
 - `AudienceResolver` (`audience.ts`, `e95d5497`) — `audienceForStudent/Group/Lesson`
   free functions; removed the 3 `affectedUserIdsForStudent` copies the B1 leaves left.
-Remaining domain services to extract (foundation ready): `FinanceService` (mapped:
-10 methods + 4 mappers; toPaymentDto/PaymentRow shared with getMySummary → copy,
-other 3 mappers + rows move; back-inject into CrmService for getStudentCard's
-payments/expected/balances), `AttendanceService`, `ScheduleService`, `TasksService`,
-`TimelineCommentsService`, `TeachersService`, `StaffService`. Still TODO:
-`CrmEntityResolver` map replacing the `if/else`-on-entity-type dispatch (OCP).
+- `student-read.ts` (`4ce09427`) — shared `findStudent` + `StudentRow` (B3 seed).
+- `crm-util.ts` (`19e69d23`) — `requiredTrim`/`trimOptional`/`sanitizeJsonObject`/
+  `rethrowCreatePersonError`; removed the Groups/Payroll trim copies.
+Domain services extracted: `FinanceService` (`e0847c37`), `TasksService` (`7e2b6b13`),
+`AttendanceService` (`e797ff1a`), `StaffService` (`3babb22e`), `TeachersService`
+(`e07b0794`). Back-injected into CrmService where a core aggregate calls them
+(getStudentCard → finance/tasks). **Remaining:** `ScheduleService` (lessons + series +
+matrix, largest), `TimelineCommentsService` (entity-resolution-coupled, closer to B5).
+Still TODO: `CrmEntityResolver` map replacing the `if/else`-on-entity-type dispatch (OCP).
 
 **B5 — tangled core (last, highest risk)**
 `StudentsService`, `LeadsService`, `ClientLinkingService`, `MergeService`,
