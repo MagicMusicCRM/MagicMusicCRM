@@ -51,18 +51,26 @@ one-method `LEAD_INTAKE_PORT` token instead of the whole `CrmService`; CrmServic
 CrmModule for the token — the win is file-level type decoupling, which unblocks splitting
 messenger.service (B7) and crm.service (B5) independently. Full server suite green.
 
-**B3 — repository layer (prerequisite for the core)**
-Thin per-aggregate repos: `StudentRepository`, `LeadRepository`, `ProfileRepository`,
-`LinkRepository`, … Services depend on repos instead of raw SQL / sibling services.
-Required before the core: Students and Leads both hit `app.profiles` / `app.user_crm_links`;
-without a shared repo, splitting them creates circular service deps. This is NOT an ORM/DDD
-layer — thin repos with hand-written SQL. Largest "invisible" step; behavior unchanged.
+**B3 — repository layer (prerequisite for the core)** — 🔶 SEEDED
+Deferred per ponytail (introduce infra when the 2nd/3rd caller forces it, not
+speculatively) and seeded on demand: `student-read.ts` (`4ce09427`) exports
+`StudentRow` + `findStudent(db, id)` as the shared student read (the
+`StudentRepository` seed) — a plain hand-written-SQL free function, no ORM. More
+per-aggregate reads (Lead/Profile/Link) get seeded the same way when the core
+extraction (B5) forces them.
 
-**B4 — mid tier**
-`FinanceService`, `AttendanceService`, `ScheduleService`, `TasksService`,
-`TimelineCommentsService`, `TeachersService`, `StaffService`. Lift shared helpers here:
-`AudienceResolver`, `BranchScope`, mappers, and a `CrmEntityResolver` map replacing the
-`if/else`-on-entity-type dispatch (also fixes the OCP violation).
+**B4 — mid tier** — 🔶 FOUNDATION DONE
+Shared helpers lifted first (they unblock every mid-tier domain):
+- `BranchScope` (`branch-scope.ts`, `258aadf4`) — pure `branchIdExpr`/`extractBranchId`
+  functions; also killed the 5× inline copy in `analytics.service.ts`.
+- `AudienceResolver` (`audience.ts`, `e95d5497`) — `audienceForStudent/Group/Lesson`
+  free functions; removed the 3 `affectedUserIdsForStudent` copies the B1 leaves left.
+Remaining domain services to extract (foundation ready): `FinanceService` (mapped:
+10 methods + 4 mappers; toPaymentDto/PaymentRow shared with getMySummary → copy,
+other 3 mappers + rows move; back-inject into CrmService for getStudentCard's
+payments/expected/balances), `AttendanceService`, `ScheduleService`, `TasksService`,
+`TimelineCommentsService`, `TeachersService`, `StaffService`. Still TODO:
+`CrmEntityResolver` map replacing the `if/else`-on-entity-type dispatch (OCP).
 
 **B5 — tangled core (last, highest risk)**
 `StudentsService`, `LeadsService`, `ClientLinkingService`, `MergeService`,
