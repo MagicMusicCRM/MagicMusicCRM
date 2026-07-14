@@ -19,8 +19,6 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
-import { CreateBranchDto } from "./dto/create-branch.dto";
-import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { CreateCommentDto } from "./dto/create-comment.dto";
 import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
 import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
@@ -406,14 +404,6 @@ interface DuplicateCandidateRow {
   entity_b_phone: string | null;
   entity_a_email: string | null;
   entity_b_email: string | null;
-}
-
-interface BranchRow {
-  id: string;
-  name: string;
-  address: string | null;
-  utc_offset_minutes: number | string;
-  created_at: Date | string;
 }
 
 interface GroupRow {
@@ -2382,28 +2372,6 @@ export class CrmService {
     } catch (error) {
       this.rethrowCreatePersonError(error);
     }
-  }
-
-  async listBranches(actor: ActorContext, query: CrmListQuery) {
-    this.policy.assertCanReadOperationalData(actor);
-    const limit = Math.min(query.limit ?? 100, 100);
-    const q = query.q?.trim();
-    const result = await this.database.query<BranchRow>(
-      `
-        select id, name, address, utc_offset_minutes, created_at
-        from app.branches
-        where deleted_at is null
-          and (
-            $1::text is null
-            or lower(coalesce(name, '') || ' ' || coalesce(address, '')) like lower('%' || $1 || '%')
-          )
-        order by name asc, id asc
-        limit $2
-      `,
-      [q || null, limit],
-    );
-
-    return { items: result.rows.map((row) => this.toBranchDto(row)) };
   }
 
   async listGroups(actor: ActorContext, query: CrmListQuery) {
@@ -7986,78 +7954,6 @@ export class CrmService {
         email: row.entity_b_email,
       },
     };
-  }
-
-  private toBranchDto(row: BranchRow) {
-    return {
-      id: row.id,
-      name: row.name,
-      address: row.address,
-      utcOffsetMinutes: Number(row.utc_offset_minutes ?? 180),
-      createdAt: row.created_at,
-    };
-  }
-
-  async createBranch(actor: ActorContext, dto: CreateBranchDto) {
-    this.policy.assertCanWriteCrm(actor);
-    const name = dto.name?.trim();
-    if (!name) {
-      throw new BadRequestException("Название филиала обязательно.");
-    }
-    // Default to Moscow (UTC+3 / 180 minutes) when no offset is provided.
-    const utcOffsetMinutes = dto.utcOffsetMinutes ?? 180;
-    const result = await this.database.query<BranchRow>(
-      `
-        insert into app.branches (name, address, utc_offset_minutes)
-        values ($1, $2, $3)
-        returning id, name, address, utc_offset_minutes, created_at
-      `,
-      [name, dto.address?.trim() || null, utcOffsetMinutes],
-    );
-    const branch = result.rows[0];
-    await this.audit.record({
-      actor,
-      action: "crm.branch_created",
-      entityType: "branch",
-      entityId: branch.id,
-      metadata: { utcOffsetMinutes },
-    });
-    return this.toBranchDto(branch);
-  }
-
-  async updateBranch(
-    actor: ActorContext,
-    branchId: string,
-    dto: UpdateBranchDto,
-  ) {
-    this.policy.assertCanWriteCrm(actor);
-    const result = await this.database.query<BranchRow>(
-      `
-        update app.branches
-        set name = coalesce($2, name),
-          address = coalesce($3, address),
-          utc_offset_minutes = coalesce($4, utc_offset_minutes),
-          updated_at = now()
-        where id = $1 and deleted_at is null
-        returning id, name, address, utc_offset_minutes, created_at
-      `,
-      [
-        branchId,
-        dto.name?.trim() || null,
-        dto.address?.trim() ?? null,
-        dto.utcOffsetMinutes ?? null,
-      ],
-    );
-    const branch = result.rows[0];
-    if (!branch) throw new NotFoundException("Филиал не найден.");
-    await this.audit.record({
-      actor,
-      action: "crm.branch_updated",
-      entityType: "branch",
-      entityId: branch.id,
-      metadata: { utcOffsetMinutes: dto.utcOffsetMinutes },
-    });
-    return this.toBranchDto(branch);
   }
 
   private toGroupDto(row: GroupRow) {

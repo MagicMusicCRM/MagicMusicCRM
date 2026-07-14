@@ -18,6 +18,7 @@ import { HomeworkService } from "./homework.service";
 import { ReferenceDataService } from "./reference-data.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { RoomsService } from "./rooms.service";
+import { BranchesService } from "./branches.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
@@ -91,6 +92,7 @@ export class CrmController {
     private readonly referenceData: ReferenceDataService,
     private readonly subscriptions: SubscriptionsService,
     private readonly rooms: RoomsService,
+    private readonly branches: BranchesService,
   ) {}
 
   @Get("me")
@@ -387,7 +389,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: CrmListQuery,
   ) {
-    return this.crm.listBranches(actor, query);
+    return this.branches.listBranches(actor, query);
   }
 
   @Post("branches")
@@ -395,7 +397,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreateBranchDto,
   ) {
-    return this.crm.createBranch(actor, dto);
+    return this.branches.createBranch(actor, dto);
   }
 
   @Patch("branches/:id")
@@ -404,7 +406,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateBranchDto,
   ) {
-    return this.crm.updateBranch(actor, id, dto);
+    return this.branches.updateBranch(actor, id, dto);
   }
 
   @Get("rooms")
