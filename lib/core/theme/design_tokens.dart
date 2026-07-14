@@ -199,33 +199,3 @@ class AppShadow {
     BoxShadow(color: Color(0x8C000000), blurRadius: 44, offset: Offset(0, 18)),
   ];
 }
-
-/// Typography tokens. v7 uses Inter; the app does not bundle it yet, so
-/// [fontFamily] is null (platform default) until the TTFs are added under
-/// `fonts:` in pubspec. [target] documents the intended family.
-class AppType {
-  AppType._();
-
-  /// Active app font family. `null` = platform default (Roboto/SF/Segoe).
-  /// TODO(P0): bundle Inter TTFs and set this to [target].
-  static const String? fontFamily = null;
-
-  /// The v7-specified family (`font-family:'Inter'`).
-  static const String target = 'Inter';
-}
-
-/// v7 stacking order (`--z-*`) — use when composing overlays in a [Stack] so
-/// drawers sit above the app bar, sheets above drawers, toasts above sheets.
-class AppZ {
-  AppZ._();
-
-  static const int nav = 20;
-  static const int appbar = 25;
-  static const int drawerBackdrop = 60;
-  static const int drawer = 70;
-  static const int sheetBackdrop = 80;
-  static const int sheet = 90;
-  static const int drag = 120;
-  static const int toast = 130;
-  static const int tooltip = 140;
-}

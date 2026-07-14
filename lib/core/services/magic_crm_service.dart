@@ -219,17 +219,6 @@ class MagicCrmService {
     };
   }
 
-  Future<Map<String, dynamic>> inviteStudent(String id) async {
-    final response = await _api.post<Map<String, dynamic>>(
-      '/crm/students/$id/invite',
-    );
-    return {
-      'student_id': response['studentId'],
-      'email': response['email'],
-      'status': response['status'],
-    };
-  }
-
   Future<List<Map<String, dynamic>>> listStudentGroups(
     String studentId, {
     int limit = 50,
@@ -1000,16 +989,6 @@ class MagicCrmService {
 
   Future<void> removeFamilyMember(String memberId) async {
     await _api.delete<Map<String, dynamic>>('/crm/family-members/$memberId');
-  }
-
-  Future<Map<String, dynamic>> setFamilyPrimaryPayer(
-    String familyId,
-    String memberId,
-  ) async {
-    return _api.post<Map<String, dynamic>>(
-      '/crm/families/$familyId/primary-payer/$memberId',
-      data: const <String, dynamic>{},
-    );
   }
 
   // ── Data quality: phone review + lead merge (P5-7) ───────────────────────
@@ -1987,25 +1966,6 @@ class MagicCrmService {
     return _api.post<Map<String, dynamic>>('/crm/expenses', data: data);
   }
 
-  Future<Map<String, dynamic>> updateExpense(
-    String id, {
-    num? amount,
-    String? category,
-    String? description,
-    String? branchId,
-  }) async {
-    final data = <String, dynamic>{};
-    if (amount != null) data['amount'] = amount;
-    if (category != null) data['category'] = category;
-    if (description != null) data['description'] = description;
-    if (branchId != null) data['branchId'] = branchId;
-    return _api.patch<Map<String, dynamic>>('/crm/expenses/$id', data: data);
-  }
-
-  Future<void> deleteExpense(String id) async {
-    await _api.delete<Map<String, dynamic>>('/crm/expenses/$id');
-  }
-
   // ── Subscription packages (P5b) ─────────────────────────────────────────
   Future<List<Map<String, dynamic>>> listSubscriptionPackages({
     String? q,
@@ -2112,28 +2072,10 @@ class MagicCrmService {
     return _api.post<Map<String, dynamic>>('/crm/homeworks', data: data);
   }
 
-  Future<Map<String, dynamic>> updateHomework(
-    String id,
-    Map<String, dynamic> patch,
-  ) async {
-    return _api.patch<Map<String, dynamic>>('/crm/homeworks/$id', data: patch);
-  }
-
   Future<Map<String, dynamic>> submitHomework(String id) async {
     return _api.post<Map<String, dynamic>>(
       '/crm/homeworks/$id/submit',
       data: const <String, dynamic>{},
-    );
-  }
-
-  Future<Map<String, dynamic>> addHomeworkAttachment(
-    String homeworkId, {
-    required String fileId,
-    String kind = 'assignment',
-  }) async {
-    return _api.post<Map<String, dynamic>>(
-      '/crm/homeworks/$homeworkId/attachments',
-      data: {'fileId': fileId, 'kind': kind},
     );
   }
 
@@ -2283,17 +2225,6 @@ class MagicCrmService {
     if (to != null) q['to'] = to;
     return _api.get<Map<String, dynamic>>(
       '/analytics/chats/sla',
-      queryParameters: q,
-    );
-  }
-
-  Future<Map<String, dynamic>> getAnalyticsWeeklyReport({
-    String? branchId,
-  }) async {
-    final q = <String, dynamic>{};
-    if (branchId != null) q['branchId'] = branchId;
-    return _api.get<Map<String, dynamic>>(
-      '/analytics/weekly-report',
       queryParameters: q,
     );
   }

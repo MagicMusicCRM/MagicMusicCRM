@@ -574,162 +574,164 @@ void main() {
     });
 
     // KVA-238: зарплатный модуль педагогов.
-    test('teacher payroll, payouts, rates, stats and group rate override',
-        () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/teachers/teacher-a/payroll',
-          statusCode: 200,
-          body: {
-            'teacherId': 'teacher-a',
-            'hoursTotal': 12,
-            'accruedTotal': 8400,
-            'bonusTotal': 500,
-            'deductionTotal': 200,
-            'paidTotal': 5000,
-            'debt': 3700,
-            'currentRate': 700,
-            'rateHistory': [
-              {'rate': 700, 'effectiveFrom': '2026-01-01'},
-            ],
-            'payouts': [
-              {
-                'id': 'payout-a',
-                'kind': 'payout',
-                'amount': 5000,
-                'comment': 'За июнь',
-                'paidAt': '2026-07-01T10:00:00.000Z',
-                'authorName': 'Ольга Смирнова',
-              },
-            ],
-          },
-        ),
-        _FakeResponse(
-          path: '/crm/teachers/teacher-a/payouts',
-          statusCode: 201,
-          body: {
-            'id': 'payout-b',
-            'teacherId': 'teacher-a',
-            'kind': 'bonus',
-            'amount': 1000,
-            'comment': 'Премия',
-            'paidAt': '2026-07-10T10:00:00.000Z',
-          },
-        ),
-        _FakeResponse(
-          path: '/crm/teachers/teacher-a/rates',
-          statusCode: 201,
-          body: {
-            'id': 'rate-a',
-            'teacherId': 'teacher-a',
-            'rate': 900,
-            'effectiveFrom': '2026-08-01',
-          },
-        ),
-        _FakeResponse(
-          path: '/crm/reports/teacher-stats',
-          statusCode: 200,
-          body: {
-            'from': '2026-07-01T00:00:00.000Z',
-            'to': '2026-08-01T00:00:00.000Z',
-            'items': [
-              {
-                'teacherId': 'teacher-a',
-                'teacherName': 'Мария Петрова',
+    test(
+      'teacher payroll, payouts, rates, stats and group rate override',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/teachers/teacher-a/payroll',
+            statusCode: 200,
+            body: {
+              'teacherId': 'teacher-a',
+              'hoursTotal': 12,
+              'accruedTotal': 8400,
+              'bonusTotal': 500,
+              'deductionTotal': 200,
+              'paidTotal': 5000,
+              'debt': 3700,
+              'currentRate': 700,
+              'rateHistory': [
+                {'rate': 700, 'effectiveFrom': '2026-01-01'},
+              ],
+              'payouts': [
+                {
+                  'id': 'payout-a',
+                  'kind': 'payout',
+                  'amount': 5000,
+                  'comment': 'За июнь',
+                  'paidAt': '2026-07-01T10:00:00.000Z',
+                  'authorName': 'Ольга Смирнова',
+                },
+              ],
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/teachers/teacher-a/payouts',
+            statusCode: 201,
+            body: {
+              'id': 'payout-b',
+              'teacherId': 'teacher-a',
+              'kind': 'bonus',
+              'amount': 1000,
+              'comment': 'Премия',
+              'paidAt': '2026-07-10T10:00:00.000Z',
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/teachers/teacher-a/rates',
+            statusCode: 201,
+            body: {
+              'id': 'rate-a',
+              'teacherId': 'teacher-a',
+              'rate': 900,
+              'effectiveFrom': '2026-08-01',
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/reports/teacher-stats',
+            statusCode: 200,
+            body: {
+              'from': '2026-07-01T00:00:00.000Z',
+              'to': '2026-08-01T00:00:00.000Z',
+              'items': [
+                {
+                  'teacherId': 'teacher-a',
+                  'teacherName': 'Мария Петрова',
+                  'hoursTotal': 3,
+                  'accruedTotal': 2100,
+                  'paidTotal': 500,
+                  'units': [
+                    {
+                      'unitType': 'group',
+                      'groupId': 'group-a',
+                      'studentId': null,
+                      'unitName': 'Вокал (группа)',
+                      'rate': 700,
+                      'days': [
+                        {'date': '2026-07-01', 'hours': 1},
+                      ],
+                      'hoursTotal': 2,
+                      'accruedTotal': 1400,
+                    },
+                  ],
+                },
+              ],
+              'totals': {
                 'hoursTotal': 3,
                 'accruedTotal': 2100,
                 'paidTotal': 500,
-                'units': [
-                  {
-                    'unitType': 'group',
-                    'groupId': 'group-a',
-                    'studentId': null,
-                    'unitName': 'Вокал (группа)',
-                    'rate': 700,
-                    'days': [
-                      {'date': '2026-07-01', 'hours': 1},
-                    ],
-                    'hoursTotal': 2,
-                    'accruedTotal': 1400,
-                  },
-                ],
               },
-            ],
-            'totals': {
-              'hoursTotal': 3,
-              'accruedTotal': 2100,
-              'paidTotal': 500,
             },
-          },
-        ),
-        _FakeResponse(
-          path: '/crm/groups/group-a',
-          statusCode: 200,
-          body: {
-            'id': 'group-a',
-            'teacherId': 'teacher-a',
-            'branchId': 'branch-a',
-            'roomId': 'room-a',
-            'name': 'Вокал (группа)',
-            'pricePerLesson': 3000,
-            'teacherRate': 0,
-            'teacherName': 'Мария Петрова',
-            'branchName': 'Центр',
-            'roomName': '101',
-            'createdAt': '2026-06-13T00:00:00.000Z',
-          },
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
+          ),
+          _FakeResponse(
+            path: '/crm/groups/group-a',
+            statusCode: 200,
+            body: {
+              'id': 'group-a',
+              'teacherId': 'teacher-a',
+              'branchId': 'branch-a',
+              'roomId': 'room-a',
+              'name': 'Вокал (группа)',
+              'pricePerLesson': 3000,
+              'teacherRate': 0,
+              'teacherName': 'Мария Петрова',
+              'branchName': 'Центр',
+              'roomName': '101',
+              'createdAt': '2026-06-13T00:00:00.000Z',
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
 
-      final payroll = await service.getTeacherPayroll('teacher-a');
-      final payout = await service.createTeacherPayout(
-        teacherId: 'teacher-a',
-        kind: 'bonus',
-        amount: 1000,
-        comment: 'Премия',
-      );
-      final rate = await service.setTeacherHourRate(
-        teacherId: 'teacher-a',
-        rate: 900,
-        effectiveFrom: '2026-08-01',
-      );
-      final stats = await service.getTeacherStatsReport(
-        from: '2026-07-01T00:00:00.000Z',
-        to: '2026-08-01T00:00:00.000Z',
-        branchId: 'branch-a',
-        teacherId: 'teacher-a',
-        unitType: 'group',
-      );
-      // «Входит в оклад» = 0 (drill-down отчёта переводит группу в 0).
-      final group = await service.updateGroup(
-        'group-a',
-        teacherRate: 0,
-        setTeacherRate: true,
-      );
+        final payroll = await service.getTeacherPayroll('teacher-a');
+        final payout = await service.createTeacherPayout(
+          teacherId: 'teacher-a',
+          kind: 'bonus',
+          amount: 1000,
+          comment: 'Премия',
+        );
+        final rate = await service.setTeacherHourRate(
+          teacherId: 'teacher-a',
+          rate: 900,
+          effectiveFrom: '2026-08-01',
+        );
+        final stats = await service.getTeacherStatsReport(
+          from: '2026-07-01T00:00:00.000Z',
+          to: '2026-08-01T00:00:00.000Z',
+          branchId: 'branch-a',
+          teacherId: 'teacher-a',
+          unitType: 'group',
+        );
+        // «Входит в оклад» = 0 (drill-down отчёта переводит группу в 0).
+        final group = await service.updateGroup(
+          'group-a',
+          teacherRate: 0,
+          setTeacherRate: true,
+        );
 
-      expect(payroll['debt'], 3700);
-      expect(payroll['currentRate'], 700);
-      expect((payroll['payouts'] as List).single['kind'], 'payout');
+        expect(payroll['debt'], 3700);
+        expect(payroll['currentRate'], 700);
+        expect((payroll['payouts'] as List).single['kind'], 'payout');
 
-      expect(payout['kind'], 'bonus');
-      expect(adapter.requests[1].body['kind'], 'bonus');
-      expect(adapter.requests[1].body['amount'], 1000);
-      expect(adapter.requests[1].body['comment'], 'Премия');
+        expect(payout['kind'], 'bonus');
+        expect(adapter.requests[1].body['kind'], 'bonus');
+        expect(adapter.requests[1].body['amount'], 1000);
+        expect(adapter.requests[1].body['comment'], 'Премия');
 
-      expect(rate['rate'], 900);
-      expect(adapter.requests[2].body['rate'], 900);
-      expect(adapter.requests[2].body['effectiveFrom'], '2026-08-01');
+        expect(rate['rate'], 900);
+        expect(adapter.requests[2].body['rate'], 900);
+        expect(adapter.requests[2].body['effectiveFrom'], '2026-08-01');
 
-      expect((stats['items'] as List).single['teacherName'], 'Мария Петрова');
-      expect(adapter.requests[3].queryParameters['branchId'], 'branch-a');
-      expect(adapter.requests[3].queryParameters['teacherId'], 'teacher-a');
-      expect(adapter.requests[3].queryParameters['unitType'], 'group');
+        expect((stats['items'] as List).single['teacherName'], 'Мария Петрова');
+        expect(adapter.requests[3].queryParameters['branchId'], 'branch-a');
+        expect(adapter.requests[3].queryParameters['teacherId'], 'teacher-a');
+        expect(adapter.requests[3].queryParameters['unitType'], 'group');
 
-      expect(group['teacher_rate'], 0);
-      expect(adapter.requests[4].body.containsKey('teacherRate'), isTrue);
-      expect(adapter.requests[4].body['teacherRate'], 0);
-    });
+        expect(group['teacher_rate'], 0);
+        expect(adapter.requests[4].body.containsKey('teacherRate'), isTrue);
+        expect(adapter.requests[4].body['teacherRate'], 0);
+      },
+    );
 
     test('gets updates students and creates comments through v3 API', () async {
       final adapter = _FakeAdapter([
@@ -1194,28 +1196,6 @@ void main() {
 
       expect(result['leadId'], 'lead-a');
       expect(result['createdLead'], false);
-      expect(adapter.requests.single.body, isEmpty);
-    });
-
-    test('queues student invite through v3 API', () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/students/student-a/invite',
-          statusCode: 201,
-          body: {
-            'studentId': 'student-a',
-            'email': 'anna@example.com',
-            'status': 'queued',
-          },
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
-
-      final invite = await service.inviteStudent('student-a');
-
-      expect(invite['student_id'], 'student-a');
-      expect(invite['email'], 'anna@example.com');
-      expect(invite['status'], 'queued');
       expect(adapter.requests.single.body, isEmpty);
     });
 
@@ -2237,117 +2217,96 @@ void main() {
 
     // ── Analytics endpoints ───────────────────────────────────────────────
 
-    test('getAnalyticsFunnel requests /analytics/funnel and maps stages',
-        () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/analytics/funnel',
-          statusCode: 200,
-          body: {
-            'from': '2026-01-01',
-            'to': '2026-04-01',
-            'stages': [
-              {
-                'statusId': 's1',
-                'name': 'Новый',
-                'sortOrder': 0,
-                'leadsEntered': 100,
-                'ratioToPrevStage': null,
-              },
-            ],
-          },
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
+    test(
+      'getAnalyticsFunnel requests /analytics/funnel and maps stages',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/analytics/funnel',
+            statusCode: 200,
+            body: {
+              'from': '2026-01-01',
+              'to': '2026-04-01',
+              'stages': [
+                {
+                  'statusId': 's1',
+                  'name': 'Новый',
+                  'sortOrder': 0,
+                  'leadsEntered': 100,
+                  'ratioToPrevStage': null,
+                },
+              ],
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
 
-      final result = await service.getAnalyticsFunnel(
-        from: '2026-01-01',
-        to: '2026-04-01',
-      );
+        final result = await service.getAnalyticsFunnel(
+          from: '2026-01-01',
+          to: '2026-04-01',
+        );
 
-      expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
-      expect(adapter.requests.single.queryParameters['to'], '2026-04-01');
-      expect((result['stages'] as List).first['name'], 'Новый');
-      expect((result['stages'] as List).first['leadsEntered'], 100);
-    });
-
-    test('getAnalyticsDebts requests /analytics/debts and maps buckets',
-        () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/analytics/debts',
-          statusCode: 200,
-          body: {
-            'buckets': [
-              {'bucket': '0-7', 'students': 5, 'amount': 50000},
-            ],
-            'bucketStudentSum': 5,
-            'distinctStudents': 5,
-            'totalAmount': 50000,
-          },
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
-
-      final r = await service.getAnalyticsDebts();
-
-      expect(adapter.requests.single.queryParameters, isEmpty);
-      expect((r['buckets'] as List).first['bucket'], '0-7');
-      expect(r['totalAmount'], 50000);
-    });
+        expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
+        expect(adapter.requests.single.queryParameters['to'], '2026-04-01');
+        expect((result['stages'] as List).first['name'], 'Новый');
+        expect((result['stages'] as List).first['leadsEntered'], 100);
+      },
+    );
 
     test(
-        'getAnalyticsBranches requests /analytics/branches with date params',
-        () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/analytics/branches',
-          statusCode: 200,
-          body: {
-            'from': '2026-01-01',
-            'to': '2026-04-01',
-            'branches': [
-              {'branchId': 'b1', 'branchName': 'Центр', 'newLeads': 20},
-            ],
-          },
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
+      'getAnalyticsDebts requests /analytics/debts and maps buckets',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/analytics/debts',
+            statusCode: 200,
+            body: {
+              'buckets': [
+                {'bucket': '0-7', 'students': 5, 'amount': 50000},
+              ],
+              'bucketStudentSum': 5,
+              'distinctStudents': 5,
+              'totalAmount': 50000,
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
 
-      final r = await service.getAnalyticsBranches(
-        from: '2026-01-01',
-        to: '2026-04-01',
-      );
+        final r = await service.getAnalyticsDebts();
 
-      expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
-      expect((r['branches'] as List).first['branchName'], 'Центр');
-    });
+        expect(adapter.requests.single.queryParameters, isEmpty);
+        expect((r['buckets'] as List).first['bucket'], '0-7');
+        expect(r['totalAmount'], 50000);
+      },
+    );
 
     test(
-        'getAnalyticsWeeklyReport requests /analytics/weekly-report',
-        () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/analytics/weekly-report',
-          statusCode: 200,
-          body: {
-            'weekStart': '2026-06-10',
-            'weekEnd': '2026-06-16',
-            'newLeads': 12,
-            'tasks': 8,
-          },
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
+      'getAnalyticsBranches requests /analytics/branches with date params',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/analytics/branches',
+            statusCode: 200,
+            body: {
+              'from': '2026-01-01',
+              'to': '2026-04-01',
+              'branches': [
+                {'branchId': 'b1', 'branchName': 'Центр', 'newLeads': 20},
+              ],
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
 
-      final r = await service.getAnalyticsWeeklyReport(branchId: 'b1');
+        final r = await service.getAnalyticsBranches(
+          from: '2026-01-01',
+          to: '2026-04-01',
+        );
 
-      expect(
-        adapter.requests.single.queryParameters['branchId'],
-        'b1',
-      );
-      expect(r['newLeads'], 12);
-    });
+        expect(adapter.requests.single.queryParameters['from'], '2026-01-01');
+        expect((r['branches'] as List).first['branchName'], 'Центр');
+      },
+    );
 
     test('getAnalyticsLossReasons requests /analytics/loss-reasons', () async {
       final adapter = _FakeAdapter([
@@ -2374,10 +2333,7 @@ void main() {
         _FakeResponse(
           path: '/analytics/forecast',
           statusCode: 200,
-          body: {
-            'forecastAmount': 120000,
-            'confirmedAmount': 80000,
-          },
+          body: {'forecastAmount': 120000, 'confirmedAmount': 80000},
         ),
       ]);
       final service = MagicCrmService(_client(adapter));
@@ -2414,10 +2370,7 @@ void main() {
         _FakeResponse(
           path: '/analytics/chats/sla',
           statusCode: 200,
-          body: {
-            'avgResponseMs': 45000,
-            'withinSlaPercent': 92.5,
-          },
+          body: {'avgResponseMs': 45000, 'withinSlaPercent': 92.5},
         ),
       ]);
       final service = MagicCrmService(_client(adapter));
@@ -2431,22 +2384,24 @@ void main() {
       expect(r['avgResponseMs'], 45000);
     });
 
-    test('getAppLeadsCount reads /crm/leads/app-count and returns the count',
-        () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/leads/app-count',
-          statusCode: 200,
-          body: {'count': 7},
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
+    test(
+      'getAppLeadsCount reads /crm/leads/app-count and returns the count',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/leads/app-count',
+            statusCode: 200,
+            body: {'count': 7},
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
 
-      final count = await service.getAppLeadsCount();
+        final count = await service.getAppLeadsCount();
 
-      expect(count, 7);
-      expect(adapter.requests.single.queryParameters, isEmpty);
-    });
+        expect(count, 7);
+        expect(adapter.requests.single.queryParameters, isEmpty);
+      },
+    );
 
     test('getAppLeadsCount coerces a string count to int', () async {
       final adapter = _FakeAdapter([
@@ -2638,24 +2593,27 @@ void main() {
       },
     );
 
-    test('getFamilyForEntity returns null family when entity has no family', () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/families/by-entity/student/student-x',
-          statusCode: 200,
-          body: {'family': null, 'members': <dynamic>[]},
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
+    test(
+      'getFamilyForEntity returns null family when entity has no family',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/families/by-entity/student/student-x',
+            statusCode: 200,
+            body: {'family': null, 'members': <dynamic>[]},
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
 
-      final result = await service.getFamilyForEntity(
-        entityType: 'student',
-        entityId: 'student-x',
-      );
+        final result = await service.getFamilyForEntity(
+          entityType: 'student',
+          entityId: 'student-x',
+        );
 
-      expect(result['family'], isNull);
-      expect((result['members'] as List), isEmpty);
-    });
+        expect(result['family'], isNull);
+        expect((result['members'] as List), isEmpty);
+      },
+    );
   });
 }
 
