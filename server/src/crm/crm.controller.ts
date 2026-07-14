@@ -17,6 +17,7 @@ import { CrmService } from "./crm.service";
 import { HomeworkService } from "./homework.service";
 import { ReferenceDataService } from "./reference-data.service";
 import { SubscriptionsService } from "./subscriptions.service";
+import { RoomsService } from "./rooms.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
@@ -89,6 +90,7 @@ export class CrmController {
     private readonly homework: HomeworkService,
     private readonly referenceData: ReferenceDataService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly rooms: RoomsService,
   ) {}
 
   @Get("me")
@@ -407,7 +409,7 @@ export class CrmController {
 
   @Get("rooms")
   listRooms(@CurrentActor() actor: ActorContext, @Query() query: CrmListQuery) {
-    return this.crm.listRooms(actor, query);
+    return this.rooms.listRooms(actor, query);
   }
 
   @Get("rooms/availability")
@@ -415,12 +417,12 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: RoomAvailabilityQuery,
   ) {
-    return this.crm.listRoomAvailability(actor, query);
+    return this.rooms.listRoomAvailability(actor, query);
   }
 
   @Post("rooms")
   createRoom(@CurrentActor() actor: ActorContext, @Body() dto: UpsertRoomDto) {
-    return this.crm.createRoom(actor, dto);
+    return this.rooms.createRoom(actor, dto);
   }
 
   @Patch("rooms/:id")
@@ -429,7 +431,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpsertRoomDto,
   ) {
-    return this.crm.updateRoom(actor, id, dto);
+    return this.rooms.updateRoom(actor, id, dto);
   }
 
   @Delete("rooms/:id")
@@ -437,7 +439,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.deleteRoom(actor, id);
+    return this.rooms.deleteRoom(actor, id);
   }
 
   @Get("groups")
