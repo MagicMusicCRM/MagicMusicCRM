@@ -1377,6 +1377,7 @@ class MagicCrmService {
     String status = 'scheduled',
     bool isTrial = false,
     String? notes,
+    num? teacherRate,
   }) async {
     final data = <String, dynamic>{
       'scheduledAt': scheduledAt,
@@ -1390,6 +1391,7 @@ class MagicCrmService {
     if (branchId != null) data['branchId'] = branchId;
     if (roomId != null) data['roomId'] = roomId;
     if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
+    if (teacherRate != null) data['teacherRate'] = teacherRate;
     if (notes != null && notes.trim().isNotEmpty) {
       data['notes'] = notes.trim();
     }
@@ -1413,6 +1415,7 @@ class MagicCrmService {
     String? status,
     bool? isTrial,
     String? notes,
+    num? teacherRate,
   }) async {
     final data = <String, dynamic>{};
     if (studentId != null) data['studentId'] = studentId;
@@ -1425,6 +1428,7 @@ class MagicCrmService {
     if (status != null) data['status'] = status;
     if (isTrial != null) data['isTrial'] = isTrial;
     if (notes != null) data['notes'] = notes.trim();
+    if (teacherRate != null) data['teacherRate'] = teacherRate;
 
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/lessons/$id',
@@ -1641,6 +1645,20 @@ class MagicCrmService {
         'progress': progress,
         'kind': ?kind,
       },
+    );
+    return _legacyComment(response);
+  }
+
+  /// Toggle whether a comment is visible to the assigned teacher. Default
+  /// comments are admin-only; showing to the teacher flips kind to `teacher_note`
+  /// (and back to `admin_comment` hides it again). Staff only.
+  Future<Map<String, dynamic>> setCommentVisibility({
+    required String commentId,
+    required bool visibleToTeacher,
+  }) async {
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/comments/$commentId/visibility',
+      data: {'visibleToTeacher': visibleToTeacher},
     );
     return _legacyComment(response);
   }
@@ -2725,6 +2743,7 @@ class MagicCrmService {
       'status': item['status'],
       'is_trial': item['isTrial'],
       'notes': item['notes'],
+      'teacher_rate': item['teacherRate'],
       'student_name': item['studentName'],
       'teacher_name': item['teacherName'],
       'branch_name': item['branchName'],

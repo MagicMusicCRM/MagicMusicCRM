@@ -372,6 +372,8 @@ class MagicMessengerService {
       'is_muted': item['isMuted'] == true,
       'created_at': item['createdAt'],
       'updated_at': item['updatedAt'],
+      'slug': item['slug'],
+      'is_system': item['isSystem'] == true,
       '_item_type': type,
       '_partner_id': item['partnerId'],
       '_partner_data': partnerMap.isEmpty
@@ -450,6 +452,9 @@ class MagicMessengerService {
       'updated_at': item['updatedAt'],
       'deleted_at': item['deletedAt'],
       'is_read': isRead,
+      // Backend now returns aggregated reactions [{emoji,count,reactedByMe}]
+      // inside each message; keep them so they render on load (were dropped).
+      'reactions': item['reactions'],
       'profiles': {
         'id': senderMap['id'],
         'email': senderMap['email'],

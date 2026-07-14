@@ -152,6 +152,9 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
     // before login (the listener itself is a no-op outside Windows/Linux).
     if (ref.watch(magicAuthStateProvider).asData?.value != null) {
       ref.watch(leadNotificationListenerProvider);
+      // #11: «У вас новая задача» desktop popup for the assignee.
+      ref.watch(currentUserIdProvider); // keep the assignee id resolved
+      ref.watch(taskNotificationListenerProvider);
     }
 
     final router = ref.watch(routerProvider);

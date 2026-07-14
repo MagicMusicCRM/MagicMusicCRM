@@ -79,7 +79,14 @@ final _routeGateStateProvider = Provider<_RouteGateState>((ref) {
   }
 
   final gateState = ref.watch(releaseGateStatusProvider);
+  // skipLoadingOnReload: a token refresh/login invalidates releaseGateStatusProvider,
+  // flipping it to loading. Without keeping the previous value the router would
+  // collapse to '/' on every re-validation and pop whatever dialog/route is open
+  // (the "kicked out of the client card / Reports" bug). With this, a reload that
+  // has a last-known-good gate stays on `data`; only the very first load shows
+  // the loader.
   return gateState.when(
+    skipLoadingOnReload: true,
     data: _RouteGateState.ready,
     error: (error, _) => _RouteGateState.gateError(error),
     loading: () => const _RouteGateState.gateLoading(),

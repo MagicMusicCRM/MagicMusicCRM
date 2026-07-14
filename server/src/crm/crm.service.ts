@@ -176,6 +176,7 @@ interface LessonRow {
   status: string;
   is_trial: boolean;
   notes: string | null;
+  teacher_rate?: string | number | null;
   student_user_id: string | null;
   teacher_user_id: string | null;
   student_name: string | null;
@@ -526,6 +527,7 @@ interface PayrollLessonRow {
   duration_minutes: number | string;
   is_trial: boolean;
   group_rate: string | number | null;
+  teacher_rate: string | number | null;
   attendance_kind: string | null;
   charge_share: string | number | null;
 }
@@ -3550,7 +3552,7 @@ export class CrmService {
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
-          l.duration_minutes, l.status, l.is_trial, l.notes,
+          l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
           sp.user_id as student_user_id, tp.user_id as teacher_user_id,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
@@ -3646,11 +3648,11 @@ export class CrmService {
       `
         insert into app.lessons (
           student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
-          status, is_trial, notes
+          status, is_trial, notes, teacher_rate
         )
-        values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 60), coalesce($9, 'scheduled'), coalesce($10, false), $11)
+        values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 60), coalesce($9, 'scheduled'), coalesce($10, false), $11, $12::numeric)
         returning id, student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
-          status, is_trial, notes, null::uuid as student_user_id, null::uuid as teacher_user_id,
+          status, is_trial, notes, teacher_rate, null::uuid as student_user_id, null::uuid as teacher_user_id,
           null::text as student_name, null::text as teacher_name, null::text as branch_name,
           null::text as room_name, null::text as group_name, null::numeric as group_price_per_lesson
       `,
@@ -3666,6 +3668,7 @@ export class CrmService {
         dto.status ?? null,
         dto.isTrial ?? null,
         dto.notes?.trim() || null,
+        dto.teacherRate ?? null,
       ],
     );
     const lesson = result.rows[0];
@@ -4023,10 +4026,11 @@ export class CrmService {
           status = coalesce($10, status),
           is_trial = coalesce($11, is_trial),
           notes = coalesce($12, notes),
+          teacher_rate = coalesce($13::numeric, teacher_rate),
           updated_at = now()
         where id = $1 and deleted_at is null
         returning id, student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
-          status, is_trial, notes, null::uuid as student_user_id, null::uuid as teacher_user_id,
+          status, is_trial, notes, teacher_rate, null::uuid as student_user_id, null::uuid as teacher_user_id,
           null::text as student_name, null::text as teacher_name, null::text as branch_name,
           null::text as room_name, null::text as group_name, null::numeric as group_price_per_lesson
       `,
@@ -4043,6 +4047,7 @@ export class CrmService {
         dto.status ?? null,
         dto.isTrial ?? null,
         dto.notes?.trim() || null,
+        dto.teacherRate ?? null,
       ],
     );
     const lesson = result.rows[0];
@@ -4885,6 +4890,47 @@ export class CrmService {
     return this.toCommentDto(comment);
   }
 
+  // Toggle whether an existing comment is visible to the assigned teacher.
+  // Default comments are `admin_comment` (staff-only); flipping to `teacher_note`
+  // makes them visible to the teacher too, and back hides them again. Only staff
+  // may change visibility; `progress` (client-facing) notes are out of scope.
+  async setCommentVisibility(
+    actor: ActorContext,
+    commentId: string,
+    visibleToTeacher: boolean,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const kind = visibleToTeacher ? "teacher_note" : "admin_comment";
+    const result = await this.database.query<CommentRow>(
+      `
+        update app.entity_comments
+        set kind = $2
+        where id = $1
+          and deleted_at is null
+          and kind in ('admin_comment', 'teacher_note')
+        returning id, entity_type, entity_id, author_id,
+          null::text as author_first_name, null::text as author_last_name,
+          body, kind, created_at
+      `,
+      [commentId, kind],
+    );
+    const comment = result.rows[0];
+    if (!comment) throw new NotFoundException("Комментарий не найден.");
+    await this.audit.record({
+      actor,
+      action: "crm.comment_visibility_changed",
+      entityType: comment.entity_type,
+      entityId: comment.entity_id,
+      metadata: { commentId: comment.id, kind },
+    });
+    this.realtime.emitCrmChanged({
+      entity: "comment",
+      action: "updated",
+      id: comment.id,
+    });
+    return this.toCommentDto(comment);
+  }
+
   async createTask(actor: ActorContext, dto: UpsertTaskDto) {
     this.policy.assertManagerOnly(actor);
     if (!dto.entityType || !dto.entityId || !dto.title) {
@@ -4924,8 +4970,38 @@ export class CrmService {
       entity: "task",
       action: "created",
       id: task.id,
+      // Scope to the assignee so their client can pop «У вас новая задача».
+      affectedUserIds: task.assigned_to ? [task.assigned_to] : null,
     });
+    if (task.assigned_to && task.assigned_to !== actor.userId) {
+      this.notifyNewTaskSafe(task.assigned_to, task.title, task.due_at);
+    }
     return this.toTaskDto(task);
+  }
+
+  // Fire-and-forget "new task" notification to the assignee ("У вас новая
+  // задача"). A notification failure must NEVER break task creation.
+  private notifyNewTaskSafe(
+    userId: string,
+    title: string,
+    dueAt: Date | string | null,
+  ): void {
+    const when = dueAt
+      ? ` (срок ${this.formatLessonTimeMoscow(dueAt)} по Москве)`
+      : "";
+    try {
+      void this.notifications
+        .notifyUser({
+          userId,
+          title: "У вас новая задача",
+          body: `«${title}»${when}`,
+        })
+        .catch((error: unknown) => {
+          this.logger.warn(`New task notification failed: ${String(error)}`);
+        });
+    } catch (error: unknown) {
+      this.logger.warn(`New task notification failed: ${String(error)}`);
+    }
   }
 
   async updateTask(actor: ActorContext, taskId: string, dto: UpsertTaskDto) {
@@ -5350,8 +5426,9 @@ export class CrmService {
 
   /**
    * Эффективная ставка и коэффициент занятия.
-   * Ставка: переопределение группы (groups.teacher_rate) ?? последняя ставка
-   * педагога с effective_from <= даты занятия ?? 0 (0 = «входит в оклад»).
+   * Ставка: поурочная ставка (lessons.teacher_rate, набирается вручную) ??
+   * переопределение группы (groups.teacher_rate) ?? последняя ставка педагога
+   * с effective_from <= даты занятия ?? 0 (0 = «входит в оклад»).
    * Коэффициент (KVA-237, lesson_participation.attendance_kind): unpaid_miss →
    * 0, partially_paid → charge_share, прочие статусы, занятия без
    * participation и групповые занятия → 1.
@@ -5362,7 +5439,10 @@ export class CrmService {
   ): { hours: number; rate: number; coefficient: number; amount: number } {
     const hours = Number(lesson.duration_minutes ?? 0) / 60;
     let rate: number;
-    if (lesson.group_rate !== null && lesson.group_rate !== undefined) {
+    if (lesson.teacher_rate !== null && lesson.teacher_rate !== undefined) {
+      // Per-lesson override (набранная вручную ставка за это занятие) wins.
+      rate = Number(lesson.teacher_rate);
+    } else if (lesson.group_rate !== null && lesson.group_rate !== undefined) {
       rate = Number(lesson.group_rate);
     } else {
       const lessonDate = this.toDateOnly(lesson.scheduled_at);
@@ -5400,7 +5480,7 @@ export class CrmService {
       `
         select l.id, l.teacher_id, l.student_id, l.group_id,
           l.scheduled_at, l.duration_minutes, l.is_trial,
-          g.teacher_rate as group_rate, g.name as group_name,
+          l.teacher_rate, g.teacher_rate as group_rate, g.name as group_name,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
           lp.attendance_kind, lp.charge_share
         from app.lessons l
@@ -7928,7 +8008,7 @@ export class CrmService {
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
-          l.duration_minutes, l.status, l.is_trial, l.notes,
+          l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
           sp.user_id as student_user_id, tp.user_id as teacher_user_id,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
@@ -8390,6 +8470,13 @@ export class CrmService {
     return createHash("sha256").update(value.toLowerCase()).digest("hex");
   }
 
+  // ponytail: import placeholders (hollihop-client-*@migration.invalid etc.) are
+  // real students/leads without a HolliHop email. Hide the fake address from the
+  // UI instead of showing noise — never delete the record.
+  private presentableEmail(value: string | null | undefined): string | null {
+    return value && this.isDeliverableEmail(value) ? value : null;
+  }
+
   private async affectedUserIdsForStudent(
     studentId: string | null | undefined,
   ): Promise<string[]> {
@@ -8520,7 +8607,7 @@ export class CrmService {
       profileUserId: row.profile_user_id,
       firstName: row.first_name,
       lastName: row.last_name,
-      email: row.email,
+      email: this.presentableEmail(row.email),
       phone: row.phone,
       teacherUserIds: row.teacher_user_ids ?? [],
       createdAt: row.created_at,
@@ -8777,6 +8864,10 @@ export class CrmService {
       status: row.status,
       isTrial: row.is_trial,
       notes: row.notes,
+      teacherRate:
+        row.teacher_rate === null || row.teacher_rate === undefined
+          ? null
+          : Number(row.teacher_rate),
       studentName: row.student_name || null,
       teacherName: row.teacher_name || null,
       branchName: row.branch_name || null,
@@ -8945,7 +9036,7 @@ export class CrmService {
       firstName: row.first_name,
       lastName: row.last_name,
       phone: row.phone,
-      email: row.email,
+      email: this.presentableEmail(row.email),
       source: row.source,
       notes: row.notes,
       assignedTo: row.assigned_to,

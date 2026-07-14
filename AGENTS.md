@@ -244,10 +244,10 @@ _Последнее обновление 2026-06-16: локальный manager-
 |------|------------|
 | `server/.env` | Локальный NestJS backend, DB, email/push providers, HolliHop key, local migration DB URL. |
 | `server/.migration.env` | Безопасные дефолты импортов: dry-run, batch size, Supabase export dir, HolliHop mode. Секреты брать из `server/.env`. |
-| `infra/staging/.env` | Staging Docker Compose runtime для `api.phantom-net.ru`. |
+| `infra/staging/.env` | Staging Docker Compose runtime для `api.magicmusiccrm.ru`. |
 | `infra/staging/.backup.env` | Backup root/storage root/encryption passphrase для `backup-staging.sh` и `restore-staging.sh`. |
 | `infra/staging/.monitor.env` | Health URL, disk threshold, service list and alert sink for `monitor-staging.sh`. |
-| `infra/staging/.deploy.env` | SSH/deploy координаты: `magicdeploy@161.104.50.105`, key `C:/Users/potyl/.ssh/mmcrm_proxy_ed25519`, remote `/opt/magicmusiccrm`. |
+| `infra/staging/.deploy.env` | SSH/deploy координаты: `magicdeploy@161.104.49.153` (`api.magicmusiccrm.ru`; старый `161.104.50.105`/`api.phantom-net.ru` выведен из эксплуатации 2026-07), key `C:/Users/potyl/.ssh/mmcrm_proxy_ed25519`, remote `/opt/magicmusiccrm`. |
 | `.flutter.env` | Build-time values for Flutter; Flutter still needs these passed as `--dart-define`. |
 
 Минимальные проверки после env-правок:

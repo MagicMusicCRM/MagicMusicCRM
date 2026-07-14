@@ -68,6 +68,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   String? _selectedChatId;
   String? _selectedChatType; // 'direct', 'group', 'channel'
   String? _selectedChatRawType;
+  String? _selectedChatSlug; // 'announcements' for the system Объявления chat
   String? _selectedChatName;
   String? _selectedChatAvatarUrl;
   String? _selectedPartnerId;
@@ -907,14 +908,50 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   void _handleRealtimeMessageUpdated(Map<String, dynamic> payload) {
     _markRealtimeEvent();
     if (!mounted) return;
-    final message = _normalizeRealtimeMessage(payload);
-    final messageId = message['id']?.toString();
+    final messageId = payload['id']?.toString();
     if (messageId == null) return;
+
+    // Patch ONLY the fields the event actually carries. A reaction/pin update
+    // sends just {id, reactions}; merging a fully-normalized map here would null
+    // out sender/content/created_at and make the message flip to "Пользователь",
+    // blank out, and jump in the sort until the next REST refresh.
+    final normalized = _normalizeRealtimeMessage(payload);
+    const aliases = <String, List<String>>{
+      'content': ['content'],
+      'message_type': ['messageType', 'message_type'],
+      'attachment_file_id': ['attachmentFileId', 'attachment_file_id'],
+      'attachment_name': ['attachmentName', 'attachmentFileName', 'attachment_name'],
+      'attachment_size': ['attachmentSize', 'attachmentFileSize', 'attachment_size'],
+      'attachment_mime_type': [
+        'attachmentMimeType',
+        'attachmentContentType',
+        'attachment_mime_type',
+      ],
+      'reply_to_id': ['replyToId', 'reply_to_id'],
+      'forwarded_from_id': ['forwardedFromId', 'forwarded_from_id'],
+      'pinned_by': ['pinnedBy', 'pinned_by'],
+      'pinned_at': ['pinnedAt', 'pinned_at'],
+      'updated_at': ['updatedAt', 'updated_at'],
+      'deleted_at': ['deletedAt', 'deleted_at'],
+    };
+    final patch = <String, dynamic>{};
+    aliases.forEach((key, srcKeys) {
+      if (srcKeys.any(payload.containsKey)) patch[key] = normalized[key];
+    });
+    if (payload['sender'] is Map ||
+        payload.containsKey('senderId') ||
+        payload.containsKey('sender_id')) {
+      patch['sender_id'] = normalized['sender_id'];
+      patch['profiles'] = normalized['profiles'];
+    }
 
     setState(() {
       final idx = _messages.indexWhere((msg) => msg['id'] == messageId);
       if (idx != -1) {
-        _messages[idx] = {..._messages[idx], ...message};
+        _messages[idx] = {..._messages[idx], ...patch};
+        if (payload['reactions'] is List) {
+          _messages[idx]['reactions'] = payload['reactions'];
+        }
       }
       if (payload['reactions'] is List) {
         _reactionsMap[messageId] = payload['reactions'] as List<dynamic>;
@@ -1585,6 +1622,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       _selectedChatId = id;
       _selectedChatType = type;
       _selectedChatRawType = rawType;
+      _selectedChatSlug = item['slug']?.toString() ?? item['_slug']?.toString();
       _selectedChatName = name;
       _selectedChatAvatarUrl = avatarUrl;
       _selectedPartnerId = partnerId;
@@ -1621,6 +1659,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       _selectedChatId = null;
       _selectedChatType = null;
       _selectedChatRawType = null;
+      _selectedChatSlug = null;
       _selectedChatName = null;
       _selectedChatAvatarUrl = null;
       _selectedPartnerId = null;
@@ -1755,23 +1794,40 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     }
   }
 
+  // True if the aggregated reaction list marks `emoji` as reacted by me.
+  // Tolerates the legacy per-user shape ({user_id, emoji}) as a fallback.
+  bool _reactionMine(List<dynamic> list, String emoji) => list.any(
+        (r) =>
+            r is Map &&
+            r['emoji'] == emoji &&
+            (r['reactedByMe'] == true || r['user_id'] == _userId),
+      );
+
   Future<void> _toggleReaction(String messageId, String emoji) async {
     final messenger = ref.read(magicMessengerServiceProvider);
     final previous = List<dynamic>.from(_reactionsMap[messageId] ?? const []);
-    final hasMine = previous.any(
-      (r) => r is Map && r['user_id'] == _userId && r['emoji'] == emoji,
-    );
+    final hasMine = _reactionMine(previous, emoji);
 
-    // Optimistic update so the reaction reflects instantly, independent of
-    // realtime delivery (top-tier messenger behaviour). The server response is
-    // then applied as the authoritative state below.
-    final optimistic = List<dynamic>.from(previous);
-    if (hasMine) {
-      optimistic.removeWhere(
-        (r) => r is Map && r['user_id'] == _userId && r['emoji'] == emoji,
-      );
-    } else {
-      optimistic.add({'user_id': _userId, 'emoji': emoji});
+    // Optimistic update in the aggregated shape {emoji,count,reactedByMe} so the
+    // chip reflects instantly. The server response is applied as authoritative
+    // state below.
+    final optimistic = <Map<String, dynamic>>[];
+    var found = false;
+    for (final r in previous) {
+      if (r is! Map) continue;
+      final m = Map<String, dynamic>.from(r);
+      if (m['emoji']?.toString() == emoji) {
+        found = true;
+        final c = (m['count'] as num?)?.toInt() ?? 1;
+        final next = hasMine ? c - 1 : c + 1;
+        if (next <= 0) continue; // drop the chip when it hits zero
+        m['count'] = next;
+        m['reactedByMe'] = !hasMine;
+      }
+      optimistic.add(m);
+    }
+    if (!found && !hasMine) {
+      optimistic.add({'emoji': emoji, 'count': 1, 'reactedByMe': true});
     }
     setState(() {
       _reactionsMap = {..._reactionsMap, messageId: optimistic};
@@ -1784,9 +1840,17 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
           : await messenger.setReaction(messageId: messageId, emoji: emoji);
       final reactions = result['reactions'];
       if (reactions is List && mounted) {
+        // Server returns aggregated counts without reactedByMe; re-apply my own
+        // flag — the toggled emoji reflects my new state, others keep theirs.
+        final merged = reactions.map((r) {
+          final m = Map<String, dynamic>.from(r as Map);
+          final e = m['emoji']?.toString() ?? '';
+          m['reactedByMe'] = e == emoji ? !hasMine : _reactionMine(previous, e);
+          return m;
+        }).toList();
         setState(() {
-          _reactionsMap = {..._reactionsMap, messageId: reactions};
-          _applyReactionsToMessage(messageId, reactions);
+          _reactionsMap = {..._reactionsMap, messageId: merged};
+          _applyReactionsToMessage(messageId, merged);
         });
       }
     } catch (e) {
@@ -2584,6 +2648,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         : TelegramColors.lightTextSecondary;
     final isChannel = _selectedChatType == 'channel';
     final isGroup = _selectedChatType == 'group';
+    // «Объявления» is a group chat everyone reads but only управляющий/директор
+    // may post to.
+    final isAnnouncements = _selectedChatSlug == 'announcements';
 
     return DropTarget(
       onDragDone: (details) async {
@@ -2900,8 +2967,18 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                       reactionsMap: _reactionsMap,
                     ),
             ),
-            // Input (not for channels unless user has permission)
-            if (!isChannel)
+            // Input (not for channels unless user has permission). «Объявления»
+            // is read-only for everyone except управляющий/директор.
+            if (!isChannel && isAnnouncements && !_isManagerTier)
+              Padding(
+                padding: const EdgeInsets.all(AppSpace.md),
+                child: Text(
+                  'В «Объявления» пишут только управляющий и директор',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: secondaryText),
+                ),
+              )
+            else if (!isChannel)
               Column(
                 children: [
                   if (_typingText.isNotEmpty)

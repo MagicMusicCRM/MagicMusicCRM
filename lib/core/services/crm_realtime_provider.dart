@@ -9,12 +9,15 @@ class CrmChangedEvent {
   final String action; // created | updated | deleted
   final String? id;
   final String? branchId;
+  /// Recipient-scoped user ids (e.g. a task's assignee) for targeted UI hints.
+  final List<String> affectedUserIds;
 
   const CrmChangedEvent({
     required this.entity,
     required this.action,
     this.id,
     this.branchId,
+    this.affectedUserIds = const [],
   });
 
   factory CrmChangedEvent.fromMap(Map<String, dynamic> map) => CrmChangedEvent(
@@ -22,6 +25,10 @@ class CrmChangedEvent {
     action: map['action']?.toString() ?? '',
     id: map['id']?.toString(),
     branchId: map['branchId']?.toString(),
+    affectedUserIds: (map['affectedUserIds'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        const [],
   );
 
   bool get isFallbackPoll => action == 'poll';

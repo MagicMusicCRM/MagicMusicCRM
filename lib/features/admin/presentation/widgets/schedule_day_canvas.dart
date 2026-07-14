@@ -574,37 +574,40 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
           right: BorderSide(color: cs.onSurfaceVariant.withAlpha(14)),
         ),
       ),
-      child: Stack(
-        children: [
-          // Empty-area gesture layer (tap = 1h create, desktop drag / touch
-          // long-press-drag = multi-hour select).
-          Positioned.fill(
-            child: DragTarget<Map<String, dynamic>>(
-              // «Без аудитории» only accepts lessons that are ALREADY roomless
-              // (re-timing within it). Clearing a room isn't expressible via the
-              // PATCH contract, so a roomed lesson can't be dropped here (it
-              // would silently keep its room). Real room columns accept anything.
-              onWillAcceptWithDetails: (d) {
-                if (!col.isUnassigned) return true;
-                final rid = d.data['room_id']?.toString();
-                return rid == null || rid.isEmpty;
-              },
-              onAcceptWithDetails: (d) =>
-                  _onDropOnColumn(col, d.data, d.offset),
-              builder: (context, candidate, rejected) {
-                final platform = Theme.of(context).platform;
-                final desktop = platform == TargetPlatform.windows ||
-                    platform == TargetPlatform.linux ||
-                    platform == TargetPlatform.macOS;
-                return GestureDetector(
+      // DragTarget wraps the WHOLE column (ancestor of the lesson cards) so a
+      // drop over an existing card still reaches it. Previously it was a sibling
+      // painted *under* the cards, whose opaque tap layers stopped the hit-test
+      // and swallowed every drop on a populated day — that's why drag-and-drop
+      // "stopped working".
+      child: DragTarget<Map<String, dynamic>>(
+        // «Без аудитории» only accepts lessons that are ALREADY roomless
+        // (re-timing within it). Clearing a room isn't expressible via the
+        // PATCH contract, so a roomed lesson can't be dropped here (it would
+        // silently keep its room). Real room columns accept anything.
+        onWillAcceptWithDetails: (d) {
+          if (!col.isUnassigned) return true;
+          final rid = d.data['room_id']?.toString();
+          return rid == null || rid.isEmpty;
+        },
+        onAcceptWithDetails: (d) => _onDropOnColumn(col, d.data, d.offset),
+        builder: (context, candidate, rejected) {
+          final platform = Theme.of(context).platform;
+          final desktop = platform == TargetPlatform.windows ||
+              platform == TargetPlatform.linux ||
+              platform == TargetPlatform.macOS;
+          return Stack(
+            children: [
+              // Empty-area gesture layer (bottom): tap = 1h create, desktop pan
+              // / touch long-press-drag = multi-hour select. On desktop the
+              // long-press handlers are dropped so a mouse click-drag isn't
+              // ambiguous with a ~500ms long-press.
+              Positioned.fill(
+                child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTapUp: (d) => _onColumnTap(col, d.localPosition.dy),
                   onPanStart: desktop
-                      ? (d) => _onSelectStart(
-                            col,
-                            colIndex,
-                            d.localPosition.dy,
-                          )
+                      ? (d) =>
+                          _onSelectStart(col, colIndex, d.localPosition.dy)
                       : null,
                   onPanUpdate: desktop
                       ? (d) => _onSelectUpdate(
@@ -613,25 +616,29 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
                           )
                       : null,
                   onPanEnd: desktop ? (_) => _onSelectEnd() : null,
-                  onLongPressStart: (d) =>
-                      _onSelectStart(col, colIndex, d.localPosition.dy),
-                  onLongPressMoveUpdate: (d) => _onSelectUpdate(
-                    d.localPosition.dy,
-                    d.localPosition.dx,
-                  ),
-                  onLongPressEnd: (_) => _onSelectEnd(),
+                  onLongPressStart: desktop
+                      ? null
+                      : (d) =>
+                          _onSelectStart(col, colIndex, d.localPosition.dy),
+                  onLongPressMoveUpdate: desktop
+                      ? null
+                      : (d) => _onSelectUpdate(
+                            d.localPosition.dy,
+                            d.localPosition.dx,
+                          ),
+                  onLongPressEnd: desktop ? null : (_) => _onSelectEnd(),
                   child: const SizedBox.expand(),
-                );
-              },
-            ),
-          ),
-          // Vertical selection block (dashed teal — flow-02/03). New booking.
-          if (selecting) _selectionBlock(),
-          // Forbidden horizontal hint (dashed red — flow-02).
-          if (showForbidden) _forbiddenBlock(),
-          // Lesson cards (on top — own their tap/drag/resize).
-          for (final e in entries) _entryBlock(e, colWidth),
-        ],
+                ),
+              ),
+              // Vertical selection block (dashed teal — flow-02/03). New booking.
+              if (selecting) _selectionBlock(),
+              // Forbidden horizontal hint (dashed red — flow-02).
+              if (showForbidden) _forbiddenBlock(),
+              // Lesson cards (on top — own their tap/drag/resize).
+              for (final e in entries) _entryBlock(e, colWidth),
+            ],
+          );
+        },
       ),
     );
   }

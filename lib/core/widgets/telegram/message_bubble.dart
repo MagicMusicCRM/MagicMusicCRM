@@ -416,41 +416,59 @@ class MessageBubble extends StatelessWidget {
 
   List<Widget> _buildReactionWidgets(BuildContext context, bool isDark) {
     if (reactions == null) return [];
-    // Group reactions by emoji
+    // Aggregated shape [{emoji, count, reactedByMe}] from the backend; tolerate
+    // a legacy per-user [{emoji, user_id}] list by counting occurrences.
     final Map<String, int> counts = {};
+    final Map<String, bool> mine = {};
+    final List<String> order = [];
     for (final r in reactions!) {
-      final emoji = r['emoji'] as String;
-      counts[emoji] = (counts[emoji] ?? 0) + 1;
+      if (r is! Map) continue;
+      final emoji = r['emoji']?.toString();
+      if (emoji == null) continue;
+      if (!counts.containsKey(emoji)) {
+        counts[emoji] = 0;
+        order.add(emoji);
+      }
+      counts[emoji] = counts[emoji]! + ((r['count'] as num?)?.toInt() ?? 1);
+      if (r['reactedByMe'] == true) mine[emoji] = true;
     }
 
-    return counts.entries.map((entry) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return order.map((emoji) {
+      final isMine = mine[emoji] == true;
       return GestureDetector(
-        onTap: () => onReact?.call(entry.key),
+        onTap: () => onReact?.call(emoji),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withAlpha(20)
-                : Colors.black.withAlpha(10),
+            color: isMine
+                ? accent.withAlpha(38)
+                : (isDark
+                    ? Colors.white.withAlpha(20)
+                    : Colors.black.withAlpha(10)),
             borderRadius: BorderRadius.circular(AppRadius.chip),
             border: Border.all(
-              color: isDark
-                  ? Colors.white.withAlpha(20)
-                  : Colors.black.withAlpha(20),
-              width: 0.5,
+              color: isMine
+                  ? accent.withAlpha(160)
+                  : (isDark
+                      ? Colors.white.withAlpha(20)
+                      : Colors.black.withAlpha(20)),
+              width: isMine ? 1 : 0.5,
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(entry.key, style: const TextStyle(fontSize: 12)),
+              Text(emoji, style: const TextStyle(fontSize: 12)),
               const SizedBox(width: 4),
               Text(
-                entry.value.toString(),
+                (counts[emoji] ?? 0).toString(),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white70 : Colors.black87,
+                  color: isMine
+                      ? accent
+                      : (isDark ? Colors.white70 : Colors.black87),
                 ),
               ),
             ],

@@ -3578,6 +3578,7 @@ describe("CrmService", () => {
       null,
       null,
       null,
+      null,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -3656,6 +3657,7 @@ describe("CrmService", () => {
       "completed",
       null,
       "План занятия",
+      null,
     ]);
   });
 
@@ -4052,6 +4054,7 @@ describe("CrmService", () => {
       null,
       true,
       "Пробное занятие",
+      null,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

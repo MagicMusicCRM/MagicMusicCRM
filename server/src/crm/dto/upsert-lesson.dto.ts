@@ -3,6 +3,7 @@ import {
   IsDateString,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -58,4 +59,12 @@ export class UpsertLessonDto {
   @IsString()
   @MaxLength(1000)
   notes?: string;
+
+  // Поурочная ставка педагога за это занятие (₽/час). Приоритетнее групповой и
+  // историчной ставки при расчёте зарплаты.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100000)
+  teacherRate?: number;
 }

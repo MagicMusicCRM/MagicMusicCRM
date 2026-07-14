@@ -829,15 +829,14 @@ describe("MessengerService", () => {
     expect(crm.autoCreateLeadFromChat).not.toHaveBeenCalled();
   });
 
-  it("seeds the default Объявления channel and role permissions when missing", async () => {
+  it("creates the Объявления group chat and backfills membership when missing", async () => {
     type MockClient = { query: jest.Mock };
     const client = {
       query: jest
         .fn()
-        .mockResolvedValueOnce({ rows: [] }) // adopt-by-title update -> none
         .mockResolvedValueOnce({ rows: [] }) // lookup by slug -> none
-        .mockResolvedValueOnce({ rows: [{ id: "channel-announcements" }] }) // insert channel
-        .mockResolvedValue({ rows: [] }), // 5 permission guards
+        .mockResolvedValueOnce({ rows: [{ id: "chat-announcements" }] }) // insert chat
+        .mockResolvedValue({ rows: [] }), // membership backfill
     };
     const { service } = createService({
       database: {
@@ -847,33 +846,29 @@ describe("MessengerService", () => {
       },
     });
 
-    await service.ensureDefaultChannels();
+    await service.ensureAnnouncementsChat();
 
-    // 1 adopt update + 1 slug lookup + 1 channel insert + 5 permission inserts.
-    expect(client.query).toHaveBeenCalledTimes(8);
+    // 1 slug lookup + 1 chat insert + 1 membership backfill.
+    expect(client.query).toHaveBeenCalledTimes(3);
     expect(client.query).toHaveBeenNthCalledWith(
-      3,
-      expect.stringContaining("insert into app.channels"),
+      2,
+      expect.stringContaining("insert into app.chats"),
       ["announcements"],
     );
-    const roles = client.query.mock.calls.slice(3).map((call) => call[1][1]);
-    expect(roles).toEqual([
-      "client",
-      "teacher",
-      "admin",
-      "manager",
-      "system_admin",
-    ]);
+    expect(client.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("insert into app.chat_members"),
+      ["chat-announcements"],
+    );
   });
 
-  it("does not create a duplicate Объявления channel when one already exists (idempotent)", async () => {
+  it("does not create a duplicate Объявления chat when one already exists (idempotent)", async () => {
     type MockClient = { query: jest.Mock };
     const client = {
       query: jest
         .fn()
-        .mockResolvedValueOnce({ rows: [] }) // adopt-by-title update -> none
-        .mockResolvedValueOnce({ rows: [{ id: "channel-existing" }] }) // slug lookup -> found
-        .mockResolvedValue({ rows: [] }),
+        .mockResolvedValueOnce({ rows: [{ id: "chat-existing" }] }) // slug lookup -> found
+        .mockResolvedValue({ rows: [] }), // membership backfill
     };
     const { service } = createService({
       database: {
@@ -883,14 +878,14 @@ describe("MessengerService", () => {
       },
     });
 
-    await service.ensureDefaultChannels();
+    await service.ensureAnnouncementsChat();
 
     const sqls = client.query.mock.calls.map((call) => call[0] as string);
-    expect(sqls.some((sql) => sql.includes("insert into app.channels"))).toBe(
+    expect(sqls.some((sql) => sql.includes("insert into app.chats"))).toBe(
       false,
     );
-    // 1 adopt update + 1 lookup + 5 permission guards, no channel insert.
-    expect(client.query).toHaveBeenCalledTimes(7);
+    // 1 lookup + 1 membership backfill, no chat insert.
+    expect(client.query).toHaveBeenCalledTimes(2);
   });
 
   it("publishes channel.post_created to the channel room, never a chat room", async () => {

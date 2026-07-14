@@ -874,6 +874,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
     ref.listen(crmRealtimeProvider, (previous, next) {
       final event = next.value;
       if (event == null) return;
+      // Skip the 30s fallback poll (10 entities) — it was refetching the whole
+      // card every 30s, flashing spinners and jittering fields. Real socket
+      // events still refresh.
+      if (event.isFallbackPoll) return;
       _scheduleRealtimeRefresh(event.entity);
     });
 
@@ -5412,8 +5416,28 @@ class _CommentsList extends ConsumerStatefulWidget {
 }
 
 class _CommentsListState extends ConsumerState<_CommentsList> {
-  // Bumped on «Повторить» to rebuild the FutureBuilder with a fresh request.
-  int _retryKey = 0;
+  // The comments future is held in a field (not recreated in build()) so the
+  // list doesn't re-fetch on every parent rebuild — the card rebuilds often on
+  // realtime events. Recomputed only when refs/refreshKey change or on retry.
+  late Future<List<Map<String, dynamic>>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _loadMerged();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CommentsList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshKey != widget.refreshKey ||
+        _refsSig(oldWidget.refs) != _refsSig(widget.refs)) {
+      _future = _loadMerged();
+    }
+  }
+
+  String _refsSig(List<ClientHalfRef> refs) =>
+      refs.map((r) => '${r.entityType}/${r.entityId}').join(',');
 
   // Maps a comment `kind` to a short Russian badge label. Unknown / generic
   // kinds (e.g. plain staff comments) get no badge.
@@ -5467,14 +5491,69 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
     return mergeByIdSorted(results, dateKey: 'created_at');
   }
 
+  bool get _isStaff {
+    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    return role == 'admin' ||
+        role == 'manager' ||
+        role == 'director' ||
+        role == 'system_admin';
+  }
+
+  // Flip a comment between admin-only (`admin_comment`) and teacher-visible
+  // (`teacher_note`). Default is admin-only; this is the «показать преподавателю»
+  // toggle from the client card.
+  Future<void> _toggleCommentVisibility(Map<String, dynamic> c) async {
+    final id = c['id']?.toString();
+    if (id == null) return;
+    final showToTeacher = c['kind'] != 'teacher_note';
+    try {
+      await ref.read(magicCrmServiceProvider).setCommentVisibility(
+            commentId: id,
+            visibleToTeacher: showToTeacher,
+          );
+      if (mounted) setState(() => _future = _loadMerged());
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось изменить видимость: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _visibilityToggle(Map<String, dynamic> c) {
+    final visible = c['kind'] == 'teacher_note';
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: () => _toggleCommentVisibility(c),
+        style: TextButton.styleFrom(
+          foregroundColor: visible
+              ? AppColor.gold
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          minimumSize: const Size(0, 28),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        icon: Icon(
+          visible
+              ? Icons.visibility_rounded
+              : Icons.visibility_off_rounded,
+          size: 14,
+        ),
+        label: Text(
+          visible ? 'Виден преподавателю' : 'Показать преподавателю',
+          style: const TextStyle(fontSize: 10),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return FutureBuilder<List<Map<String, dynamic>>>(
-      key: ValueKey(
-        '${widget.refreshKey}:$_retryKey:${widget.refs.map((r) => '${r.entityType}/${r.entityId}').join(',')}',
-      ),
-      future: _loadMerged(),
+      future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -5494,7 +5573,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                 ),
                 const SizedBox(height: AppSpace.xs),
                 TextButton.icon(
-                  onPressed: () => setState(() => _retryKey++),
+                  onPressed: () => setState(() => _future = _loadMerged()),
                   style: TextButton.styleFrom(foregroundColor: AppColor.gold),
                   icon: const Icon(Icons.refresh_rounded, size: 16),
                   label: const Text('Повторить'),
@@ -5585,6 +5664,12 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                     c['content'] ?? '',
                     style: const TextStyle(fontSize: 13),
                   ),
+                  if (_isStaff &&
+                      (c['kind'] == 'admin_comment' ||
+                          c['kind'] == 'teacher_note')) ...[
+                    const SizedBox(height: 2),
+                    _visibilityToggle(c),
+                  ],
                 ],
               ),
             );

@@ -18,6 +18,7 @@ import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
 import { CreateCommentDto } from "./dto/create-comment.dto";
+import { SetCommentVisibilityDto } from "./dto/set-comment-visibility.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import {
   CreateScheduleSeriesDto,
@@ -689,6 +690,15 @@ export class CrmController {
     @Body() dto: CreateCommentDto,
   ) {
     return this.crm.createComment(actor, dto);
+  }
+
+  @Patch("comments/:id/visibility")
+  setCommentVisibility(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: SetCommentVisibilityDto,
+  ) {
+    return this.crm.setCommentVisibility(actor, id, dto.visibleToTeacher);
   }
 
   @Post("tasks")

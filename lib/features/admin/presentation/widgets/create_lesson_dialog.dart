@@ -4,6 +4,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
+import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 import 'package:intl/intl.dart';
 
 class CreateLessonDialog extends ConsumerStatefulWidget {
@@ -66,6 +67,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   int _durationMinutes = 60;
+  // Поурочная ставка педагога (₽/астр.ч.): null — по умолчанию (ставка группы/
+  // педагога), 0 — «входит в оклад», иначе фикс за это занятие.
+  num? _teacherRate;
 
   bool get _isEdit => widget.lesson != null;
 
@@ -104,6 +108,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _selectedTime = TimeOfDay(hour: local.hour, minute: local.minute);
       }
       if (_selectedBranchId != null) _loadRooms(_selectedBranchId!);
+      final rawRate = lesson['teacher_rate'];
+      if (rawRate is num) {
+        _teacherRate = rawRate;
+      } else if (rawRate != null) {
+        _teacherRate = num.tryParse(rawRate.toString());
+      }
     }
     _loadData();
   }
@@ -206,6 +216,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           roomId: _selectedRoomId,
           scheduledAt: scheduledAt,
           durationMinutes: _durationMinutes,
+          teacherRate: _teacherRate,
         );
       } else {
         await _crm.createLesson(
@@ -217,6 +228,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           scheduledAt: scheduledAt,
           durationMinutes: _durationMinutes,
           status: 'scheduled',
+          teacherRate: _teacherRate,
         );
       }
 
@@ -601,6 +613,15 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            // #6: поурочная ставка педагога (по умолчанию — ставка группы/
+            // педагога, «Входит в оклад» = 0 для пробных).
+            TeacherRateSelector(
+              label: 'Ставка за занятие (₽/астр.ч.)',
+              allowInherit: true,
+              initialRate: _teacherRate,
+              onChanged: (v) => setState(() => _teacherRate = v),
             ),
           ],
         ),

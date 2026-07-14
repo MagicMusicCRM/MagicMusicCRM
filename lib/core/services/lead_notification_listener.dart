@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_notifier/local_notifier.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
 /// Staff roles that should hear about new leads. Teachers are excluded on
@@ -30,6 +31,25 @@ final leadNotificationListenerProvider = Provider<void>((ref) {
     LocalNotification(
       title: 'Новая заявка',
       body: 'Поступил новый лид — откройте раздел «Лиды».',
+    ).show();
+  });
+});
+
+/// #11: pops «У вас новая задача» on the ASSIGNEE's desktop when a task is
+/// created for them. Targeted via the event's affectedUserIds (mobile staff get
+/// the server push for the same task). Desktop-only, same rationale as leads.
+final taskNotificationListenerProvider = Provider<void>((ref) {
+  if (kIsWeb || !(Platform.isWindows || Platform.isLinux)) return;
+  ref.listen(crmRealtimeProvider, (previous, next) {
+    final event = next.value;
+    if (event == null || event.entity != 'task' || event.action != 'created') {
+      return;
+    }
+    final userId = ref.read(currentUserIdProvider).asData?.value;
+    if (userId == null || !event.affectedUserIds.contains(userId)) return;
+    LocalNotification(
+      title: 'У вас новая задача',
+      body: 'Вам назначена задача — откройте раздел «Задачи».',
     ).show();
   });
 });

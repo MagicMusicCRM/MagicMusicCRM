@@ -99,21 +99,26 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     super.dispose();
   }
 
-  Future<void> _loadReports() async {
+  Future<void> _loadReports({bool background = false}) async {
     if (!_canSeeFinance) return;
-    setState(() {
-      _loading = true;
-      _loadError = null;
-      // Reset the extra analytics cards to their loading state.
-      _sources = null;
-      _sourcesError = false;
-      _dataQuality = null;
-      _dataQualityError = false;
-      _responsible = null;
-      _responsibleError = false;
-      _financeMonthly = null;
-      _financeMonthlyError = false;
-    });
+    // Background (realtime-driven) refresh keeps the current report on screen
+    // instead of blanking every tab to a full-screen spinner — otherwise a
+    // payment/lesson/expense event elsewhere throws the user out of the sub-tab.
+    if (!background) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+        // Reset the extra analytics cards to their loading state.
+        _sources = null;
+        _sourcesError = false;
+        _dataQuality = null;
+        _dataQualityError = false;
+        _responsible = null;
+        _responsibleError = false;
+        _financeMonthly = null;
+        _financeMonthlyError = false;
+      });
+    }
     try {
       final now = DateTime.now();
       final periodStart = DateTime(now.year, now.month - (_monthsBack - 1), 1);
@@ -216,7 +221,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       _realtimeDebounce?.cancel();
       _realtimeDebounce = Timer(const Duration(milliseconds: 800), () {
         if (!mounted || _loading) return;
-        _loadReports();
+        _loadReports(background: true);
       });
     });
     if (_loading) {

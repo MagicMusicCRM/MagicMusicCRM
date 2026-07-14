@@ -48,6 +48,8 @@ interface ChatRow {
   partner_avatar_file_id?: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  slug?: string | null;
+  is_system?: boolean | null;
   // Staff inbox fields (administration chats only)
   owner_first_name?: string | null;
   owner_last_name?: string | null;
@@ -81,6 +83,7 @@ interface MessageRow {
   attachment_mime_type?: string | null;
   attachment_size_bytes?: string | number | null;
   is_read: boolean | null;
+  reactions?: Array<{ emoji: string; count: number; reactedByMe: boolean }> | null;
 }
 
 interface ChatMemberRow {
@@ -150,80 +153,50 @@ export class MessengerService implements OnModuleInit {
     // Self-heal the durable default channels on boot. Idempotent and best-effort
     // (migration 0042 already seeds them; this covers fresh/partial databases).
     try {
-      await this.ensureDefaultChannels();
+      await this.ensureAnnouncementsChat();
     } catch (err) {
-      this.logger.warn(`ensureDefaultChannels failed: ${String(err)}`);
+      this.logger.warn(`ensureAnnouncementsChat failed: ${String(err)}`);
     }
   }
 
   /**
-   * Idempotently ensure the default system "Объявления" channel exists with the
-   * correct role permissions (read: all roles; write: admin/manager/system_admin).
-   * Safe to call repeatedly — never creates a duplicate channel.
+   * Idempotently ensure the system "Объявления" GROUP CHAT exists and that every
+   * active user is a member (only управляющий/директор may post — enforced in the
+   * policy). Migration 0058 converts the legacy channel into this chat; this
+   * self-heals fresh databases and backfills membership for imported/new users on
+   * every boot. Safe to call repeatedly.
    */
-  async ensureDefaultChannels(): Promise<void> {
+  async ensureAnnouncementsChat(): Promise<void> {
     await this.database.transaction(async (client) => {
-      // Adopt a pre-existing "Объявления" channel (created before the system-slug
-      // contract) instead of creating a duplicate.
-      await client.query(
-        `
-          update app.channels
-          set slug = $1, is_system = true, updated_at = now()
-          where id = (
-            select id from app.channels
-            where title = 'Объявления' and slug is null and deleted_at is null
-            order by created_at asc
-            limit 1
-          )
-          and not exists (
-            select 1 from app.channels where slug = $1 and deleted_at is null
-          )
-        `,
-        [MessengerService.announcementsSlug],
-      );
-
       const existing = await client.query<{ id: string }>(
-        `select id from app.channels where slug = $1 and deleted_at is null limit 1`,
+        `select id from app.chats where slug = $1 and deleted_at is null limit 1`,
         [MessengerService.announcementsSlug],
       );
-      let channelId = existing.rows[0]?.id;
-      if (!channelId) {
+      let chatId = existing.rows[0]?.id;
+      if (!chatId) {
         const inserted = await client.query<{ id: string }>(
           `
-            insert into app.channels (title, description, slug, is_system)
-            values ('Объявления', 'Школьные объявления', $1, true)
+            insert into app.chats (type, title, slug, is_system)
+            values ('group', 'Объявления', $1, true)
             returning id
           `,
           [MessengerService.announcementsSlug],
         );
-        channelId = inserted.rows[0].id;
+        chatId = inserted.rows[0].id;
       }
 
-      const permissions: Array<{
-        role: string;
-        canRead: boolean;
-        canWrite: boolean;
-      }> = [
-        { role: "client", canRead: true, canWrite: false },
-        { role: "teacher", canRead: true, canWrite: false },
-        { role: "admin", canRead: true, canWrite: true },
-        { role: "manager", canRead: true, canWrite: true },
-        { role: "system_admin", canRead: true, canWrite: true },
-      ];
-      for (const permission of permissions) {
-        await client.query(
-          `
-            insert into app.channel_permissions (channel_id, role, can_read, can_write)
-            select $1, $2::app.user_role, $3, $4
-            where not exists (
-              select 1 from app.channel_permissions cp
-              where cp.channel_id = $1 and cp.user_id is null
-                and cp.role = $2::app.user_role
-            )
-          `,
-          [channelId, permission.role, permission.canRead, permission.canWrite],
-        );
-      }
+      // Backfill membership for every active user (covers imported/new users).
+      await client.query(
+        `
+          insert into app.chat_members (chat_id, user_id, role)
+          select $1, u.id,
+            case when u.role in ('manager', 'director') then 'admin' else 'member' end
+          from app.users u
+          where u.deleted_at is null
+          on conflict (chat_id, user_id) do nothing
+        `,
+        [chatId],
+      );
     });
   }
 
@@ -240,6 +213,7 @@ export class MessengerService implements OnModuleInit {
           partner_p.avatar_file_id as partner_avatar_file_id,
           c.created_at, c.updated_at,
           (me_state.muted_until is not null and me_state.muted_until > now()) as is_muted,
+          c.slug, c.is_system,
           (
             select count(*)
             from app.messages unread
@@ -370,7 +344,21 @@ export class MessengerService implements OnModuleInit {
                 )
             )
             else true
-          end as is_read
+          end as is_read,
+          coalesce((
+            select json_agg(
+              json_build_object('emoji', r.emoji, 'count', r.cnt, 'reactedByMe', r.me)
+              order by r.first_at
+            )
+            from (
+              select emoji, count(*)::int as cnt,
+                     bool_or(user_id = $4) as me,
+                     min(created_at) as first_at
+              from app.message_reactions
+              where message_id = m.id
+              group by emoji
+            ) r
+          ), '[]'::json) as reactions
         from app.messages m
         left join app.users u on u.id = m.sender_id
         left join app.profiles p on p.user_id = u.id and p.deleted_at is null
@@ -632,6 +620,11 @@ export class MessengerService implements OnModuleInit {
     this.policy.assertCanManageGroup(actor, chat);
     if (chat.type !== "group")
       throw new NotFoundException("Группа не найдена.");
+    if (chat.isSystem) {
+      throw new ForbiddenException(
+        "Состав участников системного чата «Объявления» изменять нельзя.",
+      );
+    }
     await this.assertActiveUsers(dto.addUserIds ?? []);
 
     await this.database.transaction(async (client) => {
@@ -685,6 +678,11 @@ export class MessengerService implements OnModuleInit {
     if (chat.type !== "group") {
       throw new NotFoundException("Группа не найдена.");
     }
+    if (chat.isSystem) {
+      throw new ForbiddenException(
+        "Нельзя выйти из системного чата «Объявления».",
+      );
+    }
     if (chat.memberUserId !== actor.userId) {
       throw new NotFoundException("Группа не найдена.");
     }
@@ -715,7 +713,7 @@ export class MessengerService implements OnModuleInit {
           partner_p.avatar_file_id as partner_avatar_file_id,
           '0'::text as unread_count,
           (cm.muted_until is not null and cm.muted_until > now()) as is_muted,
-          c.created_at, c.updated_at
+          c.created_at, c.updated_at, c.slug, c.is_system
         from app.chats c
         left join app.chat_members cm on cm.chat_id = c.id and cm.user_id = $2 and cm.left_at is null
         left join app.messages lm on lm.id = c.last_message_id
@@ -1852,6 +1850,8 @@ export class MessengerService implements OnModuleInit {
         : null,
       folder: row.folder ?? null,
       archived: row.archived_at != null,
+      slug: row.slug ?? null,
+      isSystem: row.is_system == true,
     };
   }
 
@@ -1912,6 +1912,7 @@ export class MessengerService implements OnModuleInit {
       updatedAt: row.updated_at,
       deletedAt: row.deleted_at,
       isRead: row.is_read == true,
+      reactions: row.deleted_at ? [] : (row.reactions ?? []),
     };
   }
 

@@ -14,6 +14,8 @@ export interface ChatAccessRecord {
   memberUserId: string | null;
   memberRole: string | null;
   assignedToUserId?: string | null;
+  slug?: string | null;
+  isSystem?: boolean;
 }
 
 export interface ChannelAccessRecord {
@@ -34,6 +36,14 @@ export class MessengerPolicy {
 
   assertCanWriteChat(actor: ActorContext, chat: ChatAccessRecord): void {
     this.assertCanReadChat(actor, chat);
+    // «Объявления»: everyone is a member and can read, but only the
+    // управляющий/директор (and system_admin) may post.
+    if (chat.slug === 'announcements') {
+      if (isManagerRole(actor.role)) return;
+      throw new ForbiddenException(
+        'Писать в «Объявления» могут только управляющий и директор.'
+      );
+    }
     if (chat.type === 'administration' && this.isStaff(actor)) return;
     if (chat.memberUserId === actor.userId) return;
     throw new ForbiddenException('Недостаточно прав для отправки сообщения.');
@@ -116,7 +126,8 @@ export class MessengerPolicy {
     const result = await this.database.query<ChatAccessRecord>(
       `
         select c.id, c.type, cm.user_id as "memberUserId", cm.role as "memberRole",
-          c.assigned_to_user_id as "assignedToUserId"
+          c.assigned_to_user_id as "assignedToUserId",
+          c.slug, c.is_system as "isSystem"
         from app.chats c
         left join app.chat_members cm
           on cm.chat_id = c.id and cm.user_id = $2 and cm.left_at is null
