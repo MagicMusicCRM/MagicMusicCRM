@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
+import { LeadIntakePort } from "../common/lead-intake.port";
 import {
   ActorContext,
   canAssignRole,
@@ -474,7 +475,7 @@ interface FinanceReportRoomRow {
 }
 
 @Injectable()
-export class CrmService {
+export class CrmService implements LeadIntakePort {
   private readonly logger = new Logger(CrmService.name);
 
   constructor(

@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
-import { CrmService } from "../crm/crm.service";
+import { LeadIntakePort } from "../common/lead-intake.port";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { MessengerPolicy } from "./messenger.policy";
@@ -16,7 +16,7 @@ describe("MessengerService", () => {
     policy?: Partial<MessengerPolicy>;
     realtime?: Partial<RealtimeGateway>;
     realtimeBus?: Partial<RealtimeBus>;
-    crm?: Partial<CrmService>;
+    crm?: Partial<LeadIntakePort>;
   }) {
     const database = {
       query: jest.fn(),
@@ -57,7 +57,7 @@ describe("MessengerService", () => {
         .fn()
         .mockResolvedValue({ leadId: "l1", created: true }),
       ...overrides?.crm,
-    } as unknown as CrmService;
+    } as unknown as LeadIntakePort;
     const realtimeBus = {
       emitCrmChanged: jest.fn(),
       ...overrides?.realtimeBus,
@@ -142,7 +142,7 @@ describe("MessengerService", () => {
       { record: jest.fn() } as unknown as AuditService,
       policy,
       realtime,
-      { autoCreateLeadFromChat: jest.fn().mockResolvedValue({ leadId: "l1", created: true }) } as unknown as CrmService,
+      { autoCreateLeadFromChat: jest.fn().mockResolvedValue({ leadId: "l1", created: true }) } as unknown as LeadIntakePort,
       { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
     );
 

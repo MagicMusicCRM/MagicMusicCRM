@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuditModule } from '../audit/audit.module';
+import { LEAD_INTAKE_PORT } from '../common/lead-intake.port';
 import { JwtAuthGuard } from '../common/security/jwt-auth.guard';
 import { DatabaseModule } from '../db/database.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -21,7 +22,24 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
 @Module({
   imports: [AuditModule, DatabaseModule, JwtModule.register({}), NotificationsModule],
   controllers: [CrmController, LeadWebhookController],
-  providers: [CrmService, HomeworkService, ReferenceDataService, SubscriptionsService, RoomsService, BranchesService, GroupsService, PayrollService, CrmPolicy, HolliHopMetadataService, ScheduleSeriesWorker, JwtAuthGuard],
-  exports: [CrmService, CrmPolicy]
+  providers: [
+    CrmService,
+    HomeworkService,
+    ReferenceDataService,
+    SubscriptionsService,
+    RoomsService,
+    BranchesService,
+    GroupsService,
+    PayrollService,
+    CrmPolicy,
+    HolliHopMetadataService,
+    ScheduleSeriesWorker,
+    JwtAuthGuard,
+    // B2: bind the messenger's narrow lead-intake port to CrmService (its
+    // current implementer). When lead logic moves to LeadsService (B5), only
+    // this binding changes — messenger stays untouched.
+    { provide: LEAD_INTAKE_PORT, useExisting: CrmService },
+  ],
+  exports: [CrmService, CrmPolicy, LEAD_INTAKE_PORT]
 })
 export class CrmModule {}

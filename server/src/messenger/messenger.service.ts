@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,10 +15,10 @@ import {
   isManagerRole,
   isStaffRole,
 } from "../common/security/actor-context";
-import { CrmService } from "../crm/crm.service";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { ChannelPermissionDto, UpsertChannelDto } from "./dto/channel.dto";
+import { LEAD_INTAKE_PORT, LeadIntakePort } from "../common/lead-intake.port";
 import { CreateChannelPostDto } from "./dto/create-channel-post.dto";
 import { CreateDirectChatDto } from "./dto/create-direct-chat.dto";
 import { CreateGroupChatDto } from "./dto/create-group-chat.dto";
@@ -145,7 +146,7 @@ export class MessengerService implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly policy: MessengerPolicy,
     private readonly realtime: RealtimeGateway,
-    private readonly crm: CrmService,
+    @Inject(LEAD_INTAKE_PORT) private readonly leadIntake: LeadIntakePort,
     private readonly realtimeBus: RealtimeBus,
   ) {}
 
@@ -516,7 +517,9 @@ export class MessengerService implements OnModuleInit {
       }
     }
     if (chat.type === "administration" && !isStaffRole(actor.role)) {
-      void this.crm.autoCreateLeadFromChat(actor, actor.userId).catch(() => undefined);
+      void this.leadIntake
+        .autoCreateLeadFromChat(actor, actor.userId)
+        .catch(() => undefined);
     }
     return payload;
   }
