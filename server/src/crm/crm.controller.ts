@@ -15,6 +15,7 @@ import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { CrmService } from "./crm.service";
 import { HomeworkService } from "./homework.service";
+import { ReferenceDataService } from "./reference-data.service";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
@@ -85,6 +86,7 @@ export class CrmController {
   constructor(
     private readonly crm: CrmService,
     private readonly homework: HomeworkService,
+    private readonly referenceData: ReferenceDataService,
   ) {}
 
   @Get("me")
@@ -494,22 +496,22 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: CrmListQuery,
   ) {
-    return this.crm.listLeadStatuses(actor, query);
+    return this.referenceData.listLeadStatuses(actor, query);
   }
 
   @Get("loss-reasons")
   listLossReasons(@CurrentActor() actor: ActorContext) {
-    return this.crm.listLossReasons(actor);
+    return this.referenceData.listLossReasons(actor);
   }
 
   @Get("lead-sources")
   listLeadSources(@CurrentActor() actor: ActorContext) {
-    return this.crm.listLeadSources(actor);
+    return this.referenceData.listLeadSources(actor);
   }
 
   @Get("disciplines")
   listDisciplines(@CurrentActor() actor: ActorContext) {
-    return this.crm.listDisciplines(actor);
+    return this.referenceData.listDisciplines(actor);
   }
 
   @Get("branches/:branchId/disciplines")
@@ -517,7 +519,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("branchId", ParseUUIDPipe) branchId: string,
   ) {
-    return this.crm.listBranchDisciplines(actor, branchId);
+    return this.referenceData.listBranchDisciplines(actor, branchId);
   }
 
   @Post("disciplines")
@@ -525,7 +527,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreateDisciplineDto,
   ) {
-    return this.crm.createDiscipline(actor, dto);
+    return this.referenceData.createDiscipline(actor, dto);
   }
 
   @Post("loss-reasons")
@@ -533,7 +535,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreateLossReasonDto,
   ) {
-    return this.crm.createLossReason(actor, dto);
+    return this.referenceData.createLossReason(actor, dto);
   }
 
   @Post("branches/:branchId/disciplines")
@@ -542,7 +544,7 @@ export class CrmController {
     @Param("branchId", ParseUUIDPipe) branchId: string,
     @Body() dto: UpsertBranchDisciplineDto,
   ) {
-    return this.crm.assignBranchDiscipline(actor, branchId, dto);
+    return this.referenceData.assignBranchDiscipline(actor, branchId, dto);
   }
 
   @Patch("branches/:branchId/disciplines/order")
@@ -551,27 +553,27 @@ export class CrmController {
     @Param("branchId", ParseUUIDPipe) branchId: string,
     @Body() dto: ReorderBranchDisciplinesDto,
   ) {
-    return this.crm.reorderBranchDisciplines(actor, branchId, dto);
+    return this.referenceData.reorderBranchDisciplines(actor, branchId, dto);
   }
 
   @Get("hollihop/disciplines")
   listHolliHopDisciplines(@CurrentActor() actor: ActorContext) {
-    return this.crm.listHolliHopDisciplines(actor);
+    return this.referenceData.listHolliHopDisciplines(actor);
   }
 
   @Get("hollihop/levels")
   listHolliHopLevels(@CurrentActor() actor: ActorContext) {
-    return this.crm.listHolliHopLevels(actor);
+    return this.referenceData.listHolliHopLevels(actor);
   }
 
   @Get("hollihop/categories")
   listHolliHopCategories(@CurrentActor() actor: ActorContext) {
-    return this.crm.listHolliHopCategories(actor);
+    return this.referenceData.listHolliHopCategories(actor);
   }
 
   @Get("hollihop/lead-statuses")
   listHolliHopLeadStatuses(@CurrentActor() actor: ActorContext) {
-    return this.crm.listHolliHopLeadStatuses(actor);
+    return this.referenceData.listHolliHopLeadStatuses(actor);
   }
 
   @Post("lead-statuses")
@@ -579,7 +581,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: UpsertLeadStatusDto,
   ) {
-    return this.crm.createLeadStatus(actor, dto);
+    return this.referenceData.createLeadStatus(actor, dto);
   }
 
   @Patch("lead-statuses/order")
@@ -587,7 +589,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: { statusIds: string[] },
   ) {
-    return this.crm.reorderLeadStatuses(actor, dto);
+    return this.referenceData.reorderLeadStatuses(actor, dto);
   }
 
   @Delete("lead-statuses/:id")
@@ -595,7 +597,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.deleteLeadStatus(actor, id);
+    return this.referenceData.deleteLeadStatus(actor, id);
   }
 
   @Get("lessons")
