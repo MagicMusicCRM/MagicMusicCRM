@@ -20,6 +20,7 @@ import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
 import { TasksService } from "./tasks.service";
 import { AttendanceService } from "./attendance.service";
+import { StaffService } from "./staff.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -99,6 +100,7 @@ export class CrmController {
     private readonly finance: FinanceService,
     private readonly tasks: TasksService,
     private readonly attendance: AttendanceService,
+    private readonly staff: StaffService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -374,7 +376,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: StaffListQuery,
   ) {
-    return this.crm.listStaff(actor, query);
+    return this.staff.listStaff(actor, query);
   }
 
   @Post("staff")
@@ -382,7 +384,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreateStaffDto,
   ) {
-    return this.crm.createStaff(actor, dto);
+    return this.staff.createStaff(actor, dto);
   }
 
   @Patch("staff/:id")
@@ -391,7 +393,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateStaffDto,
   ) {
-    return this.crm.updateStaff(actor, id, dto);
+    return this.staff.updateStaff(actor, id, dto);
   }
 
   @Get("branches")

@@ -15,6 +15,7 @@ import { SubscriptionsService } from './subscriptions.service';
 import { FinanceService } from './finance.service';
 import { TasksService } from './tasks.service';
 import { AttendanceService } from './attendance.service';
+import { StaffService } from './staff.service';
 import { RoomsService } from './rooms.service';
 import { BranchesService } from './branches.service';
 import { GroupsService } from './groups.service';
@@ -33,6 +34,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     FinanceService,
     TasksService,
     AttendanceService,
+    StaffService,
     RoomsService,
     BranchesService,
     GroupsService,
