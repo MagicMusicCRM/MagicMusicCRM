@@ -4,6 +4,7 @@ import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { CrmService } from "../crm/crm.service";
 import { CrmPolicy } from "../crm/crm.policy";
+import { branchIdExpr } from "../crm/branch-scope";
 
 @Injectable()
 export class AnalyticsService {
@@ -98,9 +99,6 @@ export class AnalyticsService {
     // KVA-239: выручка по филиалам — общешкольные финансы.
     this.policy.assertCanReadSchoolFinance(actor);
     const { from, to } = this.rangeBounds(query);
-    // Mirror of CrmService.branchIdExpr (column preferred, custom_data fallback).
-    const branchOf = (a: string) =>
-      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
     const result = await this.database.query<{
       branch_id: string;
       name: string;
@@ -113,12 +111,12 @@ export class AnalyticsService {
          (select coalesce(sum(p.amount), 0) from app.payments p
             join app.students s on s.id = p.student_id and s.deleted_at is null
            where p.deleted_at is null and p.payment_date >= $1::timestamptz and p.payment_date < $2::timestamptz
-             and ${branchOf("s")} = b.id::text) as revenue,
+             and ${branchIdExpr("s")} = b.id::text) as revenue,
          (select count(*) from app.students s
-           where s.deleted_at is null and s.status = 'active' and ${branchOf("s")} = b.id::text) as active_students,
+           where s.deleted_at is null and s.status = 'active' and ${branchIdExpr("s")} = b.id::text) as active_students,
          (select count(*) from app.leads l
            where l.deleted_at is null and l.created_at >= $1::timestamptz and l.created_at < $2::timestamptz
-             and ${branchOf("l")} = b.id::text) as new_leads,
+             and ${branchIdExpr("l")} = b.id::text) as new_leads,
          (select count(*) from app.lessons les
            where les.deleted_at is null and les.status in ('completed', 'done')
              and les.scheduled_at >= $1::timestamptz and les.scheduled_at < $2::timestamptz
@@ -191,8 +189,6 @@ export class AnalyticsService {
   async debts(actor: ActorContext, query: { branchId?: string }) {
     // KVA-239: суммы долгов по школе — общешкольные финансы.
     this.policy.assertCanReadSchoolFinance(actor);
-    const branchOf = (a: string) =>
-      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
     const result = await this.database.query<{ bucket: string; students: string; amount: string }>(
       `select
          case
@@ -208,7 +204,7 @@ export class AnalyticsService {
       where ep.status in ('pending', 'open')
         and ep.due_date is not null
         and ep.due_date <= now()::date
-        and ($1::uuid is null or ${branchOf("s")} = $1::text)
+        and ($1::uuid is null or ${branchIdExpr("s")} = $1::text)
       group by 1`,
       [query.branchId ?? null],
     );
@@ -219,7 +215,7 @@ export class AnalyticsService {
         where ep.status in ('pending', 'open')
           and ep.due_date is not null
           and ep.due_date <= now()::date
-          and ($1::uuid is null or ${branchOf("s")} = $1::text)`,
+          and ($1::uuid is null or ${branchIdExpr("s")} = $1::text)`,
       [query.branchId ?? null],
     );
     const order = ["0-7", "8-14", "15-30", "30+"];
@@ -239,8 +235,6 @@ export class AnalyticsService {
   async revenueForecast(actor: ActorContext, query: { branchId?: string }) {
     // KVA-239: прогноз выручки — общешкольные финансы.
     this.policy.assertCanReadSchoolFinance(actor);
-    const branchOf = (a: string) =>
-      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
     const result = await this.database.query<{ next7: string; next14: string; next30: string }>(
       `select
          coalesce(sum(ep.amount) filter (where ep.due_date >= now()::date and ep.due_date <= now()::date + 7), 0) as next7,
@@ -249,7 +243,7 @@ export class AnalyticsService {
        from app.expected_payments ep
        join app.students s on s.id = ep.student_id and s.deleted_at is null
       where ep.status in ('pending', 'open')
-        and ($1::uuid is null or ${branchOf("s")} = $1::text)`,
+        and ($1::uuid is null or ${branchIdExpr("s")} = $1::text)`,
       [query.branchId ?? null],
     );
     const row = result.rows[0];
@@ -259,8 +253,6 @@ export class AnalyticsService {
   async churnRisk(actor: ActorContext, query: { inactiveDays?: number | string; branchId?: string }) {
     this.policy.assertManagerOnly(actor);
     const inactiveDays = Number(query.inactiveDays ?? 21);
-    const branchOf = (a: string) =>
-      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
     const result = await this.database.query<{
       student_id: string;
       name: string;
@@ -289,7 +281,7 @@ export class AnalyticsService {
          left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
          left join last_lesson ll on ll.student_id = s.id
         where s.deleted_at is null and s.status = 'active'
-          and ($2::uuid is null or ${branchOf("s")} = $2::text)
+          and ($2::uuid is null or ${branchIdExpr("s")} = $2::text)
           and (ll.last_completed_at is null
                or ll.last_completed_at < now() - make_interval(days => $1::int))
         order by ll.last_completed_at asc nulls first
@@ -417,8 +409,6 @@ export class AnalyticsService {
 
   async dataQuality(actor: ActorContext, query: { branchId?: string }) {
     this.policy.assertManagerOnly(actor);
-    const branchOf = (a: string) =>
-      `coalesce(${a}.branch_id::text, ${a}.custom_data->>'branchId', ${a}.custom_data->>'branch_id')`;
 
     const leadsResult = await this.database.query<{
       total: string;
@@ -440,7 +430,7 @@ export class AnalyticsService {
       missing_discipline: string;
     }>(
       `select count(*) as total,
-              count(*) filter (where ${branchOf("s")} is null) as missing_branch,
+              count(*) filter (where ${branchIdExpr("s")} is null) as missing_branch,
               count(*) filter (
                 where not exists (
                   select 1 from app.student_disciplines sd
@@ -449,7 +439,7 @@ export class AnalyticsService {
               ) as missing_discipline
          from app.students s
         where s.deleted_at is null
-          and ($1::uuid is null or ${branchOf("s")} = $1::text)`,
+          and ($1::uuid is null or ${branchIdExpr("s")} = $1::text)`,
       [query.branchId ?? null],
     );
 
