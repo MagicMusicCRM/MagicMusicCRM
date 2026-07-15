@@ -16,11 +16,11 @@ import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
 import 'manage_statuses_dialog.dart';
 import 'lead_dialogs.dart';
+import 'lead_board_filters.dart';
 
 part 'leads_widget_widgets.dart';
 
@@ -558,277 +558,30 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     }
   }
 
-  // Desktop inline filters: drops BELOW the «Фильтры» button (not a side drawer),
-  // controls wrap onto multiple rows (never one long horizontal strip), and each
-  // edit applies live through the same [_setFilters] path the drawer used.
-  Widget _buildInlineFilterPanel() {
-    Widget quickChip(String value, String chipLabel) => ChoiceChip(
-      label: Text(chipLabel),
-      selected: _filters.quick == value,
-      onSelected: (_) => _setFilters(_filters.copyWith(quick: value)),
-    );
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColor.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColor.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              quickChip('all', 'Все'),
-              quickChip('active', 'В работе'),
-              quickChip('deferred', 'Отложенные'),
-              quickChip('processed', 'Обработанные'),
-              FilterChip(
-                label: const Text('Есть задачи'),
-                selected: _filters.openTasks,
-                onSelected: (v) => _setFilters(_filters.copyWith(openTasks: v)),
-              ),
-              _filterDropdown(
-                width: 200,
-                label: 'Филиал',
-                value: _filters.branchId,
-                options: _branches,
-                onChanged: (v) =>
-                    _setFilters(_filters.copyWith(branchId: v ?? '')),
-              ),
-              _filterDropdown(
-                width: 200,
-                label: 'Статус',
-                value: _filters.statusId,
-                options: _activeStatuses
-                    .map((s) => {'id': s.$1, 'name': s.$2})
-                    .toList(),
-                onChanged: (v) =>
-                    _setFilters(_filters.copyWith(statusId: v ?? '')),
-              ),
-              _filterDropdown(
-                width: 200,
-                label: 'Направление',
-                value: _filters.discipline,
-                options: _disciplines,
-                valueField: 'name',
-                onChanged: (v) =>
-                    _setFilters(_filters.copyWith(discipline: v ?? '')),
-              ),
-              _filterDropdown(
-                width: 200,
-                label: 'Уровень',
-                value: _filters.level,
-                options: _levels,
-                valueField: 'name',
-                onChanged: (v) =>
-                    _setFilters(_filters.copyWith(level: v ?? '')),
-              ),
-              _filterDropdown(
-                width: 200,
-                label: 'Категория',
-                value: _filters.category,
-                options: _categories,
-                valueField: 'name',
-                onChanged: (v) =>
-                    _setFilters(_filters.copyWith(category: v ?? '')),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: () =>
-                    _setFilters(LeadBoardFilters(q: _searchCtrl.text.trim())),
-                icon: const Icon(Icons.restart_alt_rounded, size: 18),
-                label: const Text('Сбросить'),
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: () => setState(() => _filtersOpen = false),
-                child: const Text('Свернуть'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildInlineFilterPanel() => LeadsInlineFilterPanel(
+    filters: _filters,
+    searchText: _searchCtrl.text.trim(),
+    branches: _branches,
+    statuses: _activeStatuses,
+    disciplines: _disciplines,
+    levels: _levels,
+    categories: _categories,
+    onApply: _setFilters,
+    onCollapse: () => setState(() => _filtersOpen = false),
+  );
 
-  /// Opens the secondary filters in a v7 right-side slide-out drawer.
-  ///
-  /// The drawer edits a local *draft* copy of [_filters]; nothing touches the
-  /// board until «Применить», which routes through the exact same
-  /// [_setFilters] path the inline controls used — so the fetched/shown leads
-  /// for a given combination are byte-for-byte identical to before. «Сбросить»
-  /// returns the draft to defaults while preserving the active quick-search.
-  Future<void> _openFiltersDrawer() async {
-    // Seed the draft from the live filters, keeping the current search text so
-    // applying the drawer never clobbers the inline quick search.
-    var draft = _filters.copyWith(q: _searchCtrl.text.trim());
+  Future<void> _openFiltersDrawer() => openLeadsFilterDrawer(
+    context,
+    filters: _filters,
+    searchText: _searchCtrl.text.trim(),
+    branches: _branches,
+    statuses: _activeStatuses,
+    disciplines: _disciplines,
+    levels: _levels,
+    categories: _categories,
+    onApply: _setFilters,
+  );
 
-    final applied = await showMagicDrawer<bool>(
-      context,
-      title: 'Фильтры',
-      builder: (drawerContext) {
-        return StatefulBuilder(
-          builder: (drawerContext, setDrawerState) {
-            void update(LeadBoardFilters next) =>
-                setDrawerState(() => draft = next);
-
-            Widget section(String label, Widget child) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: AppColor.text2,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                child,
-                const SizedBox(height: AppSpace.lg),
-              ],
-            );
-
-            Widget quickChip(String value, String chipLabel) => ChoiceChip(
-              label: Text(chipLabel),
-              selected: draft.quick == value,
-              onSelected: (_) => update(draft.copyWith(quick: value)),
-            );
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                section(
-                  'Быстрый фильтр',
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      quickChip('all', 'Все'),
-                      quickChip('active', 'В работе'),
-                      quickChip('deferred', 'Отложенные'),
-                      quickChip('processed', 'Обработанные'),
-                    ],
-                  ),
-                ),
-                section(
-                  'Задачи',
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: FilterChip(
-                      label: const Text('Есть задачи'),
-                      selected: draft.openTasks,
-                      onSelected: (selected) =>
-                          update(draft.copyWith(openTasks: selected)),
-                    ),
-                  ),
-                ),
-                section(
-                  'Филиал',
-                  _filterDropdown(
-                    width: double.infinity,
-                    label: 'Филиал',
-                    value: draft.branchId,
-                    options: _branches,
-                    onChanged: (value) =>
-                        update(draft.copyWith(branchId: value ?? '')),
-                  ),
-                ),
-                section(
-                  'Статус',
-                  _filterDropdown(
-                    width: double.infinity,
-                    label: 'Статус',
-                    value: draft.statusId,
-                    options: _activeStatuses
-                        .map((s) => {'id': s.$1, 'name': s.$2})
-                        .toList(),
-                    onChanged: (value) =>
-                        update(draft.copyWith(statusId: value ?? '')),
-                  ),
-                ),
-                section(
-                  'Направление',
-                  _filterDropdown(
-                    width: double.infinity,
-                    label: 'Направление',
-                    value: draft.discipline,
-                    options: _disciplines,
-                    valueField: 'name',
-                    onChanged: (value) =>
-                        update(draft.copyWith(discipline: value ?? '')),
-                  ),
-                ),
-                section(
-                  'Уровень',
-                  _filterDropdown(
-                    width: double.infinity,
-                    label: 'Уровень',
-                    value: draft.level,
-                    options: _levels,
-                    valueField: 'name',
-                    onChanged: (value) =>
-                        update(draft.copyWith(level: value ?? '')),
-                  ),
-                ),
-                section(
-                  'Категория',
-                  _filterDropdown(
-                    width: double.infinity,
-                    label: 'Категория',
-                    value: draft.category,
-                    options: _categories,
-                    valueField: 'name',
-                    onChanged: (value) =>
-                        update(draft.copyWith(category: value ?? '')),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-      actions: [
-        OutlinedButton(
-          onPressed: () {
-            // Reset the secondary filters to defaults, but keep the active
-            // quick-search text the toolbar field still shows.
-            draft = LeadBoardFilters(q: _searchCtrl.text.trim());
-            _setFilters(draft);
-            Navigator.of(context).maybePop(false);
-          },
-          child: const Text('Сбросить'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).maybePop(true),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColor.gold,
-            foregroundColor: AppColor.onGold,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.control),
-            ),
-          ),
-          child: const Text('Применить'),
-        ),
-      ],
-    );
-
-    // Commit the draft only on «Применить»; «Сбросить» already applied above.
-    if (applied == true) {
-      _setFilters(draft);
-    }
-  }
 
 
   StatusRecord _statusFromColumn(Map<String, dynamic> column) {
@@ -940,58 +693,6 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     );
   }
 
-  Widget _filterDropdown({
-    required double width,
-    required String label,
-    required String value,
-    required List<Map<String, dynamic>> options,
-    required ValueChanged<String?> onChanged,
-    String valueField = 'id',
-  }) {
-    final normalizedValue = value.isEmpty ? '' : value;
-    final seen = <String>{};
-    final optionItems = options
-        .map((item) {
-          final optionValue = item[valueField]?.toString() ?? '';
-          final optionLabel =
-              item['name']?.toString() ??
-              item['label']?.toString() ??
-              optionValue;
-          return (optionValue, optionLabel);
-        })
-        .where((item) => item.$1.isNotEmpty && seen.add(item.$1))
-        .toList();
-    final hasSelected =
-        normalizedValue.isEmpty ||
-        optionItems.any((item) => item.$1 == normalizedValue);
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: SizedBox(
-        width: width,
-        child: DropdownButtonFormField<String>(
-          key: ValueKey('$label:$normalizedValue'),
-          initialValue: normalizedValue,
-          isExpanded: true,
-          decoration: InputDecoration(labelText: label, isDense: true),
-          items: [
-            const DropdownMenuItem(value: '', child: Text('Все')),
-            if (!hasSelected)
-              DropdownMenuItem(
-                value: normalizedValue,
-                child: Text(normalizedValue, overflow: TextOverflow.ellipsis),
-              ),
-            ...optionItems.map(
-              (item) => DropdownMenuItem(
-                value: item.$1,
-                child: Text(item.$2, overflow: TextOverflow.ellipsis),
-              ),
-            ),
-          ],
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
