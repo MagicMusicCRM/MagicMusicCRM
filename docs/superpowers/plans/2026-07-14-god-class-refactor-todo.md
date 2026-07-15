@@ -13,6 +13,45 @@ Flutter leads/schedule доведены до ядра, client_card/messenger —
 
 ---
 
+## 🎉 ИТОГ: ВСЕ God-классы Flutter растворены — ноль файлов > 800 строк
+
+Проверка: `find lib -name '*.dart' | xargs wc -l | awk '$1>800'` → пусто.
+Весь проект `flutter analyze` зелёный (кроме 3 пред-существующих warning'ов в
+`convert_lead_dialog_test.dart`, не связаны). F1 (messenger) и F3 (client_card)
++ все интерактивные ядра сделаны БЕЗ рискового Riverpod-hoist — техникой
+`_emitState` (см. ниже), с near-zero рантайм-риском и байт-идентичными телами.
+
+**Ключевая техника — `_emitState` + extension-on-State (обходит Riverpod-hoist):**
+Блокер выноса методов State в `extension …` — вызов `@protected setState`
+(`invalid_use_of_protected_member`). Решение: заменить `setState(fn)` →
+`_emitState(fn)` (хелпер `if (mounted) setState(fn)` в самом State) — faithful,
+поведение сохранено (проверить, что нет локального `setState`-параметра у
+`StatefulBuilder` — там имя другое). После этого ВСЕ методы (включая context/
+dialog) выносятся в `extension _X on _State` в part-файлы; `context`/`mounted` —
+обычные геттеры State (не @protected), резолвятся из extension. Ловушки:
+(1) `static const` члены State → из extension обязательно `_State.name`
+(qualified); (2) инлайновые поля среди методов → вернуть в main (extension не
+держит поля); (3) `@override` lifecycle (initState/dispose/build/didUpdate/
+wantKeepAlive) — ТОЛЬКО в main; (4) публичный метод, ставший unused в приватном
+extension → был dead code (напр. `convertLeadToStudent`).
+
+Итоговые интерактивные ядра (было → main, все части < 800):
+- `messenger_screen` 3364 → 298 (+5 ext: actions/realtime/messaging/builders_a/b) `6e5d2fb5`
+- `client_card` 3663 → 430 (+5 ext: data/tabs_a/tabs_b/student/editors) `e458f7c9`
+- `schedule_widget` 1995 → 242 (+3 ext)
+- `schedule_day_canvas` 1070 → 315 (+logic ext +widgets part)
+- `user_roles_widget` 999 → 530 (+actions ext +widgets part)
+- `leads_widget` 859 → 163 (+actions ext)
+
+**Рантайм-верификация (analyze НЕ проверяет) — прогнать вручную:** messenger см.
+`2026-07-15-messenger-controller-hoist-spec.md` чек-лист; client_card —
+редактирование+save во всех режимах (lead/student/converted), ledger topup/refund,
+семья, задачи/ДЗ, realtime; schedule day-view — drag/resize/move/undo; leads —
+kanban drag, move, search, convert. Ядра остались `(Consumer)StatefulWidget` —
+опциональный Riverpod-Notifier hoist больше не нужен для DoD (< 800 достигнут).
+
+---
+
 ## ✅ СДЕЛАНО (после создания этого файла)
 
 ### F-service — split `MagicCrmService` (2987 строк) — DONE `e7143151`
