@@ -103,7 +103,43 @@ non-contiguous сборку main (init-методы + build + `}`, выреза�
 
 ---
 
-## F0 — типизированные модели (cross-cutting, фундамент)
+## F0 — типизированные модели (cross-cutting, фундамент) — НАЧАТО
+
+### ✅ Payment (первый домен, эталон паттерна) — DONE `ee0d9d4f`
+`Payment` (`lib/core/models/payment.dart`) — типизированный view над legacy-map
+формой (выход `_legacyPayment`). Типизированы 3 сервис-метода (listPayments/
+listPaymentsWithTotal/createPayment → `Payment`), все консьюмеры переведены с
+`payment['key']` на геттеры: finance_widget, client_dashboard_screen, client_card
+(_paymentsView). Whole-project analyze зелёный; сервис-тест обновлён на типизир.
+API, **все 43 теста magic_crm_service проходят** (рантайм-проверка парсинга).
+
+**Паттерн F0 (эталон для следующих доменов — lead/student/lesson/family/…):**
+1. Источник формы — `_legacy<Domain>` маппер в `magic_crm_service_mappers.dart`
+   (snake_case ключи, которые видят виджеты), НЕ сырой backend-DTO.
+2. Модель = тонкий типизированный view над map: геттеры повторяют ТОЧНЫЕ
+   выражения, которые виджеты уже применяли к map (это делает миграцию
+   behaviour-preserving). Спорные места:
+   - числа/деньги: `num get amount` (лениво парсит num|строку) для вычислений +
+     `Object? get amountRaw` для СЫРОЙ интерполяции `'${x}'` (иначе дрейф формата
+     "1500.00"→"1500"); сверить каждый сайт.
+   - `a ?? b` цепочки → convenience-геттер (`methodLabel`, `note`).
+3. Типизировать сервис-методы, которые возвращают ЧИСТЫЙ список домена (не
+   вложенный в getStudentCard/getMySummary — те оставить map на этот домен).
+4. Перевести консьюмеры + обновить unit-тесты сервиса на типизир. API; прогнать
+   `flutter test test/core/services/magic_crm_service_test.dart` (рантайм-проверка).
+**Границы (ripple):** менять return type сервиса → все call-sites; провайдеры с
+явным `FutureProvider<List<Map...>>` → перетипизировать. getMySummary/getStudentCard
+вложенные списки оставлять map, пока не дойдёт очередь до их домена целиком.
+
+### Остальные домены (не начаты) — по паттерну выше
+lead (18 полей, много консьюмеров) / student (23) / lesson (34) / task (34) /
+comment (13) / subscription (13) / family (6) / lead-status (7) / expected-payment
+(12) / student-balance (10). Начинать с бол­ее изолированных; lesson/task самые
+крупные. Оценка риска: домены со ЧИСЛАМИ/деньгами и raw-интерполяцией — самые
+тонкие (нужен `*Raw` геттер + сверка формата); строковые домены (family/status) —
+низкий риск.
+
+### ~~F0 — исходное описание~~
 
 **Что:** заменить `Map<String, dynamic>` на типизированные модели, домен за доменом,
 синхронно с backend-DTO. Только в messenger ~246 обращений `['key']`.
