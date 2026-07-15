@@ -9,6 +9,7 @@ import { LinkProfileCrmDto } from './dto/link-profile-crm.dto';
 import { ListProfilesQuery } from './dto/list-profiles.query';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { ProfileLinkingService } from './profile-linking.service';
 import { ProfileService } from './profile.service';
 
 @UseGuards(JwtAuthGuard)
@@ -30,7 +31,10 @@ export class ProfileController {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('admin/profiles')
 export class AdminProfilesController {
-  constructor(private readonly profiles: ProfileService) {}
+  constructor(
+    private readonly profiles: ProfileService,
+    private readonly linking: ProfileLinkingService,
+  ) {}
 
   @Get()
   @Roles('manager', 'director', 'admin', 'system_admin')
@@ -78,7 +82,7 @@ export class AdminProfilesController {
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string
   ) {
-    return this.profiles.listLinkCandidates(actor, id);
+    return this.linking.listLinkCandidates(actor, id);
   }
 
   @Post(':id/links/auto')
@@ -87,7 +91,7 @@ export class AdminProfilesController {
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string
   ) {
-    return this.profiles.autoLinkByPhone(actor, id);
+    return this.linking.autoLinkByPhone(actor, id);
   }
 
   @Post(':id/links')
@@ -97,7 +101,7 @@ export class AdminProfilesController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: LinkProfileCrmDto
   ) {
-    return this.profiles.linkCrmEntity(actor, id, dto);
+    return this.linking.linkCrmEntity(actor, id, dto);
   }
 
   @Patch(':id/role')

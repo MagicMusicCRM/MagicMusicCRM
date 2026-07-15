@@ -7,6 +7,7 @@ function createService(overrides: {
   database?: Record<string, jest.Mock>;
   audit?: Record<string, jest.Mock>;
   policy?: Record<string, jest.Mock>;
+  linking?: Record<string, jest.Mock>;
 } = {}) {
   const database = {
     query: jest.fn(),
@@ -23,11 +24,22 @@ function createService(overrides: {
     ...overrides.policy,
   };
 
+  const linking = {
+    linkProfileByPhone: jest.fn().mockResolvedValue({}),
+    ...overrides.linking,
+  };
+
   return {
-    service: new ProfileService(database as any, audit as any, policy as any),
+    service: new ProfileService(
+      database as any,
+      audit as any,
+      policy as any,
+      linking as any,
+    ),
     database,
     audit,
     policy,
+    linking,
   };
 }
 
