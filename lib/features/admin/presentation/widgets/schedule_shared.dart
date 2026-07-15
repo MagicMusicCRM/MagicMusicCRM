@@ -57,3 +57,9 @@ List<String> conflictTypes(dynamic value) {
   if (value is! List) return const [];
   return value.map((item) => item.toString()).toList();
 }
+
+/// Top-level schedule view mode.
+enum ScheduleView { year, month, day }
+
+/// Day-view grouping mode.
+enum DayViewMode { byRoom, byTeacher }

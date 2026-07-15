@@ -17,6 +17,7 @@ import 'schedule_legends.dart';
 import 'schedule_shared.dart';
 import 'schedule_year_view.dart';
 import 'schedule_month_view.dart';
+import 'schedule_day_mode_toggle.dart';
 
 part 'schedule_widget_widgets.dart';
 
@@ -35,9 +36,7 @@ const List<Color> _roomColors = [
 ];
 
 // ── Enums ───────────────────────────────────────────────────────────────────
-enum ScheduleView { year, month, day }
 
-enum DayViewMode { byRoom, byTeacher }
 
 // ── Russian month names ─────────────────────────────────────────────────────
 
@@ -883,7 +882,15 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           if (!firstLoad) _buildViewSwitcher(),
           if (!firstLoad) ...[
             _buildBranchSelector(),
-            if (_currentView == ScheduleView.day) _buildDayViewModeToggle(),
+            if (_currentView == ScheduleView.day)
+              ScheduleDayModeToggle(
+                mode: _dayViewMode,
+                onModeChanged: (m) {
+                  if (_dayViewMode == m) return;
+                  setState(() => _dayViewMode = m);
+                  _fetchAll();
+                },
+              ),
           ],
           _buildDateNavigation(),
           if (!firstLoad && _currentView == ScheduleView.day) ...[
@@ -1230,67 +1237,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   // ── Day-view mode toggle (По аудиториям / По педагогу) ────────────────────
-  Widget _buildDayViewModeToggle() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      child: Row(
-        children: [
-          _buildToggleButton(
-            'По аудиториям',
-            _dayViewMode == DayViewMode.byRoom,
-            () {
-              if (_dayViewMode == DayViewMode.byRoom) return;
-              setState(() => _dayViewMode = DayViewMode.byRoom);
-              // The matrix is grouped server-side by mode, so re-fetch to avoid
-              // showing the previous grouping's (stale) payload.
-              _fetchAll();
-            },
-          ),
-          SizedBox(width: 8),
-          _buildToggleButton(
-            'По педагогу',
-            _dayViewMode == DayViewMode.byTeacher,
-            () {
-              if (_dayViewMode == DayViewMode.byTeacher) return;
-              setState(() => _dayViewMode = DayViewMode.byTeacher);
-              _fetchAll();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToggleButton(String label, bool isActive, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive
-              ? Theme.of(context).colorScheme.surface
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive
-                ? Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80)
-                : Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(40),
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive
-                ? Theme.of(context).colorScheme.onSurface
-                : Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 13,
-            fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
-          ),
-        ),
-      ),
-    );
-  }
 
   // ── Date navigation ───────────────────────────────────────────────────────
   Widget _buildDateNavigation() {
