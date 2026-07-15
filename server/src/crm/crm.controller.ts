@@ -27,6 +27,7 @@ import { TimelineService } from "./timeline.service";
 import { DashboardService } from "./dashboard.service";
 import { ClientLinkingService } from "./client-linking.service";
 import { FamilyService } from "./family.service";
+import { DuplicatesService } from "./duplicates.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -113,6 +114,7 @@ export class CrmController {
     private readonly dashboard: DashboardService,
     private readonly clientLinking: ClientLinkingService,
     private readonly family: FamilyService,
+    private readonly duplicates: DuplicatesService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -302,7 +304,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: DuplicateCandidatesQuery,
   ) {
-    return this.crm.listDuplicateCandidates(actor, query);
+    return this.duplicates.listDuplicateCandidates(actor, query);
   }
 
   @Patch("duplicates/:id")
@@ -311,7 +313,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: DuplicateDecisionDto,
   ) {
-    return this.crm.decideDuplicateCandidate(actor, id, dto);
+    return this.duplicates.decideDuplicateCandidate(actor, id, dto);
   }
 
   @Get("activity")
