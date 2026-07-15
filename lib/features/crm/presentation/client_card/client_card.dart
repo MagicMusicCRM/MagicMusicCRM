@@ -19,6 +19,8 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'client_card_aggregation.dart';
+import 'client_card_sheets.dart';
+import 'client_card_ui.dart';
 import 'student_schedule_section.dart';
 
 part 'client_card_widgets.dart';
@@ -3468,41 +3470,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   /// Flat gold button used inside the v7 «Задать ДЗ» sheet (ported helper).
-  Widget _goldButton(String label, VoidCallback? onPressed) {
-    return FilledButton(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        backgroundColor: AppColor.gold,
-        foregroundColor: AppColor.onGold,
-        disabledBackgroundColor: AppColor.goldSoft,
-        disabledForegroundColor: AppColor.text2,
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        padding: const EdgeInsets.symmetric(vertical: 13),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-        ),
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-      ),
-      child: Text(label),
-    );
-  }
+  Widget _goldButton(String label, VoidCallback? onPressed) =>
+      clientCardGoldButton(label, onPressed);
 
-  Widget _ghostButton(String label, VoidCallback? onPressed) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColor.text,
-        side: const BorderSide(color: AppColor.divider),
-        padding: const EdgeInsets.symmetric(vertical: 13),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-        ),
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      ),
-      child: Text(label),
-    );
-  }
+  Widget _ghostButton(String label, VoidCallback? onPressed) =>
+      clientCardGhostButton(label, onPressed);
 
   Future<void> _showIssueSubscriptionSheet() async {
     final crm = ref.read(magicCrmServiceProvider);
@@ -3790,28 +3762,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
     String? helperText,
     bool isDense = false,
     Widget? suffixIcon,
-  }) {
-    final r = BorderRadius.circular(AppRadius.control);
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      helperText: helperText,
-      isDense: isDense,
-      suffixIcon: suffixIcon,
-      enabledBorder: OutlineInputBorder(
-        borderRadius: r,
-        borderSide: BorderSide(color: cs.outlineVariant),
-      ),
-      border: OutlineInputBorder(
-        borderRadius: r,
-        borderSide: BorderSide(color: cs.outlineVariant),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: r,
-        borderSide: const BorderSide(color: AppColor.gold, width: 2),
-      ),
-    );
-  }
+  }) => clientCardInputDecoration(
+    cs,
+    label: label,
+    hint: hint,
+    helperText: helperText,
+    isDense: isDense,
+    suffixIcon: suffixIcon,
+  );
 
   Widget _sectionTitle(String title) {
     return Padding(
@@ -4757,15 +4715,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   // Role keys understood by the family API, paired with Russian labels for the
   // add-member sheet picker.
-  static const List<(String, String)> _familyRoleOptions = [
-    ('parent', 'Родитель'),
-    ('child', 'Ребёнок'),
-    ('partner', 'Партнёр'),
-    ('sibling', 'Брат/сестра'),
-    ('guardian', 'Опекун'),
-    ('payer', 'Плательщик'),
-  ];
-
   // Reads the family id out of either the existing `_family` payload or the
   // raw `createFamily` response (which nests the record under `family`).
   String? _familyIdFrom(Map<String, dynamic>? source) {
@@ -4781,132 +4730,19 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   Future<void> _openAddFamilyMemberSheet() async {
-    final cs = Theme.of(context).colorScheme;
     final selfId = _leadData['id']?.toString() ?? widget.lead['id']?.toString();
-    var role = _familyRoleOptions.first.$1;
-    // Default the linked record to this card's own entity (lead or student).
-    var entityType = widget.entityType;
-    final entityIdCtrl = TextEditingController(text: selfId ?? '');
-    var isPrimaryContact = false;
-
-    final confirmed = await showMagicSheet<bool>(
+    final input = await showAddFamilyMemberSheet(
       context,
-      title: 'Добавить участника',
-      subtitle: _isStudent
-          ? 'Свяжите запись с семьёй ученика'
-          : 'Свяжите запись с семьёй лида',
-      icon: Icons.person_add_alt_1_rounded,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Роль',
-                  style: TextStyle(
-                    color: cs.onSurfaceVariant,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                DropdownButtonFormField<String>(
-                  initialValue: role,
-                  isExpanded: true,
-                  decoration: _inputDecoration(cs, isDense: true),
-                  items: _familyRoleOptions
-                      .map(
-                        (option) => DropdownMenuItem(
-                          value: option.$1,
-                          child: Text(option.$2),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setSheetState(() => role = value);
-                  },
-                ),
-                const SizedBox(height: AppSpace.md),
-                Text(
-                  'Тип записи',
-                  style: TextStyle(
-                    color: cs.onSurfaceVariant,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                DropdownButtonFormField<String>(
-                  initialValue: entityType,
-                  isExpanded: true,
-                  decoration: _inputDecoration(cs, isDense: true),
-                  items: const [
-                    DropdownMenuItem(value: 'lead', child: Text('Лид')),
-                    DropdownMenuItem(value: 'student', child: Text('Ученик')),
-                    DropdownMenuItem(value: 'profile', child: Text('Профиль')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setSheetState(() => entityType = value);
-                  },
-                ),
-                const SizedBox(height: AppSpace.md),
-                TextField(
-                  controller: entityIdCtrl,
-                  decoration: _inputDecoration(
-                    cs,
-                    label: 'ID записи',
-                    hint: 'Идентификатор лида/ученика/профиля',
-                    helperText: selfId == null
-                        ? null
-                        : (_isStudent
-                              ? 'По умолчанию — текущий ученик'
-                              : 'По умолчанию — текущий лид'),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.xs),
-                CheckboxListTile(
-                  value: isPrimaryContact,
-                  activeColor: AppColor.gold,
-                  onChanged: (value) =>
-                      setSheetState(() => isPrimaryContact = value ?? false),
-                  title: const Text('Основной контакт'),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                ),
-              ],
-            );
-          },
-        );
-      },
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColor.gold,
-            foregroundColor: AppColor.onGold,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.control),
-            ),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          child: const Text('Добавить'),
-        ),
-      ],
+      isStudent: _isStudent,
+      // Default the linked record to this card's own entity (lead or student).
+      defaultEntityType: widget.entityType,
+      defaultEntityId: selfId,
     );
-
-    final entityId = entityIdCtrl.text.trim();
-    entityIdCtrl.dispose();
-    if (confirmed != true) return;
+    if (input == null) return;
+    final role = input.role;
+    final entityType = input.entityType;
+    final entityId = input.entityId;
+    final isPrimaryContact = input.isPrimaryContact;
     if (entityId.isEmpty) {
       if (mounted) {
         MagicToast.show(
