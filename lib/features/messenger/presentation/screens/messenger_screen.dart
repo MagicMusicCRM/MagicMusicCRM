@@ -48,6 +48,7 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/show_clien
 import 'package:mime/mime.dart';
 import 'package:magic_music_crm/features/messenger/inbox_logic.dart';
 import 'package:magic_music_crm/features/messenger/widgets/inbox_folder_bar.dart';
+import 'messenger_dialogs.dart';
 
 part 'messenger_screen_widgets.dart';
 
@@ -487,7 +488,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   }
 
   /// Shows a long-press context menu for an administration chat row
-  /// (manager/admin only). Uses the same showDialog pattern as [_showStatusInfo].
+  /// (manager/admin only). Uses the same showDialog pattern as showStatusInfoDialog.
   void _showChatRowMenu(Map<String, dynamic> item) {
     final id = item['id']?.toString();
     if (id == null || id.isEmpty) return;
@@ -2624,7 +2625,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                             onTap: () => _selectChat(item),
                             isMuted: _mutedChatIds.contains(id),
                             statusIcon: _buildStatusIcon(item, isDark),
-                            onStatusTap: () => _showStatusInfo(item),
+                            onStatusTap: () => showStatusInfoDialog(context, item),
                             // Archive long-press: manager/admin only, administration chats only.
                             onLongPress:
                                 _isManagerOrAdminRole && isAdministration(item)
@@ -3048,60 +3049,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     }
   }
 
-  void _showStatusInfo(Map<String, dynamic> item) {
-    final groupData = item['_group_data'];
-    if (groupData == null) return;
-
-    final respondedAt = groupData['responded_at'];
-    if (respondedAt == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('На этот запрос еще никто не ответил')),
-      );
-      return;
-    }
-
-    final responder = groupData['first_responder'];
-    final responderName = responder != null
-        ? '${responder['first_name'] ?? ''} ${responder['last_name'] ?? ''}'
-              .trim()
-        : 'Неизвестно';
-
-    final time = DateFormat('dd.MM HH:mm').format(DateTime.parse(respondedAt));
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Информация об ответе'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.person_rounded, color: AppColor.gold),
-              title: const Text('Ответил первым:'),
-              subtitle: Text(responderName),
-              contentPadding: EdgeInsets.zero,
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.access_time_rounded,
-                color: AppColor.gold,
-              ),
-              title: const Text('Время ответа:'),
-              subtitle: Text(time),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ── Pinned Bar ────────────────────────────────────────────────────────────
 
