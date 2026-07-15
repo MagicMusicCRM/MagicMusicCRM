@@ -4,6 +4,7 @@ import { LeadIntakePort } from "../common/lead-intake.port";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { MessengerPolicy } from "./messenger.policy";
+import { MessengerFanoutService } from "./messenger-fanout.service";
 import { MessengerService } from "./messenger.service";
 import { RealtimeGateway } from "./realtime.gateway";
 
@@ -63,6 +64,8 @@ describe("MessengerService", () => {
       ...overrides?.realtimeBus,
     } as unknown as RealtimeBus;
 
+    const fanout = new MessengerFanoutService(database, realtime);
+
     return {
       service: new MessengerService(
         database,
@@ -71,6 +74,7 @@ describe("MessengerService", () => {
         realtime,
         crm,
         realtimeBus,
+        fanout,
       ),
       database,
       audit,
@@ -144,6 +148,7 @@ describe("MessengerService", () => {
       realtime,
       { autoCreateLeadFromChat: jest.fn().mockResolvedValue({ leadId: "l1", created: true }) } as unknown as LeadIntakePort,
       { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+      new MessengerFanoutService(database, realtime),
     );
 
     const result = await service.sendMessage(
