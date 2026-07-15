@@ -2380,13 +2380,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
         children: [
           if (upcoming.isNotEmpty) ...[
             _sectionTitle('Предстоящие'),
-            ...upcoming.map((l) => _buildLessonRow(cs, l)),
+            ...upcoming.map((l) => _lessonRow(cs, l, onOpenSchedule: _openScheduleForLesson)),
           ],
           if (upcoming.isNotEmpty && past.isNotEmpty)
             const SizedBox(height: AppSpace.md),
           if (past.isNotEmpty) ...[
             _sectionTitle('Прошедшие'),
-            ...past.map((l) => _buildLessonRow(cs, l)),
+            ...past.map((l) => _lessonRow(cs, l, onOpenSchedule: _openScheduleForLesson)),
           ],
         ],
       );
@@ -2395,63 +2395,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   /// One tappable lesson row. Tapping focuses the dashboard schedule on the
   /// lesson's day with the lesson highlighted, then closes the card.
-  Widget _buildLessonRow(ColorScheme cs, Map<String, dynamic> l) {
-    final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
-    final dateStr = dt != null
-        ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
-        : '—';
-    final teacherData = l['teachers'] as Map<String, dynamic>?;
-    String teacherName = '—';
-    if (teacherData != null) {
-      final tfName = teacherData['first_name']?.toString() ?? '';
-      final tlName = teacherData['last_name']?.toString() ?? '';
-      final p = teacherData['profiles'] as Map<String, dynamic>?;
-      var tName = '$tfName $tlName'.trim();
-      if (tName.isEmpty && p != null) {
-        tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-      }
-      teacherName = tName.isEmpty ? '—' : tName;
-    }
-    final completed = l['status'] == 'completed';
-    final lessonId = l['id']?.toString();
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        onTap: (lessonId != null && lessonId.isNotEmpty && dt != null)
-            ? () => _openScheduleForLesson(dt, lessonId)
-            : null,
-        title: Text(
-          dateStr,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          [
-            'Преп.: $teacherName',
-            '${l['groups']?['name'] ?? 'Инд.'}',
-            if ((l['rooms']?['name']?.toString() ?? '').isNotEmpty)
-              'Ауд.: ${l['rooms']['name']}',
-          ].join(' • '),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: (completed ? AppTheme.success : AppTheme.primaryGold)
-                .withAlpha(30),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            completed ? 'Завершено' : 'Запланировано',
-            style: TextStyle(
-              fontSize: 11,
-              color: completed ? AppTheme.success : AppTheme.primaryGold,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   /// Focus the dashboard schedule on [scheduledAt] with [lessonId] highlighted,
   /// then close this card and route to the admin dashboard schedule tab.
   ///

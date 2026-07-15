@@ -58,6 +58,67 @@ Widget _sectionTitle(String title) {
   );
 }
 
+/// One student-lessons-tab row. [onOpenSchedule] jumps to the dashboard
+/// schedule focused on this lesson (only wired when it has a date + id).
+Widget _lessonRow(
+  ColorScheme cs,
+  Map<String, dynamic> l, {
+  required void Function(DateTime scheduledAt, String lessonId) onOpenSchedule,
+}) {
+  final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
+  final dateStr = dt != null
+      ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
+      : '—';
+  final teacherData = l['teachers'] as Map<String, dynamic>?;
+  String teacherName = '—';
+  if (teacherData != null) {
+    final tfName = teacherData['first_name']?.toString() ?? '';
+    final tlName = teacherData['last_name']?.toString() ?? '';
+    final p = teacherData['profiles'] as Map<String, dynamic>?;
+    var tName = '$tfName $tlName'.trim();
+    if (tName.isEmpty && p != null) {
+      tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
+    }
+    teacherName = tName.isEmpty ? '—' : tName;
+  }
+  final completed = l['status'] == 'completed';
+  final lessonId = l['id']?.toString();
+  return Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      onTap: (lessonId != null && lessonId.isNotEmpty && dt != null)
+          ? () => onOpenSchedule(dt, lessonId)
+          : null,
+      title: Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(
+        [
+          'Преп.: $teacherName',
+          '${l['groups']?['name'] ?? 'Инд.'}',
+          if ((l['rooms']?['name']?.toString() ?? '').isNotEmpty)
+            'Ауд.: ${l['rooms']['name']}',
+        ].join(' • '),
+      ),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: (completed ? AppTheme.success : AppTheme.primaryGold).withAlpha(
+            30,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          completed ? 'Завершено' : 'Запланировано',
+          style: TextStyle(
+            fontSize: 11,
+            color: completed ? AppTheme.success : AppTheme.primaryGold,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 List<Map<String, dynamic>> _list(Object? value) {
   if (value is! List) return const <Map<String, dynamic>>[];
   return value.whereType<Map<String, dynamic>>().toList();
