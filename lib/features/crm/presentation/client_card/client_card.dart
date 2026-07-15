@@ -3470,12 +3470,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   /// Flat gold button used inside the v7 «Задать ДЗ» sheet (ported helper).
-  Widget _goldButton(String label, VoidCallback? onPressed) =>
-      clientCardGoldButton(label, onPressed);
-
-  Widget _ghostButton(String label, VoidCallback? onPressed) =>
-      clientCardGhostButton(label, onPressed);
-
   Future<void> _showIssueSubscriptionSheet() async {
     final crm = ref.read(magicCrmServiceProvider);
     List<Map<String, dynamic>> packages;
@@ -3561,162 +3555,25 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
     if (!mounted) return;
 
-    final titleCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    DateTime? dueAt;
-
-    final created = await showMagicSheet<bool>(
+    final input = await showAssignHomeworkSheet(
       context,
-      title: 'Задать ДЗ',
-      subtitle: 'Новое домашнее задание',
-      icon: Icons.assignment_rounded,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            final dueLabel = dueAt == null
-                ? 'Срок не задан'
-                : DateFormat('d MMM yyyy, HH:mm', 'ru').format(dueAt!);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: titleCtrl,
-                  autofocus: true,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Заголовок *',
-                    hintText: 'Что нужно выучить?',
-                  ),
-                ),
-                const SizedBox(height: AppSpace.md),
-                TextField(
-                  controller: descCtrl,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Описание',
-                    hintText: 'Подробности (необязательно)',
-                  ),
-                ),
-                const SizedBox(height: AppSpace.md),
-                InkWell(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  onTap: () async {
-                    final now = DateTime.now();
-                    final date = await showDatePicker(
-                      context: sheetContext,
-                      initialDate: dueAt ?? now,
-                      firstDate: now.subtract(const Duration(days: 1)),
-                      lastDate: now.add(const Duration(days: 365)),
-                    );
-                    if (date == null || !sheetContext.mounted) return;
-                    final time = await showTimePicker(
-                      context: sheetContext,
-                      initialTime: TimeOfDay.fromDateTime(dueAt ?? now),
-                    );
-                    setSheetState(() {
-                      dueAt = DateTime(
-                        date.year,
-                        date.month,
-                        date.day,
-                        time?.hour ?? 0,
-                        time?.minute ?? 0,
-                      );
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpace.md,
-                      vertical: AppSpace.md,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColor.input,
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                      border: Border.all(color: AppColor.divider),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.event_rounded,
-                          size: 18,
-                          color: AppColor.gold,
-                        ),
-                        const SizedBox(width: AppSpace.md),
-                        Expanded(
-                          child: Text(
-                            dueLabel,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: dueAt == null
-                                  ? AppColor.text2
-                                  : AppColor.text,
-                            ),
-                          ),
-                        ),
-                        if (dueAt != null)
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 18),
-                            color: AppColor.text2,
-                            tooltip: 'Сбросить срок',
-                            onPressed: () => setSheetState(() => dueAt = null),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (homeworks.isNotEmpty) ...[
-                  const SizedBox(height: AppSpace.lg),
-                  const Divider(height: 1, color: AppColor.divider),
-                  const SizedBox(height: AppSpace.md),
-                  const Text(
-                    'Последние ДЗ',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColor.gold,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpace.sm),
-                  for (final hw in homeworks) _HomeworkTile(homework: hw),
-                ],
-              ],
-            );
-          },
-        );
-      },
-      actions: [
-        _ghostButton('Отмена', () => Navigator.pop(context, false)),
-        _goldButton('Создать', () {
-          if (titleCtrl.text.trim().isEmpty) {
-            MagicToast.show(
-              context,
-              'Введите заголовок',
-              type: MagicToastType.danger,
-            );
-            return;
-          }
-          Navigator.pop(context, true);
-        }),
-      ],
+      recentHomeworks: homeworks,
     );
-
-    if (created != true || !mounted) return;
-
-    final title = titleCtrl.text.trim();
-    if (title.isEmpty) return;
+    if (input == null || !mounted) return;
 
     try {
       await crm.createHomework(
         studentId: _entityId,
-        title: title,
-        description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-        dueAt: dueAt?.toIso8601String(),
+        title: input.title,
+        description: input.description,
+        dueAt: input.dueAt?.toIso8601String(),
       );
       if (!mounted) return;
       _dirty = true;
       MagicToast.show(
         context,
         'ДЗ создано',
-        detail: title,
+        detail: input.title,
         type: MagicToastType.success,
       );
     } catch (e) {

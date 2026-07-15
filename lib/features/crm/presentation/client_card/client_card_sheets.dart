@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
@@ -165,4 +166,232 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
     entityId: entityId,
     isPrimaryContact: isPrimaryContact,
   );
+}
+
+/// Collected values from [showAssignHomeworkSheet].
+typedef HomeworkInput = ({String title, String? description, DateTime? dueAt});
+
+/// «Задать ДЗ» sheet. [recentHomeworks] is a best-effort preview list shown
+/// under the form. Returns the new homework's fields, or `null` if cancelled.
+Future<HomeworkInput?> showAssignHomeworkSheet(
+  BuildContext context, {
+  required List<Map<String, dynamic>> recentHomeworks,
+}) async {
+  final titleCtrl = TextEditingController();
+  final descCtrl = TextEditingController();
+  DateTime? dueAt;
+
+  final created = await showMagicSheet<bool>(
+    context,
+    title: 'Задать ДЗ',
+    subtitle: 'Новое домашнее задание',
+    icon: Icons.assignment_rounded,
+    builder: (sheetContext) {
+      return StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final dueLabel = dueAt == null
+              ? 'Срок не задан'
+              : DateFormat('d MMM yyyy, HH:mm', 'ru').format(dueAt!);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                autofocus: true,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Заголовок *',
+                  hintText: 'Что нужно выучить?',
+                ),
+              ),
+              const SizedBox(height: AppSpace.md),
+              TextField(
+                controller: descCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Описание',
+                  hintText: 'Подробности (необязательно)',
+                ),
+              ),
+              const SizedBox(height: AppSpace.md),
+              InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                onTap: () async {
+                  final now = DateTime.now();
+                  final date = await showDatePicker(
+                    context: sheetContext,
+                    initialDate: dueAt ?? now,
+                    firstDate: now.subtract(const Duration(days: 1)),
+                    lastDate: now.add(const Duration(days: 365)),
+                  );
+                  if (date == null || !sheetContext.mounted) return;
+                  final time = await showTimePicker(
+                    context: sheetContext,
+                    initialTime: TimeOfDay.fromDateTime(dueAt ?? now),
+                  );
+                  setSheetState(() {
+                    dueAt = DateTime(
+                      date.year,
+                      date.month,
+                      date.day,
+                      time?.hour ?? 0,
+                      time?.minute ?? 0,
+                    );
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.md,
+                    vertical: AppSpace.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColor.input,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    border: Border.all(color: AppColor.divider),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.event_rounded,
+                        size: 18,
+                        color: AppColor.gold,
+                      ),
+                      const SizedBox(width: AppSpace.md),
+                      Expanded(
+                        child: Text(
+                          dueLabel,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: dueAt == null
+                                ? AppColor.text2
+                                : AppColor.text,
+                          ),
+                        ),
+                      ),
+                      if (dueAt != null)
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          color: AppColor.text2,
+                          tooltip: 'Сбросить срок',
+                          onPressed: () => setSheetState(() => dueAt = null),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              if (recentHomeworks.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.lg),
+                const Divider(height: 1, color: AppColor.divider),
+                const SizedBox(height: AppSpace.md),
+                const Text(
+                  'Последние ДЗ',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColor.gold,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                for (final hw in recentHomeworks) HomeworkTile(homework: hw),
+              ],
+            ],
+          );
+        },
+      );
+    },
+    actions: [
+      clientCardGhostButton('Отмена', () => Navigator.pop(context, false)),
+      clientCardGoldButton('Создать', () {
+        if (titleCtrl.text.trim().isEmpty) {
+          MagicToast.show(
+            context,
+            'Введите заголовок',
+            type: MagicToastType.danger,
+          );
+          return;
+        }
+        Navigator.pop(context, true);
+      }),
+    ],
+  );
+
+  final title = titleCtrl.text.trim();
+  final description = descCtrl.text.trim();
+  titleCtrl.dispose();
+  descCtrl.dispose();
+  if (created != true || title.isEmpty) return null;
+  return (
+    title: title,
+    description: description.isEmpty ? null : description,
+    dueAt: dueAt,
+  );
+}
+
+/// Compact read-only homework row for the «Последние ДЗ» section in the «Задать
+/// ДЗ» sheet (ported from student_detail_screen).
+class HomeworkTile extends StatelessWidget {
+  final Map<String, dynamic> homework;
+  const HomeworkTile({super.key, required this.homework});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = homework['title']?.toString() ?? '—';
+    final status = homework['status']?.toString();
+    final dueRaw = homework['due_at'] ?? homework['dueAt'];
+    final due = DateTime.tryParse(dueRaw?.toString() ?? '');
+    final subtitle = [
+      if (status != null && status.isNotEmpty) _statusLabel(status),
+      if (due != null) DateFormat('d MMM yyyy', 'ru').format(due.toLocal()),
+    ].join(' · ');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.assignment_outlined,
+              size: 16,
+              color: AppColor.text2,
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, color: AppColor.text),
+                ),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 11, color: AppColor.text2),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'assigned':
+        return 'Назначено';
+      case 'submitted':
+        return 'Сдано';
+      case 'done':
+      case 'completed':
+        return 'Завершено';
+      default:
+        return status;
+    }
+  }
 }
