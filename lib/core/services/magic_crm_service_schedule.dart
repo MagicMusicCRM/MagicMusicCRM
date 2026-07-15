@@ -1,0 +1,564 @@
+part of 'magic_crm_service.dart';
+
+/// Schedule & lessons: matrix, lessons, attendance, tasks, comments,
+/// timeline, progress notes, subscriptions, ledger, schedule series.
+extension MagicCrmSchedule on MagicCrmService {
+  Future<Map<String, dynamic>> getScheduleMatrix({
+    String? from,
+    String? to,
+    String? branchId,
+    String? roomId,
+    String? teacherId,
+    bool? isTrial,
+    String? groupBy,
+    int limit = 300,
+  }) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    void addString(String key, String? value) {
+      final trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        queryParameters[key] = trimmed;
+      }
+    }
+
+    addString('from', from);
+    addString('to', to);
+    addString('branchId', branchId);
+    addString('roomId', roomId);
+    addString('teacherId', teacherId);
+    addString('groupBy', groupBy);
+    if (isTrial != null) queryParameters['isTrial'] = isTrial;
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/schedule/matrix',
+      queryParameters: queryParameters,
+    );
+    return {
+      'from': response['from'],
+      'to': response['to'],
+      'group_by': response['groupBy'],
+      'items': _mapList(response['items'], _legacyScheduleLesson),
+      'groups': _mapList(response['groups'], _legacyScheduleGroup),
+      'conflicts': _mapList(response['conflicts'], _legacyScheduleConflict),
+    };
+  }
+
+  /// Lightweight per-day lesson counts for the month calendar. Returns a list of
+  /// `{ 'day': 'YYYY-MM-DD', 'count': int, 'room_ids': List<String> }` so the
+  /// month view can render counts + room dots without fetching every lesson.
+  Future<List<Map<String, dynamic>>> getScheduleMonthSummary({
+    String? from,
+    String? to,
+    String? branchId,
+  }) async {
+    final queryParameters = <String, dynamic>{};
+    void addString(String key, String? value) {
+      final trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        queryParameters[key] = trimmed;
+      }
+    }
+
+    addString('from', from);
+    addString('to', to);
+    addString('branchId', branchId);
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/schedule/month-summary',
+      queryParameters: queryParameters,
+    );
+    return _items(response).map((item) {
+      final roomIds = item['roomIds'];
+      return {
+        'day': item['day']?.toString(),
+        'count': item['count'] is int
+            ? item['count']
+            : int.tryParse('${item['count']}') ?? 0,
+        'room_ids': roomIds is List
+            ? roomIds.map((e) => e.toString()).toList()
+            : const <String>[],
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listLessons({
+    String? from,
+    String? to,
+    String? studentId,
+    String? teacherId,
+    bool? isTrial,
+    int limit = 100,
+  }) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    if (from != null) queryParameters['from'] = from;
+    if (to != null) queryParameters['to'] = to;
+    if (studentId != null) queryParameters['studentId'] = studentId;
+    if (teacherId != null) queryParameters['teacherId'] = teacherId;
+    if (isTrial != null) queryParameters['isTrial'] = isTrial;
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/lessons',
+      queryParameters: queryParameters,
+    );
+    return _items(response).map(_legacyLesson).toList();
+  }
+
+  Future<Map<String, dynamic>> createLesson({
+    String? studentId,
+    String? groupId,
+    String? leadId,
+    String? teacherId,
+    String? branchId,
+    String? roomId,
+    required String scheduledAt,
+    int? durationMinutes,
+    String status = 'scheduled',
+    bool isTrial = false,
+    String? notes,
+    num? teacherRate,
+  }) async {
+    final data = <String, dynamic>{
+      'scheduledAt': scheduledAt,
+      'status': status,
+      'isTrial': isTrial,
+    };
+    if (studentId != null) data['studentId'] = studentId;
+    if (groupId != null) data['groupId'] = groupId;
+    if (leadId != null) data['leadId'] = leadId;
+    if (teacherId != null) data['teacherId'] = teacherId;
+    if (branchId != null) data['branchId'] = branchId;
+    if (roomId != null) data['roomId'] = roomId;
+    if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
+    if (teacherRate != null) data['teacherRate'] = teacherRate;
+    if (notes != null && notes.trim().isNotEmpty) {
+      data['notes'] = notes.trim();
+    }
+
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/lessons',
+      data: data,
+    );
+    return _legacyLesson(response);
+  }
+
+  Future<Map<String, dynamic>> updateLesson(
+    String id, {
+    String? studentId,
+    String? groupId,
+    String? teacherId,
+    String? branchId,
+    String? roomId,
+    String? scheduledAt,
+    int? durationMinutes,
+    String? status,
+    bool? isTrial,
+    String? notes,
+    num? teacherRate,
+  }) async {
+    final data = <String, dynamic>{};
+    if (studentId != null) data['studentId'] = studentId;
+    if (groupId != null) data['groupId'] = groupId;
+    if (teacherId != null) data['teacherId'] = teacherId;
+    if (branchId != null) data['branchId'] = branchId;
+    if (roomId != null) data['roomId'] = roomId;
+    if (scheduledAt != null) data['scheduledAt'] = scheduledAt;
+    if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
+    if (status != null) data['status'] = status;
+    if (isTrial != null) data['isTrial'] = isTrial;
+    if (notes != null) data['notes'] = notes.trim();
+    if (teacherRate != null) data['teacherRate'] = teacherRate;
+
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/lessons/$id',
+      data: data,
+    );
+    return _legacyLesson(response);
+  }
+
+  Future<void> deleteLesson(String id) async {
+    await _api.delete<Map<String, dynamic>>('/crm/lessons/$id');
+  }
+
+  Future<Map<String, dynamic>> getLessonAttendance(String lessonId) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/lessons/$lessonId/attendance',
+    );
+    return _legacyAttendance(response);
+  }
+
+  Future<Map<String, dynamic>> saveLessonAttendance(
+    String lessonId,
+    List<Map<String, dynamic>> participations, {
+    bool notifyClient = false,
+  }) async {
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/lessons/$lessonId/attendance',
+      data: {
+        'items': participations
+            .map(
+              (item) => {
+                'studentId': item['student_id'],
+                // KVA-237: kind — источник истины; status оставлен для
+                // обратной совместимости бекенда.
+                'kind': item['kind'] ?? 'attended',
+                if (item['kind'] == 'partially_paid')
+                  'chargeShare': item['charge_share'] ?? 0.5,
+                'status': item['is_present'] == false ? 'absent' : 'present',
+                'passReason': item['pass_reason']?.toString().trim() ?? '',
+              },
+            )
+            .toList(),
+        if (notifyClient) 'notifyClient': true,
+      },
+    );
+    return _legacyAttendance(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listTasks({
+    String? q,
+    String? entityType,
+    String? entityId,
+    String? studentId,
+    String? assignedTo,
+    String? createdBy,
+    String? branchId,
+    String? status,
+    String? priority,
+    String? taskType,
+    String? communicationMethod,
+    String? from,
+    String? to,
+    int limit = 100,
+  }) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    void addString(String key, String? value) {
+      final trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        queryParameters[key] = trimmed;
+      }
+    }
+
+    addString('q', q);
+    addString('entityType', entityType);
+    addString('entityId', entityId);
+    addString('studentId', studentId);
+    addString('assignedTo', assignedTo);
+    addString('createdBy', createdBy);
+    addString('branchId', branchId);
+    addString('status', status);
+    addString('priority', priority);
+    addString('taskType', taskType);
+    addString('communicationMethod', communicationMethod);
+    addString('from', from);
+    addString('to', to);
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/tasks',
+      queryParameters: queryParameters,
+    );
+    return _items(response).map(_legacyTask).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listTimeline({
+    required String entityType,
+    required String entityId,
+    String? from,
+    String? to,
+    bool includeAudit = false,
+    int limit = 80,
+  }) async {
+    final queryParameters = <String, dynamic>{
+      'entityType': entityType,
+      'entityId': entityId,
+      'includeAudit': includeAudit,
+      'limit': limit,
+    };
+    if (from != null && from.trim().isNotEmpty) {
+      queryParameters['from'] = from.trim();
+    }
+    if (to != null && to.trim().isNotEmpty) {
+      queryParameters['to'] = to.trim();
+    }
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/timeline',
+      queryParameters: queryParameters,
+    );
+    return _items(response).map(_legacyTimelineItem).toList();
+  }
+
+  Future<Map<String, dynamic>> createTask({
+    required String entityType,
+    required String entityId,
+    required String title,
+    String? description,
+    String status = 'open',
+    String? dueAt,
+    String? assignedTo,
+  }) async {
+    final data = <String, dynamic>{
+      'entityType': entityType,
+      'entityId': entityId,
+      'title': title.trim(),
+      'status': status,
+    };
+    if (description != null && description.trim().isNotEmpty) {
+      data['description'] = description.trim();
+    }
+    if (dueAt != null) data['dueAt'] = dueAt;
+    if (assignedTo != null) data['assignedTo'] = assignedTo;
+
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/tasks',
+      data: data,
+    );
+    return _legacyTask(response);
+  }
+
+  Future<Map<String, dynamic>> updateTask(
+    String id, {
+    String? entityType,
+    String? entityId,
+    String? assignedTo,
+    String? title,
+    String? description,
+    String? status,
+    String? dueAt,
+  }) async {
+    final data = <String, dynamic>{};
+    void addString(String key, String? value) {
+      final trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        data[key] = trimmed;
+      }
+    }
+
+    addString('entityType', entityType);
+    addString('entityId', entityId);
+    addString('assignedTo', assignedTo);
+    addString('title', title);
+    addString('description', description);
+    addString('status', status);
+    addString('dueAt', dueAt);
+
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/tasks/$id',
+      data: data,
+    );
+    return _legacyTask(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listComments({
+    required String entityType,
+    required String entityId,
+    bool progressOnly = false,
+    String? kind,
+    int limit = 50,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/comments',
+      queryParameters: {
+        'entityType': entityType,
+        'entityId': entityId,
+        'progressOnly': progressOnly,
+        'kind': ?kind,
+        'limit': limit,
+      },
+    );
+    return _items(response).map(_legacyComment).toList();
+  }
+
+  Future<Map<String, dynamic>> createComment({
+    required String entityType,
+    required String entityId,
+    required String body,
+    bool progress = false,
+    String? kind,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/comments',
+      data: {
+        'entityType': entityType,
+        'entityId': entityId,
+        'body': body.trim(),
+        'progress': progress,
+        'kind': ?kind,
+      },
+    );
+    return _legacyComment(response);
+  }
+
+  /// Toggle whether a comment is visible to the assigned teacher. Default
+  /// comments are admin-only; showing to the teacher flips kind to `teacher_note`
+  /// (and back to `admin_comment` hides it again). Staff only.
+  Future<Map<String, dynamic>> setCommentVisibility({
+    required String commentId,
+    required bool visibleToTeacher,
+  }) async {
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/comments/$commentId/visibility',
+      data: {'visibleToTeacher': visibleToTeacher},
+    );
+    return _legacyComment(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listProgressNotes({
+    required String studentId,
+    int limit = 50,
+  }) {
+    return listComments(
+      entityType: 'student',
+      entityId: studentId,
+      progressOnly: true,
+      limit: limit,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listSubscriptions({
+    String? studentId,
+    int limit = 20,
+  }) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    if (studentId != null) queryParameters['studentId'] = studentId;
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/subscriptions',
+      queryParameters: queryParameters,
+    );
+    return _items(response).map(_legacySubscription).toList();
+  }
+
+  /// KVA-235: лента личного счёта (платежи + списания за занятия + ручные
+  /// операции) с итогами прихода/расхода.
+  Future<Map<String, dynamic>> getStudentLedger(
+    String studentId, {
+    String? direction,
+    int limit = 100,
+  }) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    if (direction != null) queryParameters['direction'] = direction;
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/students/$studentId/ledger',
+      queryParameters: queryParameters,
+    );
+    return {
+      'items': _items(response)
+          .map(
+            (item) => {
+              'id': item['id'],
+              'kind': item['kind'],
+              'amount': item['amount'],
+              'description': item['description'],
+              'method': item['method'],
+              'branch_name': item['branchName'],
+              'author_name': item['authorName'],
+              'occurred_at': item['occurredAt'],
+            },
+          )
+          .toList(),
+      'income_total': response['incomeTotal'],
+      'outcome_total': response['outcomeTotal'],
+    };
+  }
+
+  /// KVA-236: серии постоянного расписания.
+  Future<List<Map<String, dynamic>>> listScheduleSeries({
+    String? studentId,
+    String? groupId,
+    bool includeExpired = false,
+  }) async {
+    final queryParameters = <String, dynamic>{};
+    if (studentId != null) queryParameters['studentId'] = studentId;
+    if (groupId != null) queryParameters['groupId'] = groupId;
+    if (includeExpired) queryParameters['includeExpired'] = 'true';
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/schedule-series',
+      queryParameters: queryParameters,
+    );
+    return _items(response)
+        .map(
+          (item) => {
+            'id': item['id'],
+            'student_id': item['studentId'],
+            'group_id': item['groupId'],
+            'teacher_id': item['teacherId'],
+            'teacher_name': item['teacherName'],
+            'room_id': item['roomId'],
+            'room_name': item['roomName'],
+            'branch_id': item['branchId'],
+            'branch_name': item['branchName'],
+            'weekday': item['weekday'],
+            'begin_time': item['beginTime'],
+            'duration_minutes': item['durationMinutes'],
+            'valid_from': item['validFrom'],
+            'valid_until': item['validUntil'],
+            'notes': item['notes'],
+          },
+        )
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createScheduleSeries({
+    String? studentId,
+    String? groupId,
+    String? teacherId,
+    String? roomId,
+    String? branchId,
+    required int weekday,
+    required String beginTime,
+    int? durationMinutes,
+    required String validFrom,
+    String? validUntil,
+    String? notes,
+  }) async {
+    final data = <String, dynamic>{
+      'weekday': weekday,
+      'beginTime': beginTime,
+      'validFrom': validFrom,
+    };
+    if (studentId != null) data['studentId'] = studentId;
+    if (groupId != null) data['groupId'] = groupId;
+    if (teacherId != null) data['teacherId'] = teacherId;
+    if (roomId != null) data['roomId'] = roomId;
+    if (branchId != null) data['branchId'] = branchId;
+    if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
+    if (validUntil != null) data['validUntil'] = validUntil;
+    if (notes != null && notes.trim().isNotEmpty) data['notes'] = notes.trim();
+    return _api.post<Map<String, dynamic>>('/crm/schedule-series', data: data);
+  }
+
+  Future<Map<String, dynamic>> updateScheduleSeries(
+    String id, {
+    String? teacherId,
+    String? roomId,
+    int? weekday,
+    String? beginTime,
+    int? durationMinutes,
+    String? validUntil,
+    String? effectiveFrom,
+    String? notes,
+  }) async {
+    final data = <String, dynamic>{};
+    if (teacherId != null) data['teacherId'] = teacherId;
+    if (roomId != null) data['roomId'] = roomId;
+    if (weekday != null) data['weekday'] = weekday;
+    if (beginTime != null) data['beginTime'] = beginTime;
+    if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
+    if (validUntil != null) data['validUntil'] = validUntil;
+    if (effectiveFrom != null) data['effectiveFrom'] = effectiveFrom;
+    if (notes != null) data['notes'] = notes;
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/schedule-series/$id',
+      data: data,
+    );
+  }
+
+  Future<Map<String, dynamic>> deleteScheduleSeries(
+    String id, {
+    String? from,
+  }) async {
+    return _api.delete<Map<String, dynamic>>(
+      '/crm/schedule-series/$id',
+      queryParameters: from != null ? {'from': from} : null,
+    );
+  }
+}

@@ -1,0 +1,558 @@
+part of 'students_board_widget.dart';
+
+// ── Column data ────────────────────────────────────────────────────────────
+
+class _StatusColumnData {
+  final String? status; // null → «Прочие», non-droppable
+  final String name;
+  final List<Map<String, dynamic>> students;
+
+  _StatusColumnData({
+    required this.status,
+    required this.name,
+    required this.students,
+  });
+}
+
+// ── Column ───────────────────────────────────────────────────────────────────
+
+class _StatusColumn extends StatelessWidget {
+  final _StatusColumnData column;
+  final Set<String> pendingStudentIds;
+  final ValueChanged<Map<String, dynamic>> onTap;
+  final Future<void> Function(Map<String, dynamic>, String) onMove;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
+
+  const _StatusColumn({
+    required this.column,
+    required this.pendingStudentIds,
+    required this.onTap,
+    required this.onMove,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+  });
+
+  bool get _droppable => column.status != null;
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<Map<String, dynamic>>(
+      onWillAcceptWithDetails: (_) => _droppable,
+      onAcceptWithDetails: (details) {
+        onDragEnd();
+        if (column.status != null) {
+          onMove(details.data, column.status!);
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        final hovering = _droppable && candidateData.isNotEmpty;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final columnWidth = screenWidth < 360
+            ? (screenWidth - 24).clamp(220.0, 300.0)
+            : 300.0;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          width: columnWidth,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: hovering
+                ? AppTheme.primaryGold.withAlpha(30)
+                : Theme.of(context).colorScheme.surface.withAlpha(127),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: hovering
+                  ? AppTheme.primaryGold
+                  : AppTheme.primaryGold.withAlpha(45),
+              width: hovering ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              // ── Header ──────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.school_rounded,
+                      size: 14,
+                      color: AppTheme.primaryGold,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        column.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(AppRadius.chip),
+                        border: Border.all(
+                          color: AppTheme.primaryGold.withAlpha(70),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        '${column.students.length}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // ── Drop hint ─────────────────────────────────────────────────
+              AnimatedSize(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: hovering
+                    ? Container(
+                        height: 40,
+                        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppTheme.primaryGold),
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.control,
+                          ),
+                          color: AppTheme.primaryGold.withAlpha(25),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Отпустите, чтобы перенести',
+                            style: TextStyle(
+                              color: AppTheme.primaryGold,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              // ── Cards ─────────────────────────────────────────────────────
+              Expanded(
+                child: column.students.isEmpty
+                    ? _buildEmptyColumn(context)
+                    : ListView.builder(
+                        key: PageStorageKey(
+                          'students_col_${column.status ?? 'other'}',
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        itemCount: column.students.length,
+                        itemBuilder: (context, index) {
+                          final student = column.students[index];
+                          final id = student['id']?.toString() ?? '';
+                          return _StudentCard(
+                            student: student,
+                            isPending: pendingStudentIds.contains(id),
+                            onTap: () => onTap(student),
+                            onDragUpdate: onDragUpdate,
+                            onDragEnd: onDragEnd,
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyColumn(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md,
+          vertical: AppSpace.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.inbox_outlined,
+              size: 28,
+              color: cs.onSurfaceVariant.withAlpha(140),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              'Нет учеников',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: cs.onSurfaceVariant,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (_droppable) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Перетащите карточку сюда',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: cs.onSurfaceVariant.withAlpha(160),
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Card ─────────────────────────────────────────────────────────────────────
+
+class _StudentCard extends StatelessWidget {
+  final Map<String, dynamic> student;
+  final bool isPending;
+  final VoidCallback onTap;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnd;
+
+  const _StudentCard({
+    required this.student,
+    required this.isPending,
+    required this.onTap,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final firstName = student['first_name']?.toString() ?? '';
+    final lastName = student['last_name']?.toString() ?? '';
+    final displayName = '$firstName $lastName'.trim();
+    final name = displayName.isEmpty ? 'Без имени' : displayName;
+    final phone = student['phone']?.toString() ?? '';
+
+    return LongPressDraggable<Map<String, dynamic>>(
+      data: student,
+      maxSimultaneousDrags: isPending ? 0 : null,
+      // Snappier than the platform 500ms long-press while still separating a
+      // click (tap → open) from a deliberate drag on mouse and touch.
+      delay: const Duration(milliseconds: 250),
+      hapticFeedbackOnStart: true,
+      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
+      onDragEnd: (_) => onDragEnd(),
+      onDraggableCanceled: (_, _) => onDragEnd(),
+      onDragCompleted: onDragEnd,
+      feedback: Transform.rotate(
+        angle: 0.03,
+        child: Material(
+          color: Colors.transparent,
+          child: Builder(
+            builder: (context) {
+              final screenWidth = MediaQuery.of(context).size.width;
+              final feedbackWidth = screenWidth < 360
+                  ? (screenWidth - 24).clamp(220.0, 300.0) - 24
+                  : 276.0;
+              return Container(
+                width: feedbackWidth,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  border: Border.all(color: AppTheme.primaryGold, width: 2),
+                  boxShadow: AppShadow.shLift,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.school_rounded,
+                      size: 14,
+                      color: AppTheme.primaryGold,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (phone.isNotEmpty)
+                            Text(
+                              phone,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.drag_indicator_rounded, size: 18),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+      // Faded placeholder gap in the source column while dragging.
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            side: BorderSide(
+              color: AppTheme.primaryGold.withAlpha(120),
+            ),
+          ),
+          child: const SizedBox(height: 64, width: double.infinity),
+        ),
+      ),
+      child: Opacity(
+        opacity: isPending ? 0.62 : 1,
+        child: AbsorbPointer(
+          absorbing: isPending,
+          child: GestureDetector(
+            onTap: onTap,
+            child: _CardBody(student: student, isPending: isPending),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CardBody extends StatelessWidget {
+  final Map<String, dynamic> student;
+  final bool isPending;
+
+  const _CardBody({required this.student, required this.isPending});
+
+  @override
+  Widget build(BuildContext context) {
+    final firstName = student['first_name']?.toString() ?? '';
+    final lastName = student['last_name']?.toString() ?? '';
+    final displayName = '$firstName $lastName'.trim();
+    final name = displayName.isEmpty ? 'Без имени' : displayName;
+    final phone = student['phone']?.toString() ?? '';
+    final branchName = student['branch_name']?.toString() ?? '';
+    final customData = student['custom_data'];
+    final discipline = customData is Map
+        ? customData['discipline']?.toString() ?? ''
+        : '';
+    final openTasks = _intValue(student['open_tasks_count']);
+    final lessonsCount = _intValue(student['lessons_count']);
+    final groupsCount = _intValue(student['groups_count']);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      color: Theme.of(context).colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Name + pending spinner ────────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isPending)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            // ── Phone ─────────────────────────────────────────────────────
+            if (phone.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  phone,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            // ── Discipline badge ──────────────────────────────────────────
+            if (discipline.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryGold.withAlpha(51),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  discipline,
+                  style: const TextStyle(
+                    color: AppTheme.primaryGold,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            // ── Branch badge ──────────────────────────────────────────────
+            if (branchName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: _IconBadge(
+                  icon: Icons.location_on_outlined,
+                  text: branchName,
+                ),
+              ),
+            // ── Metric badges (tasks / lessons / groups) ──────────────────
+            if (openTasks > 0 || lessonsCount > 0 || groupsCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    if (openTasks > 0)
+                      _MetricBadge(
+                        icon: Icons.task_alt_rounded,
+                        text: '$openTasks',
+                      ),
+                    if (lessonsCount > 0)
+                      _MetricBadge(
+                        icon: Icons.event_rounded,
+                        text: '$lessonsCount',
+                      ),
+                    if (groupsCount > 0)
+                      _MetricBadge(
+                        icon: Icons.group_rounded,
+                        text: '$groupsCount',
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  int _intValue(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+}
+
+// ── Shared badge widgets ──────────────────────────────────────────────────────
+
+class _IconBadge extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _IconBadge({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              text,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricBadge extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _MetricBadge({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryGold.withAlpha(36),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppTheme.primaryGold),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              color: AppTheme.primaryGold,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
