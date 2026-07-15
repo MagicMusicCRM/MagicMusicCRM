@@ -159,16 +159,19 @@ id/bool, ноль числового форматирования). Типизи
 - **ExpectedPayment** `expected_payment.dart` — client_card `_invoicesView` (инвойсы); `amountRaw` для raw-интерполяции.
 - **Comment** `comment.dart` — client_card `_CommentsList` end-to-end (`_future`/`_loadMerged` → `List<Comment>`; `origin`-геттер для синтетического `_origin`-ключа мержа). `_progressNotesView` оставлен follow-up'ом.
 
-**Итого F0 сделано 6 доменов:** Payment, Lead(card), FamilyMember, StudentBalance, ExpectedPayment, Comment — все профили риска покрыты (деньги+raw-интерполяция, широкий ripple, чистые строки, nested-в-агрегаторе объекты, синтетический merge-ключ).
+- **Subscription** `subscription.dart` — client_card slice: `_subscriptions` поле, getStudentCard-присвоение, «Абонементы»-карточка в tabs_a, `_subscriptionRemainder`. `packagePriceRaw` = `Object?` (сохраняет guard `price is num`); `lessonsTotal/Used` = ленивый `num`. `[commit] subscription`.
+- **Lesson** `lesson.dart` — client_card slice «Занятия»-таб: `_lessons` поле, getStudentCard-присвоение, upcoming/past-split + `byTime` в `_buildLessonsTab`, `_lessonRow`. Вложенные `groups/rooms/teachers` = raw-map геттеры (позиционные чтения byte-faithful); `StudentScheduleSection` остаётся на map через `.raw`-адаптер. `[commit] lesson`.
 
-### Остальные домены — НЕ начаты (по паттерну выше, механически)
-Крупные/широкие, требуют свежего контекст-бюджета (чтобы не оборвать миграцию на середине):
-- **subscription** (13) — `_subscriptionRemainder`/tabs_a + student_schedule_section (valid_until) + subscription_status_card + manage_entities + catalog. Числа (lessons_total/used, package_price) → нужны `*Raw`.
-- **lesson** (34) — schedule + client_card lessons-таб + create_lesson_dialog. Самый большой, много консьюмеров.
-- **task** (34) — tasks_widget + client_card tasks-таб. Большой.
-- **student** (23) — очень широкий (десятки мест).
-- **lead-status** (7) — НИЗКАЯ ценность: `_legacyLeadStatus` map сразу конвертится в `StatusRecord`-тапл в точках потребления (client_card/leads_providers/manage_statuses), т.е. `['key']/['label']/['color']` уже локализованы в 3-4 конверторах. F0-выигрыш маргинальный.
-- **lead (board целиком)** — типизировать `leadBoardProvider` items (тогда `_matchesLiveQuery`/drag/onTap на `Lead`); больше ripple.
+**Итого F0 сделано 8 доменов:** Payment, Lead(card), FamilyMember, StudentBalance, ExpectedPayment, Comment, Subscription, Lesson.
+
+### Оставшиеся домены — СОЗНАТЕЛЬНО ПРОПУЩЕНЫ (F0-паттерн неприменим)
+Не «не успели» — типизация здесь **net-negative** и фрактурит cohesive core (нарушает ponytail). Разобрано:
+- **task** (34) — ❌ НЕ типизировать. `_studentTasks` в client_card — исключительно вход гетерогенного merge: `_origin` (`{...r,'_origin':…}`-spread), in-place `_studentTasks.sort(…)`, `_studentTimelineView` (задачи+комментарии как maps в общем таймлайне). Таб задач рендерит `_leadCard['tasks']`-maps, НЕ `_studentTasks`. Типизация потребовала бы `.raw`-адаптеров на каждом merge-стыке и сломала бы spread/sort — при нулевой типобезопасности на рендер-сайтах. (tasks_widget — отдельный путь listTasks, тоже гетерогенный `Future.wait<List<Map>>`.)
+- **student** (23) — ❌ НЕ типизировать. `_student` — **мутабельный рабочий буфер**: inline-редакторы пишут сквозь него (`_student!['first_name'] = value`, `_student?['status'] = value`, `_student!['custom_data'] = cd`), и он целиком передаётся в `put()`-save-буфер и `TopUpDialog.show(_student!)`. Иммутабельный typed-view нельзя присвоить и он сломал бы все mutation-сайты + raw-handoff'ы. Вне scope F0 «тонкий read-only view».
+- **lead-status** (7) — ❌ низкая ценность (без изменений): `_legacyLeadStatus` сразу → `StatusRecord`-тапл в 3-4 конверторах, `['key']/['label']/['color']` уже локализованы.
+- **lead (board целиком)** — опционально: типизировать `leadBoardProvider` items (тогда `_matchesLiveQuery`/drag/onTap на `Lead`). Больший ripple на уровне провайдера; карточка лида уже типизирована (Lead). Оставлено как отдельный опциональный заход, не блокирует DoD.
+
+**Вывод F0:** покрыты все домены, где данные потребляются как чистый read-only список/объект (8 шт). Домены-исключения (task/student) используют данные как merge-вход / мутабельный буфер — там F0 противопоказан по SRP+ponytail. F0 закрыт.
 
 ### ~~Остальные домены (не начаты) — по паттерну выше~~
 lead (18 полей, много консьюмеров) / student (23) / lesson (34) / task (34) /
