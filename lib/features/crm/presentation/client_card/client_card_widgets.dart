@@ -25,7 +25,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
   // The comments future is held in a field (not recreated in build()) so the
   // list doesn't re-fetch on every parent rebuild — the card rebuilds often on
   // realtime events. Recomputed only when refs/refreshKey change or on retry.
-  late Future<List<Map<String, dynamic>>> _future;
+  late Future<List<Comment>> _future;
 
   @override
   void initState() {
@@ -79,7 +79,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
   // half contributes no rows but never fails the whole list), tags each comment
   // with its origin entityType (`_origin`), merges, de-dups by id and sorts by
   // created_at desc.
-  Future<List<Map<String, dynamic>>> _loadMerged() async {
+  Future<List<Comment>> _loadMerged() async {
     final crm = ref.read(magicCrmServiceProvider);
     final results = await Future.wait(
       widget.refs.map((r) async {
@@ -94,7 +94,10 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
         }
       }),
     );
-    return mergeByIdSorted(results, dateKey: 'created_at');
+    return mergeByIdSorted(
+      results,
+      dateKey: 'created_at',
+    ).map(Comment.fromMap).toList();
   }
 
   bool get _isStaff {
@@ -113,10 +116,9 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
     if (id == null) return;
     final showToTeacher = c['kind'] != 'teacher_note';
     try {
-      await ref.read(magicCrmServiceProvider).setCommentVisibility(
-            commentId: id,
-            visibleToTeacher: showToTeacher,
-          );
+      await ref
+          .read(magicCrmServiceProvider)
+          .setCommentVisibility(commentId: id, visibleToTeacher: showToTeacher);
       if (mounted) setState(() => _future = _loadMerged());
     } catch (e) {
       if (mounted) {
@@ -142,9 +144,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
         icon: Icon(
-          visible
-              ? Icons.visibility_rounded
-              : Icons.visibility_off_rounded,
+          visible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
           size: 14,
         ),
         label: Text(
@@ -158,7 +158,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return FutureBuilder<List<Map<String, dynamic>>>(
+    return FutureBuilder<List<Comment>>(
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -199,11 +199,11 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
 
         return Column(
           children: comments.map((c) {
-            final dt = DateTime.tryParse(c['created_at'] ?? '')?.toLocal();
+            final dt = DateTime.tryParse(c.createdAt ?? '')?.toLocal();
             final dateStr = dt != null
                 ? DateFormat('d MMM HH:mm', 'ru').format(dt)
                 : '';
-            final kindLabel = _kindLabel(c['kind']);
+            final kindLabel = _kindLabel(c.kind);
             return Container(
               width: double.infinity,
               margin: const EdgeInsets.only(bottom: AppSpace.sm),
@@ -226,12 +226,8 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                           children: [
                             Flexible(
                               child: Text(
-                                (c['author_name']
-                                            ?.toString()
-                                            .trim()
-                                            .isNotEmpty ??
-                                        false)
-                                    ? c['author_name'].toString()
+                                c.authorName.trim().isNotEmpty
+                                    ? c.authorName
                                     : 'Сотрудник',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -246,11 +242,9 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                               const SizedBox(width: 6),
                               _kindBadge(kindLabel),
                             ],
-                            if (widget.showOrigin && c['_origin'] != null) ...[
+                            if (widget.showOrigin && c.origin != null) ...[
                               const SizedBox(width: 6),
-                              ClientOriginChip(
-                                entityType: c['_origin'].toString(),
-                              ),
+                              ClientOriginChip(entityType: c.origin!),
                             ],
                           ],
                         ),
@@ -266,15 +260,12 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    c['content'] ?? '',
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  Text(c.content ?? '', style: const TextStyle(fontSize: 13)),
                   if (_isStaff &&
-                      (c['kind'] == 'admin_comment' ||
-                          c['kind'] == 'teacher_note')) ...[
+                      (c.kind == 'admin_comment' ||
+                          c.kind == 'teacher_note')) ...[
                     const SizedBox(height: 2),
-                    _visibilityToggle(c),
+                    _visibilityToggle(c.raw),
                   ],
                 ],
               ),
@@ -336,4 +327,3 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
-

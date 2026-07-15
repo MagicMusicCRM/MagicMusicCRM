@@ -18,6 +18,14 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/models/comment.dart';
+import 'package:magic_music_crm/core/models/expected_payment.dart';
+import 'package:magic_music_crm/core/models/family_member.dart';
+import 'package:magic_music_crm/core/models/student_balance.dart';
+import 'package:magic_music_crm/core/models/payment.dart';
+import 'package:magic_music_crm/core/models/subscription.dart';
+import 'package:magic_music_crm/core/models/lesson.dart';
+import '../trial_lesson_booking.dart';
 import 'client_card_aggregation.dart';
 import 'client_card_dialogs.dart';
 import 'client_card_sheets.dart';
@@ -166,16 +174,16 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // Loaded from `getStudentCard` (+ a family fetch). Each section is isolated so
   // a single failed call never blanks the whole card.
   Map<String, dynamic>? _student;
-  Map<String, dynamic>? _balance;
-  List<Map<String, dynamic>> _subscriptions = [];
-  List<Map<String, dynamic>> _payments = [];
-  List<Map<String, dynamic>> _lessons = [];
+  StudentBalance? _balance;
+  List<Subscription> _subscriptions = [];
+  List<Payment> _payments = [];
+  List<Lesson> _lessons = [];
   List<Map<String, dynamic>> _studentTasks = [];
   // Unified comment stream for the Прогресс tab ([PROGRESS]-prefixed notes) and
   // the «История» merge — the «Комментарии» tab reads live via [_CommentsList].
   List<Map<String, dynamic>> _studentComments = [];
   List<Map<String, dynamic>> _groups = [];
-  List<Map<String, dynamic>> _expectedPayments = [];
+  List<ExpectedPayment> _expectedPayments = [];
   bool _loadingStudent = true;
   String? _studentError;
   bool _realtimeRefreshQueued = false;

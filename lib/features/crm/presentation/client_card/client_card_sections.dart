@@ -32,9 +32,7 @@ String _duplicateMatchText(Map<String, dynamic> candidate) {
 }
 
 /// Student «Группы» info card: active groups + their teachers (read-only).
-Widget _studentGroupsInfoCard({
-  required List<Map<String, dynamic>> groups,
-}) {
+Widget _studentGroupsInfoCard({required List<Map<String, dynamic>> groups}) {
   return _buildInfoCard('Группы', [
     if (groups.isEmpty)
       const _InfoRow(
@@ -69,7 +67,7 @@ Widget _familySection(
   required bool loading,
   required Map<String, dynamic>? family,
   required bool busy,
-  required void Function(Map<String, dynamic> member) onRemove,
+  required void Function(FamilyMember member) onRemove,
 }) {
   if (loading) {
     return const Padding(
@@ -78,9 +76,12 @@ Widget _familySection(
     );
   }
   final familyRecord = family?['family'] as Map<String, dynamic>?;
-  final members = _list(family?['members']);
+  final members = _list(family?['members']).map(FamilyMember.fromMap).toList();
   if (familyRecord == null) {
-    return Text('Семья не указана', style: TextStyle(color: cs.onSurfaceVariant));
+    return Text(
+      'Семья не указана',
+      style: TextStyle(color: cs.onSurfaceVariant),
+    );
   }
   final primaryId = familyRecord['primary_payer_member_id']?.toString();
   return Column(
@@ -101,10 +102,10 @@ Widget _familySection(
         )
       else
         ...members.map((m) {
-          final isPayer = primaryId != null && m['id']?.toString() == primaryId;
+          final isPayer = primaryId != null && m.id == primaryId;
           final subtitle = [
-            _familyRoleLabel(m['role']),
-            if (m['is_primary_contact'] == true) 'Осн. контакт',
+            _familyRoleLabel(m.role),
+            if (m.isPrimaryContact) 'Осн. контакт',
             if (isPayer) 'Плательщик',
           ].where((value) => value.isNotEmpty).join(' · ');
           return Padding(
@@ -114,7 +115,9 @@ Widget _familySection(
               visualDensity: VisualDensity.compact,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppRadius.control),
-                side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                side: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
               ),
               tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
               leading: const Icon(
@@ -123,9 +126,7 @@ Widget _familySection(
                 color: AppColor.gold,
               ),
               title: Text(
-                (m['name']?.toString().trim().isNotEmpty ?? false)
-                    ? m['name'].toString()
-                    : 'Без имени',
+                m.name.trim().isNotEmpty ? m.name : 'Без имени',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -175,10 +176,11 @@ Widget _duplicateCandidatesSection(
         ...candidates.take(4).map((candidate) {
           final student = _candidateEntity(candidate, 'student');
           final title = student['name']?.toString().trim();
-          final subtitle =
-              [student['phone'], student['email'], _duplicateMatchText(candidate)]
-                  .where((value) => value != null && '$value'.isNotEmpty)
-                  .join(' · ');
+          final subtitle = [
+            student['phone'],
+            student['email'],
+            _duplicateMatchText(candidate),
+          ].where((value) => value != null && '$value'.isNotEmpty).join(' · ');
           final candidateId = candidate['id']?.toString();
           final pending = candidateId != null && candidateId == pendingId;
           return Padding(
@@ -188,7 +190,9 @@ Widget _duplicateCandidatesSection(
               visualDensity: VisualDensity.compact,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppRadius.control),
-                side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                side: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
               ),
               tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
               title: Text(
@@ -198,7 +202,11 @@ Widget _duplicateCandidatesSection(
               ),
               subtitle: subtitle.isEmpty
                   ? null
-                  : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  : Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
               trailing: FilledButton.tonalIcon(
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColor.goldSoft,
@@ -339,9 +347,11 @@ Widget _aggregateCard(
         subtitleBuilder: (row) {
           final utm = row['utm'];
           final utmSource = utm is Map ? utm['Source']?.toString() : null;
-          return [row['channel'], row['discipline'], utmSource]
-              .where((value) => value != null && '$value'.isNotEmpty)
-              .join(' · ');
+          return [
+            row['channel'],
+            row['discipline'],
+            utmSource,
+          ].where((value) => value != null && '$value'.isNotEmpty).join(' · ');
         },
       ),
       _miniSection(
@@ -355,4 +365,3 @@ Widget _aggregateCard(
     ],
   );
 }
-

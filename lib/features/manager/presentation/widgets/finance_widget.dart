@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -48,7 +49,7 @@ class FinanceWidget extends ConsumerStatefulWidget {
 }
 
 class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
-  List<Map<String, dynamic>> _payments = [];
+  List<Payment> _payments = [];
   bool _loading = true;
   Object? _loadError;
   double _total = 0;
@@ -558,20 +559,17 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                       itemCount: _payments.length,
                       itemBuilder: (ctx, i) {
                         final p = _payments[i];
-                        final amount =
-                            double.tryParse(p['amount'].toString()) ?? 0;
-                        final type = _typeLabel(p['type'] as String?);
-                        final student = p['students'];
-                        final name = student != null
-                            ? '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
-                                  .trim()
+                        final amount = p.amount.toDouble();
+                        final type = _typeLabel(p.type);
+                        final name = p.hasStudent
+                            ? p.studentName
                             : 'Неизвестный ученик';
                         // Show when the payment actually happened
                         // (payment_date), not when the row was inserted, so
                         // late-entered payments don't appear in the wrong period.
-                        final rawDate = p['payment_date'] ?? p['created_at'];
+                        final rawDate = p.paymentDate ?? p.createdAt;
                         final dt = rawDate != null
-                            ? DateTime.tryParse(rawDate.toString())
+                            ? DateTime.tryParse(rawDate)
                             : null;
                         final dateStr = dt != null
                             ? DateFormat(
@@ -579,9 +577,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                                 'ru',
                               ).format(dt.toLocal())
                             : '';
-                        final note = (p['notes'] ?? p['description'] ?? '')
-                            .toString()
-                            .trim();
+                        final note = p.note;
                         final subtitle = [
                           type,
                           if (dateStr.isNotEmpty) dateStr,
@@ -591,9 +587,9 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
-                            onTap: student != null
+                            onTap: p.hasStudent
                                 ? () async {
-                                    final id = student['id']?.toString();
+                                    final id = p.studentEntityId;
                                     if (id == null || id.isEmpty) return;
                                     await showClientCard(
                                       context,
@@ -649,4 +645,3 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     );
   }
 }
-

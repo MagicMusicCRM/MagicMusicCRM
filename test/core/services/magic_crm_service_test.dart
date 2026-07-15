@@ -1955,11 +1955,11 @@ void main() {
         method: 'other',
       );
 
-      expect(payments.single['students']['first_name'], 'Анна');
-      expect(payments.single['type'], 'subscription');
-      expect(payments.single['notes'], 'Оплата абонемента');
-      expect(payments.single['description'], 'Оплата абонемента');
-      expect(created['amount'], 2500);
+      expect(payments.single.studentFirstName, 'Анна');
+      expect(payments.single.type, 'subscription');
+      expect(payments.single.notes, 'Оплата абонемента');
+      expect(payments.single.description, 'Оплата абонемента');
+      expect(created.amount, 2500);
       expect(
         adapter.requests[0].queryParameters['from'],
         '2026-06-01T00:00:00.000Z',

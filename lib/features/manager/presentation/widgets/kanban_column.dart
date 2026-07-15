@@ -143,7 +143,9 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                             color: widget.status.$3,
                             style: BorderStyle.solid,
                           ),
-                          borderRadius: BorderRadius.circular(AppRadius.control),
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.control,
+                          ),
                           color: widget.status.$3.withAlpha(25),
                         ),
                         child: Center(
@@ -163,50 +165,51 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                 child: widget.leads.isEmpty && !hasMore
                     ? _buildEmptyColumn(context)
                     : ListView.builder(
-                  key: PageStorageKey('leads_col_${widget.status.$1}'),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  itemCount: widget.leads.length + (hasMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index >= widget.leads.length) {
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 6, 0, 10),
-                        child: OutlinedButton.icon(
-                          onPressed: widget.loadingMore
-                              ? null
-                              : () => widget.onLoadMore(widget.nextCursor),
-                          icon: widget.loadingMore
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.expand_more_rounded),
-                          label: Text(
-                            widget.loadingMore
-                                ? 'Загрузка...'
-                                : 'Загрузить ещё',
-                          ),
-                        ),
-                      );
-                    }
-                    final lead = widget.leads[index];
-                    final leadId = lead['id']?.toString() ?? '';
-                    return _LeadCard(
-                      lead: lead,
-                      statusColor: widget.status.$3,
-                      allStatuses: widget.allStatuses,
-                      onMove: widget.onMove,
-                      onDelete: widget.onDelete,
-                      onTap: () => widget.onTap(lead),
-                      onRefresh: widget.onRefresh,
-                      isPending: widget.pendingLeadIds.contains(leadId),
-                      onDragUpdate: widget.onDragUpdate,
-                      onDragEnd: widget.onDragEnd,
-                    );
-                  },
-                ),
+                        key: PageStorageKey('leads_col_${widget.status.$1}'),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        itemCount: widget.leads.length + (hasMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index >= widget.leads.length) {
+                            return Padding(
+                              padding: const EdgeInsets.fromLTRB(0, 6, 0, 10),
+                              child: OutlinedButton.icon(
+                                onPressed: widget.loadingMore
+                                    ? null
+                                    : () =>
+                                          widget.onLoadMore(widget.nextCursor),
+                                icon: widget.loadingMore
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.expand_more_rounded),
+                                label: Text(
+                                  widget.loadingMore
+                                      ? 'Загрузка...'
+                                      : 'Загрузить ещё',
+                                ),
+                              ),
+                            );
+                          }
+                          final lead = widget.leads[index];
+                          final leadId = lead['id']?.toString() ?? '';
+                          return _LeadCard(
+                            lead: Lead.fromMap(lead),
+                            statusColor: widget.status.$3,
+                            allStatuses: widget.allStatuses,
+                            onMove: widget.onMove,
+                            onDelete: widget.onDelete,
+                            onTap: () => widget.onTap(lead),
+                            onRefresh: widget.onRefresh,
+                            isPending: widget.pendingLeadIds.contains(leadId),
+                            onDragUpdate: widget.onDragUpdate,
+                            onDragEnd: widget.onDragEnd,
+                          );
+                        },
+                      ),
               ),
             ],
           ),
@@ -230,9 +233,7 @@ class _KanbanColumnState extends State<_KanbanColumn> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              searching
-                  ? Icons.search_off_rounded
-                  : Icons.inbox_outlined,
+              searching ? Icons.search_off_rounded : Icons.inbox_outlined,
               size: 28,
               color: cs.onSurfaceVariant.withAlpha(140),
             ),
@@ -248,9 +249,7 @@ class _KanbanColumnState extends State<_KanbanColumn> {
             ),
             const SizedBox(height: 2),
             Text(
-              searching
-                  ? 'Измените запрос'
-                  : 'Перетащите карточку сюда',
+              searching ? 'Измените запрос' : 'Перетащите карточку сюда',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: cs.onSurfaceVariant.withAlpha(160),
@@ -265,4 +264,3 @@ class _KanbanColumnState extends State<_KanbanColumn> {
 }
 
 // Finalizing kanban column structure
-

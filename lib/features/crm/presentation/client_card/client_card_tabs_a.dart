@@ -329,17 +329,17 @@ extension _ClientCardTabsA on _ClientCardState {
                 _InfoRow(
                   icon: Icons.summarize_outlined,
                   label: 'Всего оплачено',
-                  value: '${_balance!['total_paid']} ₽',
+                  value: '${_balance!.totalPaidRaw} ₽',
                 ),
                 _InfoRow(
                   icon: Icons.history_edu_outlined,
                   label: 'Списано за уроки',
-                  value: '${_balance!['total_cost']} ₽',
+                  value: '${_balance!.totalCostRaw} ₽',
                 ),
                 _InfoRow(
                   icon: Icons.account_balance_wallet_outlined,
                   label: 'Баланс',
-                  value: '${_balance!['balance']} ₽',
+                  value: '${_balance!.balanceRaw} ₽',
                 ),
               ]),
             ],
@@ -348,13 +348,11 @@ extension _ClientCardTabsA on _ClientCardState {
               _buildInfoCard('Абонементы', [
                 for (final s in _subscriptions.take(5))
                   _InfoRow(
-                    icon: s['status'] == 'active'
+                    icon: s.isActive
                         ? Icons.confirmation_number_outlined
                         : Icons.history_toggle_off_rounded,
-                    label:
-                        (s['package_name']?.toString().trim().isNotEmpty ??
-                            false)
-                        ? s['package_name'].toString()
+                    label: (s.packageName?.trim().isNotEmpty ?? false)
+                        ? s.packageName!
                         : 'Абонемент',
                     value: _subscriptionRemainder(s),
                   ),
@@ -364,7 +362,7 @@ extension _ClientCardTabsA on _ClientCardState {
               const SizedBox(height: AppSpace.lg),
               StudentScheduleSection(
                 studentId: _studentId,
-                lessons: _lessons,
+                lessons: _lessons.map((l) => l.raw).toList(),
                 onChanged: _fetchStudentData,
               ),
             ],
@@ -577,71 +575,21 @@ extension _ClientCardTabsA on _ClientCardState {
   /// «Записать на пробный урок» прямо из карточки лида — тот же диалог, что в
   /// меню канбан-доски (leads_widget._scheduleTrial).
   Future<void> _scheduleTrialFromCard() async {
-    final crm = ref.read(magicCrmServiceProvider);
-    List<Map<String, dynamic>> teachers;
-    List<Map<String, dynamic>> rooms;
-    try {
-      final [teachersRes, roomsRes] = await Future.wait([
-        crm.listTeachers(limit: 100),
-        crm.listRooms(limit: 100),
-      ]);
-      teachers = List<Map<String, dynamic>>.from(teachersRes);
-      rooms = List<Map<String, dynamic>>.from(roomsRes);
-    } catch (e) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Не удалось загрузить данные',
-          detail: '$e',
-          type: MagicToastType.danger,
-        );
-      }
-      return;
-    }
-    if (!mounted) return;
-    if (teachers.isEmpty) {
-      MagicToast.show(
-        context,
-        'Нет доступных преподавателей',
-        type: MagicToastType.danger,
-      );
-      return;
-    }
-
-    final slot = await showScheduleTrialDialog(
+    await bookTrialLesson(
       context,
-      teachers: teachers,
-      rooms: rooms,
+      ref,
+      leadId: _leadId,
+      leadName: _leadData['name']?.toString() ?? '',
+      feedback: (message, {detail, ok = false}) => MagicToast.show(
+        context,
+        message,
+        detail: detail,
+        type: ok ? MagicToastType.success : MagicToastType.danger,
+      ),
+      onBooked: () async {
+        _dirty = true;
+        await _fetchCard();
+      },
     );
-    if (slot == null) return;
-    try {
-      await crm.createLesson(
-        leadId: _leadId,
-        teacherId: slot.teacherId,
-        roomId: slot.roomId,
-        scheduledAt: slot.scheduledAt.toIso8601String(),
-        isTrial: true,
-        status: 'scheduled',
-        notes: 'Пробное занятие по лиду: ${_leadData['name'] ?? ''}',
-      );
-      _dirty = true;
-      await _fetchCard();
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Пробное занятие назначено',
-          type: MagicToastType.success,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Ошибка назначения',
-          detail: '$e',
-          type: MagicToastType.danger,
-        );
-      }
-    }
   }
 }

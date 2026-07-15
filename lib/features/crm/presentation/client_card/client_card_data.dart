@@ -158,15 +158,19 @@ extension _ClientCardData on _ClientCardState {
       _emitState(() {
         _student = student;
         _balance = card['balance'] is Map<String, dynamic>
-            ? card['balance'] as Map<String, dynamic>
+            ? StudentBalance.fromMap(card['balance'] as Map<String, dynamic>)
             : null;
-        _subscriptions = _list(card['subscriptions']);
-        _payments = _list(card['payments']);
-        _lessons = _list(card['lessons']);
+        _subscriptions = _list(
+          card['subscriptions'],
+        ).map(Subscription.fromMap).toList();
+        _payments = _list(card['payments']).map(Payment.fromMap).toList();
+        _lessons = _list(card['lessons']).map(Lesson.fromMap).toList();
         _studentTasks = _list(card['tasks']);
         _studentComments = _list(card['comments']);
         _groups = _list(card['groups']);
-        _expectedPayments = _list(card['expected_payments']);
+        _expectedPayments = _list(
+          card['expected_payments'],
+        ).map(ExpectedPayment.fromMap).toList();
         _studentCardTimeline = _list(card['timeline']);
         _studentTasks.sort(
           (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),

@@ -103,7 +103,85 @@ non-contiguous сборку main (init-методы + build + `}`, выреза�
 
 ---
 
-## F0 — типизированные модели (cross-cutting, фундамент)
+## F0 — типизированные модели (cross-cutting, фундамент) — НАЧАТО
+
+### ✅ Payment (первый домен, эталон паттерна) — DONE `ee0d9d4f`
+`Payment` (`lib/core/models/payment.dart`) — типизированный view над legacy-map
+формой (выход `_legacyPayment`). Типизированы 3 сервис-метода (listPayments/
+listPaymentsWithTotal/createPayment → `Payment`), все консьюмеры переведены с
+`payment['key']` на геттеры: finance_widget, client_dashboard_screen, client_card
+(_paymentsView). Whole-project analyze зелёный; сервис-тест обновлён на типизир.
+API, **все 43 теста magic_crm_service проходят** (рантайм-проверка парсинга).
+
+### ✅ Lead — kanban-card slice — DONE `51ff55ce`
+`Lead` (`lib/core/models/lead.dart`) — типизированный view над `_legacyLead`/
+`_legacyLeadBoardItem` (покрывает base + board-item; board-поля дефолтятся). Типизирован
+kanban-путь: `_LeadCard.lead` и `_LeadDragHandle.lead` → `Lead`, обёртка `Lead.fromMap`
+одна — в `kanban_column`. Все `lead['key']` → геттеры; счётчики через ленивый int-parse
+(= старый `_intValue`, удалён). Map-API (`ConvertLeadDialog.show`, transfer-контроллер/
+ghost-card) получают `lead.raw`. **Осознанно вне slice (оставлено Map):** client_card
+`widget.lead` (dual lead/student, loose access), `listLeads` (единственный консьюмер
+`tasks_widget` пакует в гетерогенный `Future.wait<List<Map>>`), lead-transfer фича,
+board-internals в `leads_actions` (`_matchesLiveQuery` фильтр по raw column-items).
+Следующий шаг lead-домена: типизировать `leadBoardProvider` items целиком (тогда
+`_matchesLiveQuery`, drag, onTap перейдут на `Lead`) — больше ripple.
+
+### ✅ FamilyMember — DONE `08648461`
+`FamilyMember` (`lib/core/models/family_member.dart`, 6 полей: id/entity_type/
+entity_id/role/is_primary_contact/name) — самый безопасный домен (только строки/
+id/bool, ноль числового форматирования). Типизированы члены семьи в точке
+извлечения виджета (`getFamilyForEntity` возвращает `{family, members}`-обёртку →
+сервис-return остаётся map, как у nested-payments): `_familySection` мапит members
+→ `List<FamilyMember>`, `onRemove`/`_removeFamilyMember` берут `FamilyMember`, все
+`member['key']` → геттеры. **БЕЗ изменения сервиса/теста** (getFamilyForEntity map
++ его тест не тронуты). analyze зелёный.
+
+**Паттерн F0 (эталон для следующих доменов — lead/student/lesson/family/…):**
+1. Источник формы — `_legacy<Domain>` маппер в `magic_crm_service_mappers.dart`
+   (snake_case ключи, которые видят виджеты), НЕ сырой backend-DTO.
+2. Модель = тонкий типизированный view над map: геттеры повторяют ТОЧНЫЕ
+   выражения, которые виджеты уже применяли к map (это делает миграцию
+   behaviour-preserving). Спорные места:
+   - числа/деньги: `num get amount` (лениво парсит num|строку) для вычислений +
+     `Object? get amountRaw` для СЫРОЙ интерполяции `'${x}'` (иначе дрейф формата
+     "1500.00"→"1500"); сверить каждый сайт.
+   - `a ?? b` цепочки → convenience-геттер (`methodLabel`, `note`).
+3. Типизировать сервис-методы, которые возвращают ЧИСТЫЙ список домена (не
+   вложенный в getStudentCard/getMySummary — те оставить map на этот домен).
+4. Перевести консьюмеры + обновить unit-тесты сервиса на типизир. API; прогнать
+   `flutter test test/core/services/magic_crm_service_test.dart` (рантайм-проверка).
+**Границы (ripple):** менять return type сервиса → все call-sites; провайдеры с
+явным `FutureProvider<List<Map...>>` → перетипизировать. getMySummary/getStudentCard
+вложенные списки оставлять map, пока не дойдёт очередь до их домена целиком.
+
+### ✅ Ещё домены — DONE (widget-side, все analyze-зелёные)
+- **StudentBalance** `student_balance.dart` — client_card `_balance` (nested в getStudentCard); `*Raw` для `'${x} ₽'`, `balance` = ленивый `num?`.
+- **ExpectedPayment** `expected_payment.dart` — client_card `_invoicesView` (инвойсы); `amountRaw` для raw-интерполяции.
+- **Comment** `comment.dart` — client_card `_CommentsList` end-to-end (`_future`/`_loadMerged` → `List<Comment>`; `origin`-геттер для синтетического `_origin`-ключа мержа). `_progressNotesView` оставлен follow-up'ом.
+
+- **Subscription** `subscription.dart` — client_card slice: `_subscriptions` поле, getStudentCard-присвоение, «Абонементы»-карточка в tabs_a, `_subscriptionRemainder`. `packagePriceRaw` = `Object?` (сохраняет guard `price is num`); `lessonsTotal/Used` = ленивый `num`. `[commit] subscription`.
+- **Lesson** `lesson.dart` — client_card slice «Занятия»-таб: `_lessons` поле, getStudentCard-присвоение, upcoming/past-split + `byTime` в `_buildLessonsTab`, `_lessonRow`. Вложенные `groups/rooms/teachers` = raw-map геттеры (позиционные чтения byte-faithful); `StudentScheduleSection` остаётся на map через `.raw`-адаптер. `[commit] lesson`.
+
+**Итого F0 сделано 8 доменов:** Payment, Lead(card), FamilyMember, StudentBalance, ExpectedPayment, Comment, Subscription, Lesson.
+
+### Оставшиеся домены — СОЗНАТЕЛЬНО ПРОПУЩЕНЫ (F0-паттерн неприменим)
+Не «не успели» — типизация здесь **net-negative** и фрактурит cohesive core (нарушает ponytail). Разобрано:
+- **task** (34) — ❌ НЕ типизировать. `_studentTasks` в client_card — исключительно вход гетерогенного merge: `_origin` (`{...r,'_origin':…}`-spread), in-place `_studentTasks.sort(…)`, `_studentTimelineView` (задачи+комментарии как maps в общем таймлайне). Таб задач рендерит `_leadCard['tasks']`-maps, НЕ `_studentTasks`. Типизация потребовала бы `.raw`-адаптеров на каждом merge-стыке и сломала бы spread/sort — при нулевой типобезопасности на рендер-сайтах. (tasks_widget — отдельный путь listTasks, тоже гетерогенный `Future.wait<List<Map>>`.)
+- **student** (23) — ❌ НЕ типизировать. `_student` — **мутабельный рабочий буфер**: inline-редакторы пишут сквозь него (`_student!['first_name'] = value`, `_student?['status'] = value`, `_student!['custom_data'] = cd`), и он целиком передаётся в `put()`-save-буфер и `TopUpDialog.show(_student!)`. Иммутабельный typed-view нельзя присвоить и он сломал бы все mutation-сайты + raw-handoff'ы. Вне scope F0 «тонкий read-only view».
+- **lead-status** (7) — ❌ низкая ценность (без изменений): `_legacyLeadStatus` сразу → `StatusRecord`-тапл в 3-4 конверторах, `['key']/['label']/['color']` уже локализованы.
+- **lead (board целиком)** — опционально: типизировать `leadBoardProvider` items (тогда `_matchesLiveQuery`/drag/onTap на `Lead`). Больший ripple на уровне провайдера; карточка лида уже типизирована (Lead). Оставлено как отдельный опциональный заход, не блокирует DoD.
+
+**Вывод F0:** покрыты все домены, где данные потребляются как чистый read-only список/объект (8 шт). Домены-исключения (task/student) используют данные как merge-вход / мутабельный буфер — там F0 противопоказан по SRP+ponytail. F0 закрыт.
+
+### ~~Остальные домены (не начаты) — по паттерну выше~~
+lead (18 полей, много консьюмеров) / student (23) / lesson (34) / task (34) /
+comment (13) / subscription (13) / family (6) / lead-status (7) / expected-payment
+(12) / student-balance (10). Начинать с бол­ее изолированных; lesson/task самые
+крупные. Оценка риска: домены со ЧИСЛАМИ/деньгами и raw-интерполяцией — самые
+тонкие (нужен `*Raw` геттер + сверка формата); строковые домены (family/status) —
+низкий риск.
+
+### ~~F0 — исходное описание~~
 
 **Что:** заменить `Map<String, dynamic>` на типизированные модели, домен за доменом,
 синхронно с backend-DTO. Только в messenger ~246 обращений `['key']`.
@@ -169,7 +247,22 @@ form-контроллеров, dirty-tracking, realtime-refresh. `analyze` не 
 
 ---
 
-## F+B — де-дупликация (cross-cut, ПОСЛЕ F1/F3)
+## ✅ F+B — де-дупликация — DONE
+
+Trial-scheduling был продублирован в 2 местах: `client_card` `_scheduleTrialFromCard`
+и `lead_card` `_scheduleTrial` (последний ещё и хардкодил свой inline-диалог,
+дублируя `showScheduleTrialDialog`). Свёрнуто в один shared `bookTrialLesson`
+(`lib/features/crm/presentation/trial_lesson_booking.dart`): load teachers/rooms →
+guard → shared-диалог → `createLesson(isTrial:true)`. Feedback (MagicToast vs
+ScaffoldMessenger) и refresh делегированы вызывающему через колбэки — поверхности
+разные, поток общий. `_scheduleTrialFromCard` 68→17 строк, `_scheduleTrial`
+130→11 (lead_card 721→601, inline-диалог удалён; заодно lead_card получил
+обработку ошибок load/create, которой не было). `createLesson` в
+`create_lesson_dialog.dart` — отдельный общий путь полного создания урока (не
+trial), уже централизован. analyze зелёный. Рантайм-проверка: назначить пробное
+из карточки лида И из kanban-меню — диалог, создание, тост, refresh.
+
+### ~~F+B — де-дупликация (cross-cut, ПОСЛЕ F1/F3)~~ (исходное описание ниже)
 
 **Что:** `createLesson` продублирован в 3 виджетах; «schedule trial» — в 2.
 После появления контроллеров свернуть в один `bookLesson()` / `scheduleTrialLesson()`.

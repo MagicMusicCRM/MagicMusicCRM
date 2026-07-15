@@ -5,7 +5,6 @@ part of 'client_card.dart';
 // class calls them unchanged. Split out of client_card_widgets.dart to keep each
 // source under the ~800-line bar.
 
-
 /// Shared card container used by the student Инфо/Документы tabs.
 Widget _buildInfoCard(String title, List<Widget> children) {
   return Card(
@@ -62,14 +61,14 @@ Widget _sectionTitle(String title) {
 /// schedule focused on this lesson (only wired when it has a date + id).
 Widget _lessonRow(
   ColorScheme cs,
-  Map<String, dynamic> l, {
+  Lesson l, {
   required void Function(DateTime scheduledAt, String lessonId) onOpenSchedule,
 }) {
-  final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
+  final dt = DateTime.tryParse(l.scheduledAt ?? '');
   final dateStr = dt != null
       ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
       : '—';
-  final teacherData = l['teachers'] as Map<String, dynamic>?;
+  final teacherData = l.teachers;
   String teacherName = '—';
   if (teacherData != null) {
     final tfName = teacherData['first_name']?.toString() ?? '';
@@ -81,8 +80,8 @@ Widget _lessonRow(
     }
     teacherName = tName.isEmpty ? '—' : tName;
   }
-  final completed = l['status'] == 'completed';
-  final lessonId = l['id']?.toString();
+  final completed = l.status == 'completed';
+  final lessonId = l.id;
   return Card(
     margin: const EdgeInsets.only(bottom: 8),
     child: ListTile(
@@ -93,17 +92,16 @@ Widget _lessonRow(
       subtitle: Text(
         [
           'Преп.: $teacherName',
-          '${l['groups']?['name'] ?? 'Инд.'}',
-          if ((l['rooms']?['name']?.toString() ?? '').isNotEmpty)
-            'Ауд.: ${l['rooms']['name']}',
+          '${l.groups?['name'] ?? 'Инд.'}',
+          if ((l.rooms?['name']?.toString() ?? '').isNotEmpty)
+            'Ауд.: ${l.rooms!['name']}',
         ].join(' • '),
       ),
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: (completed ? AppTheme.success : AppTheme.primaryGold).withAlpha(
-            30,
-          ),
+          color: (completed ? AppTheme.success : AppTheme.primaryGold)
+              .withAlpha(30),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
@@ -201,7 +199,10 @@ Widget _studentTimelineView(
 }) {
   if (tasks.isEmpty && comments.isEmpty) {
     return Center(
-      child: Text('История пуста', style: TextStyle(color: cs.onSurfaceVariant)),
+      child: Text(
+        'История пуста',
+        style: TextStyle(color: cs.onSurfaceVariant),
+      ),
     );
   }
   final items = [
@@ -242,9 +243,7 @@ Widget _studentTimelineView(
                       Icon(
                         isTask ? Icons.task_alt_rounded : Icons.comment_rounded,
                         size: 16,
-                        color: isTask
-                            ? AppTheme.warning
-                            : AppTheme.primaryGold,
+                        color: isTask ? AppTheme.warning : AppTheme.primaryGold,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -301,7 +300,10 @@ Widget _mergedHistoryView(
   }
   if (items.isEmpty) {
     return Center(
-      child: Text('История пуста', style: TextStyle(color: cs.onSurfaceVariant)),
+      child: Text(
+        'История пуста',
+        style: TextStyle(color: cs.onSurfaceVariant),
+      ),
     );
   }
   return ListView.builder(
@@ -592,17 +594,16 @@ Widget _miniSection(
   );
 }
 
-String _subscriptionRemainder(Map<String, dynamic> s) {
-  num toNum(Object? v) => v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
+String _subscriptionRemainder(Subscription s) {
   String hours(num v) =>
       v == v.truncate() ? v.toInt().toString() : v.toStringAsFixed(1);
-  final total = toNum(s['lessons_total']);
-  final left = total - toNum(s['lessons_used']);
-  final price = s['package_price'];
+  final total = s.lessonsTotal;
+  final left = total - s.lessonsUsed;
+  final price = s.packagePriceRaw;
   final money = (price is num && total > 0)
       ? ' / ${(price / total * left).round()} ₽'
       : '';
-  final status = s['status']?.toString();
+  final status = s.status;
   final suffix = status == 'active' ? '' : ' · ${_formatStatus(status)}';
   return 'Остаток: ${hours(left)} из ${hours(total)} астр.ч.$money$suffix';
 }
@@ -647,4 +648,3 @@ String _formatDate(Object? raw) {
   if (dt == null) return '';
   return DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt);
 }
-

@@ -3,23 +3,23 @@ part of 'leads_widget.dart';
 // Drag handle and its icon for reordering lead cards.
 
 class _LeadDragHandle extends StatelessWidget {
-  final Map<String, dynamic> lead;
+  final Lead lead;
   final LeadTransferController controller;
 
   const _LeadDragHandle({required this.lead, required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    final id = lead['id']?.toString() ?? '';
+    final id = lead.id;
     return Draggable<String>(
       data: id,
       dragAnchorStrategy: pointerDragAnchorStrategy,
-      onDragStarted: () => controller.startFromLead(lead),
+      onDragStarted: () => controller.startFromLead(lead.raw),
       onDragUpdate: (d) => controller.updatePointer(d.globalPosition),
       // No DragTarget is used, so both callbacks fire — endDrag is idempotent.
       onDragEnd: (_) => controller.endDrag(),
       onDraggableCanceled: (_, _) => controller.endDrag(),
-      feedback: TransferGhostCard(controller: controller, lead: lead),
+      feedback: TransferGhostCard(controller: controller, lead: lead.raw),
       childWhenDragging: const _HandleIcon(faded: true),
       child: MouseRegion(
         cursor: SystemMouseCursors.grab,

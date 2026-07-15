@@ -103,19 +103,19 @@ extension _ClientCardStudent on _ClientCardState {
       // «Прошедшие» (scheduled_at < now, descending). Lessons without a parsable
       // time fold into «Прошедшие» so they are never silently dropped.
       final now = DateTime.now();
-      final upcoming = <Map<String, dynamic>>[];
-      final past = <Map<String, dynamic>>[];
+      final upcoming = <Lesson>[];
+      final past = <Lesson>[];
       for (final l in _lessons) {
-        final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
+        final dt = DateTime.tryParse(l.scheduledAt ?? '');
         if (dt != null && !dt.isBefore(now)) {
           upcoming.add(l);
         } else {
           past.add(l);
         }
       }
-      int byTime(Map<String, dynamic> a, Map<String, dynamic> b) {
-        final ad = DateTime.tryParse(a['scheduled_at']?.toString() ?? '');
-        final bd = DateTime.tryParse(b['scheduled_at']?.toString() ?? '');
+      int byTime(Lesson a, Lesson b) {
+        final ad = DateTime.tryParse(a.scheduledAt ?? '');
+        final bd = DateTime.tryParse(b.scheduledAt ?? '');
         if (ad == null && bd == null) return 0;
         if (ad == null) return 1;
         if (bd == null) return -1;
