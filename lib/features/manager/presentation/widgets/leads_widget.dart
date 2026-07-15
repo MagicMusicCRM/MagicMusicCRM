@@ -23,7 +23,12 @@ import 'lead_dialogs.dart';
 import 'lead_board_filters.dart';
 import 'leads_board_states.dart';
 
-part 'leads_widget_widgets.dart';
+part 'kanban_column.dart';
+part 'lead_card.dart';
+part 'lead_drag_handle.dart';
+part 'filters_button.dart';
+part 'lead_badges.dart';
+part 'lead_dialog.dart';
 
 class LeadsWidget extends ConsumerStatefulWidget {
   const LeadsWidget({super.key});
