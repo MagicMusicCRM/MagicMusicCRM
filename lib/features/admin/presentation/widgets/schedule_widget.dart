@@ -13,6 +13,7 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'create_lesson_dialog.dart';
 import 'schedule_day_canvas.dart';
 import 'lesson_details_sheet.dart';
+import 'schedule_legends.dart';
 
 part 'schedule_widget_widgets.dart';
 
@@ -920,7 +921,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           ],
           _buildDateNavigation(),
           if (!firstLoad && _currentView == _ScheduleView.day) ...[
-            _buildDayLegend(),
+            const ScheduleDayLegend(),
             _buildAvailabilitySummary(),
           ],
           Expanded(child: _buildScheduleContent()),
@@ -1599,7 +1600,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
     return Column(
       children: [
-        _buildMonthLegend(),
+        ScheduleMonthLegend(onToday: _goToToday),
         Expanded(
           child: LayoutBuilder(
             builder: (context, c) {
@@ -1623,77 +1624,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     );
   }
 
-  Widget _buildMonthLegend() {
-    Widget chip(Color c, String label) {
-      return Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: c.withAlpha(22),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: c.withAlpha(70)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  chip(AppColor.actionBlue, 'Обычные'),
-                  chip(AppColor.success, 'Пробные'),
-                  chip(AppColor.warning, 'Пиковая'),
-                  chip(AppColor.danger, 'Конфликт'),
-                ],
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: _goToToday,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColor.goldLine),
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-              child: const Text(
-                'Сегодня',
-                style: TextStyle(
-                  color: AppColor.gold,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildMonthCellRich(
     int day, {
@@ -2356,53 +2286,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   // Interaction legend above the day grid: all the rules live here, not on every
   // cell (owner rule «инструкции в легенду, не поверх ячеек»).
-  Widget _buildDayLegend() {
-    Widget chip(Color c, String label) {
-      return Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(
-          color: c.withAlpha(22),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: c.withAlpha(70)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            chip(AppColor.transferCyan, 'Тянуть вниз — выбрать часы'),
-            chip(AppColor.actionBlue, 'Перетащить — время / комната'),
-            chip(AppColor.gold, 'Край (наведи) — растянуть'),
-            chip(AppColor.danger, 'Конфликт'),
-          ],
-        ),
-      ),
-    );
-  }
 
   // ── Focus-on-lesson (Phase 5) ───────────────────────────────────────────────
   // Applies a [ScheduleFocusState] from the client card: switch to the lesson's
