@@ -26,6 +26,7 @@ import 'student_schedule_section.dart';
 
 part 'client_card_widgets.dart';
 part 'client_card_display.dart';
+part 'client_card_sections.dart';
 part 'client_card_student_tabs.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
@@ -1380,7 +1381,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
               (_loadingDuplicates || duplicateCandidates.isNotEmpty)) ...[
             const SizedBox(height: AppSpace.md),
             _sectionTitle('Кандидаты на связь'),
-            _duplicateCandidatesSection(cs, duplicateCandidates),
+            _duplicateCandidatesSection(
+              cs,
+              candidates: duplicateCandidates,
+              loading: _loadingDuplicates,
+              pendingId: _duplicateDecisionId,
+              onAttach: _attachDuplicateCandidate,
+            ),
           ],
         ],
       ),
@@ -3701,95 +3708,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
   }
 
-  Widget _duplicateCandidatesSection(
-    ColorScheme cs,
-    List<Map<String, dynamic>> candidates,
-  ) {
-    if (_loadingDuplicates) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-        child: LinearProgressIndicator(color: AppColor.gold),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Кандидаты на связь с учеником',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          ...candidates.take(4).map((candidate) {
-            final student = _candidateEntity(candidate, 'student');
-            final title = student['name']?.toString().trim();
-            final subtitle =
-                [
-                      student['phone'],
-                      student['email'],
-                      _duplicateMatchText(candidate),
-                    ]
-                    .where((value) => value != null && '$value'.isNotEmpty)
-                    .join(' · ');
-            final candidateId = candidate['id']?.toString();
-            final pending =
-                candidateId != null && candidateId == _duplicateDecisionId;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: ListTile(
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  side: BorderSide(
-                    color: cs.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-                tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-                title: Text(
-                  title == null || title.isEmpty
-                      ? 'Существующий ученик'
-                      : title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: subtitle.isEmpty
-                    ? null
-                    : Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                trailing: FilledButton.tonalIcon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColor.goldSoft,
-                    foregroundColor: AppColor.gold,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                    ),
-                  ),
-                  onPressed: pending
-                      ? null
-                      : () => _attachDuplicateCandidate(candidate),
-                  icon: pending
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.link_rounded, size: 16),
-                  label: const Text('Связать'),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
   bool _isCurrentLeadDuplicateCandidate(Map<String, dynamic> candidate) {
     final leadId = _leadData['id']?.toString() ?? widget.lead['id']?.toString();
     if (leadId == null || leadId.isEmpty) return false;
@@ -3799,33 +3717,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
         (candidate['entity_type_b'] == 'lead' &&
             candidate['entity_id_b'] == leadId &&
             candidate['entity_type_a'] == 'student');
-  }
-
-  Map<String, dynamic> _candidateEntity(
-    Map<String, dynamic> candidate,
-    String entityType,
-  ) {
-    if (candidate['entity_type_a'] == entityType) {
-      final value = candidate['entity_a'];
-      return value is Map<String, dynamic> ? value : const <String, dynamic>{};
-    }
-    if (candidate['entity_type_b'] == entityType) {
-      final value = candidate['entity_b'];
-      return value is Map<String, dynamic> ? value : const <String, dynamic>{};
-    }
-    return const <String, dynamic>{};
-  }
-
-  String _duplicateMatchText(Map<String, dynamic> candidate) {
-    final matchValue = candidate['match_value']?.toString().trim() ?? '';
-    final confidence = _asNum(candidate['confidence']);
-    final confidenceText = confidence > 0
-        ? '${(confidence * 100).round()}% совпадение'
-        : '';
-    return [
-      if (matchValue.isNotEmpty) matchValue,
-      if (confidenceText.isNotEmpty) confidenceText,
-    ].join(' · ');
   }
 
   Future<void> _addComment() async {
