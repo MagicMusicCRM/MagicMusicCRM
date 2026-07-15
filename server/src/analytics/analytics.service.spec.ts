@@ -1,7 +1,7 @@
 import { AnalyticsService } from "./analytics.service";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
-import { CrmService } from "../crm/crm.service";
+import { DashboardService } from "../crm/dashboard.service";
 import { CrmPolicy } from "../crm/crm.policy";
 
 describe("AnalyticsService", () => {
@@ -9,7 +9,7 @@ describe("AnalyticsService", () => {
   const build = (rows: Record<string, unknown>[]) => {
     const query = jest.fn().mockResolvedValue({ rows });
     const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn(), assertCanReadSchoolFinance: jest.fn() };
-    const crm = {} as unknown as CrmService;
+    const crm = {} as unknown as DashboardService;
     const audit = { record: jest.fn() };
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
@@ -107,7 +107,7 @@ describe("AnalyticsService", () => {
       ] })
       .mockResolvedValueOnce({ rows: [{ distinct_students: "6" }] });
     const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn(), assertCanReadSchoolFinance: jest.fn() };
-    const crm = {} as unknown as CrmService;
+    const crm = {} as unknown as DashboardService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
       crm,
@@ -234,7 +234,7 @@ describe("AnalyticsService", () => {
       ] })
       .mockResolvedValueOnce({ rows: [{ unspecified: "5" }] });
     const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn(), assertCanReadSchoolFinance: jest.fn() };
-    const crm = {} as unknown as CrmService;
+    const crm = {} as unknown as DashboardService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
       crm,
@@ -260,7 +260,7 @@ describe("AnalyticsService", () => {
       .mockResolvedValueOnce({ rows: [{ total: "200", missing_phone: "15", missing_branch: "8" }] })
       .mockResolvedValueOnce({ rows: [{ total: "300", missing_branch: "5", missing_discipline: "40" }] });
     const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn(), assertCanReadSchoolFinance: jest.fn() };
-    const crm = {} as unknown as CrmService;
+    const crm = {} as unknown as DashboardService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
       crm,
@@ -286,7 +286,7 @@ describe("AnalyticsService", () => {
       ] })
       .mockResolvedValueOnce({ rows: [{ unassigned: "12" }] });
     const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn(), assertCanReadSchoolFinance: jest.fn() };
-    const crm = {} as unknown as CrmService;
+    const crm = {} as unknown as DashboardService;
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
       crm,

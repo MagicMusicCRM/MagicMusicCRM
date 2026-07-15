@@ -1,9 +1,10 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
-import { CrmService } from "../crm/crm.service";
+import { LeadIntakePort } from "../common/lead-intake.port";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { MessengerPolicy } from "./messenger.policy";
+import { MessengerFanoutService } from "./messenger-fanout.service";
 import { MessengerService } from "./messenger.service";
 import { RealtimeGateway } from "./realtime.gateway";
 
@@ -16,7 +17,7 @@ describe("MessengerService", () => {
     policy?: Partial<MessengerPolicy>;
     realtime?: Partial<RealtimeGateway>;
     realtimeBus?: Partial<RealtimeBus>;
-    crm?: Partial<CrmService>;
+    crm?: Partial<LeadIntakePort>;
   }) {
     const database = {
       query: jest.fn(),
@@ -57,11 +58,13 @@ describe("MessengerService", () => {
         .fn()
         .mockResolvedValue({ leadId: "l1", created: true }),
       ...overrides?.crm,
-    } as unknown as CrmService;
+    } as unknown as LeadIntakePort;
     const realtimeBus = {
       emitCrmChanged: jest.fn(),
       ...overrides?.realtimeBus,
     } as unknown as RealtimeBus;
+
+    const fanout = new MessengerFanoutService(database, realtime);
 
     return {
       service: new MessengerService(
@@ -71,6 +74,7 @@ describe("MessengerService", () => {
         realtime,
         crm,
         realtimeBus,
+        fanout,
       ),
       database,
       audit,
@@ -142,8 +146,9 @@ describe("MessengerService", () => {
       { record: jest.fn() } as unknown as AuditService,
       policy,
       realtime,
-      { autoCreateLeadFromChat: jest.fn().mockResolvedValue({ leadId: "l1", created: true }) } as unknown as CrmService,
+      { autoCreateLeadFromChat: jest.fn().mockResolvedValue({ leadId: "l1", created: true }) } as unknown as LeadIntakePort,
       { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+      new MessengerFanoutService(database, realtime),
     );
 
     const result = await service.sendMessage(
@@ -159,104 +164,6 @@ describe("MessengerService", () => {
       expect.objectContaining({ id: "message-a", content: "hello" }),
     );
     expect(order).toEqual(["transaction:start", "transaction:done", "publish"]);
-  });
-
-  it("rejects markRead when lastReadMessageId belongs to another chat", async () => {
-    const { service, database } = createService({
-      database: {
-        query: jest.fn().mockResolvedValueOnce({ rows: [] }),
-      },
-    });
-
-    await expect(
-      service.markRead(actor, "chat-a", { lastReadMessageId: "message-other" }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-
-    expect(database.query).toHaveBeenCalledWith(
-      expect.stringContaining("from app.messages"),
-      ["message-other", "chat-a"],
-    );
-    expect(database.query).toHaveBeenCalledTimes(1);
-  });
-
-  it("derives markRead lastReadMessageId from the latest chat message when omitted", async () => {
-    const { service, database, realtime } = createService({
-      database: {
-        query: jest
-          .fn()
-          .mockResolvedValueOnce({ rows: [{ id: "message-latest" }] })
-          .mockResolvedValueOnce({ rows: [] })
-          .mockResolvedValueOnce({ rows: [] }),
-      },
-    });
-
-    await expect(service.markRead(actor, "chat-a", {})).resolves.toEqual({
-      success: true,
-    });
-
-    expect(database.query).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining("order by created_at desc"),
-      ["chat-a"],
-    );
-    expect(database.query).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining("update app.chat_members"),
-      ["chat-a", "user-a", "message-latest"],
-    );
-    expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-      "chat-a",
-      "chat.updated",
-      {
-        id: "chat-a",
-        readerId: "user-a",
-        lastReadMessageId: "message-latest",
-      },
-    );
-  });
-
-  it("publishes message.updated read receipts after markRead", async () => {
-    const readMessage = {
-      id: "message-read",
-      chat_id: "chat-a",
-      sender_id: "sender-a",
-      content: "hello",
-      message_type: "text",
-      attachment_file_id: null,
-      reply_to_id: null,
-      forwarded_from_id: null,
-      pinned_by: null,
-      pinned_at: null,
-      created_at: new Date("2026-06-13T10:00:00Z"),
-      updated_at: new Date("2026-06-13T10:00:00Z"),
-      deleted_at: null,
-      sender_email: "sender@example.com",
-      sender_first_name: "Анна",
-      sender_last_name: "Иванова",
-      is_read: true,
-    };
-    const { service, realtime } = createService({
-      database: {
-        query: jest
-          .fn()
-          .mockResolvedValueOnce({ rows: [{ id: "message-read" }] })
-          .mockResolvedValueOnce({ rows: [] })
-          .mockResolvedValueOnce({ rows: [readMessage] }),
-      },
-    });
-
-    await service.markRead(actor, "chat-a", {
-      lastReadMessageId: "message-read",
-    });
-
-    expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-      "chat-a",
-      "message.updated",
-      expect.objectContaining({
-        id: "message-read",
-        isRead: true,
-      }),
-    );
   });
 
   it("persists chat mute state for the current member", async () => {
@@ -400,88 +307,6 @@ describe("MessengerService", () => {
     ]);
   });
 
-  it("returns current channel access for readable channels", async () => {
-    const { service, policy } = createService({
-      policy: {
-        getChannelAccess: jest.fn().mockResolvedValue({
-          id: "channel-a",
-          canRead: true,
-          canWrite: false,
-        }),
-        assertCanReadChannel: jest.fn(),
-      },
-    });
-
-    await expect(service.getChannelAccess(actor, "channel-a")).resolves.toEqual(
-      {
-        channelId: "channel-a",
-        canRead: true,
-        canWrite: false,
-      },
-    );
-
-    expect(policy.assertCanReadChannel).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "channel-a", canRead: true }),
-    );
-  });
-
-  it("lists channel permissions for users who can write the channel", async () => {
-    const { service, database, policy } = createService({
-      database: {
-        query: jest.fn().mockResolvedValueOnce({
-          rows: [
-            {
-              id: "permission-a",
-              user_id: "teacher-a",
-              role: null,
-              can_read: true,
-              can_write: true,
-              user_email: "teacher@example.com",
-              user_first_name: "Анна",
-              user_last_name: "Иванова",
-            },
-          ],
-        }),
-      },
-      policy: {
-        getChannelAccess: jest.fn().mockResolvedValue({
-          id: "channel-a",
-          canRead: true,
-          canWrite: true,
-        }),
-        assertCanWriteChannel: jest.fn(),
-      },
-    });
-
-    const result = await service.listChannelPermissions(
-      { userId: "manager-a", role: "manager" },
-      "channel-a",
-    );
-
-    expect(policy.assertCanWriteChannel).toHaveBeenCalledWith(
-      { userId: "manager-a", role: "manager" },
-      expect.objectContaining({ id: "channel-a", canWrite: true }),
-    );
-    expect(database.query).toHaveBeenCalledWith(
-      expect.stringContaining("from app.channel_permissions cp"),
-      ["channel-a"],
-    );
-    expect(result.items).toEqual([
-      expect.objectContaining({
-        id: "permission-a",
-        userId: "teacher-a",
-        role: null,
-        canRead: true,
-        canWrite: true,
-        user: expect.objectContaining({
-          email: "teacher@example.com",
-          firstName: "Анна",
-          lastName: "Иванова",
-        }),
-      }),
-    ]);
-  });
-
   it("rejects message attachmentFileId that is not an active chat attachment for the chat", async () => {
     const { service, database } = createService({
       database: {
@@ -502,126 +327,6 @@ describe("MessengerService", () => {
       ["file-other", "chat-a"],
     );
     expect(database.transaction).not.toHaveBeenCalled();
-  });
-
-  it("updates own text message and publishes message.updated", async () => {
-    const { service, database, audit, realtime } = createService({
-      database: {
-        query: jest
-          .fn()
-          .mockResolvedValueOnce({
-            rows: [
-              {
-                id: "message-a",
-                chat_id: "chat-a",
-                sender_id: "user-a",
-                content: "old",
-                message_type: "text",
-                attachment_file_id: null,
-                reply_to_id: null,
-                forwarded_from_id: null,
-                pinned_by: null,
-                pinned_at: null,
-                created_at: new Date("2026-06-13T10:00:00Z"),
-                updated_at: new Date("2026-06-13T10:00:00Z"),
-                deleted_at: null,
-                sender_email: null,
-                sender_first_name: null,
-                sender_last_name: null,
-              },
-            ],
-          })
-          .mockResolvedValueOnce({
-            rows: [
-              {
-                id: "message-a",
-                chat_id: "chat-a",
-                sender_id: "user-a",
-                content: "new text",
-                message_type: "text",
-                attachment_file_id: null,
-                reply_to_id: null,
-                forwarded_from_id: null,
-                pinned_by: null,
-                pinned_at: null,
-                created_at: new Date("2026-06-13T10:00:00Z"),
-                updated_at: new Date("2026-06-13T10:01:00Z"),
-                deleted_at: null,
-                sender_email: null,
-                sender_first_name: null,
-                sender_last_name: null,
-              },
-            ],
-          }),
-      },
-    });
-
-    const result = await service.updateMessage(actor, "message-a", {
-      content: "  new text  ",
-    });
-
-    expect(result.content).toBe("new text");
-    expect(database.query).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining("update app.messages"),
-      ["message-a", "new text"],
-    );
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "messenger.message_updated",
-        entityType: "message",
-        entityId: "message-a",
-      }),
-    );
-    expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-      "chat-a",
-      "message.updated",
-      expect.objectContaining({ id: "message-a", content: "new text" }),
-    );
-  });
-
-  it("audits message deletion (moderation log)", async () => {
-    const baseRow = {
-      id: "message-a",
-      chat_id: "chat-a",
-      sender_id: "user-a",
-      content: "hi",
-      message_type: "text",
-      attachment_file_id: null,
-      reply_to_id: null,
-      forwarded_from_id: null,
-      pinned_by: null,
-      pinned_at: null,
-      created_at: new Date("2026-06-13T10:00:00Z"),
-      updated_at: new Date("2026-06-13T10:00:00Z"),
-      deleted_at: null,
-      sender_email: null,
-      sender_first_name: null,
-      sender_last_name: null,
-    };
-    const { service, audit } = createService({
-      database: {
-        query: jest
-          .fn()
-          .mockResolvedValueOnce({ rows: [baseRow] })
-          .mockResolvedValueOnce({
-            rows: [
-              { ...baseRow, content: null, deleted_at: new Date("2026-06-13T10:05:00Z") },
-            ],
-          }),
-      },
-      policy: { assertCanModerateMessage: jest.fn() },
-    });
-
-    await service.deleteMessage(actor, "message-a", {});
-
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "messenger.message_deleted",
-        entityType: "message",
-        entityId: "message-a",
-      }),
-    );
   });
 
   it("creates administration chats with Russian title", async () => {
@@ -888,46 +593,6 @@ describe("MessengerService", () => {
     expect(client.query).toHaveBeenCalledTimes(2);
   });
 
-  it("publishes channel.post_created to the channel room, never a chat room", async () => {
-    const { service, realtime } = createService({
-      database: {
-        query: jest.fn().mockResolvedValueOnce({
-          rows: [
-            {
-              id: "post-a",
-              channel_id: "channel-a",
-              author_id: "manager-a",
-              content: "Объявление",
-              attachment_file_id: null,
-              published_at: new Date("2026-06-20T10:00:00Z"),
-              updated_at: new Date("2026-06-20T10:00:00Z"),
-            },
-          ],
-        }),
-      },
-      policy: {
-        getChannelAccess: jest
-          .fn()
-          .mockResolvedValue({ id: "channel-a", canRead: true, canWrite: true }),
-        assertCanWriteChannel: jest.fn(),
-      },
-    });
-
-    const post = await service.createChannelPost(
-      { userId: "manager-a", role: "manager" },
-      "channel-a",
-      { content: "Объявление" } as never,
-    );
-
-    expect(post.id).toBe("post-a");
-    expect(realtime.publishChannelEvent).toHaveBeenCalledWith(
-      "channel-a",
-      "channel.post_created",
-      expect.objectContaining({ id: "post-a" }),
-    );
-    expect(realtime.publishChatEvent).not.toHaveBeenCalled();
-  });
-
   it("fans out chat.updated to the admin inbox and member rooms for administration messages", async () => {
     const adminChatId = "chat-admin-a";
     type MockClient = { query: jest.Mock };
@@ -1165,95 +830,6 @@ describe("MessengerService", () => {
     expect(item.assignedTo!.name).toBeNull();
   });
 
-  describe("assignChat / unassignChat", () => {
-    const staffActor = { userId: "staff-a", role: "admin" as const };
-    const managerActor = { userId: "manager-a", role: "manager" as const };
-    const adminChat = {
-      id: "chat-admin", type: "administration",
-      memberUserId: null, memberRole: null, assignedToUserId: null,
-    };
-
-    it("assignChat sets assigned_to_user_id/assigned_at and publishes chat.updated to admin inbox", async () => {
-      const { service, database, realtime } = createService({
-        database: {
-          query: jest.fn()
-            // requireStaffTarget: user role lookup
-            .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
-            // update query
-            .mockResolvedValueOnce({ rows: [] })
-            // chat_work_events insert
-            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue(adminChat),
-          assertCanAssign: jest.fn(),
-        },
-      });
-
-      await service.assignChat(staffActor, "chat-admin", undefined);
-
-      expect(database.query).toHaveBeenCalledWith(
-        expect.stringContaining("assigned_to_user_id"),
-        expect.arrayContaining(["chat-admin", "staff-a"]),
-      );
-      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
-        "chat.updated",
-        expect.objectContaining({ id: "chat-admin" }),
-      );
-    });
-
-    it("assignChat self-claim works for any staff actor (admin role)", async () => {
-      const { service, realtime } = createService({
-        database: {
-          query: jest.fn()
-            .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
-            .mockResolvedValueOnce({ rows: [] })
-            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue(adminChat),
-          assertCanAssign: jest.fn(),
-        },
-      });
-
-      const adminActor = { userId: "admin-b", role: "admin" as const };
-      await service.assignChat(adminActor, "chat-admin", undefined);
-
-      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
-        "chat.updated",
-        expect.objectContaining({ id: "chat-admin" }),
-      );
-    });
-
-    it("unassignChat clears assignment and publishes chat.updated with assignedTo null", async () => {
-      const assignedChat = {
-        ...adminChat, assignedToUserId: "manager-a",
-      };
-      const { service, database, realtime } = createService({
-        database: {
-          query: jest.fn()
-            .mockResolvedValueOnce({ rows: [] })
-            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue(assignedChat),
-          assertCanAssign: jest.fn(),
-        },
-      });
-
-      await service.unassignChat(managerActor, "chat-admin");
-
-      expect(database.query).toHaveBeenCalledWith(
-        expect.stringContaining("assigned_to_user_id = null"),
-        ["chat-admin"],
-      );
-      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
-        "chat.updated",
-        expect.objectContaining({ id: "chat-admin", assignedTo: null }),
-      );
-    });
-  });
-
   it("creates an administration chat with the actor as owner", async () => {
     type MockClient = { query: jest.Mock };
     const client = { query: jest.fn()
@@ -1269,97 +845,6 @@ describe("MessengerService", () => {
     const insert = client.query.mock.calls.find(c => String(c[0]).includes("values ('administration'"));
     expect(insert![0]).toContain('owner_user_id');
     expect(insert![1]).toContain('user-a');
-  });
-
-  describe("archiveChat / unarchiveChat", () => {
-    const staffActor = { userId: "staff-user-1", role: "manager" as const };
-    const adminChat = {
-      id: "chat-admin-1",
-      type: "administration",
-      memberUserId: null,
-      memberRole: null,
-      assignedToUserId: null,
-    };
-
-    it("archiveChat upserts chat_inbox_state with archived_at=now() and emits chat.updated to staff user room", async () => {
-      const { service, database, realtime } = createService({
-        database: {
-          query: jest.fn().mockResolvedValueOnce({ rows: [] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue(adminChat),
-        },
-      });
-
-      await service.archiveChat(staffActor, "chat-admin-1");
-
-      expect(database.query).toHaveBeenCalledWith(
-        expect.stringContaining("chat_inbox_state"),
-        expect.arrayContaining(["chat-admin-1", "staff-user-1"]),
-      );
-      expect(database.query).toHaveBeenCalledWith(
-        expect.stringContaining("on conflict"),
-        expect.anything(),
-      );
-      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
-        "staff-user-1",
-        "chat.updated",
-        expect.objectContaining({ id: "chat-admin-1", archived: true }),
-      );
-    });
-
-    it("unarchiveChat upserts chat_inbox_state with archived_at=null and emits chat.updated { archived: false }", async () => {
-      const { service, database, realtime } = createService({
-        database: {
-          query: jest.fn().mockResolvedValueOnce({ rows: [] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue(adminChat),
-        },
-      });
-
-      await service.unarchiveChat(staffActor, "chat-admin-1");
-
-      expect(database.query).toHaveBeenCalledWith(
-        expect.stringContaining("chat_inbox_state"),
-        expect.arrayContaining(["chat-admin-1", "staff-user-1"]),
-      );
-      expect(database.query).toHaveBeenCalledWith(
-        expect.stringContaining("on conflict"),
-        expect.anything(),
-      );
-      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
-        "staff-user-1",
-        "chat.updated",
-        expect.objectContaining({ id: "chat-admin-1", archived: false }),
-      );
-    });
-
-    it("archiveChat rejects non-staff actors", async () => {
-      const clientActor = { userId: "client-1", role: "client" as const };
-      const { service } = createService({
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue(adminChat),
-        },
-      });
-
-      await expect(service.archiveChat(clientActor, "chat-admin-1")).rejects.toThrow();
-    });
-
-    it("archiveChat rejects non-administration chats", async () => {
-      const { service } = createService({
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: "chat-direct-1",
-            type: "direct",
-            memberUserId: "staff-user-1",
-            memberRole: "member",
-          }),
-        },
-      });
-
-      await expect(service.archiveChat(staffActor, "chat-direct-1")).rejects.toThrow();
-    });
   });
 
   describe("client-side staff-identity masking in administration chats", () => {
@@ -1627,360 +1112,6 @@ describe("MessengerService", () => {
         adminChatId,
         "message.created",
         expect.anything(),
-      );
-    });
-  });
-
-  describe("staff-identity masking on message.updated realtime paths", () => {
-    const adminChatId = "chat-admin-upd";
-    const groupChatId = "chat-group-upd";
-
-    function baseUpdatedRow(overrides: Record<string, unknown> = {}) {
-      return {
-        id: "msg-upd",
-        chat_id: adminChatId,
-        sender_id: "staff-1",
-        content: "Закреплено",
-        message_type: "text",
-        attachment_file_id: null,
-        reply_to_id: null,
-        forwarded_from_id: null,
-        pinned_by: "staff-1",
-        pinned_at: new Date("2026-06-25T10:00:00Z"),
-        created_at: new Date("2026-06-25T10:00:00Z"),
-        updated_at: new Date("2026-06-25T10:00:00Z"),
-        deleted_at: null,
-        sender_email: null,
-        sender_first_name: null,
-        sender_last_name: null,
-        sender_role: "manager",
-        is_read: false,
-        ...overrides,
-      };
-    }
-
-    // --- pinMessage ---
-
-    it("pinMessage masks senderId for a STAFF author in an administration chat", async () => {
-      // query #1 requireMessage, query #2 UPDATE...returning
-      const { service, realtime } = createService({
-        database: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "staff-1" }] })
-            .mockResolvedValueOnce({ rows: [baseUpdatedRow()] })
-            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: adminChatId,
-            type: "administration",
-            memberUserId: "client-owner",
-            memberRole: "member",
-          }),
-          assertCanReadChat: jest.fn(),
-          assertCanManageGroup: jest.fn(),
-        },
-      });
-
-      await service.pinMessage({ userId: "staff-1", role: "manager" }, "msg-upd");
-
-      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
-        "client-owner",
-        "message.updated",
-        expect.objectContaining({ senderId: null }),
-      );
-      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
-        "message.updated",
-        expect.objectContaining({ senderId: "staff-1" }),
-      );
-    });
-
-    it("pinMessage keeps the real senderId in a NON-administration (group) chat", async () => {
-      const { service, realtime } = createService({
-        database: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: groupChatId, sender_id: "staff-1" }] })
-            .mockResolvedValueOnce({ rows: [baseUpdatedRow({ chat_id: groupChatId })] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: groupChatId,
-            type: "group",
-            memberUserId: "staff-1",
-            memberRole: "owner",
-          }),
-          assertCanReadChat: jest.fn(),
-          assertCanManageGroup: jest.fn(),
-        },
-      });
-
-      await service.pinMessage({ userId: "staff-1", role: "manager" }, "msg-upd");
-
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        groupChatId,
-        "message.updated",
-        expect.objectContaining({ senderId: "staff-1" }),
-      );
-    });
-
-    it("pinMessage keeps the real senderId for a NON-staff (client) author in an administration chat", async () => {
-      const { service, realtime } = createService({
-        database: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "client-owner" }] })
-            .mockResolvedValueOnce({
-              rows: [baseUpdatedRow({ sender_id: "client-owner", sender_role: "client" })],
-            })
-            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: adminChatId,
-            type: "administration",
-            memberUserId: "client-owner",
-            memberRole: "member",
-          }),
-          assertCanReadChat: jest.fn(),
-          assertCanManageGroup: jest.fn(),
-        },
-      });
-
-      await service.pinMessage({ userId: "manager-x", role: "manager" }, "msg-upd");
-
-      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
-        "client-owner",
-        "message.updated",
-        expect.objectContaining({ senderId: "client-owner" }),
-      );
-      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
-        "message.updated",
-        expect.objectContaining({ senderId: "client-owner" }),
-      );
-    });
-
-    // --- deleteMessage ---
-
-    it("deleteMessage masks senderId for a STAFF author in an administration chat", async () => {
-      const { service, realtime } = createService({
-        database: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "staff-1" }] })
-            .mockResolvedValueOnce({
-              rows: [baseUpdatedRow({ content: null, deleted_at: new Date("2026-06-25T10:05:00Z") })],
-            })
-            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: adminChatId,
-            type: "administration",
-            memberUserId: "client-owner",
-            memberRole: "member",
-          }),
-          assertCanReadChat: jest.fn(),
-          assertCanModerateMessage: jest.fn(),
-        },
-      });
-
-      await service.deleteMessage({ userId: "manager-x", role: "manager" }, "msg-upd", {} as never);
-
-      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
-        "client-owner",
-        "message.updated",
-        expect.objectContaining({ senderId: null }),
-      );
-      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
-        "message.updated",
-        expect.objectContaining({ senderId: "staff-1" }),
-      );
-    });
-
-    it("deleteMessage keeps the real senderId in a NON-administration (group) chat", async () => {
-      const { service, realtime } = createService({
-        database: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: groupChatId, sender_id: "staff-1" }] })
-            .mockResolvedValueOnce({
-              rows: [baseUpdatedRow({ chat_id: groupChatId, content: null, deleted_at: new Date("2026-06-25T10:05:00Z") })],
-            }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: groupChatId,
-            type: "group",
-            memberUserId: "staff-1",
-            memberRole: "owner",
-          }),
-          assertCanReadChat: jest.fn(),
-          assertCanModerateMessage: jest.fn(),
-        },
-      });
-
-      await service.deleteMessage({ userId: "manager-x", role: "manager" }, "msg-upd", {} as never);
-
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        groupChatId,
-        "message.updated",
-        expect.objectContaining({ senderId: "staff-1" }),
-      );
-    });
-
-    // --- unpinMessage ---
-
-    it("unpinMessage masks senderId for a STAFF author in an administration chat", async () => {
-      // query #1 requireMessage, query #2 UPDATE...returning
-      const { service, realtime } = createService({
-        database: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({ rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "staff-1" }] })
-            .mockResolvedValueOnce({ rows: [baseUpdatedRow({ pinned_by: null, pinned_at: null })] })
-            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: adminChatId,
-            type: "administration",
-            memberUserId: "client-owner",
-            memberRole: "member",
-          }),
-          assertCanReadChat: jest.fn(),
-          assertCanManageGroup: jest.fn(),
-        },
-      });
-
-      await service.unpinMessage({ userId: "staff-1", role: "manager" }, "msg-upd");
-
-      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
-        "client-owner",
-        "message.updated",
-        expect.objectContaining({ senderId: null }),
-      );
-      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
-        "message.updated",
-        expect.objectContaining({ senderId: "staff-1" }),
-      );
-    });
-
-    // --- updateMessage ---
-
-    it("updateMessage masks senderId for a STAFF author editing their own message in an administration chat", async () => {
-      // query #1 requireMessage, query #2 UPDATE...returning
-      // NOTE: updateMessage enforces message.sender_id === actor.userId, so actor must match the message author
-      const { service, realtime } = createService({
-        database: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({
-              rows: [{ id: "msg-upd", chat_id: adminChatId, sender_id: "staff-1", deleted_at: null, message_type: "text", attachment_file_id: null }],
-            })
-            .mockResolvedValueOnce({ rows: [baseUpdatedRow({ content: "Обновлено" })] })
-            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: adminChatId,
-            type: "administration",
-            memberUserId: "client-owner",
-            memberRole: "member",
-          }),
-          assertCanReadChat: jest.fn(),
-        },
-      });
-
-      await service.updateMessage(
-        { userId: "staff-1", role: "manager" },
-        "msg-upd",
-        { content: "Обновлено" } as never,
-      );
-
-      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
-        "client-owner",
-        "message.updated",
-        expect.objectContaining({ senderId: null }),
-      );
-      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
-        "message.updated",
-        expect.objectContaining({ senderId: "staff-1" }),
-      );
-    });
-
-    // --- markRead read-receipt path ---
-
-    it("markRead masks senderId for a STAFF-authored receipt in an administration chat", async () => {
-      // query #1 resolveLastReadMessageId, #2 update chat_members, #3 listReadReceiptUpdates
-      const { service, realtime } = createService({
-        database: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({ rows: [{ id: "msg-read" }] })
-            .mockResolvedValueOnce({ rowCount: 1, rows: [] })
-            .mockResolvedValueOnce({
-              rows: [baseUpdatedRow({ id: "msg-read", is_read: true })],
-            })
-            .mockResolvedValueOnce({ rows: [{ user_id: "client-owner" }] }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: adminChatId,
-            type: "administration",
-            memberUserId: "client-owner",
-            memberRole: "member",
-          }),
-          assertCanReadChat: jest.fn(),
-        },
-      });
-
-      await service.markRead({ userId: "client-owner", role: "client" }, adminChatId, {
-        lastReadMessageId: "msg-read",
-      } as never);
-
-      expect(realtime.publishUserEvent).toHaveBeenCalledWith(
-        "client-owner",
-        "message.updated",
-        expect.objectContaining({ id: "msg-read", senderId: null }),
-      );
-      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
-        "message.updated",
-        expect.objectContaining({ id: "msg-read", senderId: "staff-1" }),
-      );
-    });
-
-    it("markRead keeps the real senderId for a STAFF-authored receipt in a NON-administration chat", async () => {
-      const { service, realtime } = createService({
-        database: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({ rows: [{ id: "msg-read" }] })
-            .mockResolvedValueOnce({ rowCount: 1, rows: [] })
-            .mockResolvedValueOnce({
-              rows: [baseUpdatedRow({ id: "msg-read", chat_id: groupChatId, is_read: true })],
-            }),
-        },
-        policy: {
-          getChatAccess: jest.fn().mockResolvedValue({
-            id: groupChatId,
-            type: "group",
-            memberUserId: "client-owner",
-            memberRole: "member",
-          }),
-          assertCanReadChat: jest.fn(),
-        },
-      });
-
-      await service.markRead({ userId: "client-owner", role: "client" }, groupChatId, {
-        lastReadMessageId: "msg-read",
-      } as never);
-
-      expect(realtime.publishChatEvent).toHaveBeenCalledWith(
-        groupChatId,
-        "message.updated",
-        expect.objectContaining({ id: "msg-read", senderId: "staff-1" }),
       );
     });
   });

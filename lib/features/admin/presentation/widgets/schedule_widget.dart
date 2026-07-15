@@ -12,6 +12,18 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 import 'create_lesson_dialog.dart';
 import 'schedule_day_canvas.dart';
+import 'lesson_details_sheet.dart';
+import 'schedule_legends.dart';
+import 'schedule_shared.dart';
+import 'schedule_year_view.dart';
+import 'schedule_month_view.dart';
+import 'schedule_day_mode_toggle.dart';
+import 'schedule_timezone_dialog.dart';
+import 'schedule_filters_sheet.dart';
+import 'teacher_lesson_card.dart';
+import 'schedule_search_dialog.dart';
+
+part 'schedule_widget_widgets.dart';
 
 // ── Color palette for rooms / teachers ──────────────────────────────────────
 // Muted, token-aligned palette (gold + status hues, no neon) so room dots read
@@ -28,44 +40,10 @@ const List<Color> _roomColors = [
 ];
 
 // ── Enums ───────────────────────────────────────────────────────────────────
-enum _ScheduleView { year, month, day }
 
-enum _DayViewMode { byRoom, byTeacher }
 
 // ── Russian month names ─────────────────────────────────────────────────────
-const _monthNamesGenitive = [
-  '',
-  'января',
-  'февраля',
-  'марта',
-  'апреля',
-  'мая',
-  'июня',
-  'июля',
-  'августа',
-  'сентября',
-  'октября',
-  'ноября',
-  'декабря',
-];
 
-const _monthNamesNominative = [
-  '',
-  'Январь',
-  'Февраль',
-  'Март',
-  'Апрель',
-  'Май',
-  'Июнь',
-  'Июль',
-  'Август',
-  'Сентябрь',
-  'Октябрь',
-  'Ноябрь',
-  'Декабрь',
-];
-
-const _weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Main Widget
@@ -119,8 +97,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   // UI state
   String? _selectedBranchId;
-  _ScheduleView _currentView = _ScheduleView.month;
-  _DayViewMode _dayViewMode = _DayViewMode.byRoom;
+  ScheduleView _currentView = ScheduleView.month;
+  DayViewMode _dayViewMode = DayViewMode.byRoom;
   DateTime _selectedDate = DateTime.now();
   DateTime _displayedMonth = DateTime(
     DateTime.now().year,
@@ -236,7 +214,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           to: toIso,
           branchId: defaultBranch,
           groupBy:
-              _dayViewMode == _DayViewMode.byTeacher ? 'teacher' : 'room',
+              _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
           limit: 300,
         ).catchError((e) {
           debugPrint('Error fetching schedule matrix: $e');
@@ -244,7 +222,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         }),
         crm.listRoomAvailability(
           branchId: defaultBranch,
-          date: _dateOnly(_selectedDate),
+          date: dateOnly(_selectedDate),
           from: _slotIso(_selectedDate, 6),
           to: _slotIso(_selectedDate, 23),
           limit: 100,
@@ -355,9 +333,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       // The month-wide matrix is capped at 300 rows; if we're already in the day
       // view, backfill the selected day so it isn't left empty for dates past the
       // cap (e.g. today mid-month).
-      if (_currentView == _ScheduleView.day) {
+      if (_currentView == ScheduleView.day) {
         _fetchDayLessons(_selectedDate);
-      } else if (_currentView == _ScheduleView.year) {
+      } else if (_currentView == ScheduleView.year) {
         _fetchYearSummary();
       }
     } catch (e) {
@@ -378,7 +356,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           .read(magicCrmServiceProvider)
           .listRoomAvailability(
             branchId: branchId,
-            date: _dateOnly(_selectedDate),
+            date: dateOnly(_selectedDate),
             from: _slotIso(_selectedDate, 6),
             to: _slotIso(_selectedDate, 23),
             limit: 100,
@@ -415,7 +393,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         from: dayStartUtc.toIso8601String(),
         to: dayEndUtc.toIso8601String(),
         branchId: branchId,
-        groupBy: _dayViewMode == _DayViewMode.byTeacher ? 'teacher' : 'room',
+        groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
         limit: 500,
       );
       final items = result['items'];
@@ -513,11 +491,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     return parsed.toUtc().add(Duration(minutes: _selectedBranchOffset));
   }
 
-  String _dateOnly(DateTime date) {
-    return '${date.year.toString().padLeft(4, '0')}-'
-        '${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}';
-  }
 
   String _slotIso(DateTime date, int hour) {
     return DateTime(
@@ -576,7 +549,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       _clearHighlight();
       _displayedMonth = DateTime(_displayedYear, month);
       _selectedDate = DateTime(_displayedYear, month, 1);
-      _currentView = _ScheduleView.month;
+      _currentView = ScheduleView.month;
     });
     _fetchAll();
   }
@@ -646,7 +619,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     setState(() {
       _clearHighlight();
       _selectedDate = date;
-      _currentView = _ScheduleView.day;
+      _currentView = ScheduleView.day;
     });
     _fetchAvailabilityForSelectedDay();
     _fetchDayLessons(_selectedDate);
@@ -663,33 +636,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   Future<void> _showScheduleSearch() async {
-    final controller = TextEditingController();
-    final query = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Поиск в расписании'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textInputAction: TextInputAction.search,
-          decoration: const InputDecoration(
-            hintText: 'Ученик, педагог, аудитория или дата',
-          ),
-          onSubmitted: (value) => Navigator.of(ctx).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text),
-            child: const Text('Найти'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
+    final query = await showScheduleSearchDialog(context);
 
     final normalized = query?.trim().toLowerCase();
     if (normalized == null || normalized.isEmpty) return;
@@ -709,7 +656,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         setState(() {
           _selectedDate = date;
           _displayedMonth = DateTime(date.year, date.month);
-          _currentView = _ScheduleView.day;
+          _currentView = ScheduleView.day;
         });
         // Reload the window for the (possibly new) month; since the view is now
         // day, _fetchAll backfills the selected day's lessons too.
@@ -752,9 +699,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     setState(() {
       _selectedDate = lessonDate;
       _displayedMonth = DateTime(lessonDate.year, lessonDate.month);
-      _currentView = _ScheduleView.day;
+      _currentView = ScheduleView.day;
       if (foundTeacherId != null) {
-        _dayViewMode = _DayViewMode.byTeacher;
+        _dayViewMode = DayViewMode.byTeacher;
         _selectedTeacherId = foundTeacherId;
       }
     });
@@ -762,85 +709,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   Future<void> _showScheduleFilters() async {
-    String? branchId = _selectedBranchId;
-    var dayViewMode = _dayViewMode;
-
-    final result =
-        await showModalBottomSheet<({String? branchId, _DayViewMode mode})>(
-          context: context,
-          showDragHandle: true,
-          builder: (ctx) => StatefulBuilder(
-            builder: (context, setSheetState) {
-              return SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Фильтры расписания',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 12),
-                      ListTile(
-                        title: const Text('Все филиалы'),
-                        contentPadding: EdgeInsets.zero,
-                        onTap: () => setSheetState(() => branchId = null),
-                        trailing: branchId == null
-                            ? const Icon(Icons.check_rounded)
-                            : null,
-                      ),
-                      ..._branches.map((branch) {
-                        final id = branch['id'].toString();
-                        return ListTile(
-                          title: Text(branch['name']?.toString() ?? 'Филиал'),
-                          contentPadding: EdgeInsets.zero,
-                          onTap: () => setSheetState(() => branchId = id),
-                          trailing: branchId == id
-                              ? const Icon(Icons.check_rounded)
-                              : null,
-                        );
-                      }),
-                      if (_currentView == _ScheduleView.day) ...[
-                        const Divider(),
-                        ListTile(
-                          title: const Text('День по аудиториям'),
-                          contentPadding: EdgeInsets.zero,
-                          onTap: () => setSheetState(
-                            () => dayViewMode = _DayViewMode.byRoom,
-                          ),
-                          trailing: dayViewMode == _DayViewMode.byRoom
-                              ? const Icon(Icons.check_rounded)
-                              : null,
-                        ),
-                        ListTile(
-                          title: const Text('День по педагогу'),
-                          contentPadding: EdgeInsets.zero,
-                          onTap: () => setSheetState(
-                            () => dayViewMode = _DayViewMode.byTeacher,
-                          ),
-                          trailing: dayViewMode == _DayViewMode.byTeacher
-                              ? const Icon(Icons.check_rounded)
-                              : null,
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      FilledButton(
-                        onPressed: () => Navigator.of(
-                          ctx,
-                        ).pop((branchId: branchId, mode: dayViewMode)),
-                        child: const Text('Применить'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-
+    final result = await showScheduleFiltersSheet(
+      context,
+      initialBranchId: _selectedBranchId,
+      initialMode: _dayViewMode,
+      branches: _branches,
+      isDayView: _currentView == ScheduleView.day,
+    );
     if (result == null) return;
     setState(() {
       _clearHighlight();
@@ -874,7 +749,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       _realtimeDebounce?.cancel();
       _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
         if (!mounted || _isLoading || _movingLesson) return;
-        if (_currentView == _ScheduleView.day) {
+        if (_currentView == ScheduleView.day) {
           _fetchDayLessons(_selectedDate);
         } else {
           _fetchAll();
@@ -913,11 +788,19 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           if (!firstLoad) _buildViewSwitcher(),
           if (!firstLoad) ...[
             _buildBranchSelector(),
-            if (_currentView == _ScheduleView.day) _buildDayViewModeToggle(),
+            if (_currentView == ScheduleView.day)
+              ScheduleDayModeToggle(
+                mode: _dayViewMode,
+                onModeChanged: (m) {
+                  if (_dayViewMode == m) return;
+                  setState(() => _dayViewMode = m);
+                  _fetchAll();
+                },
+              ),
           ],
           _buildDateNavigation(),
-          if (!firstLoad && _currentView == _ScheduleView.day) ...[
-            _buildDayLegend(),
+          if (!firstLoad && _currentView == ScheduleView.day) ...[
+            const ScheduleDayLegend(),
             _buildAvailabilitySummary(),
           ],
           Expanded(child: _buildScheduleContent()),
@@ -927,7 +810,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           ? null
           : FloatingActionButton(
               onPressed: () => _showAddLessonDialog(
-                _currentView == _ScheduleView.day
+                _currentView == ScheduleView.day
                     ? _selectedDate
                     : DateTime.now(),
                 null,
@@ -952,19 +835,34 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       return _ScheduleError(error: _loadError, onRetry: _fetchAll);
     }
     return switch (_currentView) {
-      _ScheduleView.year => _buildYearView(),
-      _ScheduleView.month => _buildMonthView(),
-      _ScheduleView.day => _buildDayView(),
+      ScheduleView.year => ScheduleYearView(
+        yearMonths: _yearMonths,
+        displayedYear: _displayedYear,
+        displayedMonth: _displayedMonth,
+        yearLoading: _yearLoading,
+        onMonthTap: _onYearMonthTap,
+      ),
+      ScheduleView.month => ScheduleMonthView(
+        selectedDate: _selectedDate,
+        displayedMonth: _displayedMonth,
+        studentNames: _studentNames,
+        monthDaySummary: _monthDaySummary,
+        lessonsForDate: _lessonsForDate,
+        parseLessonTime: _parseLessonTime,
+        onDayTap: _onMonthDayTap,
+        onToday: _goToToday,
+      ),
+      ScheduleView.day => _buildDayView(),
     };
   }
 
   // ── Header ────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     final title = switch (_currentView) {
-      _ScheduleView.year => 'Расписание / $_displayedYear',
-      _ScheduleView.month =>
-        '${_monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}',
-      _ScheduleView.day => 'Расписание / День',
+      ScheduleView.year => 'Расписание / $_displayedYear',
+      ScheduleView.month =>
+        '${monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}',
+      ScheduleView.day => 'Расписание / День',
     };
 
     return Padding(
@@ -1016,7 +914,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   // ── Год / Месяц / День segmented control (primary navigation) ──────────────
   Widget _buildViewSwitcher() {
-    Widget seg(String label, _ScheduleView view) {
+    Widget seg(String label, ScheduleView view) {
       final active = _currentView == view;
       return Expanded(
         child: GestureDetector(
@@ -1058,26 +956,26 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         ),
         child: Row(
           children: [
-            seg('Год', _ScheduleView.year),
+            seg('Год', ScheduleView.year),
             const SizedBox(width: 4),
-            seg('Месяц', _ScheduleView.month),
+            seg('Месяц', ScheduleView.month),
             const SizedBox(width: 4),
-            seg('День', _ScheduleView.day),
+            seg('День', ScheduleView.day),
           ],
         ),
       ),
     );
   }
 
-  void _switchView(_ScheduleView view) {
+  void _switchView(ScheduleView view) {
     if (_currentView == view) return;
     setState(() {
       _clearHighlight();
       _currentView = view;
     });
-    if (view == _ScheduleView.year) {
+    if (view == ScheduleView.year) {
       _fetchYearSummary();
-    } else if (view == _ScheduleView.day) {
+    } else if (view == ScheduleView.day) {
       _fetchAvailabilityForSelectedDay();
       _fetchDayLessons(_selectedDate);
     }
@@ -1140,7 +1038,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             TextButton.icon(
               onPressed: _editBranchTimezone,
               icon: const Icon(Icons.schedule_rounded, size: 16),
-              label: Text(_offsetLabel(_selectedBranchOffset)),
+              label: Text(offsetLabel(_selectedBranchOffset)),
               style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
                 visualDensity: VisualDensity.compact,
@@ -1151,12 +1049,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     );
   }
 
-  String _offsetLabel(int minutes) {
-    final sign = minutes >= 0 ? '+' : '−';
-    final h = (minutes.abs() ~/ 60).toString();
-    final m = minutes.abs() % 60;
-    return m == 0 ? 'UTC$sign$h' : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
-  }
 
   Future<void> _editBranchTimezone() async {
     final branchId = _selectedBranchId;
@@ -1166,57 +1058,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       orElse: () => <String, dynamic>{},
     );
     final branchName = branch['name']?.toString() ?? 'Филиал';
-    // Russia spans UTC+2..UTC+12; offer those (minutes).
-    const options = <int>[120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720];
-    var selected = _selectedBranchOffset;
-    if (!options.contains(selected)) selected = 180;
-
-    final saved = await showDialog<int>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: Text('Часовой пояс — $branchName'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Время занятий отображается в этом поясе.',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                initialValue: selected,
-                decoration: const InputDecoration(labelText: 'Смещение'),
-                items: options
-                    .map(
-                      (m) => DropdownMenuItem(
-                        value: m,
-                        child: Text(_offsetLabel(m)),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setLocal(() => selected = v);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, selected),
-              child: const Text('Сохранить'),
-            ),
-          ],
-        ),
-      ),
+    final saved = await showBranchTimezoneDialog(
+      context,
+      branchName: branchName,
+      currentOffset: _selectedBranchOffset,
     );
     if (saved == null || saved == _selectedBranchOffset || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -1227,7 +1072,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Часовой пояс обновлён: ${_offsetLabel(saved)}'),
+          content: Text('Часовой пояс обновлён: ${offsetLabel(saved)}'),
           backgroundColor: AppColor.success,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1245,87 +1090,26 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   // ── Day-view mode toggle (По аудиториям / По педагогу) ────────────────────
-  Widget _buildDayViewModeToggle() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      child: Row(
-        children: [
-          _buildToggleButton(
-            'По аудиториям',
-            _dayViewMode == _DayViewMode.byRoom,
-            () {
-              if (_dayViewMode == _DayViewMode.byRoom) return;
-              setState(() => _dayViewMode = _DayViewMode.byRoom);
-              // The matrix is grouped server-side by mode, so re-fetch to avoid
-              // showing the previous grouping's (stale) payload.
-              _fetchAll();
-            },
-          ),
-          SizedBox(width: 8),
-          _buildToggleButton(
-            'По педагогу',
-            _dayViewMode == _DayViewMode.byTeacher,
-            () {
-              if (_dayViewMode == _DayViewMode.byTeacher) return;
-              setState(() => _dayViewMode = _DayViewMode.byTeacher);
-              _fetchAll();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToggleButton(String label, bool isActive, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive
-              ? Theme.of(context).colorScheme.surface
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive
-                ? Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80)
-                : Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(40),
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive
-                ? Theme.of(context).colorScheme.onSurface
-                : Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 13,
-            fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
-          ),
-        ),
-      ),
-    );
-  }
 
   // ── Date navigation ───────────────────────────────────────────────────────
   Widget _buildDateNavigation() {
     String dateLabel;
     VoidCallback onPrev, onNext;
 
-    if (_currentView == _ScheduleView.year) {
+    if (_currentView == ScheduleView.year) {
       dateLabel = '$_displayedYear';
       onPrev = _prevYear;
       onNext = _nextYear;
-    } else if (_currentView == _ScheduleView.month) {
+    } else if (_currentView == ScheduleView.month) {
       dateLabel =
-          '${_monthNamesGenitive[_displayedMonth.month].toLowerCase()} ${_displayedMonth.year}';
+          '${monthNamesGenitive[_displayedMonth.month].toLowerCase()} ${_displayedMonth.year}';
       onPrev = _prevMonth;
       onNext = _nextMonth;
     } else {
       final weekDayNames = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
       final wd = weekDayNames[_selectedDate.weekday - 1];
       dateLabel =
-          '$wd, ${_selectedDate.day} ${_monthNamesGenitive[_selectedDate.month]} ${_selectedDate.year}';
+          '$wd, ${_selectedDate.day} ${monthNamesGenitive[_selectedDate.month]} ${_selectedDate.year}';
       onPrev = _prevDay;
       onNext = _nextDay;
     }
@@ -1480,10 +1264,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     return null;
   }
 
-  List<String> _conflictTypes(dynamic value) {
-    if (value is! List) return const [];
-    return value.map((item) => item.toString()).toList();
-  }
 
   // Defensive: the backend may send duration as int, double, or string. A bare
   // `as int?` cast throws on a double and blanks the whole card (the lesson then
@@ -1499,748 +1279,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // ═══════════════════════════════════════════════════════════════════════════
   //  MONTH VIEW
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildMonthView() {
-    final year = _displayedMonth.year;
-    final month = _displayedMonth.month;
-    final firstDay = DateTime(year, month, 1);
-    final daysInMonth = DateTime(year, month + 1, 0).day;
-    final startWeekday = firstDay.weekday; // 1=Mon..7=Sun
-    final prevDays = startWeekday - 1;
-    final prevMonthLastDay = DateTime(year, month, 0).day;
-    final totalSlots = prevDays + daysInMonth;
-    final rows = (totalSlots / 7).ceil();
-    final now = DateTime.now();
-
-    // Focal day for the side summary: the selected day if it's in this month,
-    // else today (if today is this month), else the 1st.
-    DateTime focal;
-    if (_selectedDate.year == year && _selectedDate.month == month) {
-      focal = _selectedDate;
-    } else if (now.year == year && now.month == month) {
-      focal = DateTime(year, month, now.day);
-    } else {
-      focal = DateTime(year, month, 1);
-    }
-
-    final calendar = Column(
-      children: [
-        // Weekday headers.
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Row(
-            children: _weekDays
-                .map(
-                  (d) => Expanded(
-                    child: Center(
-                      child: Text(
-                        d,
-                        style: TextStyle(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurfaceVariant.withAlpha(180),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Column(
-              children: List.generate(rows, (row) {
-                return Expanded(
-                  child: Row(
-                    children: List.generate(7, (col) {
-                      final index = row * 7 + col;
-                      if (index < prevDays) {
-                        final day = prevMonthLastDay - prevDays + 1 + index;
-                        return _buildMonthCellRich(
-                          day,
-                          isCurrentMonth: false,
-                          date: null,
-                        );
-                      }
-                      final dayNum = index - prevDays + 1;
-                      if (dayNum > daysInMonth) {
-                        return _buildMonthCellRich(
-                          dayNum - daysInMonth,
-                          isCurrentMonth: false,
-                          date: null,
-                        );
-                      }
-                      final date = DateTime(year, month, dayNum);
-                      final isToday = date.year == now.year &&
-                          date.month == now.month &&
-                          date.day == now.day;
-                      return _buildMonthCellRich(
-                        dayNum,
-                        isCurrentMonth: true,
-                        date: date,
-                        isToday: isToday,
-                      );
-                    }),
-                  ),
-                );
-              }),
-            ),
-          ),
-        ),
-      ],
-    );
-
-    return Column(
-      children: [
-        _buildMonthLegend(),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, c) {
-              final wide = c.maxWidth >= 760 && c.maxHeight >= 420;
-              if (!wide) return calendar;
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: calendar),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 260,
-                    child: _buildMonthSidePanel(focal),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMonthLegend() {
-    Widget chip(Color c, String label) {
-      return Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: c.withAlpha(22),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: c.withAlpha(70)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  chip(AppColor.actionBlue, 'Обычные'),
-                  chip(AppColor.success, 'Пробные'),
-                  chip(AppColor.warning, 'Пиковая'),
-                  chip(AppColor.danger, 'Конфликт'),
-                ],
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: _goToToday,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColor.goldLine),
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-              child: const Text(
-                'Сегодня',
-                style: TextStyle(
-                  color: AppColor.gold,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMonthCellRich(
-    int day, {
-    required bool isCurrentMonth,
-    DateTime? date,
-    bool isToday = false,
-  }) {
-    final cs = Theme.of(context).colorScheme;
-    final summary = date != null ? _monthDaySummary[_dateOnly(date)] : null;
-    final lessons = date != null ? _lessonsForDate(date) : const [];
-    final count = summary != null
-        ? (summary['count'] as int? ?? 0)
-        : lessons.length;
-    final isSelected = date != null &&
-        _selectedDate.year == date.year &&
-        _selectedDate.month == date.month &&
-        _selectedDate.day == date.day;
-
-    // Up to two preview chips from the in-memory (capped) matrix; the count
-    // badge stays authoritative for the full-day total.
-    final sorted = [...lessons];
-    sorted.sort((a, b) {
-      final ta = _parseLessonTime(a);
-      final tb = _parseLessonTime(b);
-      if (ta == null || tb == null) return 0;
-      return ta.compareTo(tb);
-    });
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: date != null ? () => _onMonthDayTap(date) : null,
-        child: Container(
-          margin: const EdgeInsets.all(2),
-          padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
-          decoration: BoxDecoration(
-            color: isCurrentMonth
-                ? cs.surface.withAlpha(isSelected ? 220 : 120)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isToday
-                  ? AppColor.gold
-                  : isSelected
-                  ? AppColor.goldLine
-                  : cs.onSurfaceVariant.withAlpha(14),
-              width: isToday ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    alignment: Alignment.center,
-                    decoration: isToday
-                        ? BoxDecoration(
-                            color: AppColor.gold,
-                            borderRadius: BorderRadius.circular(7),
-                          )
-                        : null,
-                    child: Text(
-                      '$day',
-                      style: TextStyle(
-                        color: isToday
-                            ? Colors.white
-                            : isCurrentMonth
-                            ? AppColor.text
-                            : cs.onSurfaceVariant.withAlpha(90),
-                        fontSize: 13,
-                        fontWeight:
-                            isToday ? FontWeight.w700 : FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  if (isCurrentMonth && count > 0)
-                    Text(
-                      '$count',
-                      style: TextStyle(
-                        color: count >= 9 ? AppColor.warning : AppColor.gold,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                ],
-              ),
-              if (isCurrentMonth) ...[
-                const SizedBox(height: 3),
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const NeverScrollableScrollPhysics(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final l in sorted.take(2))
-                          _monthChip(l),
-                        if (count > sorted.take(2).length)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 1, left: 2),
-                            child: Text(
-                              '+${count - sorted.take(2).length} ${_pluralRu(count - sorted.take(2).length, 'занятие', 'занятия', 'занятий')}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: cs.onSurfaceVariant.withAlpha(170),
-                                fontSize: 9,
-                              ),
-                            ),
-                          )
-                        else if (count == 0 && sorted.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 1, left: 2),
-                            child: Text(
-                              'нет занятий',
-                              style: TextStyle(
-                                color: cs.onSurfaceVariant.withAlpha(110),
-                                fontSize: 9,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _monthChip(Map<String, dynamic> lesson) {
-    final cs = Theme.of(context).colorScheme;
-    final start = _parseLessonTime(lesson);
-    final conflicts = _conflictTypes(lesson['conflict_types']);
-    final color = conflicts.isNotEmpty
-        ? AppColor.danger
-        : lesson['is_trial'] == true
-        ? AppColor.success
-        : AppColor.actionBlue;
-    final time = start == null
-        ? ''
-        : '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} ';
-    final name =
-        _studentNames[lesson['student_id']?.toString()] ??
-        lesson['group_name']?.toString() ??
-        'Занятие';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withAlpha(28),
-        borderRadius: BorderRadius.circular(4),
-        border: Border(left: BorderSide(color: color, width: 2)),
-      ),
-      child: Text(
-        '$time$name',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: cs.onSurface, fontSize: 9.5),
-      ),
-    );
-  }
-
-  Widget _buildMonthSidePanel(DateTime focal) {
-    final cs = Theme.of(context).colorScheme;
-    final lessons = _lessonsForDate(focal);
-    final summary = _monthDaySummary[_dateOnly(focal)];
-    final count = summary != null
-        ? (summary['count'] as int? ?? 0)
-        : lessons.length;
-    final trials = lessons.where((l) => l['is_trial'] == true).length;
-    final conflicts = lessons
-        .where((l) => _conflictTypes(l['conflict_types']).isNotEmpty)
-        .length;
-
-    Widget stat(String value, String label, Color color) {
-      return Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: cs.surface.withAlpha(120),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: cs.onSurfaceVariant.withAlpha(20)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                color: color,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cs.surface.withAlpha(90),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: cs.onSurfaceVariant.withAlpha(24)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '${focal.day} ${_monthNamesGenitive[focal.month]}',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  stat('$count', 'занятий в выбранном дне', AppColor.gold),
-                  stat(
-                    '$conflicts',
-                    'конфликтов комнаты/педагога',
-                    conflicts > 0 ? AppColor.danger : AppColor.text,
-                  ),
-                  stat(
-                    '$trials',
-                    'пробных уроков',
-                    trials > 0 ? AppColor.success : AppColor.text,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 44,
-            child: Material(
-              color: AppColor.gold,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(AppRadius.control),
-                onTap: () => _onMonthDayTap(focal),
-                child: const Center(
-                  child: Text(
-                    'Открыть день',
-                    style: TextStyle(
-                      color: AppColor.onGold,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  YEAR VIEW
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildYearView() {
-    if (_yearLoading && _yearMonths.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: ScheduleSkeleton(rows: 4, columns: 3),
-      );
-    }
-    final now = DateTime.now();
-    final maxCount = _yearMonths.values.fold<int>(
-      0,
-      (m, v) => v.count > m ? v.count : m,
-    );
-    final totalLessons = _yearMonths.values.fold<int>(
-      0,
-      (s, v) => s + v.count,
-    );
-    final activeMonths = _yearMonths.values.where((v) => v.count > 0).length;
-
-    return LayoutBuilder(
-      builder: (context, c) {
-        final wide = c.maxWidth >= 760 && c.maxHeight >= 360;
-        final cols = c.maxWidth >= 1040
-            ? 4
-            : c.maxWidth >= 520
-            ? 3
-            : 2;
-        final grid = GridView.count(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-          crossAxisCount: cols,
-          childAspectRatio: 1.18,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          children: [
-            for (int m = 1; m <= 12; m++)
-              _buildYearCard(
-                m,
-                maxCount,
-                selected: _displayedMonth.year == _displayedYear &&
-                    _displayedMonth.month == m,
-                isCurrent: now.year == _displayedYear && now.month == m,
-              ),
-          ],
-        );
-        if (!wide) return grid;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: grid),
-            SizedBox(
-              width: 260,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 4, 12, 16),
-                child: _buildYearSummaryPanel(totalLessons, activeMonths),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildYearCard(
-    int month,
-    int maxCount, {
-    required bool selected,
-    required bool isCurrent,
-  }) {
-    final cs = Theme.of(context).colorScheme;
-    final data = _yearMonths[month] ?? (count: 0, activeDays: 0);
-    final intensity = maxCount == 0 ? 0.0 : data.count / maxCount;
-    final loadColor = intensity > 0.85
-        ? AppColor.warning
-        : intensity > 0
-        ? AppColor.success
-        : cs.onSurfaceVariant;
-
-    // 24-cell density heatmap (≈ working days), brightness ~ month load.
-    final heat = List<Widget>.generate(24, (i) {
-      final on = data.activeDays > 0 && i < (data.activeDays * 24 / 31).round();
-      return Expanded(
-        child: Container(
-          margin: const EdgeInsets.all(1),
-          decoration: BoxDecoration(
-            color: on
-                ? loadColor.withAlpha((40 + intensity * 150).round())
-                : cs.onSurfaceVariant.withAlpha(18),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      );
-    });
-
-    return GestureDetector(
-      onTap: () => _onYearMonthTap(month),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: cs.surface.withAlpha(selected ? 220 : 120),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(
-            color: selected
-                ? AppColor.gold
-                : isCurrent
-                ? AppColor.goldLine
-                : cs.onSurfaceVariant.withAlpha(20),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _monthNamesNominative[month],
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColor.goldSoft,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                    border: Border.all(color: AppColor.goldLine),
-                  ),
-                  child: Text(
-                    '${data.count}',
-                    style: const TextStyle(
-                      color: AppColor.gold,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: Column(
-                children: [
-                  for (int r = 0; r < 3; r++)
-                    Expanded(
-                      child: Row(children: heat.sublist(r * 8, r * 8 + 8)),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    '${data.activeDays} ${_pluralRu(data.activeDays, 'активный день', 'активных дня', 'активных дней')}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                if (intensity > 0.85)
-                  const Text(
-                    'пик',
-                    style: TextStyle(
-                      color: AppColor.warning,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  )
-                else if (selected)
-                  const Text(
-                    'выбран',
-                    style: TextStyle(
-                      color: AppColor.gold,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildYearSummaryPanel(int totalLessons, int activeMonths) {
-    final cs = Theme.of(context).colorScheme;
-    Widget stat(String value, String label) {
-      return Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: cs.surface.withAlpha(120),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: cs.onSurfaceVariant.withAlpha(20)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: AppColor.text,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cs.surface.withAlpha(90),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: cs.onSurfaceVariant.withAlpha(24)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Сводка $_displayedYear',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          stat('$totalLessons', 'занятий за год'),
-          stat('$activeMonths', 'месяцев с занятиями'),
-          if (_yearLoading)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: LinearProgressIndicator(
-                minHeight: 2,
-                backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation(AppColor.gold),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  String _pluralRu(int n, String one, String few, String many) {
-    final mod10 = n % 10;
-    final mod100 = n % 100;
-    if (mod10 == 1 && mod100 != 11) return one;
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-    return many;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  DAY VIEW
-  // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildDayView() {
-    if (_dayViewMode == _DayViewMode.byTeacher) {
+    if (_dayViewMode == DayViewMode.byTeacher) {
       return _buildDayViewByTeacher();
     }
     return _buildDayViewByRoom();
@@ -2281,7 +1321,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           id: r['id'].toString(),
           name: r['name']?.toString() ?? 'Аудитория',
           color: _roomColorMap[r['id'].toString()] ?? cs.onSurfaceVariant,
-          hasConflict: _conflictTypes(
+          hasConflict: conflictTypes(
             _availabilityForRoom(r['id'].toString())?['conflict_types'],
           ).isNotEmpty,
         ),
@@ -2321,7 +1361,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           title: title,
           subtitle: teacher,
           isTrial: l['is_trial'] == true,
-          conflicts: _conflictTypes(l['conflict_types']),
+          conflicts: conflictTypes(l['conflict_types']),
           movable: l['id'] != null &&
               status != 'cancelled' &&
               status != 'completed' &&
@@ -2353,53 +1393,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   // Interaction legend above the day grid: all the rules live here, not on every
   // cell (owner rule «инструкции в легенду, не поверх ячеек»).
-  Widget _buildDayLegend() {
-    Widget chip(Color c, String label) {
-      return Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(
-          color: c.withAlpha(22),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: c.withAlpha(70)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            chip(AppColor.transferCyan, 'Тянуть вниз — выбрать часы'),
-            chip(AppColor.actionBlue, 'Перетащить — время / комната'),
-            chip(AppColor.gold, 'Край (наведи) — растянуть'),
-            chip(AppColor.danger, 'Конфликт'),
-          ],
-        ),
-      ),
-    );
-  }
 
   // ── Focus-on-lesson (Phase 5) ───────────────────────────────────────────────
   // Applies a [ScheduleFocusState] from the client card: switch to the lesson's
@@ -2413,7 +1406,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     setState(() {
       _selectedDate = day;
       _displayedMonth = DateTime(day.year, day.month);
-      _currentView = _ScheduleView.day;
+      _currentView = ScheduleView.day;
       _highlightLessonId = focus.highlightLessonId;
     });
     _fetchAvailabilityForSelectedDay();
@@ -2532,12 +1525,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         (l) => l['id']?.toString() == lessonId,
         orElse: () => const <String, dynamic>{},
       );
-      final conflicts = _conflictTypes(moved['conflict_types']);
+      final conflicts = conflictTypes(moved['conflict_types']);
       if (conflicts.isNotEmpty) {
         MagicToast.show(
           context,
           'Перенесено, но есть конфликт',
-          detail: conflicts.map(_conflictLabel).join(', '),
+          detail: conflicts.map(conflictLabel).join(', '),
           type: MagicToastType.danger,
         );
       } else if (prevRoomId != null || !roomChanged) {
@@ -2866,86 +1859,16 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         ? (_roomColorMap[roomId] ??
               Theme.of(context).colorScheme.onSurfaceVariant)
         : Theme.of(context).colorScheme.onSurfaceVariant;
-    final conflicts = _conflictTypes(lesson['conflict_types']);
+    final conflicts = conflictTypes(lesson['conflict_types']);
 
-    return GestureDetector(
+    return TeacherLessonCard(
+      timeStr: timeStr,
+      studentName: studentName,
+      roomName: roomName,
+      roomColor: roomColor,
+      statusColor: _statusColor(lesson['status']),
+      hasConflict: conflicts.isNotEmpty,
       onTap: () => _showLessonDetails(lesson),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: conflicts.isEmpty
-              ? Theme.of(context).colorScheme.surface
-              : AppColor.danger.withAlpha(24),
-          borderRadius: BorderRadius.circular(12),
-          border: Border(
-            left: BorderSide(
-              color: conflicts.isEmpty ? roomColor : AppColor.danger,
-              width: 4,
-            ),
-          ),
-        ),
-        child: Row(
-          children: [
-            // Time
-            Column(
-              children: [
-                Text(
-                  timeStr,
-                  style: TextStyle(
-                    color: roomColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(width: 12),
-            // Details
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    studentName,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    roomName,
-                    style: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurfaceVariant.withAlpha(180),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Status indicator
-            if (conflicts.isNotEmpty)
-              const Icon(
-                Icons.warning_amber_rounded,
-                color: AppColor.danger,
-                size: 18,
-              )
-            else
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: _statusColor(lesson['status']),
-                  shape: BoxShape.circle,
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -2976,7 +1899,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final roomName = roomId != null
         ? (_roomNames[roomId] ?? 'Аудитория')
         : 'Без аудитории';
-    final conflicts = _conflictTypes(lesson['conflict_types']);
+    final conflicts = conflictTypes(lesson['conflict_types']);
     final lessonId = lesson['id']?.toString();
     final currentStatus = lesson['status']?.toString() ?? 'scheduled';
 
@@ -2988,309 +1911,24 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         currentStatus != 'completed' &&
         currentStatus != 'done';
 
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: AppColor.scrim,
-      builder: (ctx) {
-        final cs = Theme.of(ctx).colorScheme;
-        return Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 480,
-              maxHeight: MediaQuery.of(ctx).size.height * 0.85,
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: cs.surface,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(AppRadius.sheet),
-                ),
-                border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 10, bottom: 2),
-                    decoration: BoxDecoration(
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColor.goldSoft,
-                            borderRadius: BorderRadius.circular(AppRadius.icon),
-                            border: Border.all(color: AppColor.goldLine),
-                          ),
-                          child: const Icon(
-                            Icons.event_note_rounded,
-                            size: 20,
-                            color: AppColor.gold,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                studentName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.2,
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  timeRange,
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded),
-                          iconSize: 20,
-                          color: cs.onSurfaceVariant,
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _detailRow(Icons.person_rounded, 'Ученик', studentName),
-                          const SizedBox(height: 10),
-                          _detailRow(
-                            Icons.school_rounded,
-                            'Педагог',
-                            teacherName,
-                          ),
-                          const SizedBox(height: 10),
-                          _detailRow(Icons.room_rounded, 'Аудитория', roomName),
-                          const SizedBox(height: 10),
-                          _detailRow(
-                            Icons.access_time_rounded,
-                            'Время',
-                            timeRange,
-                          ),
-                          const SizedBox(height: 10),
-                          _detailRow(
-                            Icons.info_outline_rounded,
-                            'Статус',
-                            _lessonStatusLabel(currentStatus),
-                          ),
-                          if (conflicts.isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            _detailRow(
-                              Icons.warning_amber_rounded,
-                              'Конфликты',
-                              conflicts.map(_conflictLabel).join(', '),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
-                    child: Column(
-                      children: [
-                        if (completable) ...[
-                          SizedBox(
-                            width: double.infinity,
-                            height: 46,
-                            child: Material(
-                              color: AppColor.gold,
-                              borderRadius: BorderRadius.circular(
-                                AppRadius.control,
-                              ),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.control,
-                                ),
-                                onTap: () {
-                                  Navigator.pop(ctx);
-                                  _updateLessonStatus(
-                                    lessonId,
-                                    'completed',
-                                    'Занятие отмечено проведённым',
-                                  );
-                                },
-                                child: const Center(
-                                  child: Text(
-                                    'Завершить',
-                                    style: TextStyle(
-                                      color: AppColor.onGold,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                        Row(
-                          children: [
-                            if (lessonId != null)
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () {
-                                    Navigator.pop(ctx);
-                                    _editLesson(lesson);
-                                  },
-                                  icon: const Icon(Icons.edit_outlined, size: 18),
-                                  label: const Text('Изменить'),
-                                ),
-                              ),
-                            if (lessonId != null &&
-                                currentStatus != 'cancelled') ...[
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: OutlinedButton(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppColor.danger,
-                                    side: const BorderSide(
-                                      color: AppColor.danger,
-                                    ),
-                                  ),
-                                  onPressed: () async {
-                                    final confirmed = await showDialog<bool>(
-                                      context: context,
-                                      builder: (c) => AlertDialog(
-                                        title: const Text('Отменить занятие?'),
-                                        content: const Text(
-                                          'Занятие будет помечено как отменённое.',
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(c, false),
-                                            child: const Text('Нет'),
-                                          ),
-                                          FilledButton(
-                                            style: FilledButton.styleFrom(
-                                              backgroundColor: AppColor.danger,
-                                            ),
-                                            onPressed: () =>
-                                                Navigator.pop(c, true),
-                                            child: const Text('Отменить занятие'),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                    if (confirmed == true) {
-                                      if (ctx.mounted) Navigator.pop(ctx);
-                                      await _updateLessonStatus(
-                                        lessonId,
-                                        'cancelled',
-                                        'Занятие отменено',
-                                      );
-                                    }
-                                  },
-                                  child: const Text('Отменить'),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        if (lessonId != null) ...[
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColor.danger,
-                            ),
-                            onPressed: () async {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (c) => AlertDialog(
-                                  title: const Text('Удалить занятие?'),
-                                  content: const Text(
-                                    'Занятие будет удалено из расписания безвозвратно.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(c, false),
-                                      child: const Text('Нет'),
-                                    ),
-                                    FilledButton(
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: AppColor.danger,
-                                      ),
-                                      onPressed: () => Navigator.pop(c, true),
-                                      child: const Text('Удалить'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed == true) {
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                await _deleteLesson(lessonId);
-                              }
-                            },
-                            icon: const Icon(
-                              Icons.delete_outline_rounded,
-                              size: 18,
-                            ),
-                            label: const Text('Удалить занятие'),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+    showLessonDetailsSheet(
+      context,
+      lesson: lesson,
+      teacherName: teacherName,
+      studentName: studentName,
+      roomName: roomName,
+      timeRange: timeRange,
+      currentStatus: currentStatus,
+      conflicts: conflicts,
+      lessonId: lessonId,
+      completable: completable,
+      onEdit: () => _editLesson(lesson),
+      onDelete: () => _deleteLesson(lessonId!),
+      onUpdateStatus: (status, message) =>
+          _updateLessonStatus(lessonId!, status, message),
     );
   }
 
-  String _lessonStatusLabel(String? status) {
-    switch (status) {
-      case 'completed':
-      case 'done':
-        return 'Проведено';
-      case 'cancelled':
-        return 'Отменено';
-      case 'scheduled':
-      case 'planned':
-        return 'Запланировано';
-      default:
-        return status ?? 'Запланировано';
-    }
-  }
 
   Future<void> _editLesson(Map<String, dynamic> lesson) async {
     final changed = await CreateLessonDialog.show(context, lesson: lesson);
@@ -3351,121 +1989,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     }
   }
 
-  Widget _detailRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: AppColor.gold),
-        SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 13,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
-  String _conflictLabel(String type) {
-    return switch (type) {
-      'room_overlap' => 'пересечение аудитории',
-      'teacher_overlap' => 'пересечение педагога',
-      'missing_teacher' => 'не назначен педагог',
-      'branch_mismatch' => 'филиал не совпадает',
-      _ => type,
-    };
-  }
 }
 
 // Error state with retry, mirroring the per-feature `_TasksError`/`_FinanceError`
-// pattern so the schedule never fails silently into an anonymous skeleton.
-class _ScheduleError extends StatelessWidget {
-  final Object? error;
-  final VoidCallback onRetry;
-
-  const _ScheduleError({required this.error, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              color: AppColor.danger,
-              size: 42,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Не удалось загрузить расписание',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '$error',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 14),
-            FilledButton(onPressed: onRetry, child: const Text('Повторить')),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ScheduleBadge extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-
-  const _ScheduleBadge({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withAlpha(24),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(54)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { CrmService } from "./crm.service";
+import { LeadIntakeService } from "./lead-intake.service";
 import { LeadWebhookDto } from "./dto/lead-webhook.dto";
 
 /**
@@ -17,7 +17,7 @@ import { LeadWebhookDto } from "./dto/lead-webhook.dto";
  */
 @Controller("public")
 export class LeadWebhookController {
-  constructor(private readonly crm: CrmService) {}
+  constructor(private readonly leads: LeadIntakeService) {}
 
   @Post("lead-webhook")
   async receiveLead(
@@ -31,7 +31,7 @@ export class LeadWebhookController {
     if (!this.secretsMatch(secret ?? "", expected)) {
       throw new UnauthorizedException("Неверный секрет вебхука.");
     }
-    return this.crm.createLeadFromSiteWebhook(dto);
+    return this.leads.createLeadFromSiteWebhook(dto);
   }
 
   // Constant-time comparison (hash both sides so lengths always match).

@@ -19,7 +19,15 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'client_card_aggregation.dart';
+import 'client_card_dialogs.dart';
+import 'client_card_sheets.dart';
+import 'client_card_ui.dart';
 import 'student_schedule_section.dart';
+
+part 'client_card_widgets.dart';
+part 'client_card_display.dart';
+part 'client_card_sections.dart';
+part 'client_card_student_tabs.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
 /// Инфо / Задачи / Комментарии / Семья / История). Behaviour is equivalent to
@@ -1333,7 +1341,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
               _buildLedgerSection(cs),
             ],
             const SizedBox(height: AppSpace.lg),
-            _buildStudentGroupsInfoCard(cs),
+            _studentGroupsInfoCard(groups: _groups),
           ],
 
           if (_mode.hasLeadHalf) ...[
@@ -1373,7 +1381,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
               (_loadingDuplicates || duplicateCandidates.isNotEmpty)) ...[
             const SizedBox(height: AppSpace.md),
             _sectionTitle('Кандидаты на связь'),
-            _duplicateCandidatesSection(cs, duplicateCandidates),
+            _duplicateCandidatesSection(
+              cs,
+              candidates: duplicateCandidates,
+              loading: _loadingDuplicates,
+              pendingId: _duplicateDecisionId,
+              onAttach: _attachDuplicateCandidate,
+            ),
           ],
         ],
       ),
@@ -1455,10 +1469,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   Future<void> _openAddTaskSheet() async {
-    final cs = Theme.of(context).colorScheme;
-    final titleCtrl = TextEditingController();
-    DateTime? due;
-    String? assignedTo;
     // Сотрудники для поля «Исполнитель»; сбой загрузки не блокирует задачу.
     var staff = const <Map<String, dynamic>>[];
     try {
@@ -1468,143 +1478,15 @@ class _ClientCardState extends ConsumerState<ClientCard>
     } catch (_) {}
     if (!mounted) return;
 
-    final confirmed = await showMagicSheet<bool>(
+    final input = await showAddTaskSheet(
       context,
-      title: 'Новая задача',
-      subtitle: _isStudent
-          ? 'Поставьте задачу по этому ученику'
-          : 'Поставьте задачу по этому лиду',
-      icon: Icons.task_alt_rounded,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final dueLabel = due == null
-                ? 'Без срока'
-                : DateFormat('dd.MM.yyyy', 'ru').format(due!);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleCtrl,
-                  autofocus: true,
-                  decoration: _inputDecoration(
-                    cs,
-                    label: 'Название',
-                    hint: 'Например: Перезвонить клиенту',
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.md),
-                Text(
-                  'Срок',
-                  style: TextStyle(
-                    color: cs.onSurfaceVariant,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                InkWell(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: due ?? DateTime.now(),
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2100),
-                    );
-                    if (picked != null) setSheetState(() => due = picked);
-                  },
-                  child: InputDecorator(
-                    decoration: _inputDecoration(cs, isDense: true),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(dueLabel),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (due != null)
-                              InkWell(
-                                onTap: () => setSheetState(() => due = null),
-                                child: Icon(
-                                  Icons.clear_rounded,
-                                  size: 16,
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.calendar_today_rounded,
-                              size: 16,
-                              color: AppColor.gold,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (staff.isNotEmpty) ...[
-                  const SizedBox(height: AppSpace.md),
-                  DropdownButtonFormField<String?>(
-                    initialValue: assignedTo,
-                    isExpanded: true,
-                    decoration: _inputDecoration(
-                      cs,
-                      label: 'Исполнитель',
-                      isDense: true,
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('Не назначен'),
-                      ),
-                      for (final s in staff)
-                        if (s['profile_user_id'] != null)
-                          DropdownMenuItem<String?>(
-                            value: s['profile_user_id'].toString(),
-                            child: Text(
-                              '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
-                                  .trim(),
-                            ),
-                          ),
-                    ],
-                    onChanged: (v) => setSheetState(() => assignedTo = v),
-                  ),
-                ],
-              ],
-            );
-          },
-        );
-      },
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColor.gold,
-            foregroundColor: AppColor.onGold,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.control),
-            ),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          child: const Text('Создать'),
-        ),
-      ],
+      isStudent: _isStudent,
+      staff: staff,
     );
-
-    final title = titleCtrl.text.trim();
-    final dueAt = due?.toUtc().toIso8601String();
-    titleCtrl.dispose();
-    if (confirmed != true) return;
+    if (input == null) return;
+    final title = input.title;
+    final dueAt = input.due?.toUtc().toIso8601String();
+    final assignedTo = input.assignedTo;
     if (title.isEmpty) {
       if (mounted) {
         MagicToast.show(
@@ -1694,107 +1576,18 @@ class _ClientCardState extends ConsumerState<ClientCard>
       return;
     }
 
-    String? selectedTeacher = teachers.first['id']?.toString();
-    String? selectedRoom = rooms.isNotEmpty ? rooms.first['id']?.toString() : null;
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
-    TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocalState) => AlertDialog(
-          title: const Text('Пробное занятие'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                initialValue: selectedTeacher,
-                decoration: const InputDecoration(labelText: 'Учитель'),
-                items: teachers
-                    .map(
-                      (t) => DropdownMenuItem(
-                        value: t['id'].toString(),
-                        child: Text('${t['first_name']} ${t['last_name']}'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setLocalState(() => selectedTeacher = v),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: selectedRoom,
-                decoration: const InputDecoration(labelText: 'Кабинет'),
-                items: rooms
-                    .map(
-                      (r) => DropdownMenuItem(
-                        value: r['id'].toString(),
-                        child: Text(r['name']),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setLocalState(() => selectedRoom = v),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                title: Text(
-                  'Дата: ${DateFormat('dd.MM.yyyy').format(selectedDate)}',
-                ),
-                trailing: const Icon(Icons.calendar_today_rounded),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: selectedDate,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 90)),
-                  );
-                  if (picked != null) {
-                    setLocalState(() => selectedDate = picked);
-                  }
-                },
-              ),
-              ListTile(
-                title: Text('Время: ${selectedTime.format(ctx)}'),
-                trailing: const Icon(Icons.access_time_rounded),
-                onTap: () async {
-                  final picked = await showTimePicker(
-                    context: ctx,
-                    initialTime: selectedTime,
-                  );
-                  if (picked != null) {
-                    setLocalState(() => selectedTime = picked);
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Назначить'),
-            ),
-          ],
-        ),
-      ),
+    final slot = await showScheduleTrialDialog(
+      context,
+      teachers: teachers,
+      rooms: rooms,
     );
-
-    if (confirmed != true || selectedTeacher == null) return;
-    final scheduledAt = DateTime(
-      selectedDate.year,
-      selectedDate.month,
-      selectedDate.day,
-      selectedTime.hour,
-      selectedTime.minute,
-    );
+    if (slot == null) return;
     try {
       await crm.createLesson(
         leadId: _leadId,
-        teacherId: selectedTeacher,
-        roomId: selectedRoom,
-        scheduledAt: scheduledAt.toIso8601String(),
+        teacherId: slot.teacherId,
+        roomId: slot.roomId,
+        scheduledAt: slot.scheduledAt.toIso8601String(),
         isTrial: true,
         status: 'scheduled',
         notes: 'Пробное занятие по лиду: ${_leadData['name'] ?? ''}',
@@ -1879,7 +1672,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
               _buildFamilyAddButton(cs),
             ],
           ),
-          _buildFamilySection(cs),
+          _familySection(
+            cs,
+            loading: _loadingFamily,
+            family: _family,
+            busy: _familyBusy,
+            onRemove: _removeFamilyMember,
+          ),
         ],
       ),
     );
@@ -1920,18 +1719,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionTitle('История статусов'),
-          _buildStatusHistorySection(cs),
+          _statusHistorySection(
+            cs,
+            loading: _loadingHistory,
+            history: _statusHistory,
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _emptyHint(ColorScheme cs, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-      child: Text(
-        text,
-        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
       ),
     );
   }
@@ -2053,22 +1846,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   /// «Остаток: 7 астр.ч. / 14 000 ₽» — денежная часть считается по цене пакета
   /// пропорционально оставшимся часам; без пакета показываем только часы.
-  String _subscriptionRemainder(Map<String, dynamic> s) {
-    num toNum(Object? v) =>
-        v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
-    String hours(num v) =>
-        v == v.truncate() ? v.toInt().toString() : v.toStringAsFixed(1);
-    final total = toNum(s['lessons_total']);
-    final left = total - toNum(s['lessons_used']);
-    final price = s['package_price'];
-    final money = (price is num && total > 0)
-        ? ' / ${(price / total * left).round()} ₽'
-        : '';
-    final status = s['status']?.toString();
-    final suffix = status == 'active' ? '' : ' · ${_formatStatus(status)}';
-    return 'Остаток: ${hours(left)} из ${hours(total)} астр.ч.$money$suffix';
-  }
-
   // ── Личный счёт (KVA-235, формат HolliHop: вкладки Приход/Расход) ────────
   Widget _buildLedgerSection(ColorScheme cs) {
     return FutureBuilder<Map<String, dynamic>>(
@@ -2224,18 +2001,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
         );
       },
     );
-  }
-
-  String _ledgerKindLabel(Object? kind) {
-    return switch (kind?.toString()) {
-      'payment' => 'Платёж',
-      'lesson_charge' => 'Списание за занятие',
-      'refund' => 'Возврат',
-      'adjustment' => 'Корректировка',
-      'transfer_in' => 'Перенос (зачисление)',
-      'transfer_out' => 'Перенос (списание)',
-      _ => 'Операция',
-    };
   }
 
   void _refreshLedger() {
@@ -2398,25 +2163,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   // Pill badge for the header («Ученик» / «Лид→Ученик»).
-  Widget _headerBadge(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColor.goldSoft,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: AppColor.goldLine),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColor.gold,
-          fontWeight: FontWeight.w700,
-          fontSize: 10.5,
-        ),
-      ),
-    );
-  }
-
   Widget _buildStudentHeader(ColorScheme cs, StatusRecord curStatus) {
     final contact = _studentContact();
     final converted = _isConverted;
@@ -2649,13 +2395,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
         children: [
           if (upcoming.isNotEmpty) ...[
             _sectionTitle('Предстоящие'),
-            ...upcoming.map((l) => _buildLessonRow(cs, l)),
+            ...upcoming.map((l) => _lessonRow(cs, l, onOpenSchedule: _openScheduleForLesson)),
           ],
           if (upcoming.isNotEmpty && past.isNotEmpty)
             const SizedBox(height: AppSpace.md),
           if (past.isNotEmpty) ...[
             _sectionTitle('Прошедшие'),
-            ...past.map((l) => _buildLessonRow(cs, l)),
+            ...past.map((l) => _lessonRow(cs, l, onOpenSchedule: _openScheduleForLesson)),
           ],
         ],
       );
@@ -2664,63 +2410,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   /// One tappable lesson row. Tapping focuses the dashboard schedule on the
   /// lesson's day with the lesson highlighted, then closes the card.
-  Widget _buildLessonRow(ColorScheme cs, Map<String, dynamic> l) {
-    final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
-    final dateStr = dt != null
-        ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
-        : '—';
-    final teacherData = l['teachers'] as Map<String, dynamic>?;
-    String teacherName = '—';
-    if (teacherData != null) {
-      final tfName = teacherData['first_name']?.toString() ?? '';
-      final tlName = teacherData['last_name']?.toString() ?? '';
-      final p = teacherData['profiles'] as Map<String, dynamic>?;
-      var tName = '$tfName $tlName'.trim();
-      if (tName.isEmpty && p != null) {
-        tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-      }
-      teacherName = tName.isEmpty ? '—' : tName;
-    }
-    final completed = l['status'] == 'completed';
-    final lessonId = l['id']?.toString();
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        onTap: (lessonId != null && lessonId.isNotEmpty && dt != null)
-            ? () => _openScheduleForLesson(dt, lessonId)
-            : null,
-        title: Text(
-          dateStr,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          [
-            'Преп.: $teacherName',
-            '${l['groups']?['name'] ?? 'Инд.'}',
-            if ((l['rooms']?['name']?.toString() ?? '').isNotEmpty)
-              'Ауд.: ${l['rooms']['name']}',
-          ].join(' • '),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: (completed ? AppTheme.success : AppTheme.primaryGold)
-                .withAlpha(30),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            completed ? 'Завершено' : 'Запланировано',
-            style: TextStyle(
-              fontSize: 11,
-              color: completed ? AppTheme.success : AppTheme.primaryGold,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   /// Focus the dashboard schedule on [scheduledAt] with [lessonId] highlighted,
   /// then close this card and route to the admin dashboard schedule tab.
   ///
@@ -2744,123 +2433,15 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   // ── Student tab: Оплаты ──────────────────────────────────────────────────
   Widget _buildPaymentsTab(ColorScheme cs) {
-    return _studentGuard(cs, () {
-      if (_payments.isEmpty) {
-        return Center(
-          child: Text(
-            'Оплат не найдено',
-            style: TextStyle(color: cs.onSurfaceVariant),
-          ),
-        );
-      }
-      return ListView.builder(
-        padding: const EdgeInsets.all(AppSpace.xl),
-        itemCount: _payments.length,
-        itemBuilder: (context, i) {
-          final p = _payments[i];
-          final dt = DateTime.tryParse(p['payment_date']?.toString() ?? '');
-          final dateStr = dt != null
-              ? DateFormat('d MMM yyyy', 'ru').format(dt)
-              : '—';
-          final paymentNote = (p['notes'] ?? p['description'] ?? '')
-              .toString()
-              .trim();
-          final method = (p['method'] ?? p['type'] ?? '').toString().trim();
-          final subtitle = [
-            dateStr,
-            if (paymentNote.isNotEmpty) paymentNote,
-          ].join(' • ');
-          return Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              leading: const Icon(
-                Icons.account_balance_wallet_rounded,
-                color: AppTheme.success,
-              ),
-              title: Text(
-                '${p['amount']} ₽',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text(subtitle),
-              trailing: method.isEmpty
-                  ? null
-                  : Text(
-                      method,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-            ),
-          );
-        },
-      );
-    });
+    return _studentGuard(cs, () => _paymentsView(cs, payments: _payments));
   }
 
   // ── Student tab: Инвойсы ─────────────────────────────────────────────────
   Widget _buildInvoicesTab(ColorScheme cs) {
-    return _studentGuard(cs, () {
-      if (_expectedPayments.isEmpty) {
-        return Center(
-          child: Text(
-            'Инвойсов не найдено',
-            style: TextStyle(color: cs.onSurfaceVariant),
-          ),
-        );
-      }
-      return ListView.builder(
-        padding: const EdgeInsets.all(AppSpace.xl),
-        itemCount: _expectedPayments.length,
-        itemBuilder: (context, i) {
-          final p = _expectedPayments[i];
-          final dt = DateTime.tryParse(p['due_date']?.toString() ?? '');
-          final dateStr = dt != null
-              ? DateFormat('d MMM yyyy', 'ru').format(dt)
-              : '—';
-          final status = p['status']?.toString() ?? 'pending';
-          final description = (p['description'] ?? '').toString().trim();
-          final paid = status == 'paid';
-          final subtitle = [
-            'Срок: $dateStr',
-            if (description.isNotEmpty) description,
-          ].join(' • ');
-          return Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              leading: Icon(
-                paid
-                    ? Icons.check_circle_rounded
-                    : Icons.pending_actions_rounded,
-                color: paid ? AppTheme.success : AppTheme.warning,
-              ),
-              title: Text(
-                '${p['amount']} ₽',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text(subtitle),
-              trailing: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (paid ? AppTheme.success : AppTheme.warning).withAlpha(
-                    30,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  paid ? 'Оплачено' : 'Ожидает',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: paid ? AppTheme.success : AppTheme.warning,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    });
+    return _studentGuard(
+      cs,
+      () => _invoicesView(cs, expectedPayments: _expectedPayments),
+    );
   }
 
   // ── Student tab: Документы ───────────────────────────────────────────────
@@ -2897,297 +2478,37 @@ class _ClientCardState extends ConsumerState<ClientCard>
     });
   }
 
-  // Merged-history list (converted): lead status history + student timeline,
-  // sorted desc, each row carrying an origin chip.
-  Widget _buildMergedHistoryView(ColorScheme cs) {
-    // Lead status history loads independently; show a spinner until it settles
-    // so converted history isn't briefly missing its lead half.
-    if (_loadingHistory) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColor.gold),
-      );
-    }
-    final items = _mergedHistory;
-    if (items.isEmpty) {
-      return Center(
-        child: Text(
-          'История пуста',
-          style: TextStyle(color: cs.onSurfaceVariant),
-        ),
-      );
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(AppSpace.xl),
-      itemCount: items.length,
-      itemBuilder: (ctx, i) {
-        final item = items[i];
-        final isStatus = item['_kind'] == 'status';
-        final dt = DateTime.tryParse(item['_date']?.toString() ?? '');
-        final dateStr = dt != null
-            ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
-            : '—';
-        final subtitle = item['_subtitle']?.toString() ?? '';
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          isStatus
-                              ? Icons.flag_rounded
-                              : Icons.timeline_rounded,
-                          size: 16,
-                          color: isStatus
-                              ? AppTheme.warning
-                              : AppTheme.primaryGold,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          isStatus ? 'Статус' : 'Событие',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: isStatus
-                                ? AppTheme.warning
-                                : AppTheme.primaryGold,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        ClientOriginChip(
-                          entityType: item['_origin']?.toString() ?? 'student',
-                        ),
-                      ],
-                    ),
-                    Text(
-                      dateStr,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  item['_title']?.toString() ?? '',
-                  style: const TextStyle(fontSize: 14),
-                ),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   // ── Student tab: История ─────────────────────────────────────────────────
   // For a converted client this folds lead status history into the student
   // timeline (merged, de-duped by id, origin-badged). A plain student keeps the
   // Phase 2 view (its own tasks + comments).
   Widget _buildStudentHistoryTab(ColorScheme cs) {
     if (_isConverted) {
-      return _studentGuard(cs, () => _buildMergedHistoryView(cs));
+      return _studentGuard(
+        cs,
+        () => _mergedHistoryView(
+          cs,
+          loading: _loadingHistory,
+          items: _mergedHistory,
+        ),
+      );
     }
-    return _studentGuard(cs, () {
-      if (_studentTasks.isEmpty && _studentComments.isEmpty) {
-        return Center(
-          child: Text(
-            'История пуста',
-            style: TextStyle(color: cs.onSurfaceVariant),
-          ),
-        );
-      }
-      final items = [
-        ..._studentTasks.map(
-          (t) => {'type': 'task', 'data': t, 'date': t['created_at']},
-        ),
-        ..._studentComments
-            .where(
-              (c) =>
-                  !(c['content']?.toString().startsWith('[PROGRESS]') ?? false),
-            )
-            .map(
-              (c) => {'type': 'comment', 'data': c, 'date': c['created_at']},
-            ),
-      ];
-      items.sort(
-        (a, b) => ((b['date'] as String?) ?? '').compareTo(
-          (a['date'] as String?) ?? '',
-        ),
-      );
-      return ListView.builder(
-        padding: const EdgeInsets.all(AppSpace.xl),
-        itemCount: items.length,
-        itemBuilder: (ctx, i) {
-          final item = items[i];
-          final isTask = item['type'] == 'task';
-          final data = item['data'] as Map<String, dynamic>;
-          final dt = DateTime.tryParse(item['date'] as String? ?? '');
-          final dateStr = dt != null
-              ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
-              : '—';
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            isTask
-                                ? Icons.task_alt_rounded
-                                : Icons.comment_rounded,
-                            size: 16,
-                            color: isTask
-                                ? AppTheme.warning
-                                : AppTheme.primaryGold,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            isTask ? 'Задача' : 'Комментарий',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: isTask
-                                  ? AppTheme.warning
-                                  : AppTheme.primaryGold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        dateStr,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isTask
-                        ? (data['title']?.toString() ?? '')
-                        : (data['content']?.toString() ?? ''),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  if (isTask && data['description'] != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      data['description'].toString(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    });
+    return _studentGuard(
+      cs,
+      () => _studentTimelineView(
+        cs,
+        tasks: _studentTasks,
+        comments: _studentComments,
+      ),
+    );
   }
 
   // ── Student tab: Прогресс ([PROGRESS]-prefixed comments) ──────────────────
   Widget _buildProgressTab(ColorScheme cs) {
-    return _studentGuard(cs, () {
-      final progressNotes = _studentComments
-          .where(
-            (c) => c['content']?.toString().startsWith('[PROGRESS]') ?? false,
-          )
-          .toList();
-      if (progressNotes.isEmpty) {
-        return Center(
-          child: Text(
-            'Заметок об успехах ещё нет',
-            style: TextStyle(color: cs.onSurfaceVariant),
-          ),
-        );
-      }
-      return ListView.builder(
-        padding: const EdgeInsets.all(AppSpace.xl),
-        itemCount: progressNotes.length,
-        itemBuilder: (ctx, i) {
-          final note = progressNotes[i];
-          final content = (note['content']?.toString() ?? '').replaceFirst(
-            '[PROGRESS] ',
-            '',
-          );
-          final dt = DateTime.tryParse(note['created_at']?.toString() ?? '');
-          final dateStr = dt != null
-              ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal())
-              : '—';
-          final author = note['profiles'];
-          final authorName = author != null
-              ? '${author['first_name'] ?? ''} ${author['last_name'] ?? ''}'
-                    .trim()
-              : 'Система';
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.stars_rounded,
-                        color: AppTheme.success,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        dateStr,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        authorName.isEmpty ? 'Система' : authorName,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontStyle: FontStyle.italic,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    content,
-                    style: const TextStyle(fontSize: 15, height: 1.4),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    });
+    return _studentGuard(
+      cs,
+      () => _progressNotesView(cs, comments: _studentComments),
+    );
   }
 
   // ── Student action bar (overflow menu hosts the v7 student actions) ───────
@@ -3318,59 +2639,15 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
   }
 
-  Widget _buildStudentGroupsInfoCard(ColorScheme cs) {
-    return _buildInfoCard('Группы', [
-      if (_groups.isEmpty)
-        const _InfoRow(
-          icon: Icons.group_off_rounded,
-          label: 'Группы',
-          value: 'Нет активных групп',
-        )
-      else
-        ..._groups.map((g) {
-          final teacher = g['teachers'];
-          var teacherName = '—';
-          if (teacher is Map<String, dynamic>) {
-            final firstName = teacher['first_name']?.toString() ?? '';
-            final lastName = teacher['last_name']?.toString() ?? '';
-            teacherName = '$firstName $lastName'.trim();
-          }
-          return _InfoRow(
-            icon: Icons.groups_rounded,
-            label: g['name']?.toString() ?? 'Группа',
-            value: teacherName.isEmpty || teacherName == '—'
-                ? 'Без преподавателя'
-                : 'Преподаватель: $teacherName',
-          );
-        }),
-    ]);
-  }
 
   // ── Student actions (ported from student_detail_screen) ──────────────────
   Future<void> _editStudentPrice() async {
-    final controller = TextEditingController(
-      text: _student?['individual_price']?.toString(),
-    );
-    final newPrice = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Цена занятия'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Сумма (₽)'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+    final newPrice = await showSingleFieldDialog(
+      context,
+      title: 'Цена занятия',
+      label: 'Сумма (₽)',
+      initialValue: _student?['individual_price']?.toString(),
+      keyboardType: TextInputType.number,
     );
 
     if (newPrice != null && double.tryParse(newPrice) != null) {
@@ -3415,31 +2692,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   Future<void> _editStudentContractUrl() async {
-    final controller = TextEditingController(
-      text: _student?['contract_url']?.toString(),
-    );
-    final newUrl = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ссылка на договор'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'https://...',
-            labelText: 'Ссылка на документ',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+    final newUrl = await showSingleFieldDialog(
+      context,
+      title: 'Ссылка на договор',
+      label: 'Ссылка на документ',
+      hint: 'https://...',
+      initialValue: _student?['contract_url']?.toString(),
     );
 
     if (newUrl != null) {
@@ -3466,42 +2724,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   /// Flat gold button used inside the v7 «Задать ДЗ» sheet (ported helper).
-  Widget _goldButton(String label, VoidCallback? onPressed) {
-    return FilledButton(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        backgroundColor: AppColor.gold,
-        foregroundColor: AppColor.onGold,
-        disabledBackgroundColor: AppColor.goldSoft,
-        disabledForegroundColor: AppColor.text2,
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        padding: const EdgeInsets.symmetric(vertical: 13),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-        ),
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-      ),
-      child: Text(label),
-    );
-  }
-
-  Widget _ghostButton(String label, VoidCallback? onPressed) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColor.text,
-        side: const BorderSide(color: AppColor.divider),
-        padding: const EdgeInsets.symmetric(vertical: 13),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-        ),
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      ),
-      child: Text(label),
-    );
-  }
-
   Future<void> _showIssueSubscriptionSheet() async {
     final crm = ref.read(magicCrmServiceProvider);
     List<Map<String, dynamic>> packages;
@@ -3528,25 +2750,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
       return;
     }
 
-    final selected = await showMagicSheet<Map<String, dynamic>>(
+    final selected = await showIssueSubscriptionSheet(
       context,
-      title: 'Выдать абонемент',
-      subtitle: 'Выберите пакет занятий',
-      icon: Icons.card_membership_rounded,
-      builder: (sheetContext) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final pkg in packages) ...[
-              _SubscriptionPackageTile(
-                package: pkg,
-                onTap: () => Navigator.pop(sheetContext, pkg),
-              ),
-              const SizedBox(height: AppSpace.sm),
-            ],
-          ],
-        );
-      },
+      packages: packages,
     );
 
     if (selected == null || !mounted) return;
@@ -3587,162 +2793,25 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
     if (!mounted) return;
 
-    final titleCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    DateTime? dueAt;
-
-    final created = await showMagicSheet<bool>(
+    final input = await showAssignHomeworkSheet(
       context,
-      title: 'Задать ДЗ',
-      subtitle: 'Новое домашнее задание',
-      icon: Icons.assignment_rounded,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            final dueLabel = dueAt == null
-                ? 'Срок не задан'
-                : DateFormat('d MMM yyyy, HH:mm', 'ru').format(dueAt!);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: titleCtrl,
-                  autofocus: true,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Заголовок *',
-                    hintText: 'Что нужно выучить?',
-                  ),
-                ),
-                const SizedBox(height: AppSpace.md),
-                TextField(
-                  controller: descCtrl,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Описание',
-                    hintText: 'Подробности (необязательно)',
-                  ),
-                ),
-                const SizedBox(height: AppSpace.md),
-                InkWell(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  onTap: () async {
-                    final now = DateTime.now();
-                    final date = await showDatePicker(
-                      context: sheetContext,
-                      initialDate: dueAt ?? now,
-                      firstDate: now.subtract(const Duration(days: 1)),
-                      lastDate: now.add(const Duration(days: 365)),
-                    );
-                    if (date == null || !sheetContext.mounted) return;
-                    final time = await showTimePicker(
-                      context: sheetContext,
-                      initialTime: TimeOfDay.fromDateTime(dueAt ?? now),
-                    );
-                    setSheetState(() {
-                      dueAt = DateTime(
-                        date.year,
-                        date.month,
-                        date.day,
-                        time?.hour ?? 0,
-                        time?.minute ?? 0,
-                      );
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpace.md,
-                      vertical: AppSpace.md,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColor.input,
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                      border: Border.all(color: AppColor.divider),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.event_rounded,
-                          size: 18,
-                          color: AppColor.gold,
-                        ),
-                        const SizedBox(width: AppSpace.md),
-                        Expanded(
-                          child: Text(
-                            dueLabel,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: dueAt == null
-                                  ? AppColor.text2
-                                  : AppColor.text,
-                            ),
-                          ),
-                        ),
-                        if (dueAt != null)
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 18),
-                            color: AppColor.text2,
-                            tooltip: 'Сбросить срок',
-                            onPressed: () => setSheetState(() => dueAt = null),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (homeworks.isNotEmpty) ...[
-                  const SizedBox(height: AppSpace.lg),
-                  const Divider(height: 1, color: AppColor.divider),
-                  const SizedBox(height: AppSpace.md),
-                  const Text(
-                    'Последние ДЗ',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColor.gold,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpace.sm),
-                  for (final hw in homeworks) _HomeworkTile(homework: hw),
-                ],
-              ],
-            );
-          },
-        );
-      },
-      actions: [
-        _ghostButton('Отмена', () => Navigator.pop(context, false)),
-        _goldButton('Создать', () {
-          if (titleCtrl.text.trim().isEmpty) {
-            MagicToast.show(
-              context,
-              'Введите заголовок',
-              type: MagicToastType.danger,
-            );
-            return;
-          }
-          Navigator.pop(context, true);
-        }),
-      ],
+      recentHomeworks: homeworks,
     );
-
-    if (created != true || !mounted) return;
-
-    final title = titleCtrl.text.trim();
-    if (title.isEmpty) return;
+    if (input == null || !mounted) return;
 
     try {
       await crm.createHomework(
         studentId: _entityId,
-        title: title,
-        description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-        dueAt: dueAt?.toIso8601String(),
+        title: input.title,
+        description: input.description,
+        dueAt: input.dueAt?.toIso8601String(),
       );
       if (!mounted) return;
       _dirty = true;
       MagicToast.show(
         context,
         'ДЗ создано',
-        detail: title,
+        detail: input.title,
         type: MagicToastType.success,
       );
     } catch (e) {
@@ -3758,29 +2827,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   /// Shared card container used by the student Инфо/Документы tabs (ported from
   /// student_detail_screen._buildInfoCard).
-  Widget _buildInfoCard(String title, List<Widget> children) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                color: AppTheme.primaryGold,
-              ),
-            ),
-            const Divider(height: 24),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
   InputDecoration _inputDecoration(
     ColorScheme cs, {
     String? label,
@@ -3788,56 +2834,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
     String? helperText,
     bool isDense = false,
     Widget? suffixIcon,
-  }) {
-    final r = BorderRadius.circular(AppRadius.control);
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      helperText: helperText,
-      isDense: isDense,
-      suffixIcon: suffixIcon,
-      enabledBorder: OutlineInputBorder(
-        borderRadius: r,
-        borderSide: BorderSide(color: cs.outlineVariant),
-      ),
-      border: OutlineInputBorder(
-        borderRadius: r,
-        borderSide: BorderSide(color: cs.outlineVariant),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: r,
-        borderSide: const BorderSide(color: AppColor.gold, width: 2),
-      ),
-    );
-  }
-
-  Widget _sectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md, top: AppSpace.xs),
-      child: Row(
-        children: [
-          Container(
-            width: 3,
-            height: 14,
-            decoration: BoxDecoration(
-              color: AppColor.gold,
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-            ),
-          ),
-          const SizedBox(width: AppSpace.sm),
-          Text(
-            title,
-            style: const TextStyle(
-              color: AppColor.gold,
-              fontWeight: FontWeight.w700,
-              fontSize: 13.5,
-              letterSpacing: 0.2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  }) => clientCardInputDecoration(
+    cs,
+    label: label,
+    hint: hint,
+    helperText: helperText,
+    isDense: isDense,
+    suffixIcon: suffixIcon,
+  );
 
   Widget _buildStatusPicker(ColorScheme cs, StatusRecord current) {
     return Padding(
@@ -4235,16 +3239,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final existing = index == null
         ? const <String, dynamic>{}
         : persons[index];
-    final nameCtrl = TextEditingController(
-      text: existing['name']?.toString() ?? '',
-    );
-    final phoneCtrl = TextEditingController(
-      text: existing['phone']?.toString() ?? '',
-    );
-    final emailCtrl = TextEditingController(
-      text: existing['email']?.toString() ?? '',
-    );
-    String relation = existing['relation']?.toString() ?? '';
+    final relation = existing['relation']?.toString() ?? '';
     final relationOptions = _customFieldSchema
         .where(
           (field) =>
@@ -4255,95 +3250,20 @@ class _ClientCardState extends ConsumerState<ClientCard>
     if (relation.isNotEmpty && !relationOptions.contains(relation)) {
       relationOptions.add(relation);
     }
-    final cs = Theme.of(context).colorScheme;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          index == null ? 'Новое контактное лицо' : 'Контактное лицо',
-        ),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: _inputDecoration(cs, label: 'Имя', isDense: true),
-              ),
-              const SizedBox(height: AppSpace.md),
-              DropdownButtonFormField<String>(
-                initialValue: relationOptions.contains(relation)
-                    ? relation
-                    : '',
-                isExpanded: true,
-                decoration: _inputDecoration(
-                  cs,
-                  label: 'Кем приходится',
-                  isDense: true,
-                ),
-                items: [
-                  const DropdownMenuItem(value: '', child: Text('Не выбрано')),
-                  ...relationOptions.map(
-                    (option) =>
-                        DropdownMenuItem(value: option, child: Text(option)),
-                  ),
-                ],
-                onChanged: (value) => relation = value ?? '',
-              ),
-              const SizedBox(height: AppSpace.md),
-              TextField(
-                controller: phoneCtrl,
-                keyboardType: TextInputType.phone,
-                decoration: _inputDecoration(
-                  cs,
-                  label: 'Телефон',
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: AppSpace.md),
-              TextField(
-                controller: emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                decoration: _inputDecoration(cs, label: 'Email', isDense: true),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColor.gold,
-              foregroundColor: AppColor.onGold,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+    final person = await showEditContactPersonDialog(
+      context,
+      existing: existing,
+      relationOptions: relationOptions,
+      isNew: index == null,
     );
-    if (saved == true) {
-      final person = <String, dynamic>{
-        'name': nameCtrl.text.trim(),
-        'relation': relation,
-        'phone': phoneCtrl.text.trim(),
-        'email': emailCtrl.text.trim(),
-      }..removeWhere((_, value) => (value as String).isEmpty);
-      final next = [...persons];
-      if (index == null) {
-        next.add(person);
-      } else {
-        next[index] = person;
-      }
-      _writeContactPersons(entity, next);
+    if (person == null) return;
+    final next = [...persons];
+    if (index == null) {
+      next.add(person);
+    } else {
+      next[index] = person;
     }
-    nameCtrl.dispose();
-    phoneCtrl.dispose();
-    emailCtrl.dispose();
+    _writeContactPersons(entity, next);
   }
 
   Widget _buildContactPersonsEditor(ColorScheme cs, String entity) {
@@ -4535,234 +3455,19 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   Widget _buildAggregateCard(ColorScheme cs, {bool includeTasks = true}) {
-    if (_loadingCard) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-        child: LinearProgressIndicator(color: AppColor.gold),
-      );
-    }
-    final card = _leadCard;
-    if (card == null) {
-      return Text(
-        'Карточка активности временно недоступна',
-        style: TextStyle(color: cs.onSurfaceVariant),
-      );
-    }
-
-    final linkedStudents = _list(card['linked_students']);
-    final tasks = _list(card['tasks']);
-    final trials = _list(card['trials']);
-    final otherLeads = _list(card['other_leads']);
-    final timeline = _list(card['timeline']);
-    final duplicateCandidates = _duplicateCandidates
-        .where(_isCurrentLeadDuplicateCandidate)
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: AppSpace.sm,
-          runSpacing: AppSpace.sm,
-          children: [
-            _summaryChip(
-              Icons.school_outlined,
-              'Ученики',
-              linkedStudents.length,
-            ),
-            _summaryChip(Icons.task_alt_rounded, 'Задачи', tasks.length),
-            _summaryChip(
-              Icons.event_available_rounded,
-              'Пробные',
-              trials.length,
-            ),
-            _summaryChip(Icons.link_rounded, 'Похожие лиды', otherLeads.length),
-            if (_loadingDuplicates || duplicateCandidates.isNotEmpty)
-              _summaryChip(
-                Icons.merge_type_rounded,
-                'Кандидаты',
-                duplicateCandidates.length,
-              ),
-          ],
-        ),
-        const SizedBox(height: AppSpace.md),
-        _miniSection(
-          cs,
-          title: 'Связанные ученики',
-          empty: 'Связанных учеников нет',
-          rows: linkedStudents,
-          titleBuilder: (row) =>
-              '${row['first_name'] ?? ''} ${row['last_name'] ?? ''}'.trim(),
-          subtitleBuilder: (row) => row['phone']?.toString(),
-        ),
-        if (includeTasks)
-          _miniSection(
-            cs,
-            title: 'Задачи',
-            empty: 'Открытых задач нет',
-            rows: tasks,
-            titleBuilder: (row) => row['title']?.toString() ?? 'Задача',
-            subtitleBuilder: (row) => _formatStatus(row['status']),
-          ),
-        _miniSection(
-          cs,
-          title: 'Пробные занятия',
-          empty: 'Пробные занятия не назначены',
-          rows: trials,
-          titleBuilder: (row) => _formatDate(row['scheduled_at']),
-          subtitleBuilder: (row) => [
-            row['teacher_name'],
-            row['room_name'],
-          ].where((value) => value != null && '$value'.isNotEmpty).join(' · '),
-          action: _mode.hasLeadHalf
-              ? TextButton.icon(
-                  onPressed: _scheduleTrialFromCard,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColor.gold,
-                    visualDensity: VisualDensity.compact,
-                    textStyle: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                  icon: const Icon(Icons.add_rounded, size: 15),
-                  label: const Text('На пробный'),
-                )
-              : null,
-        ),
-        // KVA-234: заявки лида (HolliHop GetStudyRequests) — порядок секций по
-        // HolliHop: Связанные ученики → Пробные занятия → Заявки → Лента.
-        _miniSection(
-          cs,
-          title: 'Заявки',
-          empty: 'Заявок нет',
-          rows: _leadApplications,
-          titleBuilder: (row) => _formatDate(row['applied_at']),
-          subtitleBuilder: (row) {
-            final utm = row['utm'];
-            final utmSource = utm is Map ? utm['Source']?.toString() : null;
-            return [row['channel'], row['discipline'], utmSource]
-                .where((value) => value != null && '$value'.isNotEmpty)
-                .join(' · ');
-          },
-        ),
-        _miniSection(
-          cs,
-          title: 'Лента',
-          empty: 'История пока пустая',
-          rows: timeline.take(8).toList(),
-          titleBuilder: (row) => row['title']?.toString() ?? 'Событие',
-          subtitleBuilder: (row) => _formatDate(row['occurred_at']),
-        ),
-      ],
+    return _aggregateCard(
+      cs,
+      loadingCard: _loadingCard,
+      card: _leadCard,
+      leadApplications: _leadApplications,
+      duplicateCount: _duplicateCandidates
+          .where(_isCurrentLeadDuplicateCandidate)
+          .length,
+      loadingDuplicates: _loadingDuplicates,
+      includeTasks: includeTasks,
+      onScheduleTrial: _mode.hasLeadHalf ? _scheduleTrialFromCard : null,
     );
   }
-
-  String _familyRoleLabel(Object? role) {
-    return switch (role?.toString()) {
-      'parent' => 'Родитель',
-      'child' => 'Ребёнок',
-      'guardian' => 'Опекун',
-      'payer' => 'Плательщик',
-      'sibling' => 'Брат/сестра',
-      final value when value != null && value.isNotEmpty => value,
-      _ => 'Член семьи',
-    };
-  }
-
-  Widget _buildFamilySection(ColorScheme cs) {
-    if (_loadingFamily) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-        child: LinearProgressIndicator(color: AppColor.gold),
-      );
-    }
-    final family = _family?['family'] as Map<String, dynamic>?;
-    final members = _list(_family?['members']);
-    if (family == null) {
-      return Text(
-        'Семья не указана',
-        style: TextStyle(color: cs.onSurfaceVariant),
-      );
-    }
-    final primaryId = family['primary_payer_member_id']?.toString();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if ((family['name']?.toString().trim().isNotEmpty ?? false))
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              family['name'].toString(),
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-        if (members.isEmpty)
-          Text(
-            'Участники не добавлены',
-            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-          )
-        else
-          ...members.map((m) {
-            final isPayer =
-                primaryId != null && m['id']?.toString() == primaryId;
-            final subtitle = [
-              _familyRoleLabel(m['role']),
-              if (m['is_primary_contact'] == true) 'Осн. контакт',
-              if (isPayer) 'Плательщик',
-            ].where((value) => value.isNotEmpty).join(' · ');
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: ListTile(
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  side: BorderSide(
-                    color: cs.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-                tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-                leading: const Icon(
-                  Icons.people_alt_rounded,
-                  size: 18,
-                  color: AppColor.gold,
-                ),
-                title: Text(
-                  (m['name']?.toString().trim().isNotEmpty ?? false)
-                      ? m['name'].toString()
-                      : 'Без имени',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: subtitle.isEmpty ? null : Text(subtitle),
-                trailing: IconButton(
-                  tooltip: 'Удалить участника',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: _familyBusy ? null : () => _removeFamilyMember(m),
-                  icon: Icon(
-                    Icons.delete_outline_rounded,
-                    size: 18,
-                    color: AppTheme.danger,
-                  ),
-                ),
-              ),
-            );
-          }),
-      ],
-    );
-  }
-
-  // Role keys understood by the family API, paired with Russian labels for the
-  // add-member sheet picker.
-  static const List<(String, String)> _familyRoleOptions = [
-    ('parent', 'Родитель'),
-    ('child', 'Ребёнок'),
-    ('partner', 'Партнёр'),
-    ('sibling', 'Брат/сестра'),
-    ('guardian', 'Опекун'),
-    ('payer', 'Плательщик'),
-  ];
 
   // Reads the family id out of either the existing `_family` payload or the
   // raw `createFamily` response (which nests the record under `family`).
@@ -4779,132 +3484,19 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   Future<void> _openAddFamilyMemberSheet() async {
-    final cs = Theme.of(context).colorScheme;
     final selfId = _leadData['id']?.toString() ?? widget.lead['id']?.toString();
-    var role = _familyRoleOptions.first.$1;
-    // Default the linked record to this card's own entity (lead or student).
-    var entityType = widget.entityType;
-    final entityIdCtrl = TextEditingController(text: selfId ?? '');
-    var isPrimaryContact = false;
-
-    final confirmed = await showMagicSheet<bool>(
+    final input = await showAddFamilyMemberSheet(
       context,
-      title: 'Добавить участника',
-      subtitle: _isStudent
-          ? 'Свяжите запись с семьёй ученика'
-          : 'Свяжите запись с семьёй лида',
-      icon: Icons.person_add_alt_1_rounded,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Роль',
-                  style: TextStyle(
-                    color: cs.onSurfaceVariant,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                DropdownButtonFormField<String>(
-                  initialValue: role,
-                  isExpanded: true,
-                  decoration: _inputDecoration(cs, isDense: true),
-                  items: _familyRoleOptions
-                      .map(
-                        (option) => DropdownMenuItem(
-                          value: option.$1,
-                          child: Text(option.$2),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setSheetState(() => role = value);
-                  },
-                ),
-                const SizedBox(height: AppSpace.md),
-                Text(
-                  'Тип записи',
-                  style: TextStyle(
-                    color: cs.onSurfaceVariant,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                DropdownButtonFormField<String>(
-                  initialValue: entityType,
-                  isExpanded: true,
-                  decoration: _inputDecoration(cs, isDense: true),
-                  items: const [
-                    DropdownMenuItem(value: 'lead', child: Text('Лид')),
-                    DropdownMenuItem(value: 'student', child: Text('Ученик')),
-                    DropdownMenuItem(value: 'profile', child: Text('Профиль')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setSheetState(() => entityType = value);
-                  },
-                ),
-                const SizedBox(height: AppSpace.md),
-                TextField(
-                  controller: entityIdCtrl,
-                  decoration: _inputDecoration(
-                    cs,
-                    label: 'ID записи',
-                    hint: 'Идентификатор лида/ученика/профиля',
-                    helperText: selfId == null
-                        ? null
-                        : (_isStudent
-                              ? 'По умолчанию — текущий ученик'
-                              : 'По умолчанию — текущий лид'),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.xs),
-                CheckboxListTile(
-                  value: isPrimaryContact,
-                  activeColor: AppColor.gold,
-                  onChanged: (value) =>
-                      setSheetState(() => isPrimaryContact = value ?? false),
-                  title: const Text('Основной контакт'),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                ),
-              ],
-            );
-          },
-        );
-      },
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColor.gold,
-            foregroundColor: AppColor.onGold,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.control),
-            ),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          child: const Text('Добавить'),
-        ),
-      ],
+      isStudent: _isStudent,
+      // Default the linked record to this card's own entity (lead or student).
+      defaultEntityType: widget.entityType,
+      defaultEntityId: selfId,
     );
-
-    final entityId = entityIdCtrl.text.trim();
-    entityIdCtrl.dispose();
-    if (confirmed != true) return;
+    if (input == null) return;
+    final role = input.role;
+    final entityType = input.entityType;
+    final entityId = input.entityId;
+    final isPrimaryContact = input.isPrimaryContact;
     if (entityId.isEmpty) {
       if (mounted) {
         MagicToast.show(
@@ -5010,184 +3602,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
   }
 
-  Widget _buildStatusHistorySection(ColorScheme cs) {
-    if (_loadingHistory) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-        child: LinearProgressIndicator(color: AppColor.gold),
-      );
-    }
-    if (_statusHistory.isEmpty) {
-      return Text(
-        'Изменений статуса пока нет',
-        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: _statusHistory.take(12).map((h) {
-        final from = h['old_status']?.toString();
-        final to = h['new_status']?.toString();
-        final transition = [
-          if (from != null && from.isNotEmpty) from else '—',
-          '→',
-          if (to != null && to.isNotEmpty) to else '—',
-        ].join(' ');
-        final comment = h['comment']?.toString().trim() ?? '';
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
-            ),
-            tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-            leading: const Icon(
-              Icons.history_rounded,
-              size: 18,
-              color: AppColor.gold,
-            ),
-            title: Text(
-              transition,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              [
-                _formatDate(h['changed_at']),
-                if (comment.isNotEmpty) comment,
-              ].where((value) => value.isNotEmpty).join(' · '),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  List<Map<String, dynamic>> _list(Object? value) {
-    if (value is! List) return const <Map<String, dynamic>>[];
-    return value.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Widget _summaryChip(IconData icon, String label, int value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColor.goldSoft,
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(color: AppColor.goldLine),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: AppColor.gold),
-          const SizedBox(width: 6),
-          Text(
-            '$label: $value',
-            style: const TextStyle(
-              color: AppColor.gold,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _duplicateCandidatesSection(
-    ColorScheme cs,
-    List<Map<String, dynamic>> candidates,
-  ) {
-    if (_loadingDuplicates) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-        child: LinearProgressIndicator(color: AppColor.gold),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Кандидаты на связь с учеником',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          ...candidates.take(4).map((candidate) {
-            final student = _candidateEntity(candidate, 'student');
-            final title = student['name']?.toString().trim();
-            final subtitle =
-                [
-                      student['phone'],
-                      student['email'],
-                      _duplicateMatchText(candidate),
-                    ]
-                    .where((value) => value != null && '$value'.isNotEmpty)
-                    .join(' · ');
-            final candidateId = candidate['id']?.toString();
-            final pending =
-                candidateId != null && candidateId == _duplicateDecisionId;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: ListTile(
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  side: BorderSide(
-                    color: cs.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-                tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-                title: Text(
-                  title == null || title.isEmpty
-                      ? 'Существующий ученик'
-                      : title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: subtitle.isEmpty
-                    ? null
-                    : Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                trailing: FilledButton.tonalIcon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColor.goldSoft,
-                    foregroundColor: AppColor.gold,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                    ),
-                  ),
-                  onPressed: pending
-                      ? null
-                      : () => _attachDuplicateCandidate(candidate),
-                  icon: pending
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.link_rounded, size: 16),
-                  label: const Text('Связать'),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
   bool _isCurrentLeadDuplicateCandidate(Map<String, dynamic> candidate) {
     final leadId = _leadData['id']?.toString() ?? widget.lead['id']?.toString();
     if (leadId == null || leadId.isEmpty) return false;
@@ -5197,156 +3611,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
         (candidate['entity_type_b'] == 'lead' &&
             candidate['entity_id_b'] == leadId &&
             candidate['entity_type_a'] == 'student');
-  }
-
-  Map<String, dynamic> _candidateEntity(
-    Map<String, dynamic> candidate,
-    String entityType,
-  ) {
-    if (candidate['entity_type_a'] == entityType) {
-      final value = candidate['entity_a'];
-      return value is Map<String, dynamic> ? value : const <String, dynamic>{};
-    }
-    if (candidate['entity_type_b'] == entityType) {
-      final value = candidate['entity_b'];
-      return value is Map<String, dynamic> ? value : const <String, dynamic>{};
-    }
-    return const <String, dynamic>{};
-  }
-
-  String _duplicateMatchText(Map<String, dynamic> candidate) {
-    final matchValue = candidate['match_value']?.toString().trim() ?? '';
-    final confidence = _asNum(candidate['confidence']);
-    final confidenceText = confidence > 0
-        ? '${(confidence * 100).round()}% совпадение'
-        : '';
-    return [
-      if (matchValue.isNotEmpty) matchValue,
-      if (confidenceText.isNotEmpty) confidenceText,
-    ].join(' · ');
-  }
-
-  num _asNum(Object? value) {
-    if (value is num) return value;
-    return num.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  Widget _entityTile(
-    ColorScheme cs, {
-    required String title,
-    String? subtitle,
-    required IconData leading,
-    String? origin,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        dense: true,
-        visualDensity: VisualDensity.compact,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-        leading: Icon(leading, size: 18, color: AppColor.gold),
-        title: Text(
-          title.isEmpty ? 'Без названия' : title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: subtitle == null || subtitle.isEmpty
-            ? null
-            : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: origin == null ? null : ClientOriginChip(entityType: origin),
-      ),
-    );
-  }
-
-  Widget _miniSection(
-    ColorScheme cs, {
-    required String title,
-    required String empty,
-    required List<Map<String, dynamic>> rows,
-    required String Function(Map<String, dynamic>) titleBuilder,
-    required String? Function(Map<String, dynamic>) subtitleBuilder,
-    Widget? action,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpace.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              ?action,
-            ],
-          ),
-          const SizedBox(height: 6),
-          if (rows.isEmpty)
-            Text(
-              empty,
-              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-            )
-          else
-            ...rows.take(4).map((row) {
-              final subtitle = subtitleBuilder(row);
-              final titleText = titleBuilder(row);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: ListTile(
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                    side: BorderSide(
-                      color: cs.outlineVariant.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-                  title: Text(
-                    titleText.isEmpty ? 'Без названия' : titleText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: subtitle == null || subtitle.isEmpty
-                      ? null
-                      : Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  String _formatStatus(Object? status) {
-    return switch (status?.toString()) {
-      'open' => 'Открыта',
-      'in_progress' => 'В работе',
-      'done' => 'Выполнена',
-      'cancelled' => 'Отменена',
-      final value when value != null && value.isNotEmpty => value,
-      _ => '',
-    };
-  }
-
-  String _formatDate(Object? raw) {
-    final dt = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
-    if (dt == null) return '';
-    return DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt);
   }
 
   Future<void> _addComment() async {
@@ -5397,493 +3661,3 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 }
 
-class _CommentsList extends ConsumerStatefulWidget {
-  /// One ref per half whose comments should be shown. A single-side card passes
-  /// one ref; a converted client passes both ('lead', …) and ('student', …).
-  final List<ClientHalfRef> refs;
-
-  /// When true (converted), each comment gets a «Лид»/«Ученик» origin chip.
-  final bool showOrigin;
-  final int refreshKey;
-  const _CommentsList({
-    required this.refs,
-    required this.showOrigin,
-    required this.refreshKey,
-  });
-
-  @override
-  ConsumerState<_CommentsList> createState() => _CommentsListState();
-}
-
-class _CommentsListState extends ConsumerState<_CommentsList> {
-  // The comments future is held in a field (not recreated in build()) so the
-  // list doesn't re-fetch on every parent rebuild — the card rebuilds often on
-  // realtime events. Recomputed only when refs/refreshKey change or on retry.
-  late Future<List<Map<String, dynamic>>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _loadMerged();
-  }
-
-  @override
-  void didUpdateWidget(covariant _CommentsList oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.refreshKey != widget.refreshKey ||
-        _refsSig(oldWidget.refs) != _refsSig(widget.refs)) {
-      _future = _loadMerged();
-    }
-  }
-
-  String _refsSig(List<ClientHalfRef> refs) =>
-      refs.map((r) => '${r.entityType}/${r.entityId}').join(',');
-
-  // Maps a comment `kind` to a short Russian badge label. Unknown / generic
-  // kinds (e.g. plain staff comments) get no badge.
-  String? _kindLabel(Object? kind) {
-    return switch (kind?.toString()) {
-      'admin_comment' => 'Админ',
-      'teacher_note' => 'Педагог',
-      'progress' => 'Прогресс',
-      _ => null,
-    };
-  }
-
-  Widget _kindBadge(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColor.goldSoft,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: AppColor.goldLine),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColor.gold,
-          fontWeight: FontWeight.w700,
-          fontSize: 10,
-        ),
-      ),
-    );
-  }
-
-  // Loads every ref's comments in PARALLEL, isolates per-ref failures (a failed
-  // half contributes no rows but never fails the whole list), tags each comment
-  // with its origin entityType (`_origin`), merges, de-dups by id and sorts by
-  // created_at desc.
-  Future<List<Map<String, dynamic>>> _loadMerged() async {
-    final crm = ref.read(magicCrmServiceProvider);
-    final results = await Future.wait(
-      widget.refs.map((r) async {
-        try {
-          final rows = await crm.listComments(
-            entityType: r.entityType,
-            entityId: r.entityId,
-          );
-          return rows.map((c) => {...c, '_origin': r.entityType}).toList();
-        } catch (_) {
-          return <Map<String, dynamic>>[];
-        }
-      }),
-    );
-    return mergeByIdSorted(results, dateKey: 'created_at');
-  }
-
-  bool get _isStaff {
-    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
-    return role == 'admin' ||
-        role == 'manager' ||
-        role == 'director' ||
-        role == 'system_admin';
-  }
-
-  // Flip a comment between admin-only (`admin_comment`) and teacher-visible
-  // (`teacher_note`). Default is admin-only; this is the «показать преподавателю»
-  // toggle from the client card.
-  Future<void> _toggleCommentVisibility(Map<String, dynamic> c) async {
-    final id = c['id']?.toString();
-    if (id == null) return;
-    final showToTeacher = c['kind'] != 'teacher_note';
-    try {
-      await ref.read(magicCrmServiceProvider).setCommentVisibility(
-            commentId: id,
-            visibleToTeacher: showToTeacher,
-          );
-      if (mounted) setState(() => _future = _loadMerged());
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось изменить видимость: $e')),
-        );
-      }
-    }
-  }
-
-  Widget _visibilityToggle(Map<String, dynamic> c) {
-    final visible = c['kind'] == 'teacher_note';
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: () => _toggleCommentVisibility(c),
-        style: TextButton.styleFrom(
-          foregroundColor: visible
-              ? AppColor.gold
-              : Theme.of(context).colorScheme.onSurfaceVariant,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          minimumSize: const Size(0, 28),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        icon: Icon(
-          visible
-              ? Icons.visibility_rounded
-              : Icons.visibility_off_rounded,
-          size: 14,
-        ),
-        label: Text(
-          visible ? 'Виден преподавателю' : 'Показать преподавателю',
-          style: const TextStyle(fontSize: 10),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-            child: LinearProgressIndicator(color: AppColor.gold),
-          );
-        }
-        if (snapshot.hasError) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Не удалось загрузить комментарии',
-                  style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-                ),
-                const SizedBox(height: AppSpace.xs),
-                TextButton.icon(
-                  onPressed: () => setState(() => _future = _loadMerged()),
-                  style: TextButton.styleFrom(foregroundColor: AppColor.gold),
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Повторить'),
-                ),
-              ],
-            ),
-          );
-        }
-        if (!snapshot.hasData) return const SizedBox.shrink();
-        final comments = snapshot.data!;
-        if (comments.isEmpty) {
-          return Text(
-            'Нет комментариев',
-            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-          );
-        }
-
-        return Column(
-          children: comments.map((c) {
-            final dt = DateTime.tryParse(c['created_at'] ?? '')?.toLocal();
-            final dateStr = dt != null
-                ? DateFormat('d MMM HH:mm', 'ru').format(dt)
-                : '';
-            final kindLabel = _kindLabel(c['kind']);
-            return Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: AppSpace.sm),
-              padding: const EdgeInsets.all(AppSpace.md),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-                borderRadius: BorderRadius.circular(AppRadius.control),
-                border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                (c['author_name']
-                                            ?.toString()
-                                            .trim()
-                                            .isNotEmpty ??
-                                        false)
-                                    ? c['author_name'].toString()
-                                    : 'Сотрудник',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: AppColor.gold,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                            if (kindLabel != null) ...[
-                              const SizedBox(width: 6),
-                              _kindBadge(kindLabel),
-                            ],
-                            if (widget.showOrigin && c['_origin'] != null) ...[
-                              const SizedBox(width: 6),
-                              ClientOriginChip(
-                                entityType: c['_origin'].toString(),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        dateStr,
-                        style: TextStyle(
-                          color: cs.onSurfaceVariant,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    c['content'] ?? '',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  if (_isStaff &&
-                      (c['kind'] == 'admin_comment' ||
-                          c['kind'] == 'teacher_note')) ...[
-                    const SizedBox(height: 2),
-                    _visibilityToggle(c),
-                  ],
-                ],
-              ),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-}
-
-/// One labelled info row for compact read-only card sections.
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 18,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
-                ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Selectable subscription-package row inside the «Выдать абонемент» v7 sheet
-/// (ported from student_detail_screen).
-class _SubscriptionPackageTile extends StatelessWidget {
-  final Map<String, dynamic> package;
-  final VoidCallback onTap;
-  const _SubscriptionPackageTile({required this.package, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final name = package['name']?.toString() ?? 'Абонемент';
-    final lessons = package['lessons_total'] ?? package['lessonsTotal'];
-    final price = package['price'];
-    final validity = package['validity_days'] ?? package['validityDays'];
-    final meta = [
-      if (lessons != null) '$lessons ч.',
-      if (price != null) '$price ₽',
-      if (validity != null) '$validity дн.',
-    ].join(' · ');
-
-    return Material(
-      color: AppColor.input,
-      borderRadius: BorderRadius.circular(AppRadius.control),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpace.md,
-            vertical: AppSpace.md,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            border: Border.all(color: AppColor.divider),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColor.goldSoft,
-                  borderRadius: BorderRadius.circular(AppRadius.chip),
-                  border: Border.all(color: AppColor.goldLine),
-                ),
-                child: const Icon(
-                  Icons.card_membership_rounded,
-                  size: 18,
-                  color: AppColor.gold,
-                ),
-              ),
-              const SizedBox(width: AppSpace.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColor.text,
-                      ),
-                    ),
-                    if (meta.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          meta,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColor.text2,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: AppColor.text2),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Compact read-only homework row for the «Последние ДЗ» section in the «Задать
-/// ДЗ» v7 sheet (ported from student_detail_screen).
-class _HomeworkTile extends StatelessWidget {
-  final Map<String, dynamic> homework;
-  const _HomeworkTile({required this.homework});
-
-  @override
-  Widget build(BuildContext context) {
-    final title = homework['title']?.toString() ?? '—';
-    final status = homework['status']?.toString();
-    final dueRaw = homework['due_at'] ?? homework['dueAt'];
-    final due = DateTime.tryParse(dueRaw?.toString() ?? '');
-    final subtitle = [
-      if (status != null && status.isNotEmpty) _statusLabel(status),
-      if (due != null) DateFormat('d MMM yyyy', 'ru').format(due.toLocal()),
-    ].join(' · ');
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
-            child: Icon(
-              Icons.assignment_outlined,
-              size: 16,
-              color: AppColor.text2,
-            ),
-          ),
-          const SizedBox(width: AppSpace.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, color: AppColor.text),
-                ),
-                if (subtitle.isNotEmpty)
-                  Text(
-                    subtitle,
-                    style: const TextStyle(fontSize: 11, color: AppColor.text2),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _statusLabel(String status) {
-    switch (status) {
-      case 'assigned':
-        return 'Назначено';
-      case 'submitted':
-        return 'Сдано';
-      case 'done':
-      case 'completed':
-        return 'Завершено';
-      default:
-        return status;
-    }
-  }
-}

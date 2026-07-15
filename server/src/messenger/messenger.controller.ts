@@ -26,12 +26,22 @@ import { SetChatMuteDto } from "./dto/set-chat-mute.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
 import { UpdateGroupMembersDto } from "./dto/update-group-members.dto";
 import { UpdateMessageDto } from "./dto/update-message.dto";
+import { ChannelsService } from "./channels.service";
+import { ChatInboxService } from "./chat-inbox.service";
+import { MessageService } from "./message.service";
+import { ReadReceiptService } from "./read-receipt.service";
 import { MessengerService } from "./messenger.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("messenger")
 export class MessengerController {
-  constructor(private readonly messenger: MessengerService) {}
+  constructor(
+    private readonly messenger: MessengerService,
+    private readonly channels: ChannelsService,
+    private readonly inbox: ChatInboxService,
+    private readonly messages: MessageService,
+    private readonly readReceipts: ReadReceiptService,
+  ) {}
 
   @Get("chats")
   listChats(
@@ -114,7 +124,7 @@ export class MessengerController {
     @Param("chatId", ParseUUIDPipe) chatId: string,
     @Body() dto: MarkReadDto,
   ) {
-    return this.messenger.markRead(actor, chatId, dto);
+    return this.readReceipts.markRead(actor, chatId, dto);
   }
 
   @Post("chats/:chatId/assign")
@@ -123,7 +133,7 @@ export class MessengerController {
     @Param("chatId", ParseUUIDPipe) chatId: string,
     @Body() dto: AssignChatDto,
   ) {
-    return this.messenger.assignChat(actor, chatId, dto.userId);
+    return this.inbox.assignChat(actor, chatId, dto.userId);
   }
 
   @Post("chats/:chatId/unassign")
@@ -131,7 +141,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("chatId", ParseUUIDPipe) chatId: string,
   ) {
-    return this.messenger.unassignChat(actor, chatId);
+    return this.inbox.unassignChat(actor, chatId);
   }
 
   @Post("chats/:chatId/archive")
@@ -139,7 +149,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("chatId", ParseUUIDPipe) chatId: string,
   ) {
-    return this.messenger.archiveChat(actor, chatId);
+    return this.inbox.archiveChat(actor, chatId);
   }
 
   @Post("chats/:chatId/unarchive")
@@ -147,7 +157,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("chatId", ParseUUIDPipe) chatId: string,
   ) {
-    return this.messenger.unarchiveChat(actor, chatId);
+    return this.inbox.unarchiveChat(actor, chatId);
   }
 
   @Put("chats/:chatId/mute")
@@ -165,7 +175,7 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Param("emoji") emoji: string,
   ) {
-    return this.messenger.setReaction(actor, id, emoji);
+    return this.messages.setReaction(actor, id, emoji);
   }
 
   @Delete("messages/:id/reactions/:emoji")
@@ -174,7 +184,7 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Param("emoji") emoji: string,
   ) {
-    return this.messenger.removeReaction(actor, id, emoji);
+    return this.messages.removeReaction(actor, id, emoji);
   }
 
   @Post("messages/:id/pin")
@@ -182,7 +192,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.messenger.pinMessage(actor, id);
+    return this.messages.pinMessage(actor, id);
   }
 
   @Delete("messages/:id/pin")
@@ -190,7 +200,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.messenger.unpinMessage(actor, id);
+    return this.messages.unpinMessage(actor, id);
   }
 
   @Delete("messages/:id")
@@ -199,7 +209,7 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: DeleteMessageDto,
   ) {
-    return this.messenger.deleteMessage(actor, id, dto);
+    return this.messages.deleteMessage(actor, id, dto);
   }
 
   @Patch("messages/:id")
@@ -208,12 +218,12 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateMessageDto,
   ) {
-    return this.messenger.updateMessage(actor, id, dto);
+    return this.messages.updateMessage(actor, id, dto);
   }
 
   @Get("channels")
   listChannels(@CurrentActor() actor: ActorContext) {
-    return this.messenger.listChannels(actor);
+    return this.channels.listChannels(actor);
   }
 
   @Post("channels")
@@ -221,7 +231,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: UpsertChannelDto,
   ) {
-    return this.messenger.createChannel(actor, dto);
+    return this.channels.createChannel(actor, dto);
   }
 
   @Patch("channels/:id")
@@ -230,7 +240,7 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpsertChannelDto,
   ) {
-    return this.messenger.updateChannel(actor, id, dto);
+    return this.channels.updateChannel(actor, id, dto);
   }
 
   @Get("channels/:id/access")
@@ -238,7 +248,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.messenger.getChannelAccess(actor, id);
+    return this.channels.getChannelAccess(actor, id);
   }
 
   @Get("channels/:id/permissions")
@@ -246,7 +256,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.messenger.listChannelPermissions(actor, id);
+    return this.channels.listChannelPermissions(actor, id);
   }
 
   @Get("channels/:id/posts")
@@ -255,7 +265,7 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Query() query: MessengerListQuery,
   ) {
-    return this.messenger.listChannelPosts(actor, id, query);
+    return this.channels.listChannelPosts(actor, id, query);
   }
 
   @Post("channels/:id/posts")
@@ -264,6 +274,6 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: CreateChannelPostDto,
   ) {
-    return this.messenger.createChannelPost(actor, id, dto);
+    return this.channels.createChannelPost(actor, id, dto);
   }
 }
