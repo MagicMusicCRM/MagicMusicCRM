@@ -21,6 +21,7 @@ import 'package:magic_music_crm/features/manager/presentation/transfer/lead_tran
 import 'manage_statuses_dialog.dart';
 import 'lead_dialogs.dart';
 import 'lead_board_filters.dart';
+import 'leads_board_states.dart';
 
 part 'leads_widget_widgets.dart';
 
@@ -716,7 +717,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
       return const KanbanSkeleton();
     }
     if (boardAsync.hasError && !boardAsync.hasValue) {
-      return _buildBoardError();
+      return LeadsBoardError(onRetry: _refreshBoard);
     }
 
     final board = boardAsync.value ?? const <String, dynamic>{};
@@ -736,42 +737,6 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     return _buildBoard(board);
   }
 
-  Widget _buildBoardError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              color: AppColor.danger,
-              size: 42,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Не удалось загрузить воронку',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Проверьте подключение и попробуйте снова.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: _refreshBoard,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Повторить'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildBoard(Map<String, dynamic> board) {
     final columns = board['columns'] is List
@@ -841,7 +806,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
           _buildToolbar(board),
           Expanded(
             child: showNoResults
-                ? _buildNoResults()
+                ? LeadsNoResults(onClear: _clearSearch)
                 : Scrollbar(
                     controller: _boardScrollController,
                     thumbVisibility: true,
@@ -885,41 +850,5 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   }
 
   /// D1: board-wide empty state shown when a search matches nothing.
-  Widget _buildNoResults() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.search_off_rounded,
-              size: 42,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Ничего не найдено',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Измените запрос или сбросьте поиск и фильтры.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: _clearSearch,
-              icon: const Icon(Icons.close_rounded, size: 18),
-              label: const Text('Сбросить поиск'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
