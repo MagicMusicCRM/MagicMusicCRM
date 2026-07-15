@@ -21,6 +21,7 @@ import 'schedule_day_mode_toggle.dart';
 import 'schedule_timezone_dialog.dart';
 import 'schedule_filters_sheet.dart';
 import 'teacher_lesson_card.dart';
+import 'schedule_search_dialog.dart';
 
 part 'schedule_widget_widgets.dart';
 
@@ -635,33 +636,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   Future<void> _showScheduleSearch() async {
-    final controller = TextEditingController();
-    final query = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Поиск в расписании'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textInputAction: TextInputAction.search,
-          decoration: const InputDecoration(
-            hintText: 'Ученик, педагог, аудитория или дата',
-          ),
-          onSubmitted: (value) => Navigator.of(ctx).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text),
-            child: const Text('Найти'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
+    final query = await showScheduleSearchDialog(context);
 
     final normalized = query?.trim().toLowerCase();
     if (normalized == null || normalized.isEmpty) return;
