@@ -2655,83 +2655,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   // ── Student tab: Прогресс ([PROGRESS]-prefixed comments) ──────────────────
   Widget _buildProgressTab(ColorScheme cs) {
-    return _studentGuard(cs, () {
-      final progressNotes = _studentComments
-          .where(
-            (c) => c['content']?.toString().startsWith('[PROGRESS]') ?? false,
-          )
-          .toList();
-      if (progressNotes.isEmpty) {
-        return Center(
-          child: Text(
-            'Заметок об успехах ещё нет',
-            style: TextStyle(color: cs.onSurfaceVariant),
-          ),
-        );
-      }
-      return ListView.builder(
-        padding: const EdgeInsets.all(AppSpace.xl),
-        itemCount: progressNotes.length,
-        itemBuilder: (ctx, i) {
-          final note = progressNotes[i];
-          final content = (note['content']?.toString() ?? '').replaceFirst(
-            '[PROGRESS] ',
-            '',
-          );
-          final dt = DateTime.tryParse(note['created_at']?.toString() ?? '');
-          final dateStr = dt != null
-              ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal())
-              : '—';
-          final author = note['profiles'];
-          final authorName = author != null
-              ? '${author['first_name'] ?? ''} ${author['last_name'] ?? ''}'
-                    .trim()
-              : 'Система';
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.stars_rounded,
-                        color: AppTheme.success,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        dateStr,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        authorName.isEmpty ? 'Система' : authorName,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontStyle: FontStyle.italic,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    content,
-                    style: const TextStyle(fontSize: 15, height: 1.4),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    });
+    return _studentGuard(
+      cs,
+      () => _progressNotesView(cs, comments: _studentComments),
+    );
   }
 
   // ── Student action bar (overflow menu hosts the v7 student actions) ───────
