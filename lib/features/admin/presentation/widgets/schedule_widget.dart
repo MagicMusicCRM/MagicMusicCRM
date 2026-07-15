@@ -19,6 +19,7 @@ import 'schedule_year_view.dart';
 import 'schedule_month_view.dart';
 import 'schedule_day_mode_toggle.dart';
 import 'schedule_timezone_dialog.dart';
+import 'schedule_filters_sheet.dart';
 
 part 'schedule_widget_widgets.dart';
 
@@ -732,85 +733,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   Future<void> _showScheduleFilters() async {
-    String? branchId = _selectedBranchId;
-    var dayViewMode = _dayViewMode;
-
-    final result =
-        await showModalBottomSheet<({String? branchId, DayViewMode mode})>(
-          context: context,
-          showDragHandle: true,
-          builder: (ctx) => StatefulBuilder(
-            builder: (context, setSheetState) {
-              return SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Фильтры расписания',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 12),
-                      ListTile(
-                        title: const Text('Все филиалы'),
-                        contentPadding: EdgeInsets.zero,
-                        onTap: () => setSheetState(() => branchId = null),
-                        trailing: branchId == null
-                            ? const Icon(Icons.check_rounded)
-                            : null,
-                      ),
-                      ..._branches.map((branch) {
-                        final id = branch['id'].toString();
-                        return ListTile(
-                          title: Text(branch['name']?.toString() ?? 'Филиал'),
-                          contentPadding: EdgeInsets.zero,
-                          onTap: () => setSheetState(() => branchId = id),
-                          trailing: branchId == id
-                              ? const Icon(Icons.check_rounded)
-                              : null,
-                        );
-                      }),
-                      if (_currentView == ScheduleView.day) ...[
-                        const Divider(),
-                        ListTile(
-                          title: const Text('День по аудиториям'),
-                          contentPadding: EdgeInsets.zero,
-                          onTap: () => setSheetState(
-                            () => dayViewMode = DayViewMode.byRoom,
-                          ),
-                          trailing: dayViewMode == DayViewMode.byRoom
-                              ? const Icon(Icons.check_rounded)
-                              : null,
-                        ),
-                        ListTile(
-                          title: const Text('День по педагогу'),
-                          contentPadding: EdgeInsets.zero,
-                          onTap: () => setSheetState(
-                            () => dayViewMode = DayViewMode.byTeacher,
-                          ),
-                          trailing: dayViewMode == DayViewMode.byTeacher
-                              ? const Icon(Icons.check_rounded)
-                              : null,
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      FilledButton(
-                        onPressed: () => Navigator.of(
-                          ctx,
-                        ).pop((branchId: branchId, mode: dayViewMode)),
-                        child: const Text('Применить'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-
+    final result = await showScheduleFiltersSheet(
+      context,
+      initialBranchId: _selectedBranchId,
+      initialMode: _dayViewMode,
+      branches: _branches,
+      isDayView: _currentView == ScheduleView.day,
+    );
     if (result == null) return;
     setState(() {
       _clearHighlight();
