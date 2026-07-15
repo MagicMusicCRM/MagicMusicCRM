@@ -31,6 +31,91 @@ String _duplicateMatchText(Map<String, dynamic> candidate) {
   ].join(' · ');
 }
 
+/// Family members list with per-row delete. [family] is the raw `_family`
+/// payload (`{family: {...}, members: [...]}`); [onRemove] deletes a member.
+Widget _familySection(
+  ColorScheme cs, {
+  required bool loading,
+  required Map<String, dynamic>? family,
+  required bool busy,
+  required void Function(Map<String, dynamic> member) onRemove,
+}) {
+  if (loading) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+      child: LinearProgressIndicator(color: AppColor.gold),
+    );
+  }
+  final familyRecord = family?['family'] as Map<String, dynamic>?;
+  final members = _list(family?['members']);
+  if (familyRecord == null) {
+    return Text('Семья не указана', style: TextStyle(color: cs.onSurfaceVariant));
+  }
+  final primaryId = familyRecord['primary_payer_member_id']?.toString();
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if ((familyRecord['name']?.toString().trim().isNotEmpty ?? false))
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            familyRecord['name'].toString(),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+      if (members.isEmpty)
+        Text(
+          'Участники не добавлены',
+          style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+        )
+      else
+        ...members.map((m) {
+          final isPayer = primaryId != null && m['id']?.toString() == primaryId;
+          final subtitle = [
+            _familyRoleLabel(m['role']),
+            if (m['is_primary_contact'] == true) 'Осн. контакт',
+            if (isPayer) 'Плательщик',
+          ].where((value) => value.isNotEmpty).join(' · ');
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: ListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+              ),
+              tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+              leading: const Icon(
+                Icons.people_alt_rounded,
+                size: 18,
+                color: AppColor.gold,
+              ),
+              title: Text(
+                (m['name']?.toString().trim().isNotEmpty ?? false)
+                    ? m['name'].toString()
+                    : 'Без имени',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: subtitle.isEmpty ? null : Text(subtitle),
+              trailing: IconButton(
+                tooltip: 'Удалить участника',
+                visualDensity: VisualDensity.compact,
+                onPressed: busy ? null : () => onRemove(m),
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 18,
+                  color: AppTheme.danger,
+                ),
+              ),
+            ),
+          );
+        }),
+    ],
+  );
+}
+
 /// Duplicate-candidate «связать с учеником» list. [pendingId] disables+spins the
 /// row currently being attached; [onAttach] performs the link.
 Widget _duplicateCandidatesSection(
