@@ -164,7 +164,7 @@ extension _ClientCardData on _ClientCardState {
           card['subscriptions'],
         ).map(Subscription.fromMap).toList();
         _payments = _list(card['payments']).map(Payment.fromMap).toList();
-        _lessons = _list(card['lessons']);
+        _lessons = _list(card['lessons']).map(Lesson.fromMap).toList();
         _studentTasks = _list(card['tasks']);
         _studentComments = _list(card['comments']);
         _groups = _list(card['groups']);

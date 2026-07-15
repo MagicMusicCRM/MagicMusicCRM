@@ -24,6 +24,7 @@ import 'package:magic_music_crm/core/models/family_member.dart';
 import 'package:magic_music_crm/core/models/student_balance.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/models/subscription.dart';
+import 'package:magic_music_crm/core/models/lesson.dart';
 import '../trial_lesson_booking.dart';
 import 'client_card_aggregation.dart';
 import 'client_card_dialogs.dart';
@@ -176,7 +177,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   StudentBalance? _balance;
   List<Subscription> _subscriptions = [];
   List<Payment> _payments = [];
-  List<Map<String, dynamic>> _lessons = [];
+  List<Lesson> _lessons = [];
   List<Map<String, dynamic>> _studentTasks = [];
   // Unified comment stream for the Прогресс tab ([PROGRESS]-prefixed notes) and
   // the «История» merge — the «Комментарии» tab reads live via [_CommentsList].

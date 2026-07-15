@@ -61,14 +61,14 @@ Widget _sectionTitle(String title) {
 /// schedule focused on this lesson (only wired when it has a date + id).
 Widget _lessonRow(
   ColorScheme cs,
-  Map<String, dynamic> l, {
+  Lesson l, {
   required void Function(DateTime scheduledAt, String lessonId) onOpenSchedule,
 }) {
-  final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
+  final dt = DateTime.tryParse(l.scheduledAt ?? '');
   final dateStr = dt != null
       ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
       : '—';
-  final teacherData = l['teachers'] as Map<String, dynamic>?;
+  final teacherData = l.teachers;
   String teacherName = '—';
   if (teacherData != null) {
     final tfName = teacherData['first_name']?.toString() ?? '';
@@ -80,8 +80,8 @@ Widget _lessonRow(
     }
     teacherName = tName.isEmpty ? '—' : tName;
   }
-  final completed = l['status'] == 'completed';
-  final lessonId = l['id']?.toString();
+  final completed = l.status == 'completed';
+  final lessonId = l.id;
   return Card(
     margin: const EdgeInsets.only(bottom: 8),
     child: ListTile(
@@ -92,9 +92,9 @@ Widget _lessonRow(
       subtitle: Text(
         [
           'Преп.: $teacherName',
-          '${l['groups']?['name'] ?? 'Инд.'}',
-          if ((l['rooms']?['name']?.toString() ?? '').isNotEmpty)
-            'Ауд.: ${l['rooms']['name']}',
+          '${l.groups?['name'] ?? 'Инд.'}',
+          if ((l.rooms?['name']?.toString() ?? '').isNotEmpty)
+            'Ауд.: ${l.rooms!['name']}',
         ].join(' • '),
       ),
       trailing: Container(

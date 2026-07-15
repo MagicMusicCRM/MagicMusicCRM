@@ -362,7 +362,7 @@ extension _ClientCardTabsA on _ClientCardState {
               const SizedBox(height: AppSpace.lg),
               StudentScheduleSection(
                 studentId: _studentId,
-                lessons: _lessons,
+                lessons: _lessons.map((l) => l.raw).toList(),
                 onChanged: _fetchStudentData,
               ),
             ],
