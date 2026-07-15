@@ -2627,110 +2627,20 @@ class _ClientCardState extends ConsumerState<ClientCard>
     });
   }
 
-  // Merged-history list (converted): lead status history + student timeline,
-  // sorted desc, each row carrying an origin chip.
-  Widget _buildMergedHistoryView(ColorScheme cs) {
-    // Lead status history loads independently; show a spinner until it settles
-    // so converted history isn't briefly missing its lead half.
-    if (_loadingHistory) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColor.gold),
-      );
-    }
-    final items = _mergedHistory;
-    if (items.isEmpty) {
-      return Center(
-        child: Text(
-          'История пуста',
-          style: TextStyle(color: cs.onSurfaceVariant),
-        ),
-      );
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(AppSpace.xl),
-      itemCount: items.length,
-      itemBuilder: (ctx, i) {
-        final item = items[i];
-        final isStatus = item['_kind'] == 'status';
-        final dt = DateTime.tryParse(item['_date']?.toString() ?? '');
-        final dateStr = dt != null
-            ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
-            : '—';
-        final subtitle = item['_subtitle']?.toString() ?? '';
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          isStatus
-                              ? Icons.flag_rounded
-                              : Icons.timeline_rounded,
-                          size: 16,
-                          color: isStatus
-                              ? AppTheme.warning
-                              : AppTheme.primaryGold,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          isStatus ? 'Статус' : 'Событие',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: isStatus
-                                ? AppTheme.warning
-                                : AppTheme.primaryGold,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        ClientOriginChip(
-                          entityType: item['_origin']?.toString() ?? 'student',
-                        ),
-                      ],
-                    ),
-                    Text(
-                      dateStr,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  item['_title']?.toString() ?? '',
-                  style: const TextStyle(fontSize: 14),
-                ),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   // ── Student tab: История ─────────────────────────────────────────────────
   // For a converted client this folds lead status history into the student
   // timeline (merged, de-duped by id, origin-badged). A plain student keeps the
   // Phase 2 view (its own tasks + comments).
   Widget _buildStudentHistoryTab(ColorScheme cs) {
     if (_isConverted) {
-      return _studentGuard(cs, () => _buildMergedHistoryView(cs));
+      return _studentGuard(
+        cs,
+        () => _mergedHistoryView(
+          cs,
+          loading: _loadingHistory,
+          items: _mergedHistory,
+        ),
+      );
     }
     return _studentGuard(cs, () {
       if (_studentTasks.isEmpty && _studentComments.isEmpty) {

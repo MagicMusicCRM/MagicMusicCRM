@@ -394,6 +394,96 @@ Widget _sectionTitle(String title) {
   );
 }
 
+/// Merged-history list (converted): lead status history + student timeline,
+/// pre-sorted desc by the caller, each row carrying an origin chip.
+Widget _mergedHistoryView(
+  ColorScheme cs, {
+  required bool loading,
+  required List<Map<String, dynamic>> items,
+}) {
+  // Lead status history loads independently; show a spinner until it settles
+  // so converted history isn't briefly missing its lead half.
+  if (loading) {
+    return const Center(child: CircularProgressIndicator(color: AppColor.gold));
+  }
+  if (items.isEmpty) {
+    return Center(
+      child: Text('История пуста', style: TextStyle(color: cs.onSurfaceVariant)),
+    );
+  }
+  return ListView.builder(
+    padding: const EdgeInsets.all(AppSpace.xl),
+    itemCount: items.length,
+    itemBuilder: (ctx, i) {
+      final item = items[i];
+      final isStatus = item['_kind'] == 'status';
+      final dt = DateTime.tryParse(item['_date']?.toString() ?? '');
+      final dateStr = dt != null
+          ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
+          : '—';
+      final subtitle = item['_subtitle']?.toString() ?? '';
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        isStatus ? Icons.flag_rounded : Icons.timeline_rounded,
+                        size: 16,
+                        color: isStatus
+                            ? AppTheme.warning
+                            : AppTheme.primaryGold,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        isStatus ? 'Статус' : 'Событие',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isStatus
+                              ? AppTheme.warning
+                              : AppTheme.primaryGold,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      ClientOriginChip(
+                        entityType: item['_origin']?.toString() ?? 'student',
+                      ),
+                    ],
+                  ),
+                  Text(
+                    dateStr,
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                item['_title']?.toString() ?? '',
+                style: const TextStyle(fontSize: 14),
+              ),
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// Lead status-change history list (read-only).
 Widget _statusHistorySection(
   ColorScheme cs, {
