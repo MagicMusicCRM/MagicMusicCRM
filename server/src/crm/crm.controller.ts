@@ -24,6 +24,7 @@ import { StaffService } from "./staff.service";
 import { TeachersService } from "./teachers.service";
 import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
+import { DashboardService } from "./dashboard.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -107,6 +108,7 @@ export class CrmController {
     private readonly teachers: TeachersService,
     private readonly schedule: ScheduleService,
     private readonly timeline: TimelineService,
+    private readonly dashboard: DashboardService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -120,7 +122,7 @@ export class CrmController {
 
   @Get("overview")
   getOverview(@CurrentActor() actor: ActorContext) {
-    return this.crm.getOverview(actor);
+    return this.dashboard.getOverview(actor);
   }
 
   @Get("dashboard/manager")
@@ -128,7 +130,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ManagerDashboardQuery,
   ) {
-    return this.crm.getManagerDashboard(actor, query);
+    return this.dashboard.getManagerDashboard(actor, query);
   }
 
   @Get("reports/finance")
@@ -136,7 +138,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ReportQuery,
   ) {
-    return this.crm.getFinanceReport(actor, query);
+    return this.dashboard.getFinanceReport(actor, query);
   }
 
   @Get("students")
@@ -313,7 +315,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ActivityLogQuery,
   ) {
-    return this.crm.listActivityLog(actor, query);
+    return this.dashboard.listActivityLog(actor, query);
   }
 
   @Get("teachers")

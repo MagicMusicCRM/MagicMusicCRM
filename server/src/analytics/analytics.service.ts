@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { ActorContext } from "../common/security/actor-context";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
-import { CrmService } from "../crm/crm.service";
+import { DashboardService } from "../crm/dashboard.service";
 import { CrmPolicy } from "../crm/crm.policy";
 import { branchIdExpr } from "../crm/branch-scope";
 
@@ -10,17 +10,17 @@ import { branchIdExpr } from "../crm/branch-scope";
 export class AnalyticsService {
   constructor(
     private readonly database: DatabaseService,
-    private readonly crm: CrmService,
+    private readonly dashboard_: DashboardService,
     private readonly policy: CrmPolicy,
     private readonly audit: AuditService,
   ) {}
 
   overview(actor: ActorContext) {
-    return this.crm.getOverview(actor);
+    return this.dashboard_.getOverview(actor);
   }
 
-  dashboard(actor: ActorContext, query: Parameters<CrmService["getManagerDashboard"]>[1]) {
-    return this.crm.getManagerDashboard(actor, query);
+  dashboard(actor: ActorContext, query: Parameters<DashboardService["getManagerDashboard"]>[1]) {
+    return this.dashboard_.getManagerDashboard(actor, query);
   }
 
   async financeMonthly(actor: ActorContext, query: { from?: string; to?: string }) {

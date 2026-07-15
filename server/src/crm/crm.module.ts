@@ -19,6 +19,7 @@ import { StaffService } from './staff.service';
 import { TeachersService } from './teachers.service';
 import { ScheduleService } from './schedule.service';
 import { TimelineService } from './timeline.service';
+import { DashboardService } from './dashboard.service';
 import { RoomsService } from './rooms.service';
 import { BranchesService } from './branches.service';
 import { GroupsService } from './groups.service';
@@ -41,6 +42,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     TeachersService,
     ScheduleService,
     TimelineService,
+    DashboardService,
     RoomsService,
     BranchesService,
     GroupsService,
@@ -54,6 +56,6 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     // this binding changes — messenger stays untouched.
     { provide: LEAD_INTAKE_PORT, useExisting: CrmService },
   ],
-  exports: [CrmService, CrmPolicy, LEAD_INTAKE_PORT]
+  exports: [CrmService, CrmPolicy, DashboardService, LEAD_INTAKE_PORT]
 })
 export class CrmModule {}
