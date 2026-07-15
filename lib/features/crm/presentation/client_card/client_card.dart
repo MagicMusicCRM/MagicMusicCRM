@@ -1709,16 +1709,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
   }
 
-  Widget _emptyHint(ColorScheme cs, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-      child: Text(
-        text,
-        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
-      ),
-    );
-  }
-
   // ══ STUDENT (entityType == 'student') ════════════════════════════════════
   // Ported from student_detail_screen.dart, adapted to the compact dialog and
   // the unified comments tab. Lead methods above are untouched.
@@ -1836,22 +1826,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   /// «Остаток: 7 астр.ч. / 14 000 ₽» — денежная часть считается по цене пакета
   /// пропорционально оставшимся часам; без пакета показываем только часы.
-  String _subscriptionRemainder(Map<String, dynamic> s) {
-    num toNum(Object? v) =>
-        v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
-    String hours(num v) =>
-        v == v.truncate() ? v.toInt().toString() : v.toStringAsFixed(1);
-    final total = toNum(s['lessons_total']);
-    final left = total - toNum(s['lessons_used']);
-    final price = s['package_price'];
-    final money = (price is num && total > 0)
-        ? ' / ${(price / total * left).round()} ₽'
-        : '';
-    final status = s['status']?.toString();
-    final suffix = status == 'active' ? '' : ' · ${_formatStatus(status)}';
-    return 'Остаток: ${hours(left)} из ${hours(total)} астр.ч.$money$suffix';
-  }
-
   // ── Личный счёт (KVA-235, формат HolliHop: вкладки Приход/Расход) ────────
   Widget _buildLedgerSection(ColorScheme cs) {
     return FutureBuilder<Map<String, dynamic>>(
@@ -2007,18 +1981,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
         );
       },
     );
-  }
-
-  String _ledgerKindLabel(Object? kind) {
-    return switch (kind?.toString()) {
-      'payment' => 'Платёж',
-      'lesson_charge' => 'Списание за занятие',
-      'refund' => 'Возврат',
-      'adjustment' => 'Корректировка',
-      'transfer_in' => 'Перенос (зачисление)',
-      'transfer_out' => 'Перенос (списание)',
-      _ => 'Операция',
-    };
   }
 
   void _refreshLedger() {
@@ -2181,25 +2143,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   // Pill badge for the header («Ученик» / «Лид→Ученик»).
-  Widget _headerBadge(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColor.goldSoft,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: AppColor.goldLine),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColor.gold,
-          fontWeight: FontWeight.w700,
-          fontSize: 10.5,
-        ),
-      ),
-    );
-  }
-
   Widget _buildStudentHeader(ColorScheme cs, StatusRecord curStatus) {
     final contact = _studentContact();
     final converted = _isConverted;
@@ -4118,18 +4061,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
   }
 
-  String _familyRoleLabel(Object? role) {
-    return switch (role?.toString()) {
-      'parent' => 'Родитель',
-      'child' => 'Ребёнок',
-      'guardian' => 'Опекун',
-      'payer' => 'Плательщик',
-      'sibling' => 'Брат/сестра',
-      final value when value != null && value.isNotEmpty => value,
-      _ => 'Член семьи',
-    };
-  }
-
   Widget _buildFamilySection(ColorScheme cs) {
     if (_loadingFamily) {
       return const Padding(
@@ -4411,32 +4342,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     return value.whereType<Map<String, dynamic>>().toList();
   }
 
-  Widget _summaryChip(IconData icon, String label, int value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColor.goldSoft,
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(color: AppColor.goldLine),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: AppColor.gold),
-          const SizedBox(width: 6),
-          Text(
-            '$label: $value',
-            style: const TextStyle(
-              color: AppColor.gold,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _duplicateCandidatesSection(
     ColorScheme cs,
     List<Map<String, dynamic>> candidates,
@@ -4567,124 +4472,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   num _asNum(Object? value) {
     if (value is num) return value;
     return num.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  Widget _entityTile(
-    ColorScheme cs, {
-    required String title,
-    String? subtitle,
-    required IconData leading,
-    String? origin,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        dense: true,
-        visualDensity: VisualDensity.compact,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-        leading: Icon(leading, size: 18, color: AppColor.gold),
-        title: Text(
-          title.isEmpty ? 'Без названия' : title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: subtitle == null || subtitle.isEmpty
-            ? null
-            : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: origin == null ? null : ClientOriginChip(entityType: origin),
-      ),
-    );
-  }
-
-  Widget _miniSection(
-    ColorScheme cs, {
-    required String title,
-    required String empty,
-    required List<Map<String, dynamic>> rows,
-    required String Function(Map<String, dynamic>) titleBuilder,
-    required String? Function(Map<String, dynamic>) subtitleBuilder,
-    Widget? action,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpace.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              ?action,
-            ],
-          ),
-          const SizedBox(height: 6),
-          if (rows.isEmpty)
-            Text(
-              empty,
-              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-            )
-          else
-            ...rows.take(4).map((row) {
-              final subtitle = subtitleBuilder(row);
-              final titleText = titleBuilder(row);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: ListTile(
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                    side: BorderSide(
-                      color: cs.outlineVariant.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-                  title: Text(
-                    titleText.isEmpty ? 'Без названия' : titleText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: subtitle == null || subtitle.isEmpty
-                      ? null
-                      : Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  String _formatStatus(Object? status) {
-    return switch (status?.toString()) {
-      'open' => 'Открыта',
-      'in_progress' => 'В работе',
-      'done' => 'Выполнена',
-      'cancelled' => 'Отменена',
-      final value when value != null && value.isNotEmpty => value,
-      _ => '',
-    };
-  }
-
-  String _formatDate(Object? raw) {
-    final dt = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
-    if (dt == null) return '';
-    return DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt);
   }
 
   Future<void> _addComment() async {
