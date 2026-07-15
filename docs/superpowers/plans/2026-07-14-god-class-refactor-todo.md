@@ -31,6 +31,37 @@ Flutter-фасад API-клиента был God-классом на 2987 стр
 должно быть **публичным**. Мапперы без `_api`/`this` → выносятся как top-level
 функции (проверять `grep -c "_api\b\|this\."` по региону перед выносом).
 
+### F-widgets — mid-tier виджеты растворены (10 файлов сняты с >800) — DONE
+Все mid-tier виджеты имели одинаковую структуру: State-класс сверху + «хвост»
+самодостаточных private-виджетов снизу. Хвост вынесен в `part`-файлы (чистая
+релокация, приватный доступ сохранён через общую library, 0 изменений API,
+`flutter analyze` зелёный каждый). Где State-класс сам был >800 — setState-free
+display-билдеры подняты в `extension _X on _State` в part-файле (тела байт-в-байт,
+тот же dispatch — рантайм не меняется). Итог (было → main + parts, все <800):
+- `tasks_widget` 1791 → 478 (+cards 594 +sheets 724) `[commit]`
+- `manage_entities_widget` 1945 → 281 (+people/scheduling/facilities) `[commit]`
+- `finance_widget` 1338 → 652 (+widgets 690)
+- `students_board_widget` 1227 → 673 (+widgets 558)
+- `reports_widget` 1741 → 641 (+widgets 799 +cards-extension 310)
+- `deletion_requests_widget` 1027 → 292; `data_quality_widget` 953 → 282;
+  `manager_overview_widget` 817 → 364; `manage_statuses_dialog` 813 → 307;
+  `teacher_detail_dialog` 876 → 605; `chat_info_dialog` 1553 → 797
+  (+views-extension 389 +dialogs 377).
+
+**Урок №3 (extension-on-State):** class-body метод резолвит вызов extension-метода
+на `this` БЕЗ `this.` (analyzer выдаёт `unnecessary_this` на явный this). НО
+`setState`/др. `@protected` члены из extension → `invalid_use_of_protected_member`,
+поэтому в extension выносить ТОЛЬКО setState-free методы (проверять
+`grep -c setState` по региону). Границы резать по blank-строке между методами;
+non-contiguous сборку main (init-методы + build + `}`, вырезав display-диапазоны)
+`flutter analyze` верифицирует (брейс-дисбаланс = syntax error).
+
+### ОСТАЛОСЬ >800 — все интерактивные stateful-ядра (НЕ headless)
+`client_card` 3663 (F3) / `messenger_screen` 3364 (F1) — controller-hoist, девайс.
+`schedule_widget` 1995 + `schedule_day_canvas` 1070 — day-view drag/resize-ядро.
+`user_roles_widget` 999 — build(427) + setState-диалоги (нужна декомпозиция build
+или hoist, не чистая релокация). `leads_widget` 859 — kanban-ядро (leftover).
+
 ---
 
 ## F0 — типизированные модели (cross-cutting, фундамент)
