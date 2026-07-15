@@ -28,6 +28,7 @@ import { DashboardService } from "./dashboard.service";
 import { ClientLinkingService } from "./client-linking.service";
 import { FamilyService } from "./family.service";
 import { DuplicatesService } from "./duplicates.service";
+import { MergeService } from "./merge.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -115,6 +116,7 @@ export class CrmController {
     private readonly clientLinking: ClientLinkingService,
     private readonly family: FamilyService,
     private readonly duplicates: DuplicatesService,
+    private readonly merge: MergeService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -1049,7 +1051,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query("limit") limit?: string,
   ) {
-    return this.crm.listMergeCandidates(actor, limit ? Number(limit) : undefined);
+    return this.merge.listMergeCandidates(actor, limit ? Number(limit) : undefined);
   }
 
   @Post("leads/:winnerId/merge/:loserId")
@@ -1058,7 +1060,7 @@ export class CrmController {
     @Param("winnerId", ParseUUIDPipe) winnerId: string,
     @Param("loserId", ParseUUIDPipe) loserId: string,
   ) {
-    return this.crm.mergeLeads(actor, loserId, winnerId);
+    return this.merge.mergeLeads(actor, loserId, winnerId);
   }
 
   @Post("merges/:mergeLogId/undo")
@@ -1066,7 +1068,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("mergeLogId", ParseUUIDPipe) mergeLogId: string,
   ) {
-    return this.crm.undoMerge(actor, mergeLogId);
+    return this.merge.undoMerge(actor, mergeLogId);
   }
 
   @Get("clients/:entityType/:entityId/linked-users")

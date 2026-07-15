@@ -23,6 +23,7 @@ import { DashboardService } from './dashboard.service';
 import { ClientLinkingService } from './client-linking.service';
 import { FamilyService } from './family.service';
 import { DuplicatesService } from './duplicates.service';
+import { MergeService } from './merge.service';
 import { RoomsService } from './rooms.service';
 import { BranchesService } from './branches.service';
 import { GroupsService } from './groups.service';
@@ -49,6 +50,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     ClientLinkingService,
     FamilyService,
     DuplicatesService,
+    MergeService,
     RoomsService,
     BranchesService,
     GroupsService,
