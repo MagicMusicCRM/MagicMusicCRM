@@ -1,5 +1,5 @@
 import { ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
-import { LeadsService } from "./leads.service";
+import { LeadIntakeService } from "./lead-intake.service";
 import { LeadWebhookController } from "./lead-webhook.controller";
 
 describe("LeadWebhookController", () => {
@@ -17,7 +17,7 @@ describe("LeadWebhookController", () => {
     const crm = {
       createLeadFromSiteWebhook: jest.fn().mockResolvedValue({ leadId: "lead-1" }),
     };
-    const controller = new LeadWebhookController(crm as unknown as LeadsService);
+    const controller = new LeadWebhookController(crm as unknown as LeadIntakeService);
     return { controller, crm };
   };
 

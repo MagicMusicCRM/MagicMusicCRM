@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { LeadsService } from "./leads.service";
+import { LeadIntakeService } from "./lead-intake.service";
 import { LeadWebhookDto } from "./dto/lead-webhook.dto";
 
 /**
@@ -17,7 +17,7 @@ import { LeadWebhookDto } from "./dto/lead-webhook.dto";
  */
 @Controller("public")
 export class LeadWebhookController {
-  constructor(private readonly leads: LeadsService) {}
+  constructor(private readonly leads: LeadIntakeService) {}
 
   @Post("lead-webhook")
   async receiveLead(

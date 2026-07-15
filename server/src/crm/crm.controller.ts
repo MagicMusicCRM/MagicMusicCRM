@@ -31,6 +31,7 @@ import { DuplicatesService } from "./duplicates.service";
 import { MergeService } from "./merge.service";
 import { PhoneReviewService } from "./phone-review.service";
 import { LeadsService } from "./leads.service";
+import { LeadIntakeService } from "./lead-intake.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -121,6 +122,7 @@ export class CrmController {
     private readonly merge: MergeService,
     private readonly phoneReview: PhoneReviewService,
     private readonly leads: LeadsService,
+    private readonly leadIntake: LeadIntakeService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -923,7 +925,7 @@ export class CrmController {
 
   @Get("leads/app-count")
   countAppLeads(@CurrentActor() actor: ActorContext) {
-    return this.leads.countAppLeads(actor);
+    return this.leadIntake.countAppLeads(actor);
   }
 
   @Get("leads/:id/card")
@@ -956,7 +958,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.leads.resolveLeadChatUser(actor, id);
+    return this.leadIntake.resolveLeadChatUser(actor, id);
   }
 
   @Get("contacts/by-user/:userId")
@@ -964,7 +966,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("userId", ParseUUIDPipe) userId: string,
   ) {
-    return this.leads.resolveContactForUser(actor, userId);
+    return this.leadIntake.resolveContactForUser(actor, userId);
   }
 
   @Post("contacts/save-from-chat")
@@ -972,7 +974,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: SaveContactFromChatDto,
   ) {
-    return this.leads.saveContactFromChat(actor, dto);
+    return this.leadIntake.saveContactFromChat(actor, dto);
   }
 
   @Post("leads")

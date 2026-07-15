@@ -26,6 +26,7 @@ import { DuplicatesService } from './duplicates.service';
 import { MergeService } from './merge.service';
 import { PhoneReviewService } from './phone-review.service';
 import { LeadsService } from './leads.service';
+import { LeadIntakeService } from './lead-intake.service';
 import { RoomsService } from './rooms.service';
 import { BranchesService } from './branches.service';
 import { GroupsService } from './groups.service';
@@ -55,6 +56,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     MergeService,
     PhoneReviewService,
     LeadsService,
+    LeadIntakeService,
     RoomsService,
     BranchesService,
     GroupsService,
@@ -63,10 +65,10 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     HolliHopMetadataService,
     ScheduleSeriesWorker,
     JwtAuthGuard,
-    // B5: lead intake now lives in LeadsService (the port implementer). The
-    // messenger depends only on LEAD_INTAKE_PORT, so this binding is the single
-    // point that moved — messenger stays untouched.
-    { provide: LEAD_INTAKE_PORT, useExisting: LeadsService },
+    // Lead intake (chat/app/site → lead) lives in LeadIntakeService, the port
+    // implementer. The messenger depends only on LEAD_INTAKE_PORT, so this
+    // binding is the single point that moves — messenger stays untouched.
+    { provide: LEAD_INTAKE_PORT, useExisting: LeadIntakeService },
   ],
   exports: [CrmService, CrmPolicy, DashboardService, LEAD_INTAKE_PORT]
 })
