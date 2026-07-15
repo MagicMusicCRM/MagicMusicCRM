@@ -1341,7 +1341,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
               _buildLedgerSection(cs),
             ],
             const SizedBox(height: AppSpace.lg),
-            _buildStudentGroupsInfoCard(cs),
+            _studentGroupsInfoCard(groups: _groups),
           ],
 
           if (_mode.hasLeadHalf) ...[
@@ -2639,33 +2639,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
   }
 
-  Widget _buildStudentGroupsInfoCard(ColorScheme cs) {
-    return _buildInfoCard('Группы', [
-      if (_groups.isEmpty)
-        const _InfoRow(
-          icon: Icons.group_off_rounded,
-          label: 'Группы',
-          value: 'Нет активных групп',
-        )
-      else
-        ..._groups.map((g) {
-          final teacher = g['teachers'];
-          var teacherName = '—';
-          if (teacher is Map<String, dynamic>) {
-            final firstName = teacher['first_name']?.toString() ?? '';
-            final lastName = teacher['last_name']?.toString() ?? '';
-            teacherName = '$firstName $lastName'.trim();
-          }
-          return _InfoRow(
-            icon: Icons.groups_rounded,
-            label: g['name']?.toString() ?? 'Группа',
-            value: teacherName.isEmpty || teacherName == '—'
-                ? 'Без преподавателя'
-                : 'Преподаватель: $teacherName',
-          );
-        }),
-    ]);
-  }
 
   // ── Student actions (ported from student_detail_screen) ──────────────────
   Future<void> _editStudentPrice() async {

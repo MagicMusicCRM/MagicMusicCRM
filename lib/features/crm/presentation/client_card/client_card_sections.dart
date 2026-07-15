@@ -31,6 +31,37 @@ String _duplicateMatchText(Map<String, dynamic> candidate) {
   ].join(' · ');
 }
 
+/// Student «Группы» info card: active groups + their teachers (read-only).
+Widget _studentGroupsInfoCard({
+  required List<Map<String, dynamic>> groups,
+}) {
+  return _buildInfoCard('Группы', [
+    if (groups.isEmpty)
+      const _InfoRow(
+        icon: Icons.group_off_rounded,
+        label: 'Группы',
+        value: 'Нет активных групп',
+      )
+    else
+      ...groups.map((g) {
+        final teacher = g['teachers'];
+        var teacherName = '—';
+        if (teacher is Map<String, dynamic>) {
+          final firstName = teacher['first_name']?.toString() ?? '';
+          final lastName = teacher['last_name']?.toString() ?? '';
+          teacherName = '$firstName $lastName'.trim();
+        }
+        return _InfoRow(
+          icon: Icons.groups_rounded,
+          label: g['name']?.toString() ?? 'Группа',
+          value: teacherName.isEmpty || teacherName == '—'
+              ? 'Без преподавателя'
+              : 'Преподаватель: $teacherName',
+        );
+      }),
+  ]);
+}
+
 /// Family members list with per-row delete. [family] is the raw `_family`
 /// payload (`{family: {...}, members: [...]}`); [onRemove] deletes a member.
 Widget _familySection(
