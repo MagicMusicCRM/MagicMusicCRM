@@ -3,7 +3,7 @@ part of 'leads_widget.dart';
 // Lead card: contact, status, tasks, quick actions, drag payload.
 
 class _LeadCard extends ConsumerWidget {
-  final Map<String, dynamic> lead;
+  final Lead lead;
   final Color statusColor;
   final List<StatusRecord> allStatuses;
   final Function(String, String) onMove;
@@ -29,27 +29,26 @@ class _LeadCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final id = lead['id']?.toString() ?? '';
-    final firstName = lead['name']?.toString() ?? '';
-    final lName = lead['last_name']?.toString() ?? '';
+    final id = lead.id;
+    final firstName = lead.name;
+    final lName = lead.lastName;
     final name = '$firstName $lName'.trim();
     final displayName = name.isEmpty ? 'Без имени' : name;
-    final phone = lead['phone']?.toString() ?? '';
-    final source = lead['source']?.toString() ?? '';
-    final branchName = lead['branch_name']?.toString() ?? '';
-    final assignedName = lead['assigned_name']?.toString() ?? '';
-    final linkedStudentId = lead['linked_student_id']?.toString() ?? '';
-    final openTasks = _intValue(lead['open_tasks_count']);
-    final comments = _intValue(lead['comments_count']);
-    final trials = _intValue(lead['trial_lessons_count']);
-    final currentStatus = lead['status']?.toString() ?? 'new';
-    final dtStr = lead['created_at']?.toString();
+    final phone = lead.phone;
+    final source = lead.source;
+    final branchName = lead.branchName;
+    final assignedName = lead.assignedName;
+    final linkedStudentId = lead.linkedStudentId;
+    final openTasks = lead.openTasksCount;
+    final comments = lead.commentsCount;
+    final trials = lead.trialLessonsCount;
+    final currentStatus = lead.status;
+    final dtStr = lead.createdAt;
     final dt = dtStr != null ? DateTime.tryParse(dtStr) : null;
     final dateStr = dt != null ? DateFormat('d MMM', 'ru').format(dt) : '';
 
-    final customData = lead['custom_data'] as Map<String, dynamic>? ?? {};
-    final discipline = customData['discipline']?.toString() ?? '';
-    final level = customData['level']?.toString() ?? '';
+    final discipline = lead.discipline;
+    final level = lead.level;
 
     final transfer = ref.read(leadTransferControllerProvider);
     // True while THIS card is the one carried by the transfer drag — the card
@@ -446,12 +445,6 @@ class _LeadCard extends ConsumerWidget {
     );
   }
 
-  int _intValue(Object? value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
   Future<void> _addComment(BuildContext context, WidgetRef ref) async {
     final controller = TextEditingController();
     final content = await showDialog<String>(
@@ -480,7 +473,7 @@ class _LeadCard extends ConsumerWidget {
           .read(magicCrmServiceProvider)
           .createComment(
             entityType: 'lead',
-            entityId: lead['id'],
+            entityId: lead.id,
             body: content.trim(),
           );
       onRefresh();
@@ -514,7 +507,7 @@ class _LeadCard extends ConsumerWidget {
           .read(magicCrmServiceProvider)
           .createTask(
             entityType: 'lead',
-            entityId: lead['id'],
+            entityId: lead.id,
             title: title.trim(),
           );
       onRefresh();
@@ -522,8 +515,8 @@ class _LeadCard extends ConsumerWidget {
   }
 
   Future<void> _openChat(BuildContext context, WidgetRef ref) async {
-    final leadId = lead['id']?.toString();
-    if (leadId == null || leadId.isEmpty) return;
+    final leadId = lead.id;
+    if (leadId.isEmpty) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       final result = await ref
@@ -558,13 +551,13 @@ class _LeadCard extends ConsumerWidget {
   }
 
   Future<void> _convertToStudent(BuildContext context, WidgetRef ref) async {
-    if ((lead['linked_student_id']?.toString() ?? '').isNotEmpty) {
+    if (lead.linkedStudentId.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Лид уже связан с учеником')),
       );
       return;
     }
-    final student = await ConvertLeadDialog.show(context, lead: lead);
+    final student = await ConvertLeadDialog.show(context, lead: lead.raw);
     if (student == null) return; // cancelled / failed in-dialog
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -582,8 +575,8 @@ class _LeadCard extends ConsumerWidget {
     await bookTrialLesson(
       context,
       ref,
-      leadId: lead['id'].toString(),
-      leadName: lead['name']?.toString() ?? '',
+      leadId: lead.id,
+      leadName: lead.name,
       feedback: (message, {detail, ok = false}) => ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message))),

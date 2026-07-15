@@ -19,6 +19,7 @@ import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
 import 'manage_statuses_dialog.dart';
+import 'package:magic_music_crm/core/models/lead.dart';
 import 'package:magic_music_crm/features/crm/presentation/trial_lesson_booking.dart';
 import 'lead_dialogs.dart';
 import 'lead_board_filters.dart';
