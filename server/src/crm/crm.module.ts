@@ -20,6 +20,7 @@ import { TeachersService } from './teachers.service';
 import { ScheduleService } from './schedule.service';
 import { TimelineService } from './timeline.service';
 import { DashboardService } from './dashboard.service';
+import { ClientLinkingService } from './client-linking.service';
 import { RoomsService } from './rooms.service';
 import { BranchesService } from './branches.service';
 import { GroupsService } from './groups.service';
@@ -43,6 +44,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     ScheduleService,
     TimelineService,
     DashboardService,
+    ClientLinkingService,
     RoomsService,
     BranchesService,
     GroupsService,

@@ -25,6 +25,7 @@ import { TeachersService } from "./teachers.service";
 import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
 import { DashboardService } from "./dashboard.service";
+import { ClientLinkingService } from "./client-linking.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -109,6 +110,7 @@ export class CrmController {
     private readonly schedule: ScheduleService,
     private readonly timeline: TimelineService,
     private readonly dashboard: DashboardService,
+    private readonly clientLinking: ClientLinkingService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -1069,7 +1071,7 @@ export class CrmController {
     @Param("entityType") entityType: string,
     @Param("entityId", ParseUUIDPipe) entityId: string,
   ) {
-    return this.crm.getClientLinkedUsers(actor, entityType, entityId);
+    return this.clientLinking.getClientLinkedUsers(actor, entityType, entityId);
   }
 
   @Get("clients/:entityType/:entityId/user-candidates")
@@ -1078,7 +1080,7 @@ export class CrmController {
     @Param("entityType") entityType: string,
     @Param("entityId", ParseUUIDPipe) entityId: string,
   ) {
-    return this.crm.listClientUserCandidates(actor, entityType, entityId);
+    return this.clientLinking.listClientUserCandidates(actor, entityType, entityId);
   }
 
   @Post("clients/:entityType/:entityId/link-user")
@@ -1088,6 +1090,6 @@ export class CrmController {
     @Param("entityId", ParseUUIDPipe) entityId: string,
     @Body() dto: { userId: string },
   ) {
-    return this.crm.linkUserToClient(actor, entityType, entityId, dto.userId);
+    return this.clientLinking.linkUserToClient(actor, entityType, entityId, dto.userId);
   }
 }
