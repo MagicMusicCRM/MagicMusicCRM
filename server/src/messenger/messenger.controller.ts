@@ -27,6 +27,7 @@ import { SendMessageDto } from "./dto/send-message.dto";
 import { UpdateGroupMembersDto } from "./dto/update-group-members.dto";
 import { UpdateMessageDto } from "./dto/update-message.dto";
 import { ChannelsService } from "./channels.service";
+import { ChatInboxService } from "./chat-inbox.service";
 import { MessengerService } from "./messenger.service";
 
 @UseGuards(JwtAuthGuard)
@@ -35,6 +36,7 @@ export class MessengerController {
   constructor(
     private readonly messenger: MessengerService,
     private readonly channels: ChannelsService,
+    private readonly inbox: ChatInboxService,
   ) {}
 
   @Get("chats")
@@ -127,7 +129,7 @@ export class MessengerController {
     @Param("chatId", ParseUUIDPipe) chatId: string,
     @Body() dto: AssignChatDto,
   ) {
-    return this.messenger.assignChat(actor, chatId, dto.userId);
+    return this.inbox.assignChat(actor, chatId, dto.userId);
   }
 
   @Post("chats/:chatId/unassign")
@@ -135,7 +137,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("chatId", ParseUUIDPipe) chatId: string,
   ) {
-    return this.messenger.unassignChat(actor, chatId);
+    return this.inbox.unassignChat(actor, chatId);
   }
 
   @Post("chats/:chatId/archive")
@@ -143,7 +145,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("chatId", ParseUUIDPipe) chatId: string,
   ) {
-    return this.messenger.archiveChat(actor, chatId);
+    return this.inbox.archiveChat(actor, chatId);
   }
 
   @Post("chats/:chatId/unarchive")
@@ -151,7 +153,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("chatId", ParseUUIDPipe) chatId: string,
   ) {
-    return this.messenger.unarchiveChat(actor, chatId);
+    return this.inbox.unarchiveChat(actor, chatId);
   }
 
   @Put("chats/:chatId/mute")
