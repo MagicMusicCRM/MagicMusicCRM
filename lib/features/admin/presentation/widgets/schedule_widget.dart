@@ -18,6 +18,7 @@ import 'schedule_shared.dart';
 import 'schedule_year_view.dart';
 import 'schedule_month_view.dart';
 import 'schedule_day_mode_toggle.dart';
+import 'schedule_timezone_dialog.dart';
 
 part 'schedule_widget_widgets.dart';
 
@@ -1132,7 +1133,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
             TextButton.icon(
               onPressed: _editBranchTimezone,
               icon: const Icon(Icons.schedule_rounded, size: 16),
-              label: Text(_offsetLabel(_selectedBranchOffset)),
+              label: Text(offsetLabel(_selectedBranchOffset)),
               style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
                 visualDensity: VisualDensity.compact,
@@ -1143,12 +1144,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     );
   }
 
-  String _offsetLabel(int minutes) {
-    final sign = minutes >= 0 ? '+' : '−';
-    final h = (minutes.abs() ~/ 60).toString();
-    final m = minutes.abs() % 60;
-    return m == 0 ? 'UTC$sign$h' : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
-  }
 
   Future<void> _editBranchTimezone() async {
     final branchId = _selectedBranchId;
@@ -1158,57 +1153,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       orElse: () => <String, dynamic>{},
     );
     final branchName = branch['name']?.toString() ?? 'Филиал';
-    // Russia spans UTC+2..UTC+12; offer those (minutes).
-    const options = <int>[120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720];
-    var selected = _selectedBranchOffset;
-    if (!options.contains(selected)) selected = 180;
-
-    final saved = await showDialog<int>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: Text('Часовой пояс — $branchName'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Время занятий отображается в этом поясе.',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                initialValue: selected,
-                decoration: const InputDecoration(labelText: 'Смещение'),
-                items: options
-                    .map(
-                      (m) => DropdownMenuItem(
-                        value: m,
-                        child: Text(_offsetLabel(m)),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setLocal(() => selected = v);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, selected),
-              child: const Text('Сохранить'),
-            ),
-          ],
-        ),
-      ),
+    final saved = await showBranchTimezoneDialog(
+      context,
+      branchName: branchName,
+      currentOffset: _selectedBranchOffset,
     );
     if (saved == null || saved == _selectedBranchOffset || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -1219,7 +1167,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Часовой пояс обновлён: ${_offsetLabel(saved)}'),
+          content: Text('Часовой пояс обновлён: ${offsetLabel(saved)}'),
           backgroundColor: AppColor.success,
           behavior: SnackBarBehavior.floating,
         ),

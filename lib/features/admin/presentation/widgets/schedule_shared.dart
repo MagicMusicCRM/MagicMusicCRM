@@ -63,3 +63,11 @@ enum ScheduleView { year, month, day }
 
 /// Day-view grouping mode.
 enum DayViewMode { byRoom, byTeacher }
+
+/// UTC offset (minutes) as a compact label, e.g. "UTC+3", "UTC+5:30". Pure.
+String offsetLabel(int minutes) {
+  final sign = minutes >= 0 ? '+' : '−';
+  final h = (minutes.abs() ~/ 60).toString();
+  final m = minutes.abs() % 60;
+  return m == 0 ? 'UTC$sign$h' : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
+}
