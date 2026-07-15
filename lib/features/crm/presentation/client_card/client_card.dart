@@ -19,6 +19,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'client_card_aggregation.dart';
+import 'client_card_dialogs.dart';
 import 'client_card_sheets.dart';
 import 'client_card_ui.dart';
 import 'student_schedule_section.dart';
