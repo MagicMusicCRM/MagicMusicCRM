@@ -58,6 +58,101 @@ Widget _sectionTitle(String title) {
   );
 }
 
+/// Plain-student history timeline: own tasks + non-progress comments, merged
+/// and sorted desc. (Converted clients use [_mergedHistoryView] instead.)
+Widget _studentTimelineView(
+  ColorScheme cs, {
+  required List<Map<String, dynamic>> tasks,
+  required List<Map<String, dynamic>> comments,
+}) {
+  if (tasks.isEmpty && comments.isEmpty) {
+    return Center(
+      child: Text('История пуста', style: TextStyle(color: cs.onSurfaceVariant)),
+    );
+  }
+  final items = [
+    ...tasks.map((t) => {'type': 'task', 'data': t, 'date': t['created_at']}),
+    ...comments
+        .where(
+          (c) => !(c['content']?.toString().startsWith('[PROGRESS]') ?? false),
+        )
+        .map((c) => {'type': 'comment', 'data': c, 'date': c['created_at']}),
+  ];
+  items.sort(
+    (a, b) =>
+        ((b['date'] as String?) ?? '').compareTo((a['date'] as String?) ?? ''),
+  );
+  return ListView.builder(
+    padding: const EdgeInsets.all(AppSpace.xl),
+    itemCount: items.length,
+    itemBuilder: (ctx, i) {
+      final item = items[i];
+      final isTask = item['type'] == 'task';
+      final data = item['data'] as Map<String, dynamic>;
+      final dt = DateTime.tryParse(item['date'] as String? ?? '');
+      final dateStr = dt != null
+          ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
+          : '—';
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        isTask ? Icons.task_alt_rounded : Icons.comment_rounded,
+                        size: 16,
+                        color: isTask
+                            ? AppTheme.warning
+                            : AppTheme.primaryGold,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        isTask ? 'Задача' : 'Комментарий',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isTask
+                              ? AppTheme.warning
+                              : AppTheme.primaryGold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    dateStr,
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isTask
+                    ? (data['title']?.toString() ?? '')
+                    : (data['content']?.toString() ?? ''),
+                style: const TextStyle(fontSize: 14),
+              ),
+              if (isTask && data['description'] != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  data['description'].toString(),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// Merged-history list (converted): lead status history + student timeline,
 /// pre-sorted desc by the caller, each row carrying an origin chip.
 Widget _mergedHistoryView(
