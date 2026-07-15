@@ -14,6 +14,7 @@ import 'create_lesson_dialog.dart';
 import 'schedule_day_canvas.dart';
 import 'lesson_details_sheet.dart';
 import 'schedule_legends.dart';
+import 'schedule_shared.dart';
 
 part 'schedule_widget_widgets.dart';
 
@@ -53,23 +54,6 @@ const _monthNamesGenitive = [
   'декабря',
 ];
 
-const _monthNamesNominative = [
-  '',
-  'Январь',
-  'Февраль',
-  'Март',
-  'Апрель',
-  'Май',
-  'Июнь',
-  'Июль',
-  'Август',
-  'Сентябрь',
-  'Октябрь',
-  'Ноябрь',
-  'Декабрь',
-];
-
-const _weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Main Widget
@@ -967,7 +951,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final title = switch (_currentView) {
       ScheduleView.year => 'Расписание / $_displayedYear',
       ScheduleView.month =>
-        '${_monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}',
+        '${monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}',
       ScheduleView.day => 'Расписание / День',
     };
 
@@ -1532,7 +1516,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Row(
-            children: _weekDays
+            children: weekDays
                 .map(
                   (d) => Expanded(
                     child: Center(
@@ -1727,7 +1711,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                           Padding(
                             padding: const EdgeInsets.only(top: 1, left: 2),
                             child: Text(
-                              '+${count - sorted.take(2).length} ${_pluralRu(count - sorted.take(2).length, 'занятие', 'занятия', 'занятий')}',
+                              '+${count - sorted.take(2).length} ${pluralRu(count - sorted.take(2).length, 'занятие', 'занятия', 'занятий')}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -2015,7 +1999,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               children: [
                 Expanded(
                   child: Text(
-                    _monthNamesNominative[month],
+                    monthNamesNominative[month],
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -2061,7 +2045,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               children: [
                 Flexible(
                   child: Text(
-                    '${data.activeDays} ${_pluralRu(data.activeDays, 'активный день', 'активных дня', 'активных дней')}',
+                    '${data.activeDays} ${pluralRu(data.activeDays, 'активный день', 'активных дня', 'активных дней')}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -2161,13 +2145,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     );
   }
 
-  String _pluralRu(int n, String one, String few, String many) {
-    final mod10 = n % 10;
-    final mod100 = n % 100;
-    if (mod10 == 1 && mod100 != 11) return one;
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-    return many;
-  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  DAY VIEW
