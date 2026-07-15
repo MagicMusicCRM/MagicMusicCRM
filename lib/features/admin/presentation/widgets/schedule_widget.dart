@@ -32,9 +32,9 @@ const List<Color> _roomColors = [
 ];
 
 // ── Enums ───────────────────────────────────────────────────────────────────
-enum _ScheduleView { year, month, day }
+enum ScheduleView { year, month, day }
 
-enum _DayViewMode { byRoom, byTeacher }
+enum DayViewMode { byRoom, byTeacher }
 
 // ── Russian month names ─────────────────────────────────────────────────────
 const _monthNamesGenitive = [
@@ -123,8 +123,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   // UI state
   String? _selectedBranchId;
-  _ScheduleView _currentView = _ScheduleView.month;
-  _DayViewMode _dayViewMode = _DayViewMode.byRoom;
+  ScheduleView _currentView = ScheduleView.month;
+  DayViewMode _dayViewMode = DayViewMode.byRoom;
   DateTime _selectedDate = DateTime.now();
   DateTime _displayedMonth = DateTime(
     DateTime.now().year,
@@ -240,7 +240,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           to: toIso,
           branchId: defaultBranch,
           groupBy:
-              _dayViewMode == _DayViewMode.byTeacher ? 'teacher' : 'room',
+              _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
           limit: 300,
         ).catchError((e) {
           debugPrint('Error fetching schedule matrix: $e');
@@ -359,9 +359,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       // The month-wide matrix is capped at 300 rows; if we're already in the day
       // view, backfill the selected day so it isn't left empty for dates past the
       // cap (e.g. today mid-month).
-      if (_currentView == _ScheduleView.day) {
+      if (_currentView == ScheduleView.day) {
         _fetchDayLessons(_selectedDate);
-      } else if (_currentView == _ScheduleView.year) {
+      } else if (_currentView == ScheduleView.year) {
         _fetchYearSummary();
       }
     } catch (e) {
@@ -419,7 +419,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         from: dayStartUtc.toIso8601String(),
         to: dayEndUtc.toIso8601String(),
         branchId: branchId,
-        groupBy: _dayViewMode == _DayViewMode.byTeacher ? 'teacher' : 'room',
+        groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
         limit: 500,
       );
       final items = result['items'];
@@ -580,7 +580,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       _clearHighlight();
       _displayedMonth = DateTime(_displayedYear, month);
       _selectedDate = DateTime(_displayedYear, month, 1);
-      _currentView = _ScheduleView.month;
+      _currentView = ScheduleView.month;
     });
     _fetchAll();
   }
@@ -650,7 +650,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     setState(() {
       _clearHighlight();
       _selectedDate = date;
-      _currentView = _ScheduleView.day;
+      _currentView = ScheduleView.day;
     });
     _fetchAvailabilityForSelectedDay();
     _fetchDayLessons(_selectedDate);
@@ -713,7 +713,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         setState(() {
           _selectedDate = date;
           _displayedMonth = DateTime(date.year, date.month);
-          _currentView = _ScheduleView.day;
+          _currentView = ScheduleView.day;
         });
         // Reload the window for the (possibly new) month; since the view is now
         // day, _fetchAll backfills the selected day's lessons too.
@@ -756,9 +756,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     setState(() {
       _selectedDate = lessonDate;
       _displayedMonth = DateTime(lessonDate.year, lessonDate.month);
-      _currentView = _ScheduleView.day;
+      _currentView = ScheduleView.day;
       if (foundTeacherId != null) {
-        _dayViewMode = _DayViewMode.byTeacher;
+        _dayViewMode = DayViewMode.byTeacher;
         _selectedTeacherId = foundTeacherId;
       }
     });
@@ -770,7 +770,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     var dayViewMode = _dayViewMode;
 
     final result =
-        await showModalBottomSheet<({String? branchId, _DayViewMode mode})>(
+        await showModalBottomSheet<({String? branchId, DayViewMode mode})>(
           context: context,
           showDragHandle: true,
           builder: (ctx) => StatefulBuilder(
@@ -807,15 +807,15 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                               : null,
                         );
                       }),
-                      if (_currentView == _ScheduleView.day) ...[
+                      if (_currentView == ScheduleView.day) ...[
                         const Divider(),
                         ListTile(
                           title: const Text('День по аудиториям'),
                           contentPadding: EdgeInsets.zero,
                           onTap: () => setSheetState(
-                            () => dayViewMode = _DayViewMode.byRoom,
+                            () => dayViewMode = DayViewMode.byRoom,
                           ),
-                          trailing: dayViewMode == _DayViewMode.byRoom
+                          trailing: dayViewMode == DayViewMode.byRoom
                               ? const Icon(Icons.check_rounded)
                               : null,
                         ),
@@ -823,9 +823,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                           title: const Text('День по педагогу'),
                           contentPadding: EdgeInsets.zero,
                           onTap: () => setSheetState(
-                            () => dayViewMode = _DayViewMode.byTeacher,
+                            () => dayViewMode = DayViewMode.byTeacher,
                           ),
-                          trailing: dayViewMode == _DayViewMode.byTeacher
+                          trailing: dayViewMode == DayViewMode.byTeacher
                               ? const Icon(Icons.check_rounded)
                               : null,
                         ),
@@ -878,7 +878,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       _realtimeDebounce?.cancel();
       _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
         if (!mounted || _isLoading || _movingLesson) return;
-        if (_currentView == _ScheduleView.day) {
+        if (_currentView == ScheduleView.day) {
           _fetchDayLessons(_selectedDate);
         } else {
           _fetchAll();
@@ -917,10 +917,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           if (!firstLoad) _buildViewSwitcher(),
           if (!firstLoad) ...[
             _buildBranchSelector(),
-            if (_currentView == _ScheduleView.day) _buildDayViewModeToggle(),
+            if (_currentView == ScheduleView.day) _buildDayViewModeToggle(),
           ],
           _buildDateNavigation(),
-          if (!firstLoad && _currentView == _ScheduleView.day) ...[
+          if (!firstLoad && _currentView == ScheduleView.day) ...[
             const ScheduleDayLegend(),
             _buildAvailabilitySummary(),
           ],
@@ -931,7 +931,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           ? null
           : FloatingActionButton(
               onPressed: () => _showAddLessonDialog(
-                _currentView == _ScheduleView.day
+                _currentView == ScheduleView.day
                     ? _selectedDate
                     : DateTime.now(),
                 null,
@@ -956,19 +956,19 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       return _ScheduleError(error: _loadError, onRetry: _fetchAll);
     }
     return switch (_currentView) {
-      _ScheduleView.year => _buildYearView(),
-      _ScheduleView.month => _buildMonthView(),
-      _ScheduleView.day => _buildDayView(),
+      ScheduleView.year => _buildYearView(),
+      ScheduleView.month => _buildMonthView(),
+      ScheduleView.day => _buildDayView(),
     };
   }
 
   // ── Header ────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     final title = switch (_currentView) {
-      _ScheduleView.year => 'Расписание / $_displayedYear',
-      _ScheduleView.month =>
+      ScheduleView.year => 'Расписание / $_displayedYear',
+      ScheduleView.month =>
         '${_monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}',
-      _ScheduleView.day => 'Расписание / День',
+      ScheduleView.day => 'Расписание / День',
     };
 
     return Padding(
@@ -1020,7 +1020,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   // ── Год / Месяц / День segmented control (primary navigation) ──────────────
   Widget _buildViewSwitcher() {
-    Widget seg(String label, _ScheduleView view) {
+    Widget seg(String label, ScheduleView view) {
       final active = _currentView == view;
       return Expanded(
         child: GestureDetector(
@@ -1062,26 +1062,26 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         ),
         child: Row(
           children: [
-            seg('Год', _ScheduleView.year),
+            seg('Год', ScheduleView.year),
             const SizedBox(width: 4),
-            seg('Месяц', _ScheduleView.month),
+            seg('Месяц', ScheduleView.month),
             const SizedBox(width: 4),
-            seg('День', _ScheduleView.day),
+            seg('День', ScheduleView.day),
           ],
         ),
       ),
     );
   }
 
-  void _switchView(_ScheduleView view) {
+  void _switchView(ScheduleView view) {
     if (_currentView == view) return;
     setState(() {
       _clearHighlight();
       _currentView = view;
     });
-    if (view == _ScheduleView.year) {
+    if (view == ScheduleView.year) {
       _fetchYearSummary();
-    } else if (view == _ScheduleView.day) {
+    } else if (view == ScheduleView.day) {
       _fetchAvailabilityForSelectedDay();
       _fetchDayLessons(_selectedDate);
     }
@@ -1256,10 +1256,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         children: [
           _buildToggleButton(
             'По аудиториям',
-            _dayViewMode == _DayViewMode.byRoom,
+            _dayViewMode == DayViewMode.byRoom,
             () {
-              if (_dayViewMode == _DayViewMode.byRoom) return;
-              setState(() => _dayViewMode = _DayViewMode.byRoom);
+              if (_dayViewMode == DayViewMode.byRoom) return;
+              setState(() => _dayViewMode = DayViewMode.byRoom);
               // The matrix is grouped server-side by mode, so re-fetch to avoid
               // showing the previous grouping's (stale) payload.
               _fetchAll();
@@ -1268,10 +1268,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           SizedBox(width: 8),
           _buildToggleButton(
             'По педагогу',
-            _dayViewMode == _DayViewMode.byTeacher,
+            _dayViewMode == DayViewMode.byTeacher,
             () {
-              if (_dayViewMode == _DayViewMode.byTeacher) return;
-              setState(() => _dayViewMode = _DayViewMode.byTeacher);
+              if (_dayViewMode == DayViewMode.byTeacher) return;
+              setState(() => _dayViewMode = DayViewMode.byTeacher);
               _fetchAll();
             },
           ),
@@ -1316,11 +1316,11 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     String dateLabel;
     VoidCallback onPrev, onNext;
 
-    if (_currentView == _ScheduleView.year) {
+    if (_currentView == ScheduleView.year) {
       dateLabel = '$_displayedYear';
       onPrev = _prevYear;
       onNext = _nextYear;
-    } else if (_currentView == _ScheduleView.month) {
+    } else if (_currentView == ScheduleView.month) {
       dateLabel =
           '${_monthNamesGenitive[_displayedMonth.month].toLowerCase()} ${_displayedMonth.year}';
       onPrev = _prevMonth;
@@ -2173,7 +2173,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   //  DAY VIEW
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildDayView() {
-    if (_dayViewMode == _DayViewMode.byTeacher) {
+    if (_dayViewMode == DayViewMode.byTeacher) {
       return _buildDayViewByTeacher();
     }
     return _buildDayViewByRoom();
@@ -2299,7 +2299,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     setState(() {
       _selectedDate = day;
       _displayedMonth = DateTime(day.year, day.month);
-      _currentView = _ScheduleView.day;
+      _currentView = ScheduleView.day;
       _highlightLessonId = focus.highlightLessonId;
     });
     _fetchAvailabilityForSelectedDay();
