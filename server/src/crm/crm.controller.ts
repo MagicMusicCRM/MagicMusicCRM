@@ -22,6 +22,7 @@ import { TasksService } from "./tasks.service";
 import { AttendanceService } from "./attendance.service";
 import { StaffService } from "./staff.service";
 import { TeachersService } from "./teachers.service";
+import { ScheduleService } from "./schedule.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -103,6 +104,7 @@ export class CrmController {
     private readonly attendance: AttendanceService,
     private readonly staff: StaffService,
     private readonly teachers: TeachersService,
+    private readonly schedule: ScheduleService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -213,7 +215,7 @@ export class CrmController {
     @Query("groupId") groupId?: string,
     @Query("includeExpired") includeExpired?: string,
   ) {
-    return this.crm.listScheduleSeries(actor, {
+    return this.schedule.listScheduleSeries(actor, {
       studentId,
       groupId,
       includeExpired: includeExpired === "true",
@@ -225,7 +227,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreateScheduleSeriesDto,
   ) {
-    return this.crm.createScheduleSeries(actor, dto);
+    return this.schedule.createScheduleSeries(actor, dto);
   }
 
   @Patch("schedule-series/:id")
@@ -234,7 +236,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateScheduleSeriesDto,
   ) {
-    return this.crm.updateScheduleSeries(actor, id, dto);
+    return this.schedule.updateScheduleSeries(actor, id, dto);
   }
 
   @Delete("schedule-series/:id")
@@ -243,7 +245,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Query("from") from?: string,
   ) {
-    return this.crm.deleteScheduleSeries(actor, id, from);
+    return this.schedule.deleteScheduleSeries(actor, id, from);
   }
 
   @Get("students/:id")
@@ -625,7 +627,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: LessonQuery,
   ) {
-    return this.crm.listLessons(actor, query);
+    return this.schedule.listLessons(actor, query);
   }
 
   @Get("schedule/matrix")
@@ -633,7 +635,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ScheduleMatrixQuery,
   ) {
-    return this.crm.getScheduleMatrix(actor, query);
+    return this.schedule.getScheduleMatrix(actor, query);
   }
 
   @Get("schedule/month-summary")
@@ -641,7 +643,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ScheduleMatrixQuery,
   ) {
-    return this.crm.getScheduleMonthSummary(actor, query);
+    return this.schedule.getScheduleMonthSummary(actor, query);
   }
 
   @Post("lessons")
@@ -649,7 +651,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: UpsertLessonDto,
   ) {
-    return this.crm.createLesson(actor, dto);
+    return this.schedule.createLesson(actor, dto);
   }
 
   @Patch("lessons/:id")
@@ -658,7 +660,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpsertLessonDto,
   ) {
-    return this.crm.updateLesson(actor, id, dto);
+    return this.schedule.updateLesson(actor, id, dto);
   }
 
   @Delete("lessons/:id")
@@ -666,7 +668,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.deleteLesson(actor, id);
+    return this.schedule.deleteLesson(actor, id);
   }
 
   @Get("lessons/:id/attendance")
