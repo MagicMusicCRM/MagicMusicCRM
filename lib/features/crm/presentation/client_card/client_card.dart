@@ -24,6 +24,7 @@ import 'client_card_ui.dart';
 import 'student_schedule_section.dart';
 
 part 'client_card_widgets.dart';
+part 'client_card_display.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
 /// Инфо / Задачи / Комментарии / Семья / История). Behaviour is equivalent to
