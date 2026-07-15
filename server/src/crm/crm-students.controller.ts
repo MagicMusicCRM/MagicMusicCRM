@@ -1,0 +1,161 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import { ActorContext } from "../common/security/actor-context";
+import { CurrentActor } from "../common/security/current-actor.decorator";
+import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
+import { CrmService } from "./crm.service";
+import { SubscriptionsService } from "./subscriptions.service";
+import { FinanceService } from "./finance.service";
+import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
+import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
+import { CreateStudentDto } from "./dto/create-student.dto";
+import { CrmListQuery } from "./dto/crm-list.query";
+import { StudentBalanceQuery } from "./dto/student-balance.query";
+import { StudentSearchQuery } from "./dto/student-search.query";
+import { UpdateStudentDto } from "./dto/update-student.dto";
+
+@UseGuards(JwtAuthGuard)
+@Controller("crm")
+export class CrmStudentsController {
+  constructor(
+    private readonly crm: CrmService,
+    private readonly finance: FinanceService,
+    private readonly subscriptions: SubscriptionsService,
+  ) {}
+
+  @Get("me")
+  getMe(@CurrentActor() actor: ActorContext) {
+    return this.crm.getMySummary(actor);
+  }
+
+  @Get("students")
+  listStudents(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: CrmListQuery,
+  ) {
+    return this.crm.listStudents(actor, query);
+  }
+
+  @Get("students/search")
+  searchStudents(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: StudentSearchQuery,
+  ) {
+    return this.crm.searchStudents(actor, query);
+  }
+
+  @Post("students")
+  createStudent(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: CreateStudentDto,
+  ) {
+    return this.crm.createStudent(actor, dto);
+  }
+
+  @Get("student-balances")
+  listStudentBalances(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: StudentBalanceQuery,
+  ) {
+    return this.finance.listStudentBalances(actor, query);
+  }
+
+  @Get("students/:id/groups")
+  listStudentGroups(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query() query: CrmListQuery,
+  ) {
+    return this.crm.listStudentGroups(actor, id, query);
+  }
+
+  @Get("students/:id/card")
+  getStudentCard(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.getStudentCard(actor, id);
+  }
+
+  @Get("students/:id/ledger")
+  listStudentLedger(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query("direction") direction?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.finance.listStudentLedger(actor, id, {
+      direction,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Post("students/:id/adjustments")
+  createAccountAdjustment(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: CreateAdjustmentDto,
+  ) {
+    return this.finance.createAccountAdjustment(actor, id, dto);
+  }
+
+  @Get("students/:id")
+  getStudent(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.getStudent(actor, id);
+  }
+
+  @Patch("students/:id")
+  updateStudent(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateStudentDto,
+  ) {
+    return this.crm.updateStudent(actor, id, dto);
+  }
+
+  @Delete("students/:id")
+  deleteStudent(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.deleteStudent(actor, id);
+  }
+
+  @Post("students/:id/return-to-lead")
+  returnStudentToLead(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.returnStudentToLead(actor, id);
+  }
+
+  @Post("students/:id/invite")
+  inviteStudent(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.crm.inviteStudent(actor, id);
+  }
+
+  @Post("students/:id/subscriptions/issue")
+  issueSubscription(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: IssueSubscriptionDto,
+  ) {
+    return this.subscriptions.issueSubscription(actor, id, dto);
+  }
+}

@@ -5,7 +5,16 @@ import { LEAD_INTAKE_PORT } from '../common/lead-intake.port';
 import { JwtAuthGuard } from '../common/security/jwt-auth.guard';
 import { DatabaseModule } from '../db/database.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { CrmController } from './crm.controller';
+import { CrmStudentsController } from './crm-students.controller';
+import { CrmDashboardController } from './crm-dashboard.controller';
+import { CrmScheduleController } from './crm-schedule.controller';
+import { CrmPeopleController } from './crm-people.controller';
+import { CrmFacilitiesController } from './crm-facilities.controller';
+import { CrmReferenceDataController } from './crm-reference-data.controller';
+import { CrmEngagementController } from './crm-engagement.controller';
+import { CrmFinanceController } from './crm-finance.controller';
+import { CrmLeadsController } from './crm-leads.controller';
+import { CrmContactsController } from './crm-contacts.controller';
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
 import { CrmPolicy } from './crm.policy';
 import { CrmService } from './crm.service';
@@ -36,7 +45,19 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
 
 @Module({
   imports: [AuditModule, DatabaseModule, JwtModule.register({}), NotificationsModule],
-  controllers: [CrmController, LeadWebhookController],
+  controllers: [
+    CrmStudentsController,
+    CrmDashboardController,
+    CrmScheduleController,
+    CrmPeopleController,
+    CrmFacilitiesController,
+    CrmReferenceDataController,
+    CrmEngagementController,
+    CrmFinanceController,
+    CrmLeadsController,
+    CrmContactsController,
+    LeadWebhookController,
+  ],
   providers: [
     CrmService,
     HomeworkService,
