@@ -21,6 +21,7 @@ import { ScheduleService } from './schedule.service';
 import { TimelineService } from './timeline.service';
 import { DashboardService } from './dashboard.service';
 import { ClientLinkingService } from './client-linking.service';
+import { FamilyService } from './family.service';
 import { RoomsService } from './rooms.service';
 import { BranchesService } from './branches.service';
 import { GroupsService } from './groups.service';
@@ -45,6 +46,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     TimelineService,
     DashboardService,
     ClientLinkingService,
+    FamilyService,
     RoomsService,
     BranchesService,
     GroupsService,

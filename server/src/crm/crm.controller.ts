@@ -26,6 +26,7 @@ import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
 import { DashboardService } from "./dashboard.service";
 import { ClientLinkingService } from "./client-linking.service";
+import { FamilyService } from "./family.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -111,6 +112,7 @@ export class CrmController {
     private readonly timeline: TimelineService,
     private readonly dashboard: DashboardService,
     private readonly clientLinking: ClientLinkingService,
+    private readonly family: FamilyService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -1002,7 +1004,7 @@ export class CrmController {
 
   @Post("families")
   createFamily(@CurrentActor() actor: ActorContext, @Body() dto: CreateFamilyDto) {
-    return this.crm.createFamily(actor, dto);
+    return this.family.createFamily(actor, dto);
   }
 
   @Post("families/:familyId/members")
@@ -1011,7 +1013,7 @@ export class CrmController {
     @Param("familyId", ParseUUIDPipe) familyId: string,
     @Body() dto: AddFamilyMemberDto,
   ) {
-    return this.crm.addFamilyMember(actor, familyId, dto);
+    return this.family.addFamilyMember(actor, familyId, dto);
   }
 
   @Get("families/by-entity/:entityType/:entityId")
@@ -1020,7 +1022,7 @@ export class CrmController {
     @Param("entityType") entityType: string,
     @Param("entityId", ParseUUIDPipe) entityId: string,
   ) {
-    return this.crm.getFamilyForEntity(actor, entityType, entityId);
+    return this.family.getFamilyForEntity(actor, entityType, entityId);
   }
 
   @Delete("family-members/:memberId")
@@ -1028,7 +1030,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("memberId", ParseUUIDPipe) memberId: string,
   ) {
-    return this.crm.removeFamilyMember(actor, memberId);
+    return this.family.removeFamilyMember(actor, memberId);
   }
 
   @Post("families/:familyId/primary-payer/:memberId")
@@ -1037,7 +1039,7 @@ export class CrmController {
     @Param("familyId", ParseUUIDPipe) familyId: string,
     @Param("memberId", ParseUUIDPipe) memberId: string,
   ) {
-    return this.crm.setPrimaryPayer(actor, familyId, memberId);
+    return this.family.setPrimaryPayer(actor, familyId, memberId);
   }
 
   @Get("merge-candidates")
