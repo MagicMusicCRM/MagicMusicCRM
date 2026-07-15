@@ -18,6 +18,7 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import '../trial_lesson_booking.dart';
 import 'client_card_aggregation.dart';
 import 'client_card_dialogs.dart';
 import 'client_card_sheets.dart';

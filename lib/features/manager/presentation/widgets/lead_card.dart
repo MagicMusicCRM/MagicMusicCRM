@@ -89,53 +89,53 @@ class _LeadCard extends ConsumerWidget {
               return Container(
                 width: feedbackWidth,
                 padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              border: Border.all(color: statusColor, width: 2),
-              boxShadow: AppShadow.shLift,
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: statusColor,
-                    shape: BoxShape.circle,
-                  ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  border: Border.all(color: statusColor, width: 2),
+                  boxShadow: AppShadow.shLift,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        shape: BoxShape.circle,
                       ),
-                      if (phone.isNotEmpty)
-                        Text(
-                          phone,
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                            fontSize: 12,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
+                          if (phone.isNotEmpty)
+                            Text(
+                              phone,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.drag_indicator_rounded, size: 18),
+                  ],
                 ),
-                const Icon(Icons.drag_indicator_rounded, size: 18),
-              ],
-            ),
               );
             },
           ),
@@ -579,136 +579,16 @@ class _LeadCard extends ConsumerWidget {
   }
 
   Future<void> _scheduleTrial(BuildContext context, WidgetRef ref) async {
-    final crm = ref.read(magicCrmServiceProvider);
-    final [teachersRes, roomsRes] = await Future.wait([
-      crm.listTeachers(limit: 100),
-      crm.listRooms(limit: 100),
-    ]);
-
-    final teachers = List<Map<String, dynamic>>.from(teachersRes);
-    final rooms = List<Map<String, dynamic>>.from(roomsRes);
-
-    if (!context.mounted) return;
-    if (teachers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Нет доступных преподавателей')),
-      );
-      return;
-    }
-
-    String? selectedTeacher = teachers.isNotEmpty ? teachers.first['id'] : null;
-    String? selectedRoom = rooms.isNotEmpty ? rooms.first['id'] : null;
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
-    TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocalState) => AlertDialog(
-          title: const Text('Пробное занятие'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                initialValue: selectedTeacher,
-                decoration: const InputDecoration(labelText: 'Учитель'),
-                items: teachers
-                    .map(
-                      (t) => DropdownMenuItem(
-                        value: t['id'].toString(),
-                        child: Text('${t['first_name']} ${t['last_name']}'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setLocalState(() => selectedTeacher = v),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: selectedRoom,
-                decoration: const InputDecoration(labelText: 'Кабинет'),
-                items: rooms
-                    .map(
-                      (r) => DropdownMenuItem(
-                        value: r['id'].toString(),
-                        child: Text(r['name']),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setLocalState(() => selectedRoom = v),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                title: Text(
-                  'Дата: ${DateFormat('dd.MM.yyyy').format(selectedDate)}',
-                ),
-                trailing: const Icon(Icons.calendar_today_rounded),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: selectedDate,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 90)),
-                  );
-                  if (picked != null) {
-                    setLocalState(() => selectedDate = picked);
-                  }
-                },
-              ),
-              ListTile(
-                title: Text('Время: ${selectedTime.format(ctx)}'),
-                trailing: const Icon(Icons.access_time_rounded),
-                onTap: () async {
-                  final picked = await showTimePicker(
-                    context: ctx,
-                    initialTime: selectedTime,
-                  );
-                  if (picked != null) {
-                    setLocalState(() => selectedTime = picked);
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Назначить'),
-            ),
-          ],
-        ),
-      ),
+    await bookTrialLesson(
+      context,
+      ref,
+      leadId: lead['id'].toString(),
+      leadName: lead['name']?.toString() ?? '',
+      feedback: (message, {detail, ok = false}) => ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message))),
+      onBooked: () async => onRefresh(),
     );
-
-    if (confirmed == true && selectedTeacher != null) {
-      final scheduledAt = DateTime(
-        selectedDate.year,
-        selectedDate.month,
-        selectedDate.day,
-        selectedTime.hour,
-        selectedTime.minute,
-      );
-
-      await crm.createLesson(
-        leadId: lead['id'],
-        teacherId: selectedTeacher,
-        roomId: selectedRoom,
-        scheduledAt: scheduledAt.toIso8601String(),
-        isTrial: true,
-        status: 'scheduled',
-        notes: 'Пробное занятие по лиду: ${lead['name'] ?? ''}',
-      );
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пробное занятие назначено')),
-        );
-      }
-      onRefresh();
-    }
   }
 }
 

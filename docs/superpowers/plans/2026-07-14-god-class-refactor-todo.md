@@ -169,7 +169,22 @@ form-контроллеров, dirty-tracking, realtime-refresh. `analyze` не 
 
 ---
 
-## F+B — де-дупликация (cross-cut, ПОСЛЕ F1/F3)
+## ✅ F+B — де-дупликация — DONE
+
+Trial-scheduling был продублирован в 2 местах: `client_card` `_scheduleTrialFromCard`
+и `lead_card` `_scheduleTrial` (последний ещё и хардкодил свой inline-диалог,
+дублируя `showScheduleTrialDialog`). Свёрнуто в один shared `bookTrialLesson`
+(`lib/features/crm/presentation/trial_lesson_booking.dart`): load teachers/rooms →
+guard → shared-диалог → `createLesson(isTrial:true)`. Feedback (MagicToast vs
+ScaffoldMessenger) и refresh делегированы вызывающему через колбэки — поверхности
+разные, поток общий. `_scheduleTrialFromCard` 68→17 строк, `_scheduleTrial`
+130→11 (lead_card 721→601, inline-диалог удалён; заодно lead_card получил
+обработку ошибок load/create, которой не было). `createLesson` в
+`create_lesson_dialog.dart` — отдельный общий путь полного создания урока (не
+trial), уже централизован. analyze зелёный. Рантайм-проверка: назначить пробное
+из карточки лида И из kanban-меню — диалог, создание, тост, refresh.
+
+### ~~F+B — де-дупликация (cross-cut, ПОСЛЕ F1/F3)~~ (исходное описание ниже)
 
 **Что:** `createLesson` продублирован в 3 виджетах; «schedule trial» — в 2.
 После появления контроллеров свернуть в один `bookLesson()` / `scheduleTrialLesson()`.
