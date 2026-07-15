@@ -3275,25 +3275,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
       return;
     }
 
-    final selected = await showMagicSheet<Map<String, dynamic>>(
+    final selected = await showIssueSubscriptionSheet(
       context,
-      title: 'Выдать абонемент',
-      subtitle: 'Выберите пакет занятий',
-      icon: Icons.card_membership_rounded,
-      builder: (sheetContext) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final pkg in packages) ...[
-              _SubscriptionPackageTile(
-                package: pkg,
-                onTap: () => Navigator.pop(sheetContext, pkg),
-              ),
-              const SizedBox(height: AppSpace.sm),
-            ],
-          ],
-        );
-      },
+      packages: packages,
     );
 
     if (selected == null || !mounted) return;

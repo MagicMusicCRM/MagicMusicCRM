@@ -168,6 +168,126 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
   );
 }
 
+/// «Выдать абонемент» sheet. [packages] must be non-empty (the caller guards).
+/// Returns the selected package map, or `null` if dismissed.
+Future<Map<String, dynamic>?> showIssueSubscriptionSheet(
+  BuildContext context, {
+  required List<Map<String, dynamic>> packages,
+}) {
+  return showMagicSheet<Map<String, dynamic>>(
+    context,
+    title: 'Выдать абонемент',
+    subtitle: 'Выберите пакет занятий',
+    icon: Icons.card_membership_rounded,
+    builder: (sheetContext) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final pkg in packages) ...[
+            SubscriptionPackageTile(
+              package: pkg,
+              onTap: () => Navigator.pop(sheetContext, pkg),
+            ),
+            const SizedBox(height: AppSpace.sm),
+          ],
+        ],
+      );
+    },
+  );
+}
+
+/// Selectable subscription-package row inside the «Выдать абонемент» sheet
+/// (ported from student_detail_screen).
+class SubscriptionPackageTile extends StatelessWidget {
+  final Map<String, dynamic> package;
+  final VoidCallback onTap;
+  const SubscriptionPackageTile({
+    super.key,
+    required this.package,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = package['name']?.toString() ?? 'Абонемент';
+    final lessons = package['lessons_total'] ?? package['lessonsTotal'];
+    final price = package['price'];
+    final validity = package['validity_days'] ?? package['validityDays'];
+    final meta = [
+      if (lessons != null) '$lessons ч.',
+      if (price != null) '$price ₽',
+      if (validity != null) '$validity дн.',
+    ].join(' · ');
+
+    return Material(
+      color: AppColor.input,
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.md,
+            vertical: AppSpace.md,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            border: Border.all(color: AppColor.divider),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColor.goldSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.chip),
+                  border: Border.all(color: AppColor.goldLine),
+                ),
+                child: const Icon(
+                  Icons.card_membership_rounded,
+                  size: 18,
+                  color: AppColor.gold,
+                ),
+              ),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColor.text,
+                      ),
+                    ),
+                    if (meta.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          meta,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColor.text2,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: AppColor.text2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Collected values from [showScheduleTrialDialog].
 typedef TrialLessonInput = ({
   String teacherId,
