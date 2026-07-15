@@ -18,6 +18,7 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/models/expected_payment.dart';
 import 'package:magic_music_crm/core/models/family_member.dart';
 import 'package:magic_music_crm/core/models/student_balance.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
@@ -179,7 +180,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // the «История» merge — the «Комментарии» tab reads live via [_CommentsList].
   List<Map<String, dynamic>> _studentComments = [];
   List<Map<String, dynamic>> _groups = [];
-  List<Map<String, dynamic>> _expectedPayments = [];
+  List<ExpectedPayment> _expectedPayments = [];
   bool _loadingStudent = true;
   String? _studentError;
   bool _realtimeRefreshQueued = false;

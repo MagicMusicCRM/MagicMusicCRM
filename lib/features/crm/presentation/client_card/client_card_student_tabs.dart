@@ -56,7 +56,7 @@ Widget _paymentsView(ColorScheme cs, {required List<Payment> payments}) {
 /// Student «Инвойсы» tab body: expected/planned payments with paid/pending state.
 Widget _invoicesView(
   ColorScheme cs, {
-  required List<Map<String, dynamic>> expectedPayments,
+  required List<ExpectedPayment> expectedPayments,
 }) {
   if (expectedPayments.isEmpty) {
     return Center(
@@ -71,12 +71,12 @@ Widget _invoicesView(
     itemCount: expectedPayments.length,
     itemBuilder: (context, i) {
       final p = expectedPayments[i];
-      final dt = DateTime.tryParse(p['due_date']?.toString() ?? '');
+      final dt = DateTime.tryParse(p.dueDate ?? '');
       final dateStr = dt != null
           ? DateFormat('d MMM yyyy', 'ru').format(dt)
           : '—';
-      final status = p['status']?.toString() ?? 'pending';
-      final description = (p['description'] ?? '').toString().trim();
+      final status = p.status ?? 'pending';
+      final description = (p.description ?? '').trim();
       final paid = status == 'paid';
       final subtitle = [
         'Срок: $dateStr',
@@ -90,7 +90,7 @@ Widget _invoicesView(
             color: paid ? AppTheme.success : AppTheme.warning,
           ),
           title: Text(
-            '${p['amount']} ₽',
+            '${p.amountRaw} ₽',
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           subtitle: Text(subtitle),
