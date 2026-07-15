@@ -168,6 +168,161 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
   );
 }
 
+/// Collected values from [showAddTaskSheet].
+typedef TaskInput = ({String title, DateTime? due, String? assignedTo});
+
+/// «Новая задача» sheet. [staff] populates the optional «Исполнитель» dropdown
+/// (blank/failed load simply hides it). Returns the form values (title may be
+/// blank — the caller validates and toasts), or `null` if dismissed.
+Future<TaskInput?> showAddTaskSheet(
+  BuildContext context, {
+  required bool isStudent,
+  required List<Map<String, dynamic>> staff,
+}) async {
+  final cs = Theme.of(context).colorScheme;
+  final titleCtrl = TextEditingController();
+  DateTime? due;
+  String? assignedTo;
+
+  final confirmed = await showMagicSheet<bool>(
+    context,
+    title: 'Новая задача',
+    subtitle: isStudent
+        ? 'Поставьте задачу по этому ученику'
+        : 'Поставьте задачу по этому лиду',
+    icon: Icons.task_alt_rounded,
+    builder: (sheetContext) {
+      return StatefulBuilder(
+        builder: (context, setSheetState) {
+          final dueLabel = due == null
+              ? 'Без срока'
+              : DateFormat('dd.MM.yyyy', 'ru').format(due!);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                autofocus: true,
+                decoration: clientCardInputDecoration(
+                  cs,
+                  label: 'Название',
+                  hint: 'Например: Перезвонить клиенту',
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: AppSpace.md),
+              Text(
+                'Срок',
+                style: TextStyle(
+                  color: cs.onSurfaceVariant,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: due ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) setSheetState(() => due = picked);
+                },
+                child: InputDecorator(
+                  decoration: clientCardInputDecoration(cs, isDense: true),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(dueLabel),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (due != null)
+                            InkWell(
+                              onTap: () => setSheetState(() => due = null),
+                              child: Icon(
+                                Icons.clear_rounded,
+                                size: 16,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.calendar_today_rounded,
+                            size: 16,
+                            color: AppColor.gold,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (staff.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.md),
+                DropdownButtonFormField<String?>(
+                  initialValue: assignedTo,
+                  isExpanded: true,
+                  decoration: clientCardInputDecoration(
+                    cs,
+                    label: 'Исполнитель',
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Не назначен'),
+                    ),
+                    for (final s in staff)
+                      if (s['profile_user_id'] != null)
+                        DropdownMenuItem<String?>(
+                          value: s['profile_user_id'].toString(),
+                          child: Text(
+                            '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                .trim(),
+                          ),
+                        ),
+                  ],
+                  onChanged: (v) => setSheetState(() => assignedTo = v),
+                ),
+              ],
+            ],
+          );
+        },
+      );
+    },
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context, false),
+        style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
+        child: const Text('Отмена'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, true),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColor.gold,
+          foregroundColor: AppColor.onGold,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        child: const Text('Создать'),
+      ),
+    ],
+  );
+
+  final title = titleCtrl.text.trim();
+  titleCtrl.dispose();
+  if (confirmed != true) return null;
+  return (title: title, due: due, assignedTo: assignedTo);
+}
+
 /// Collected values from [showAssignHomeworkSheet].
 typedef HomeworkInput = ({String title, String? description, DateTime? dueAt});
 
