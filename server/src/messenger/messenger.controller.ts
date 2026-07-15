@@ -28,6 +28,7 @@ import { UpdateGroupMembersDto } from "./dto/update-group-members.dto";
 import { UpdateMessageDto } from "./dto/update-message.dto";
 import { ChannelsService } from "./channels.service";
 import { ChatInboxService } from "./chat-inbox.service";
+import { MessageService } from "./message.service";
 import { MessengerService } from "./messenger.service";
 
 @UseGuards(JwtAuthGuard)
@@ -37,6 +38,7 @@ export class MessengerController {
     private readonly messenger: MessengerService,
     private readonly channels: ChannelsService,
     private readonly inbox: ChatInboxService,
+    private readonly messages: MessageService,
   ) {}
 
   @Get("chats")
@@ -171,7 +173,7 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Param("emoji") emoji: string,
   ) {
-    return this.messenger.setReaction(actor, id, emoji);
+    return this.messages.setReaction(actor, id, emoji);
   }
 
   @Delete("messages/:id/reactions/:emoji")
@@ -180,7 +182,7 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Param("emoji") emoji: string,
   ) {
-    return this.messenger.removeReaction(actor, id, emoji);
+    return this.messages.removeReaction(actor, id, emoji);
   }
 
   @Post("messages/:id/pin")
@@ -188,7 +190,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.messenger.pinMessage(actor, id);
+    return this.messages.pinMessage(actor, id);
   }
 
   @Delete("messages/:id/pin")
@@ -196,7 +198,7 @@ export class MessengerController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.messenger.unpinMessage(actor, id);
+    return this.messages.unpinMessage(actor, id);
   }
 
   @Delete("messages/:id")
@@ -205,7 +207,7 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: DeleteMessageDto,
   ) {
-    return this.messenger.deleteMessage(actor, id, dto);
+    return this.messages.deleteMessage(actor, id, dto);
   }
 
   @Patch("messages/:id")
@@ -214,7 +216,7 @@ export class MessengerController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateMessageDto,
   ) {
-    return this.messenger.updateMessage(actor, id, dto);
+    return this.messages.updateMessage(actor, id, dto);
   }
 
   @Get("channels")
