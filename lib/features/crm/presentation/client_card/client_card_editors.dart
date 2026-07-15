@@ -636,12 +636,10 @@ extension _ClientCardEditors on _ClientCardState {
     }
   }
 
-  Future<void> _removeFamilyMember(Map<String, dynamic> member) async {
-    final memberId = member['id']?.toString();
-    if (memberId == null || memberId.isEmpty) return;
-    final name = (member['name']?.toString().trim().isNotEmpty ?? false)
-        ? member['name'].toString()
-        : 'участника';
+  Future<void> _removeFamilyMember(FamilyMember member) async {
+    final memberId = member.id;
+    if (memberId.isEmpty) return;
+    final name = member.name.trim().isNotEmpty ? member.name : 'участника';
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
