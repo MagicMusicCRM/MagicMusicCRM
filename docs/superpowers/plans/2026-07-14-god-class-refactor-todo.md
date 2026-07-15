@@ -113,6 +113,19 @@ listPaymentsWithTotal/createPayment → `Payment`), все консьюмеры 
 (_paymentsView). Whole-project analyze зелёный; сервис-тест обновлён на типизир.
 API, **все 43 теста magic_crm_service проходят** (рантайм-проверка парсинга).
 
+### ✅ Lead — kanban-card slice — DONE `51ff55ce`
+`Lead` (`lib/core/models/lead.dart`) — типизированный view над `_legacyLead`/
+`_legacyLeadBoardItem` (покрывает base + board-item; board-поля дефолтятся). Типизирован
+kanban-путь: `_LeadCard.lead` и `_LeadDragHandle.lead` → `Lead`, обёртка `Lead.fromMap`
+одна — в `kanban_column`. Все `lead['key']` → геттеры; счётчики через ленивый int-parse
+(= старый `_intValue`, удалён). Map-API (`ConvertLeadDialog.show`, transfer-контроллер/
+ghost-card) получают `lead.raw`. **Осознанно вне slice (оставлено Map):** client_card
+`widget.lead` (dual lead/student, loose access), `listLeads` (единственный консьюмер
+`tasks_widget` пакует в гетерогенный `Future.wait<List<Map>>`), lead-transfer фича,
+board-internals в `leads_actions` (`_matchesLiveQuery` фильтр по raw column-items).
+Следующий шаг lead-домена: типизировать `leadBoardProvider` items целиком (тогда
+`_matchesLiveQuery`, drag, onTap перейдут на `Lead`) — больше ripple.
+
 **Паттерн F0 (эталон для следующих доменов — lead/student/lesson/family/…):**
 1. Источник формы — `_legacy<Domain>` маппер в `magic_crm_service_mappers.dart`
    (snake_case ключи, которые видят виджеты), НЕ сырой backend-DTO.
