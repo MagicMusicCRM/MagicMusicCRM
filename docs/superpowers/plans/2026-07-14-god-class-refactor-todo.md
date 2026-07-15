@@ -154,7 +154,23 @@ id/bool, ноль числового форматирования). Типизи
 явным `FutureProvider<List<Map...>>` → перетипизировать. getMySummary/getStudentCard
 вложенные списки оставлять map, пока не дойдёт очередь до их домена целиком.
 
-### Остальные домены (не начаты) — по паттерну выше
+### ✅ Ещё домены — DONE (widget-side, все analyze-зелёные)
+- **StudentBalance** `student_balance.dart` — client_card `_balance` (nested в getStudentCard); `*Raw` для `'${x} ₽'`, `balance` = ленивый `num?`.
+- **ExpectedPayment** `expected_payment.dart` — client_card `_invoicesView` (инвойсы); `amountRaw` для raw-интерполяции.
+- **Comment** `comment.dart` — client_card `_CommentsList` end-to-end (`_future`/`_loadMerged` → `List<Comment>`; `origin`-геттер для синтетического `_origin`-ключа мержа). `_progressNotesView` оставлен follow-up'ом.
+
+**Итого F0 сделано 6 доменов:** Payment, Lead(card), FamilyMember, StudentBalance, ExpectedPayment, Comment — все профили риска покрыты (деньги+raw-интерполяция, широкий ripple, чистые строки, nested-в-агрегаторе объекты, синтетический merge-ключ).
+
+### Остальные домены — НЕ начаты (по паттерну выше, механически)
+Крупные/широкие, требуют свежего контекст-бюджета (чтобы не оборвать миграцию на середине):
+- **subscription** (13) — `_subscriptionRemainder`/tabs_a + student_schedule_section (valid_until) + subscription_status_card + manage_entities + catalog. Числа (lessons_total/used, package_price) → нужны `*Raw`.
+- **lesson** (34) — schedule + client_card lessons-таб + create_lesson_dialog. Самый большой, много консьюмеров.
+- **task** (34) — tasks_widget + client_card tasks-таб. Большой.
+- **student** (23) — очень широкий (десятки мест).
+- **lead-status** (7) — НИЗКАЯ ценность: `_legacyLeadStatus` map сразу конвертится в `StatusRecord`-тапл в точках потребления (client_card/leads_providers/manage_statuses), т.е. `['key']/['label']/['color']` уже локализованы в 3-4 конверторах. F0-выигрыш маргинальный.
+- **lead (board целиком)** — типизировать `leadBoardProvider` items (тогда `_matchesLiveQuery`/drag/onTap на `Lead`); больше ripple.
+
+### ~~Остальные домены (не начаты) — по паттерну выше~~
 lead (18 полей, много консьюмеров) / student (23) / lesson (34) / task (34) /
 comment (13) / subscription (13) / family (6) / lead-status (7) / expected-payment
 (12) / student-balance (10). Начинать с бол­ее изолированных; lesson/task самые
