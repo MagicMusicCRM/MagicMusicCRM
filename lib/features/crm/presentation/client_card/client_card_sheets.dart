@@ -20,6 +20,115 @@ const List<(String, String)> kFamilyRoleOptions = [
   ('payer', 'Плательщик'),
 ];
 
+/// «Контактное лицо» dialog. [relationOptions] pre-includes the current value
+/// if custom. Returns the collected person map (blank fields stripped), or
+/// `null` if dismissed.
+Future<Map<String, dynamic>?> showEditContactPersonDialog(
+  BuildContext context, {
+  required Map<String, dynamic> existing,
+  required List<String> relationOptions,
+  required bool isNew,
+}) async {
+  final nameCtrl = TextEditingController(
+    text: existing['name']?.toString() ?? '',
+  );
+  final phoneCtrl = TextEditingController(
+    text: existing['phone']?.toString() ?? '',
+  );
+  final emailCtrl = TextEditingController(
+    text: existing['email']?.toString() ?? '',
+  );
+  String relation = existing['relation']?.toString() ?? '';
+  final cs = Theme.of(context).colorScheme;
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(isNew ? 'Новое контактное лицо' : 'Контактное лицо'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: clientCardInputDecoration(
+                cs,
+                label: 'Имя',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: AppSpace.md),
+            DropdownButtonFormField<String>(
+              initialValue: relationOptions.contains(relation) ? relation : '',
+              isExpanded: true,
+              decoration: clientCardInputDecoration(
+                cs,
+                label: 'Кем приходится',
+                isDense: true,
+              ),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('Не выбрано')),
+                ...relationOptions.map(
+                  (option) =>
+                      DropdownMenuItem(value: option, child: Text(option)),
+                ),
+              ],
+              onChanged: (value) => relation = value ?? '',
+            ),
+            const SizedBox(height: AppSpace.md),
+            TextField(
+              controller: phoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: clientCardInputDecoration(
+                cs,
+                label: 'Телефон',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: AppSpace.md),
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              decoration: clientCardInputDecoration(
+                cs,
+                label: 'Email',
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColor.gold,
+            foregroundColor: AppColor.onGold,
+          ),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Сохранить'),
+        ),
+      ],
+    ),
+  );
+  Map<String, dynamic>? person;
+  if (saved == true) {
+    person = <String, dynamic>{
+      'name': nameCtrl.text.trim(),
+      'relation': relation,
+      'phone': phoneCtrl.text.trim(),
+      'email': emailCtrl.text.trim(),
+    }..removeWhere((_, value) => (value as String).isEmpty);
+  }
+  nameCtrl.dispose();
+  phoneCtrl.dispose();
+  emailCtrl.dispose();
+  return person;
+}
+
 /// Collected values from [showAddFamilyMemberSheet].
 typedef FamilyMemberInput = ({
   String role,

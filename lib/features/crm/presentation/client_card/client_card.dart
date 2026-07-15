@@ -3815,16 +3815,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final existing = index == null
         ? const <String, dynamic>{}
         : persons[index];
-    final nameCtrl = TextEditingController(
-      text: existing['name']?.toString() ?? '',
-    );
-    final phoneCtrl = TextEditingController(
-      text: existing['phone']?.toString() ?? '',
-    );
-    final emailCtrl = TextEditingController(
-      text: existing['email']?.toString() ?? '',
-    );
-    String relation = existing['relation']?.toString() ?? '';
+    final relation = existing['relation']?.toString() ?? '';
     final relationOptions = _customFieldSchema
         .where(
           (field) =>
@@ -3835,95 +3826,20 @@ class _ClientCardState extends ConsumerState<ClientCard>
     if (relation.isNotEmpty && !relationOptions.contains(relation)) {
       relationOptions.add(relation);
     }
-    final cs = Theme.of(context).colorScheme;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          index == null ? 'Новое контактное лицо' : 'Контактное лицо',
-        ),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: _inputDecoration(cs, label: 'Имя', isDense: true),
-              ),
-              const SizedBox(height: AppSpace.md),
-              DropdownButtonFormField<String>(
-                initialValue: relationOptions.contains(relation)
-                    ? relation
-                    : '',
-                isExpanded: true,
-                decoration: _inputDecoration(
-                  cs,
-                  label: 'Кем приходится',
-                  isDense: true,
-                ),
-                items: [
-                  const DropdownMenuItem(value: '', child: Text('Не выбрано')),
-                  ...relationOptions.map(
-                    (option) =>
-                        DropdownMenuItem(value: option, child: Text(option)),
-                  ),
-                ],
-                onChanged: (value) => relation = value ?? '',
-              ),
-              const SizedBox(height: AppSpace.md),
-              TextField(
-                controller: phoneCtrl,
-                keyboardType: TextInputType.phone,
-                decoration: _inputDecoration(
-                  cs,
-                  label: 'Телефон',
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: AppSpace.md),
-              TextField(
-                controller: emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                decoration: _inputDecoration(cs, label: 'Email', isDense: true),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColor.gold,
-              foregroundColor: AppColor.onGold,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+    final person = await showEditContactPersonDialog(
+      context,
+      existing: existing,
+      relationOptions: relationOptions,
+      isNew: index == null,
     );
-    if (saved == true) {
-      final person = <String, dynamic>{
-        'name': nameCtrl.text.trim(),
-        'relation': relation,
-        'phone': phoneCtrl.text.trim(),
-        'email': emailCtrl.text.trim(),
-      }..removeWhere((_, value) => (value as String).isEmpty);
-      final next = [...persons];
-      if (index == null) {
-        next.add(person);
-      } else {
-        next[index] = person;
-      }
-      _writeContactPersons(entity, next);
+    if (person == null) return;
+    final next = [...persons];
+    if (index == null) {
+      next.add(person);
+    } else {
+      next[index] = person;
     }
-    nameCtrl.dispose();
-    phoneCtrl.dispose();
-    emailCtrl.dispose();
+    _writeContactPersons(entity, next);
   }
 
   Widget _buildContactPersonsEditor(ColorScheme cs, String entity) {
