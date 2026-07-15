@@ -1703,7 +1703,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionTitle('История статусов'),
-          _buildStatusHistorySection(cs),
+          _statusHistorySection(
+            cs,
+            loading: _loadingHistory,
+            history: _statusHistory,
+          ),
         ],
       ),
     );
@@ -4226,64 +4230,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     } finally {
       if (mounted) setState(() => _familyBusy = false);
     }
-  }
-
-  Widget _buildStatusHistorySection(ColorScheme cs) {
-    if (_loadingHistory) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-        child: LinearProgressIndicator(color: AppColor.gold),
-      );
-    }
-    if (_statusHistory.isEmpty) {
-      return Text(
-        'Изменений статуса пока нет',
-        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: _statusHistory.take(12).map((h) {
-        final from = h['old_status']?.toString();
-        final to = h['new_status']?.toString();
-        final transition = [
-          if (from != null && from.isNotEmpty) from else '—',
-          '→',
-          if (to != null && to.isNotEmpty) to else '—',
-        ].join(' ');
-        final comment = h['comment']?.toString().trim() ?? '';
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
-            ),
-            tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-            leading: const Icon(
-              Icons.history_rounded,
-              size: 18,
-              color: AppColor.gold,
-            ),
-            title: Text(
-              transition,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              [
-                _formatDate(h['changed_at']),
-                if (comment.isNotEmpty) comment,
-              ].where((value) => value.isNotEmpty).join(' · '),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        );
-      }).toList(),
-    );
   }
 
   List<Map<String, dynamic>> _list(Object? value) {

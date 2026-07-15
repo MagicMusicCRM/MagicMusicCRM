@@ -394,6 +394,65 @@ Widget _sectionTitle(String title) {
   );
 }
 
+/// Lead status-change history list (read-only).
+Widget _statusHistorySection(
+  ColorScheme cs, {
+  required bool loading,
+  required List<Map<String, dynamic>> history,
+}) {
+  if (loading) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+      child: LinearProgressIndicator(color: AppColor.gold),
+    );
+  }
+  if (history.isEmpty) {
+    return Text(
+      'Изменений статуса пока нет',
+      style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+    );
+  }
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: history.take(12).map((h) {
+      final from = h['old_status']?.toString();
+      final to = h['new_status']?.toString();
+      final transition = [
+        if (from != null && from.isNotEmpty) from else '—',
+        '→',
+        if (to != null && to.isNotEmpty) to else '—',
+      ].join(' ');
+      final comment = h['comment']?.toString().trim() ?? '';
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+          leading: const Icon(
+            Icons.history_rounded,
+            size: 18,
+            color: AppColor.gold,
+          ),
+          title: Text(transition, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+            [
+              _formatDate(h['changed_at']),
+              if (comment.isNotEmpty) comment,
+            ].where((value) => value.isNotEmpty).join(' · '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }).toList(),
+  );
+}
+
 Widget _emptyHint(ColorScheme cs, String text) {
   return Padding(
     padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
