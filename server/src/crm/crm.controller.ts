@@ -30,6 +30,7 @@ import { FamilyService } from "./family.service";
 import { DuplicatesService } from "./duplicates.service";
 import { MergeService } from "./merge.service";
 import { PhoneReviewService } from "./phone-review.service";
+import { LeadsService } from "./leads.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -119,6 +120,7 @@ export class CrmController {
     private readonly duplicates: DuplicatesService,
     private readonly merge: MergeService,
     private readonly phoneReview: PhoneReviewService,
+    private readonly leads: LeadsService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -908,7 +910,7 @@ export class CrmController {
 
   @Get("leads")
   listLeads(@CurrentActor() actor: ActorContext, @Query() query: CrmListQuery) {
-    return this.crm.listLeads(actor, query);
+    return this.leads.listLeads(actor, query);
   }
 
   @Get("leads/board")
@@ -916,12 +918,12 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: LeadBoardQuery,
   ) {
-    return this.crm.listLeadBoard(actor, query);
+    return this.leads.listLeadBoard(actor, query);
   }
 
   @Get("leads/app-count")
   countAppLeads(@CurrentActor() actor: ActorContext) {
-    return this.crm.countAppLeads(actor);
+    return this.leads.countAppLeads(actor);
   }
 
   @Get("leads/:id/card")
@@ -929,7 +931,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.getLeadCard(actor, id);
+    return this.leads.getLeadCard(actor, id);
   }
 
   // KVA-234: заявки лида (app.lead_applications) — секция «Заявки» в карточке.
@@ -938,7 +940,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.listLeadApplications(actor, id);
+    return this.leads.listLeadApplications(actor, id);
   }
 
   @Get("leads/:leadId/status-history")
@@ -946,7 +948,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("leadId", ParseUUIDPipe) leadId: string,
   ) {
-    return this.crm.listLeadStatusHistory(actor, leadId);
+    return this.leads.listLeadStatusHistory(actor, leadId);
   }
 
   @Get("leads/:id/chat-user")
@@ -954,7 +956,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.resolveLeadChatUser(actor, id);
+    return this.leads.resolveLeadChatUser(actor, id);
   }
 
   @Get("contacts/by-user/:userId")
@@ -962,7 +964,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("userId", ParseUUIDPipe) userId: string,
   ) {
-    return this.crm.resolveContactForUser(actor, userId);
+    return this.leads.resolveContactForUser(actor, userId);
   }
 
   @Post("contacts/save-from-chat")
@@ -970,12 +972,12 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: SaveContactFromChatDto,
   ) {
-    return this.crm.saveContactFromChat(actor, dto);
+    return this.leads.saveContactFromChat(actor, dto);
   }
 
   @Post("leads")
   createLead(@CurrentActor() actor: ActorContext, @Body() dto: UpsertLeadDto) {
-    return this.crm.createLead(actor, dto);
+    return this.leads.createLead(actor, dto);
   }
 
   @Patch("leads/:id")
@@ -984,7 +986,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpsertLeadDto,
   ) {
-    return this.crm.updateLead(actor, id, dto);
+    return this.leads.updateLead(actor, id, dto);
   }
 
   @Delete("leads/:id")
@@ -992,7 +994,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.deleteLead(actor, id);
+    return this.leads.deleteLead(actor, id);
   }
 
   @Get("phone-review-queue/count")
