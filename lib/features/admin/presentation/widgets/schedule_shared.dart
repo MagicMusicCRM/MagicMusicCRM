@@ -28,3 +28,32 @@ String pluralRu(int n, String one, String few, String many) {
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
   return many;
 }
+
+const monthNamesGenitive = [
+  '',
+  'января',
+  'февраля',
+  'марта',
+  'апреля',
+  'мая',
+  'июня',
+  'июля',
+  'августа',
+  'сентября',
+  'октября',
+  'ноября',
+  'декабря',
+];
+
+/// yyyy-MM-dd key for a date (used to index per-day summaries). Pure.
+String dateOnly(DateTime date) {
+  return '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
+/// Normalises a schedule conflict payload to a list of type strings. Pure.
+List<String> conflictTypes(dynamic value) {
+  if (value is! List) return const [];
+  return value.map((item) => item.toString()).toList();
+}

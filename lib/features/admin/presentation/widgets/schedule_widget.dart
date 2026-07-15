@@ -39,21 +39,6 @@ enum ScheduleView { year, month, day }
 enum DayViewMode { byRoom, byTeacher }
 
 // ── Russian month names ─────────────────────────────────────────────────────
-const _monthNamesGenitive = [
-  '',
-  'января',
-  'февраля',
-  'марта',
-  'апреля',
-  'мая',
-  'июня',
-  'июля',
-  'августа',
-  'сентября',
-  'октября',
-  'ноября',
-  'декабря',
-];
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -233,7 +218,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         }),
         crm.listRoomAvailability(
           branchId: defaultBranch,
-          date: _dateOnly(_selectedDate),
+          date: dateOnly(_selectedDate),
           from: _slotIso(_selectedDate, 6),
           to: _slotIso(_selectedDate, 23),
           limit: 100,
@@ -367,7 +352,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           .read(magicCrmServiceProvider)
           .listRoomAvailability(
             branchId: branchId,
-            date: _dateOnly(_selectedDate),
+            date: dateOnly(_selectedDate),
             from: _slotIso(_selectedDate, 6),
             to: _slotIso(_selectedDate, 23),
             limit: 100,
@@ -502,11 +487,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     return parsed.toUtc().add(Duration(minutes: _selectedBranchOffset));
   }
 
-  String _dateOnly(DateTime date) {
-    return '${date.year.toString().padLeft(4, '0')}-'
-        '${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}';
-  }
 
   String _slotIso(DateTime date, int hour) {
     return DateTime(
@@ -1313,14 +1293,14 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       onNext = _nextYear;
     } else if (_currentView == ScheduleView.month) {
       dateLabel =
-          '${_monthNamesGenitive[_displayedMonth.month].toLowerCase()} ${_displayedMonth.year}';
+          '${monthNamesGenitive[_displayedMonth.month].toLowerCase()} ${_displayedMonth.year}';
       onPrev = _prevMonth;
       onNext = _nextMonth;
     } else {
       final weekDayNames = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
       final wd = weekDayNames[_selectedDate.weekday - 1];
       dateLabel =
-          '$wd, ${_selectedDate.day} ${_monthNamesGenitive[_selectedDate.month]} ${_selectedDate.year}';
+          '$wd, ${_selectedDate.day} ${monthNamesGenitive[_selectedDate.month]} ${_selectedDate.year}';
       onPrev = _prevDay;
       onNext = _nextDay;
     }
@@ -1475,10 +1455,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     return null;
   }
 
-  List<String> _conflictTypes(dynamic value) {
-    if (value is! List) return const [];
-    return value.map((item) => item.toString()).toList();
-  }
 
   // Defensive: the backend may send duration as int, double, or string. A bare
   // `as int?` cast throws on a double and blanks the whole card (the lesson then
@@ -1623,7 +1599,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     bool isToday = false,
   }) {
     final cs = Theme.of(context).colorScheme;
-    final summary = date != null ? _monthDaySummary[_dateOnly(date)] : null;
+    final summary = date != null ? _monthDaySummary[dateOnly(date)] : null;
     final lessons = date != null ? _lessonsForDate(date) : const [];
     final count = summary != null
         ? (summary['count'] as int? ?? 0)
@@ -1753,7 +1729,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Widget _monthChip(Map<String, dynamic> lesson) {
     final cs = Theme.of(context).colorScheme;
     final start = _parseLessonTime(lesson);
-    final conflicts = _conflictTypes(lesson['conflict_types']);
+    final conflicts = conflictTypes(lesson['conflict_types']);
     final color = conflicts.isNotEmpty
         ? AppColor.danger
         : lesson['is_trial'] == true
@@ -1786,13 +1762,13 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Widget _buildMonthSidePanel(DateTime focal) {
     final cs = Theme.of(context).colorScheme;
     final lessons = _lessonsForDate(focal);
-    final summary = _monthDaySummary[_dateOnly(focal)];
+    final summary = _monthDaySummary[dateOnly(focal)];
     final count = summary != null
         ? (summary['count'] as int? ?? 0)
         : lessons.length;
     final trials = lessons.where((l) => l['is_trial'] == true).length;
     final conflicts = lessons
-        .where((l) => _conflictTypes(l['conflict_types']).isNotEmpty)
+        .where((l) => conflictTypes(l['conflict_types']).isNotEmpty)
         .length;
 
     Widget stat(String value, String label, Color color) {
@@ -1837,7 +1813,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            '${focal.day} ${_monthNamesGenitive[focal.month]}',
+            '${focal.day} ${monthNamesGenitive[focal.month]}',
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
@@ -1938,7 +1914,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           id: r['id'].toString(),
           name: r['name']?.toString() ?? 'Аудитория',
           color: _roomColorMap[r['id'].toString()] ?? cs.onSurfaceVariant,
-          hasConflict: _conflictTypes(
+          hasConflict: conflictTypes(
             _availabilityForRoom(r['id'].toString())?['conflict_types'],
           ).isNotEmpty,
         ),
@@ -1978,7 +1954,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           title: title,
           subtitle: teacher,
           isTrial: l['is_trial'] == true,
-          conflicts: _conflictTypes(l['conflict_types']),
+          conflicts: conflictTypes(l['conflict_types']),
           movable: l['id'] != null &&
               status != 'cancelled' &&
               status != 'completed' &&
@@ -2142,7 +2118,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         (l) => l['id']?.toString() == lessonId,
         orElse: () => const <String, dynamic>{},
       );
-      final conflicts = _conflictTypes(moved['conflict_types']);
+      final conflicts = conflictTypes(moved['conflict_types']);
       if (conflicts.isNotEmpty) {
         MagicToast.show(
           context,
@@ -2476,7 +2452,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         ? (_roomColorMap[roomId] ??
               Theme.of(context).colorScheme.onSurfaceVariant)
         : Theme.of(context).colorScheme.onSurfaceVariant;
-    final conflicts = _conflictTypes(lesson['conflict_types']);
+    final conflicts = conflictTypes(lesson['conflict_types']);
 
     return GestureDetector(
       onTap: () => _showLessonDetails(lesson),
@@ -2586,7 +2562,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     final roomName = roomId != null
         ? (_roomNames[roomId] ?? 'Аудитория')
         : 'Без аудитории';
-    final conflicts = _conflictTypes(lesson['conflict_types']);
+    final conflicts = conflictTypes(lesson['conflict_types']);
     final lessonId = lesson['id']?.toString();
     final currentStatus = lesson['status']?.toString() ?? 'scheduled';
 
