@@ -1566,107 +1566,18 @@ class _ClientCardState extends ConsumerState<ClientCard>
       return;
     }
 
-    String? selectedTeacher = teachers.first['id']?.toString();
-    String? selectedRoom = rooms.isNotEmpty ? rooms.first['id']?.toString() : null;
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
-    TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocalState) => AlertDialog(
-          title: const Text('Пробное занятие'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                initialValue: selectedTeacher,
-                decoration: const InputDecoration(labelText: 'Учитель'),
-                items: teachers
-                    .map(
-                      (t) => DropdownMenuItem(
-                        value: t['id'].toString(),
-                        child: Text('${t['first_name']} ${t['last_name']}'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setLocalState(() => selectedTeacher = v),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: selectedRoom,
-                decoration: const InputDecoration(labelText: 'Кабинет'),
-                items: rooms
-                    .map(
-                      (r) => DropdownMenuItem(
-                        value: r['id'].toString(),
-                        child: Text(r['name']),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setLocalState(() => selectedRoom = v),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                title: Text(
-                  'Дата: ${DateFormat('dd.MM.yyyy').format(selectedDate)}',
-                ),
-                trailing: const Icon(Icons.calendar_today_rounded),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: selectedDate,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 90)),
-                  );
-                  if (picked != null) {
-                    setLocalState(() => selectedDate = picked);
-                  }
-                },
-              ),
-              ListTile(
-                title: Text('Время: ${selectedTime.format(ctx)}'),
-                trailing: const Icon(Icons.access_time_rounded),
-                onTap: () async {
-                  final picked = await showTimePicker(
-                    context: ctx,
-                    initialTime: selectedTime,
-                  );
-                  if (picked != null) {
-                    setLocalState(() => selectedTime = picked);
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Назначить'),
-            ),
-          ],
-        ),
-      ),
+    final slot = await showScheduleTrialDialog(
+      context,
+      teachers: teachers,
+      rooms: rooms,
     );
-
-    if (confirmed != true || selectedTeacher == null) return;
-    final scheduledAt = DateTime(
-      selectedDate.year,
-      selectedDate.month,
-      selectedDate.day,
-      selectedTime.hour,
-      selectedTime.minute,
-    );
+    if (slot == null) return;
     try {
       await crm.createLesson(
         leadId: _leadId,
-        teacherId: selectedTeacher,
-        roomId: selectedRoom,
-        scheduledAt: scheduledAt.toIso8601String(),
+        teacherId: slot.teacherId,
+        roomId: slot.roomId,
+        scheduledAt: slot.scheduledAt.toIso8601String(),
         isTrial: true,
         status: 'scheduled',
         notes: 'Пробное занятие по лиду: ${_leadData['name'] ?? ''}',

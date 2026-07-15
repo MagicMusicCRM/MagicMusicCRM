@@ -168,6 +168,122 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
   );
 }
 
+/// Collected values from [showScheduleTrialDialog].
+typedef TrialLessonInput = ({
+  String teacherId,
+  String? roomId,
+  DateTime scheduledAt,
+});
+
+/// «Пробное занятие» dialog (teacher/room/date/time picker). [teachers] must be
+/// non-empty (the caller guards). Returns the chosen slot, or `null` on cancel.
+Future<TrialLessonInput?> showScheduleTrialDialog(
+  BuildContext context, {
+  required List<Map<String, dynamic>> teachers,
+  required List<Map<String, dynamic>> rooms,
+}) async {
+  String? selectedTeacher = teachers.first['id']?.toString();
+  String? selectedRoom = rooms.isNotEmpty ? rooms.first['id']?.toString() : null;
+  DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
+  TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocalState) => AlertDialog(
+        title: const Text('Пробное занятие'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: selectedTeacher,
+              decoration: const InputDecoration(labelText: 'Учитель'),
+              items: teachers
+                  .map(
+                    (t) => DropdownMenuItem(
+                      value: t['id'].toString(),
+                      child: Text('${t['first_name']} ${t['last_name']}'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) => setLocalState(() => selectedTeacher = v),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: selectedRoom,
+              decoration: const InputDecoration(labelText: 'Кабинет'),
+              items: rooms
+                  .map(
+                    (r) => DropdownMenuItem(
+                      value: r['id'].toString(),
+                      child: Text(r['name']),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) => setLocalState(() => selectedRoom = v),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              title: Text(
+                'Дата: ${DateFormat('dd.MM.yyyy').format(selectedDate)}',
+              ),
+              trailing: const Icon(Icons.calendar_today_rounded),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: ctx,
+                  initialDate: selectedDate,
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 90)),
+                );
+                if (picked != null) {
+                  setLocalState(() => selectedDate = picked);
+                }
+              },
+            ),
+            ListTile(
+              title: Text('Время: ${selectedTime.format(ctx)}'),
+              trailing: const Icon(Icons.access_time_rounded),
+              onTap: () async {
+                final picked = await showTimePicker(
+                  context: ctx,
+                  initialTime: selectedTime,
+                );
+                if (picked != null) {
+                  setLocalState(() => selectedTime = picked);
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Назначить'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  if (confirmed != true || selectedTeacher == null) return null;
+  final scheduledAt = DateTime(
+    selectedDate.year,
+    selectedDate.month,
+    selectedDate.day,
+    selectedTime.hour,
+    selectedTime.minute,
+  );
+  return (
+    teacherId: selectedTeacher!,
+    roomId: selectedRoom,
+    scheduledAt: scheduledAt,
+  );
+}
+
 /// Collected values from [showAddTaskSheet].
 typedef TaskInput = ({String title, DateTime? due, String? assignedTo});
 
