@@ -329,17 +329,17 @@ extension _ClientCardTabsA on _ClientCardState {
                 _InfoRow(
                   icon: Icons.summarize_outlined,
                   label: 'Всего оплачено',
-                  value: '${_balance!['total_paid']} ₽',
+                  value: '${_balance!.totalPaidRaw} ₽',
                 ),
                 _InfoRow(
                   icon: Icons.history_edu_outlined,
                   label: 'Списано за уроки',
-                  value: '${_balance!['total_cost']} ₽',
+                  value: '${_balance!.totalCostRaw} ₽',
                 ),
                 _InfoRow(
                   icon: Icons.account_balance_wallet_outlined,
                   label: 'Баланс',
-                  value: '${_balance!['balance']} ₽',
+                  value: '${_balance!.balanceRaw} ₽',
                 ),
               ]),
             ],

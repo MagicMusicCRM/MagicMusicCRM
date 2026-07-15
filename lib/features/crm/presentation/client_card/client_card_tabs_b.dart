@@ -226,11 +226,7 @@ extension _ClientCardTabsB on _ClientCardState {
 
   // Parse the balance defensively (it can arrive as a string) and color it:
   // red < 0, green > 0, neutral at exactly 0. (Ported from student_detail.)
-  num? get _studentBalanceNum {
-    if (_balance == null) return null;
-    final raw = _balance!['balance'];
-    return raw is num ? raw : num.tryParse(raw?.toString() ?? '');
-  }
+  num? get _studentBalanceNum => _balance?.balance;
 
   /// «Остаток: 7 астр.ч. / 14 000 ₽» — денежная часть считается по цене пакета
   /// пропорционально оставшимся часам; без пакета показываем только часы.
@@ -626,7 +622,7 @@ extension _ClientCardTabsB on _ClientCardState {
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            'Баланс: ${_balance!['balance']} ₽',
+                            'Баланс: ${_balance!.balanceRaw} ₽',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

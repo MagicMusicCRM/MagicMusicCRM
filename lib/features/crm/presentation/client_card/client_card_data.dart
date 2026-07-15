@@ -158,7 +158,7 @@ extension _ClientCardData on _ClientCardState {
       _emitState(() {
         _student = student;
         _balance = card['balance'] is Map<String, dynamic>
-            ? card['balance'] as Map<String, dynamic>
+            ? StudentBalance.fromMap(card['balance'] as Map<String, dynamic>)
             : null;
         _subscriptions = _list(card['subscriptions']);
         _payments = _list(card['payments']).map(Payment.fromMap).toList();

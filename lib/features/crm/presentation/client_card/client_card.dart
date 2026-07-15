@@ -19,6 +19,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/models/family_member.dart';
+import 'package:magic_music_crm/core/models/student_balance.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 import '../trial_lesson_booking.dart';
 import 'client_card_aggregation.dart';
@@ -169,7 +170,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // Loaded from `getStudentCard` (+ a family fetch). Each section is isolated so
   // a single failed call never blanks the whole card.
   Map<String, dynamic>? _student;
-  Map<String, dynamic>? _balance;
+  StudentBalance? _balance;
   List<Map<String, dynamic>> _subscriptions = [];
   List<Payment> _payments = [];
   List<Map<String, dynamic>> _lessons = [];
