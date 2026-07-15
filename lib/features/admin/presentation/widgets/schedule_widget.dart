@@ -20,6 +20,7 @@ import 'schedule_month_view.dart';
 import 'schedule_day_mode_toggle.dart';
 import 'schedule_timezone_dialog.dart';
 import 'schedule_filters_sheet.dart';
+import 'teacher_lesson_card.dart';
 
 part 'schedule_widget_widgets.dart';
 
@@ -1885,84 +1886,14 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         : Theme.of(context).colorScheme.onSurfaceVariant;
     final conflicts = conflictTypes(lesson['conflict_types']);
 
-    return GestureDetector(
+    return TeacherLessonCard(
+      timeStr: timeStr,
+      studentName: studentName,
+      roomName: roomName,
+      roomColor: roomColor,
+      statusColor: _statusColor(lesson['status']),
+      hasConflict: conflicts.isNotEmpty,
       onTap: () => _showLessonDetails(lesson),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: conflicts.isEmpty
-              ? Theme.of(context).colorScheme.surface
-              : AppColor.danger.withAlpha(24),
-          borderRadius: BorderRadius.circular(12),
-          border: Border(
-            left: BorderSide(
-              color: conflicts.isEmpty ? roomColor : AppColor.danger,
-              width: 4,
-            ),
-          ),
-        ),
-        child: Row(
-          children: [
-            // Time
-            Column(
-              children: [
-                Text(
-                  timeStr,
-                  style: TextStyle(
-                    color: roomColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(width: 12),
-            // Details
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    studentName,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    roomName,
-                    style: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurfaceVariant.withAlpha(180),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Status indicator
-            if (conflicts.isNotEmpty)
-              const Icon(
-                Icons.warning_amber_rounded,
-                color: AppColor.danger,
-                size: 18,
-              )
-            else
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: _statusColor(lesson['status']),
-                  shape: BoxShape.circle,
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 
