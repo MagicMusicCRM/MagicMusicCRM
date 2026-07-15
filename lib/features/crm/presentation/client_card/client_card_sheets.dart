@@ -20,6 +20,42 @@ const List<(String, String)> kFamilyRoleOptions = [
   ('payer', 'Плательщик'),
 ];
 
+/// Single-text-field «Отмена/Сохранить» dialog. Returns the field text on save
+/// (unchanged/untrimmed), or `null` if cancelled.
+Future<String?> showSingleFieldDialog(
+  BuildContext context, {
+  required String title,
+  String? label,
+  String? hint,
+  String? initialValue,
+  TextInputType? keyboardType,
+}) async {
+  final controller = TextEditingController(text: initialValue);
+  final result = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        decoration: InputDecoration(labelText: label, hintText: hint),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, controller.text),
+          child: const Text('Сохранить'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  return result;
+}
+
 /// «Контактное лицо» dialog. [relationOptions] pre-includes the current value
 /// if custom. Returns the collected person map (blank fields stripped), or
 /// `null` if dismissed.

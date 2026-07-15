@@ -3131,29 +3131,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   // ── Student actions (ported from student_detail_screen) ──────────────────
   Future<void> _editStudentPrice() async {
-    final controller = TextEditingController(
-      text: _student?['individual_price']?.toString(),
-    );
-    final newPrice = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Цена занятия'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Сумма (₽)'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+    final newPrice = await showSingleFieldDialog(
+      context,
+      title: 'Цена занятия',
+      label: 'Сумма (₽)',
+      initialValue: _student?['individual_price']?.toString(),
+      keyboardType: TextInputType.number,
     );
 
     if (newPrice != null && double.tryParse(newPrice) != null) {
@@ -3198,31 +3181,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   Future<void> _editStudentContractUrl() async {
-    final controller = TextEditingController(
-      text: _student?['contract_url']?.toString(),
-    );
-    final newUrl = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ссылка на договор'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'https://...',
-            labelText: 'Ссылка на документ',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+    final newUrl = await showSingleFieldDialog(
+      context,
+      title: 'Ссылка на договор',
+      label: 'Ссылка на документ',
+      hint: 'https://...',
+      initialValue: _student?['contract_url']?.toString(),
     );
 
     if (newUrl != null) {
