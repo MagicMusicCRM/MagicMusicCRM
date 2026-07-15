@@ -29,6 +29,7 @@ import { UpdateMessageDto } from "./dto/update-message.dto";
 import { ChannelsService } from "./channels.service";
 import { ChatInboxService } from "./chat-inbox.service";
 import { MessageService } from "./message.service";
+import { ReadReceiptService } from "./read-receipt.service";
 import { MessengerService } from "./messenger.service";
 
 @UseGuards(JwtAuthGuard)
@@ -39,6 +40,7 @@ export class MessengerController {
     private readonly channels: ChannelsService,
     private readonly inbox: ChatInboxService,
     private readonly messages: MessageService,
+    private readonly readReceipts: ReadReceiptService,
   ) {}
 
   @Get("chats")
@@ -122,7 +124,7 @@ export class MessengerController {
     @Param("chatId", ParseUUIDPipe) chatId: string,
     @Body() dto: MarkReadDto,
   ) {
-    return this.messenger.markRead(actor, chatId, dto);
+    return this.readReceipts.markRead(actor, chatId, dto);
   }
 
   @Post("chats/:chatId/assign")
