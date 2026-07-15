@@ -348,13 +348,11 @@ extension _ClientCardTabsA on _ClientCardState {
               _buildInfoCard('Абонементы', [
                 for (final s in _subscriptions.take(5))
                   _InfoRow(
-                    icon: s['status'] == 'active'
+                    icon: s.isActive
                         ? Icons.confirmation_number_outlined
                         : Icons.history_toggle_off_rounded,
-                    label:
-                        (s['package_name']?.toString().trim().isNotEmpty ??
-                            false)
-                        ? s['package_name'].toString()
+                    label: (s.packageName?.trim().isNotEmpty ?? false)
+                        ? s.packageName!
                         : 'Абонемент',
                     value: _subscriptionRemainder(s),
                   ),

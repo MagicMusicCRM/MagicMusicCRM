@@ -23,6 +23,7 @@ import 'package:magic_music_crm/core/models/expected_payment.dart';
 import 'package:magic_music_crm/core/models/family_member.dart';
 import 'package:magic_music_crm/core/models/student_balance.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
+import 'package:magic_music_crm/core/models/subscription.dart';
 import '../trial_lesson_booking.dart';
 import 'client_card_aggregation.dart';
 import 'client_card_dialogs.dart';
@@ -173,7 +174,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // a single failed call never blanks the whole card.
   Map<String, dynamic>? _student;
   StudentBalance? _balance;
-  List<Map<String, dynamic>> _subscriptions = [];
+  List<Subscription> _subscriptions = [];
   List<Payment> _payments = [];
   List<Map<String, dynamic>> _lessons = [];
   List<Map<String, dynamic>> _studentTasks = [];
