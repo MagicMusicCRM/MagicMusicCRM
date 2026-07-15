@@ -342,6 +342,58 @@ class _InfoRow extends StatelessWidget {
 // in this library via `part`, so the leading underscore keeps them file-local
 // to the client-card sources) — the State class calls them unchanged.
 
+/// Shared card container used by the student Инфо/Документы tabs.
+Widget _buildInfoCard(String title, List<Widget> children) {
+  return Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              color: AppTheme.primaryGold,
+            ),
+          ),
+          const Divider(height: 24),
+          ...children,
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _sectionTitle(String title) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: AppSpace.md, top: AppSpace.xs),
+    child: Row(
+      children: [
+        Container(
+          width: 3,
+          height: 14,
+          decoration: BoxDecoration(
+            color: AppColor.gold,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+        ),
+        const SizedBox(width: AppSpace.sm),
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppColor.gold,
+            fontWeight: FontWeight.w700,
+            fontSize: 13.5,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 Widget _emptyHint(ColorScheme cs, String text) {
   return Padding(
     padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
