@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -11,9 +12,7 @@ import 'package:magic_music_crm/features/client/presentation/widgets/upcoming_le
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 
-final clientPaymentsProvider = FutureProvider<List<Map<String, dynamic>>>((
-  ref,
-) async {
+final clientPaymentsProvider = FutureProvider<List<Payment>>((ref) async {
   final studentId = ref.watch(magicCurrentStudentIdProvider).asData?.value;
   if (studentId == null) return const [];
   return ref
@@ -333,14 +332,10 @@ class _ClientPaymentsView extends ConsumerWidget {
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final payment = payments[index];
-                final amount = payment['amount'] is num
-                    ? payment['amount'] as num
-                    : num.tryParse(payment['amount']?.toString() ?? '') ?? 0;
-                final date = DateTime.tryParse(
-                  payment['payment_date']?.toString() ?? '',
-                );
-                final method = payment['method']?.toString().trim();
-                final notes = payment['notes']?.toString().trim();
+                final amount = payment.amount;
+                final date = DateTime.tryParse(payment.paymentDate ?? '');
+                final method = payment.method?.trim();
+                final notes = payment.notes?.trim();
 
                 return Card(
                   margin: EdgeInsets.zero,

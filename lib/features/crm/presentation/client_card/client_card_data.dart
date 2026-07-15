@@ -161,7 +161,7 @@ extension _ClientCardData on _ClientCardState {
             ? card['balance'] as Map<String, dynamic>
             : null;
         _subscriptions = _list(card['subscriptions']);
-        _payments = _list(card['payments']);
+        _payments = _list(card['payments']).map(Payment.fromMap).toList();
         _lessons = _list(card['lessons']);
         _studentTasks = _list(card['tasks']);
         _studentComments = _list(card['comments']);

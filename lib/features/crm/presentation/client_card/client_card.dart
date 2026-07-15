@@ -18,6 +18,7 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/models/payment.dart';
 import '../trial_lesson_booking.dart';
 import 'client_card_aggregation.dart';
 import 'client_card_dialogs.dart';
@@ -169,7 +170,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   Map<String, dynamic>? _student;
   Map<String, dynamic>? _balance;
   List<Map<String, dynamic>> _subscriptions = [];
-  List<Map<String, dynamic>> _payments = [];
+  List<Payment> _payments = [];
   List<Map<String, dynamic>> _lessons = [];
   List<Map<String, dynamic>> _studentTasks = [];
   // Unified comment stream for the Прогресс tab ([PROGRESS]-prefixed notes) and

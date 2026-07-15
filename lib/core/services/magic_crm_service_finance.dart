@@ -23,7 +23,7 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
-  Future<List<Map<String, dynamic>>> listPayments({
+  Future<List<Payment>> listPayments({
     String? studentId,
     String? from,
     String? to,
@@ -38,13 +38,13 @@ extension MagicCrmFinance on MagicCrmService {
       '/crm/payments',
       queryParameters: queryParameters,
     );
-    return _items(response).map(_legacyPayment).toList();
+    return _items(response).map(_legacyPayment).map(Payment.fromMap).toList();
   }
 
   /// Like [listPayments] but also returns the server-side period totals
   /// (`totalAmount`, `totalCount`) over the full filtered set, so the UI can
   /// show a correct «Итого» rather than summing a truncated page.
-  Future<({List<Map<String, dynamic>> items, num totalAmount, int totalCount})>
+  Future<({List<Payment> items, num totalAmount, int totalCount})>
   listPaymentsWithTotal({
     String? from,
     String? to,
@@ -60,7 +60,9 @@ extension MagicCrmFinance on MagicCrmService {
       '/crm/payments',
       queryParameters: queryParameters,
     );
-    final items = _items(response).map(_legacyPayment).toList();
+    final items = _items(
+      response,
+    ).map(_legacyPayment).map(Payment.fromMap).toList();
     final totalAmount = response['totalAmount'];
     final totalCount = response['totalCount'];
     return (
@@ -103,7 +105,7 @@ extension MagicCrmFinance on MagicCrmService {
     return _items(response).map(_legacyStudentBalance).toList();
   }
 
-  Future<Map<String, dynamic>> createPayment({
+  Future<Payment> createPayment({
     required String studentId,
     required num amount,
     required String paymentDate,
@@ -132,7 +134,7 @@ extension MagicCrmFinance on MagicCrmService {
       '/crm/payments',
       data: data,
     );
-    return _legacyPayment(response);
+    return Payment.fromMap(_legacyPayment(response));
   }
 
   // ── Expenses (P5-5) ─────────────────────────────────────────────────────
