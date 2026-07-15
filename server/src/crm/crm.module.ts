@@ -18,6 +18,7 @@ import { AttendanceService } from './attendance.service';
 import { StaffService } from './staff.service';
 import { TeachersService } from './teachers.service';
 import { ScheduleService } from './schedule.service';
+import { TimelineService } from './timeline.service';
 import { RoomsService } from './rooms.service';
 import { BranchesService } from './branches.service';
 import { GroupsService } from './groups.service';
@@ -39,6 +40,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     StaffService,
     TeachersService,
     ScheduleService,
+    TimelineService,
     RoomsService,
     BranchesService,
     GroupsService,

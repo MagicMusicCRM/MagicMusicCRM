@@ -23,6 +23,7 @@ import { AttendanceService } from "./attendance.service";
 import { StaffService } from "./staff.service";
 import { TeachersService } from "./teachers.service";
 import { ScheduleService } from "./schedule.service";
+import { TimelineService } from "./timeline.service";
 import { RoomsService } from "./rooms.service";
 import { BranchesService } from "./branches.service";
 import { GroupsService } from "./groups.service";
@@ -105,6 +106,7 @@ export class CrmController {
     private readonly staff: StaffService,
     private readonly teachers: TeachersService,
     private readonly schedule: ScheduleService,
+    private readonly timeline: TimelineService,
     private readonly rooms: RoomsService,
     private readonly branches: BranchesService,
     private readonly groups: GroupsService,
@@ -701,7 +703,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: TimelineQuery,
   ) {
-    return this.crm.listTimeline(actor, query);
+    return this.timeline.listTimeline(actor, query);
   }
 
   @Get("comments")
@@ -709,7 +711,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Query() query: CommentQuery,
   ) {
-    return this.crm.listComments(actor, query);
+    return this.timeline.listComments(actor, query);
   }
 
   @Post("comments")
@@ -717,7 +719,7 @@ export class CrmController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreateCommentDto,
   ) {
-    return this.crm.createComment(actor, dto);
+    return this.timeline.createComment(actor, dto);
   }
 
   @Patch("comments/:id/visibility")
@@ -726,7 +728,7 @@ export class CrmController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: SetCommentVisibilityDto,
   ) {
-    return this.crm.setCommentVisibility(actor, id, dto.visibleToTeacher);
+    return this.timeline.setCommentVisibility(actor, id, dto.visibleToTeacher);
   }
 
   @Post("tasks")
