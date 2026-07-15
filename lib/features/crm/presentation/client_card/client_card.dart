@@ -3632,126 +3632,17 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   Widget _buildAggregateCard(ColorScheme cs, {bool includeTasks = true}) {
-    if (_loadingCard) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-        child: LinearProgressIndicator(color: AppColor.gold),
-      );
-    }
-    final card = _leadCard;
-    if (card == null) {
-      return Text(
-        'Карточка активности временно недоступна',
-        style: TextStyle(color: cs.onSurfaceVariant),
-      );
-    }
-
-    final linkedStudents = _list(card['linked_students']);
-    final tasks = _list(card['tasks']);
-    final trials = _list(card['trials']);
-    final otherLeads = _list(card['other_leads']);
-    final timeline = _list(card['timeline']);
-    final duplicateCandidates = _duplicateCandidates
-        .where(_isCurrentLeadDuplicateCandidate)
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: AppSpace.sm,
-          runSpacing: AppSpace.sm,
-          children: [
-            _summaryChip(
-              Icons.school_outlined,
-              'Ученики',
-              linkedStudents.length,
-            ),
-            _summaryChip(Icons.task_alt_rounded, 'Задачи', tasks.length),
-            _summaryChip(
-              Icons.event_available_rounded,
-              'Пробные',
-              trials.length,
-            ),
-            _summaryChip(Icons.link_rounded, 'Похожие лиды', otherLeads.length),
-            if (_loadingDuplicates || duplicateCandidates.isNotEmpty)
-              _summaryChip(
-                Icons.merge_type_rounded,
-                'Кандидаты',
-                duplicateCandidates.length,
-              ),
-          ],
-        ),
-        const SizedBox(height: AppSpace.md),
-        _miniSection(
-          cs,
-          title: 'Связанные ученики',
-          empty: 'Связанных учеников нет',
-          rows: linkedStudents,
-          titleBuilder: (row) =>
-              '${row['first_name'] ?? ''} ${row['last_name'] ?? ''}'.trim(),
-          subtitleBuilder: (row) => row['phone']?.toString(),
-        ),
-        if (includeTasks)
-          _miniSection(
-            cs,
-            title: 'Задачи',
-            empty: 'Открытых задач нет',
-            rows: tasks,
-            titleBuilder: (row) => row['title']?.toString() ?? 'Задача',
-            subtitleBuilder: (row) => _formatStatus(row['status']),
-          ),
-        _miniSection(
-          cs,
-          title: 'Пробные занятия',
-          empty: 'Пробные занятия не назначены',
-          rows: trials,
-          titleBuilder: (row) => _formatDate(row['scheduled_at']),
-          subtitleBuilder: (row) => [
-            row['teacher_name'],
-            row['room_name'],
-          ].where((value) => value != null && '$value'.isNotEmpty).join(' · '),
-          action: _mode.hasLeadHalf
-              ? TextButton.icon(
-                  onPressed: _scheduleTrialFromCard,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColor.gold,
-                    visualDensity: VisualDensity.compact,
-                    textStyle: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                  icon: const Icon(Icons.add_rounded, size: 15),
-                  label: const Text('На пробный'),
-                )
-              : null,
-        ),
-        // KVA-234: заявки лида (HolliHop GetStudyRequests) — порядок секций по
-        // HolliHop: Связанные ученики → Пробные занятия → Заявки → Лента.
-        _miniSection(
-          cs,
-          title: 'Заявки',
-          empty: 'Заявок нет',
-          rows: _leadApplications,
-          titleBuilder: (row) => _formatDate(row['applied_at']),
-          subtitleBuilder: (row) {
-            final utm = row['utm'];
-            final utmSource = utm is Map ? utm['Source']?.toString() : null;
-            return [row['channel'], row['discipline'], utmSource]
-                .where((value) => value != null && '$value'.isNotEmpty)
-                .join(' · ');
-          },
-        ),
-        _miniSection(
-          cs,
-          title: 'Лента',
-          empty: 'История пока пустая',
-          rows: timeline.take(8).toList(),
-          titleBuilder: (row) => row['title']?.toString() ?? 'Событие',
-          subtitleBuilder: (row) => _formatDate(row['occurred_at']),
-        ),
-      ],
+    return _aggregateCard(
+      cs,
+      loadingCard: _loadingCard,
+      card: _leadCard,
+      leadApplications: _leadApplications,
+      duplicateCount: _duplicateCandidates
+          .where(_isCurrentLeadDuplicateCandidate)
+          .length,
+      loadingDuplicates: _loadingDuplicates,
+      includeTasks: includeTasks,
+      onScheduleTrial: _mode.hasLeadHalf ? _scheduleTrialFromCard : null,
     );
   }
 
@@ -3973,11 +3864,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     }
   }
 
-  List<Map<String, dynamic>> _list(Object? value) {
-    if (value is! List) return const <Map<String, dynamic>>[];
-    return value.whereType<Map<String, dynamic>>().toList();
-  }
-
   Widget _duplicateCandidatesSection(
     ColorScheme cs,
     List<Map<String, dynamic>> candidates,
@@ -4103,11 +3989,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
       if (matchValue.isNotEmpty) matchValue,
       if (confidenceText.isNotEmpty) confidenceText,
     ].join(' · ');
-  }
-
-  num _asNum(Object? value) {
-    if (value is num) return value;
-    return num.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   Future<void> _addComment() async {
