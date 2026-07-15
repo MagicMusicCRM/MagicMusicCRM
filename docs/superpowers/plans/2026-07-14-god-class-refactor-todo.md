@@ -126,6 +126,16 @@ board-internals в `leads_actions` (`_matchesLiveQuery` фильтр по raw co
 Следующий шаг lead-домена: типизировать `leadBoardProvider` items целиком (тогда
 `_matchesLiveQuery`, drag, onTap перейдут на `Lead`) — больше ripple.
 
+### ✅ FamilyMember — DONE `08648461`
+`FamilyMember` (`lib/core/models/family_member.dart`, 6 полей: id/entity_type/
+entity_id/role/is_primary_contact/name) — самый безопасный домен (только строки/
+id/bool, ноль числового форматирования). Типизированы члены семьи в точке
+извлечения виджета (`getFamilyForEntity` возвращает `{family, members}`-обёртку →
+сервис-return остаётся map, как у nested-payments): `_familySection` мапит members
+→ `List<FamilyMember>`, `onRemove`/`_removeFamilyMember` берут `FamilyMember`, все
+`member['key']` → геттеры. **БЕЗ изменения сервиса/теста** (getFamilyForEntity map
++ его тест не тронуты). analyze зелёный.
+
 **Паттерн F0 (эталон для следующих доменов — lead/student/lesson/family/…):**
 1. Источник формы — `_legacy<Domain>` маппер в `magic_crm_service_mappers.dart`
    (snake_case ключи, которые видят виджеты), НЕ сырой backend-DTO.
