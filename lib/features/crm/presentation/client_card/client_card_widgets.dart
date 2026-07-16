@@ -282,10 +282,16 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+
+  /// Мелкая приписка под значением — провенанс («из HolliHop») там, где важно
+  /// отличать настоящие данные от подставленных приложением.
+  final String? hint;
+
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
+    this.hint,
   });
 
   @override
@@ -319,6 +325,14 @@ class _InfoRow extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                if (hint != null)
+                  Text(
+                    hint!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
               ],
             ),
           ),

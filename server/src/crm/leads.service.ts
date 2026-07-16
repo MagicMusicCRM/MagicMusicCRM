@@ -5,6 +5,7 @@ import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { TimelineService } from "./timeline.service";
+import { resolveAppealDate } from "./appeal-date";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
 import { sanitizeJsonObject } from "./crm-util";
@@ -1035,6 +1036,10 @@ export class LeadsService {
   }
 
   private toLeadDto(row: LeadRow) {
+    // ✔ Решение владельца 16.07: лид, пришедший через приложение, получает
+    // датой обращения момент, когда он тут появился; у импортированного
+    // побеждает исходная дата HolliHop (custom_data.addressDate).
+    const appeal = resolveAppealDate(row.custom_data, row.created_at);
     return {
       id: row.id,
       statusId: row.status_id,
@@ -1050,6 +1055,8 @@ export class LeadsService {
       createdBy: row.created_by,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      appealAt: appeal.value,
+      appealAtSource: appeal.source,
     };
   }
 

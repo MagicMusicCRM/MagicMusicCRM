@@ -66,6 +66,11 @@ Map<String, dynamic> _legacyStudent(Map<String, dynamic> item) {
     'email': item['email'] ?? customData['email'],
     'phone': item['phone'] ?? customData['phone'],
     'created_at': item['createdAt'],
+    // Дата обращения, разрешённая сервером: явное значение → исходная дата
+    // HolliHop → момент появления записи здесь. Считать её на клиенте нельзя —
+    // правило одно для лида и ученика и живёт в appeal-date.ts.
+    'appeal_at': item['appealAt'],
+    'appeal_at_source': item['appealAtSource'],
     'profiles': {
       'id': item['profileId'],
       'user_id': item['profileUserId'],
@@ -404,6 +409,9 @@ Map<String, dynamic> _legacyLead(Map<String, dynamic> item) {
     'created_by': item['createdBy'],
     'created_at': item['createdAt'],
     'updated_at': item['updatedAt'],
+    // См. комментарий в _legacyStudent: дату обращения разрешает сервер.
+    'appeal_at': item['appealAt'],
+    'appeal_at_source': item['appealAtSource'],
   };
 }
 

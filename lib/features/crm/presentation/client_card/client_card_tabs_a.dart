@@ -380,6 +380,23 @@ extension _ClientCardTabsA on _ClientCardState {
             _studentGroupsInfoCard(groups: _groups),
           ],
 
+          // Дата обращения ученика (✔ решение владельца 16.07: поле живёт на
+          // стороне students). У импортированных 3105 учеников она уже лежала
+          // в custom_data.addressDate — просто её никто не показывал.
+          if (_mode.hasStudentHalf && !_mode.hasLeadHalf && _student != null) ...[
+            if (_appealAtLabel(_student!) != null) ...[
+              const SizedBox(height: AppSpace.lg),
+              _buildInfoCard('Обращение', [
+                _InfoRow(
+                  icon: Icons.event_outlined,
+                  label: 'Дата обращения',
+                  value: _appealAtLabel(_student!)!,
+                  hint: _appealAtSourceLabel(_student!),
+                ),
+              ]),
+            ],
+          ],
+
           if (_mode.hasLeadHalf) ...[
             if (_leadCreatedAtLabel() != null) ...[
               const SizedBox(height: AppSpace.lg),
@@ -388,6 +405,7 @@ extension _ClientCardTabsA on _ClientCardState {
                   icon: Icons.event_outlined,
                   label: 'Дата обращения',
                   value: _leadCreatedAtLabel()!,
+                  hint: _appealAtSourceLabel(_leadData),
                 ),
               ]),
             ],

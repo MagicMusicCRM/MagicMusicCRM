@@ -379,6 +379,17 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     required: false,
   },
   {
+    // ✔ Решение владельца 16.07: дата обращения нужна и у ученика — иначе при
+    // конвертации лида её некуда положить и она теряется.
+    // Пустое значение не означает «неизвестно»: CrmPolicy/appeal-date.ts
+    // разрешает её как HolliHop `addressDate` → дата появления записи здесь.
+    entity: "students",
+    key: "appealAt",
+    label: "Дата обращения",
+    type: "date",
+    required: false,
+  },
+  {
     entity: "leads",
     key: "visitAt",
     label: "Дата визита",

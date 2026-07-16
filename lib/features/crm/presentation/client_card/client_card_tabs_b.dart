@@ -538,13 +538,28 @@ extension _ClientCardTabsB on _ClientCardState {
     return '$years $word';
   }
 
-  String? _leadCreatedAtLabel() {
-    final dt = DateTime.tryParse(
-      _leadData['created_at']?.toString() ?? '',
-    )?.toLocal();
+  /// Дата обращения. Берём разрешённое сервером `appeal_at` (исходная дата из
+  /// HolliHop → иначе момент, когда запись появилась в приложении), а на
+  /// `created_at` откатываемся только ради старых ответов без этого поля.
+  String? _appealAtLabel(Map<String, dynamic> data) {
+    final raw = data['appeal_at'] ?? data['created_at'];
+    final dt = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
     if (dt == null) return null;
     return DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt);
   }
+
+  /// Пояснение к дате: важно отличать настоящую дату из HolliHop от той, что
+  /// приложение поставило само, — иначе «01.03.2023» и «сегодня» выглядят
+  /// одинаково достоверно.
+  String? _appealAtSourceLabel(Map<String, dynamic> data) {
+    return switch (data['appeal_at_source']?.toString()) {
+      'hollihop' => 'из HolliHop',
+      'app' => 'дата появления в приложении',
+      _ => null,
+    };
+  }
+
+  String? _leadCreatedAtLabel() => _appealAtLabel(_leadData);
 
   Color _studentBalanceColor(ColorScheme cs) {
     final b = _studentBalanceNum;

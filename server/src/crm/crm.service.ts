@@ -16,6 +16,7 @@ import {
 } from "./crm-util";
 import { buildTextSearch } from "./search-text";
 import { audienceForStudent } from "./audience";
+import { APPEAL_KEY, resolveAppealDate } from "./appeal-date";
 import {
   diffEntityFields,
   isDeliverableEmail,
@@ -273,11 +274,16 @@ export class CrmService {
     const branchId = extractBranchId(dto.customDataPatch);
 
     if (leadId) {
-      const lead = await this.database.query<{ id: string }>(
-        "select id from app.leads where id = $1 and deleted_at is null limit 1",
+      const lead = await this.database.query<{
+        id: string;
+        custom_data: Record<string, unknown> | null;
+        created_at: Date | string;
+      }>(
+        "select id, custom_data, created_at from app.leads where id = $1 and deleted_at is null limit 1",
         [leadId],
       );
-      if (!lead.rows[0]) throw new NotFoundException("Лид не найден.");
+      const leadRow = lead.rows[0];
+      if (!leadRow) throw new NotFoundException("Лид не найден.");
 
       const existingStudent = await this.database.query<{ id: string }>(
         "select id from app.students where lead_id = $1 and deleted_at is null limit 1",
@@ -285,6 +291,16 @@ export class CrmService {
       );
       if (existingStudent.rows[0]) {
         throw new ConflictException("Этот лид уже конвертирован в ученика.");
+      }
+
+      // ✔ Решение владельца 16.07: «дату обращения оставляем на стороне
+      // students». Конвертация — единственный момент, когда её ещё можно
+      // узнать, поэтому здесь она и фиксируется: у импортированного лида это
+      // исходная дата HolliHop, у пришедшего через приложение — момент, когда
+      // он стал тут лидом. Явное значение от клиента не трогаем.
+      if (!customDataPatch[APPEAL_KEY]) {
+        const appeal = resolveAppealDate(leadRow.custom_data, leadRow.created_at);
+        if (appeal.value) customDataPatch[APPEAL_KEY] = appeal.value;
       }
     }
 
@@ -1141,6 +1157,10 @@ export class CrmService {
   }
 
   private toStudentDto(row: StudentRow) {
+    // «Дата обращения»: явное значение → исходная дата HolliHop → момент
+    // появления записи здесь. Резолвится на чтении, а не хранится, потому что
+    // 3105 импортированных учеников уже несут её как custom_data.addressDate.
+    const appeal = resolveAppealDate(row.custom_data, row.created_at);
     return {
       id: row.id,
       leadId: row.lead_id,
@@ -1154,6 +1174,8 @@ export class CrmService {
       phone: row.phone,
       teacherUserIds: row.teacher_user_ids ?? [],
       createdAt: row.created_at,
+      appealAt: appeal.value,
+      appealAtSource: appeal.source,
     };
   }
 
