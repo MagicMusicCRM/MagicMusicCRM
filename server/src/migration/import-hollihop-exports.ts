@@ -38,6 +38,8 @@ import {
 } from "./hollihop-export-mappers";
 
 type ImportMode = "dry_run" | "apply";
+/** Импортёру нужен только query — это и позволяет прогнать его на фейке. */
+type QueryClient = Pick<PoolClient, "query">;
 type JsonRow = Record<string, unknown>;
 
 interface SectionReport {
@@ -86,7 +88,7 @@ function readArrayFile(dir: string, name: string, rootKey: string): JsonRow[] {
 
 async function upsert(
   mode: ImportMode,
-  client: PoolClient,
+  client: QueryClient,
   table: string,
   data: JsonRow,
 ): Promise<boolean> {
@@ -126,7 +128,7 @@ class Matcher {
   private readonly leadByPhone = new Map<string, string | null>();
   private readonly userByName = new Map<string, string | null>();
 
-  constructor(private readonly client: PoolClient) {}
+  constructor(private readonly client: QueryClient) {}
 
   private async cached(
     cache: Map<string, string | null>,
@@ -262,28 +264,30 @@ function taskKeyFor(externalId: string, canonical: string | null, task: { dueRaw
   return `export:task:${subject}:${task.dueRaw}:${task.description}`;
 }
 
-async function main(): Promise<void> {
-  if (!EXPORTS_DIR) throw new Error("HOLLIHOP_EXPORTS_DIR is required.");
-  if (!existsSync(EXPORTS_DIR)) {
-    throw new Error(`HOLLIHOP_EXPORTS_DIR does not exist: ${EXPORTS_DIR}`);
-  }
-  if (!CONNECTION_STRING) {
-    throw new Error("MIGRATION_DATABASE_URL or DATABASE_URL is required.");
-  }
+export interface ImportRun {
+  reports: Record<string, SectionReport>;
+  unmatchedResponsibles: string[];
+}
 
-  const taskRows = readArrayFile(EXPORTS_DIR, "tasks.json", "Tasks");
-  const historyRows = readArrayFile(EXPORTS_DIR, "task-history.json", "History");
-  const studentRows = readArrayFile(EXPORTS_DIR, "students.json", "Students");
-  const leadRows = readArrayFile(EXPORTS_DIR, "leads.json", "Leads");
+/**
+ * The import itself, over an already-connected client.
+ *
+ * Split out of main() so it can be driven end-to-end in tests against a fake
+ * client: the matching order, the report counts and the idempotent ids are the
+ * parts worth proving, and none of them need a real database to check.
+ */
+export async function runImport(options: {
+  client: QueryClient;
+  exportsDir: string;
+  mode: ImportMode;
+}): Promise<ImportRun> {
+  const { client, exportsDir, mode } = options;
 
-  // dry_run still connects: the match counts are the point of the dry run, and
-  // they can only be computed against the real database (read-only selects).
-  const pool = new Pool({
-    connectionString: CONNECTION_STRING,
-    max: 2,
-    connectionTimeoutMillis: 10_000,
-  });
-  const client = await pool.connect();
+  const taskRows = readArrayFile(exportsDir, "tasks.json", "Tasks");
+  const historyRows = readArrayFile(exportsDir, "task-history.json", "History");
+  const studentRows = readArrayFile(exportsDir, "students.json", "Students");
+  const leadRows = readArrayFile(exportsDir, "leads.json", "Leads");
+
   const reports: Record<string, SectionReport> = {
     tasks: emptySection(),
     taskHistory: emptySection(),
@@ -292,9 +296,10 @@ async function main(): Promise<void> {
   };
   const unmatchedResponsibles = new Set<string>();
 
-  try {
-    if (MODE === "apply") await client.query("begin");
+  {
+    const MODE = mode;
     const matcher = new Matcher(client);
+    // Транзакцией и соединением владеет main(): здесь только импорт.
 
     // ---- Tasks -------------------------------------------------------------
     // taskId per export row, so the history pass below can attach to it.
@@ -453,8 +458,63 @@ async function main(): Promise<void> {
       if (written) report.written++;
       else if (MODE === "apply") report.skippedDuplicate++;
     }
+  }
 
+  return {
+    reports,
+    unmatchedResponsibles: [...unmatchedResponsibles].sort(),
+  };
+}
+
+/** Отчёт о полноте (шаг 2 из §6): без него «добились всех данных» непроверяемо. */
+export function formatReport(run: ImportRun, mode: ImportMode): string {
+  const lines = [`\nHolliHop export import — mode=${mode}`];
+  for (const [section, r] of Object.entries(run.reports)) {
+    const matched = r.matchedById + r.matchedByPhone;
+    const unmatched = r.unmatchedNoPhone + r.unmatchedNoRecord;
+    lines.push(
+      `\n${section}: ${r.total} row(s) in source\n` +
+        `  matched:   ${matched} (by id ${r.matchedById}, by phone ${r.matchedByPhone})\n` +
+        `  unmatched: ${unmatched} (no usable phone ${r.unmatchedNoPhone}, no such record ${r.unmatchedNoRecord})\n` +
+        `  written:   ${r.written}${mode === "apply" ? `, already present ${r.skippedDuplicate}` : " (dry run — nothing written)"}`,
+    );
+  }
+  if (run.unmatchedResponsibles.length > 0) {
+    lines.push(
+      `\n⚠️  ${run.unmatchedResponsibles.length} responsible name(s) had no matching user — those tasks land with no assignee:`,
+    );
+    for (const name of run.unmatchedResponsibles) lines.push(`     ${name}`);
+  }
+  if (mode !== "apply") {
+    lines.push(
+      "\nDry run. Re-run with HOLLIHOP_EXPORT_IMPORT_MODE=apply to write.",
+    );
+  }
+  return lines.join("\n");
+}
+
+async function main(): Promise<void> {
+  if (!EXPORTS_DIR) throw new Error("HOLLIHOP_EXPORTS_DIR is required.");
+  if (!existsSync(EXPORTS_DIR)) {
+    throw new Error(`HOLLIHOP_EXPORTS_DIR does not exist: ${EXPORTS_DIR}`);
+  }
+  if (!CONNECTION_STRING) {
+    throw new Error("MIGRATION_DATABASE_URL or DATABASE_URL is required.");
+  }
+
+  // dry_run тоже подключается: смысл сухого прогона — реальные счётчики
+  // совпадений, а их можно посчитать только по живой базе (только чтение).
+  const pool = new Pool({
+    connectionString: CONNECTION_STRING,
+    max: 2,
+    connectionTimeoutMillis: 10_000,
+  });
+  const client = await pool.connect();
+  try {
+    if (MODE === "apply") await client.query("begin");
+    const run = await runImport({ client, exportsDir: EXPORTS_DIR, mode: MODE });
     if (MODE === "apply") await client.query("commit");
+    console.log(formatReport(run, MODE));
   } catch (error) {
     if (MODE === "apply") await client.query("rollback");
     throw error;
@@ -462,36 +522,12 @@ async function main(): Promise<void> {
     client.release();
     await pool.end();
   }
-
-  // ---- Completeness report -------------------------------------------------
-  // Spec §6 step 2: without this, «добились всех данных» is unverifiable.
-  console.log(`\nHolliHop export import — mode=${MODE}`);
-  for (const [section, r] of Object.entries(reports)) {
-    const matched = r.matchedById + r.matchedByPhone;
-    const unmatched = r.unmatchedNoPhone + r.unmatchedNoRecord;
-    console.log(
-      `\n${section}: ${r.total} row(s) in source\n` +
-        `  matched:   ${matched} (by id ${r.matchedById}, by phone ${r.matchedByPhone})\n` +
-        `  unmatched: ${unmatched} (no usable phone ${r.unmatchedNoPhone}, no such record ${r.unmatchedNoRecord})\n` +
-        `  written:   ${r.written}${MODE === "apply" ? `, already present ${r.skippedDuplicate}` : " (dry run — nothing written)"}`,
-    );
-  }
-  if (unmatchedResponsibles.size > 0) {
-    console.log(
-      `\n⚠️  ${unmatchedResponsibles.size} responsible name(s) had no matching user — those tasks land with no assignee:`,
-    );
-    for (const name of [...unmatchedResponsibles].sort()) {
-      console.log(`     ${name}`);
-    }
-  }
-  if (MODE !== "apply") {
-    console.log(
-      "\nDry run. Re-run with HOLLIHOP_EXPORT_IMPORT_MODE=apply to write.",
-    );
-  }
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+// Запуск только как скрипт: под require из тестов main() не стартует.
+if (require.main === module) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+}
