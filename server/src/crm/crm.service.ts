@@ -14,6 +14,7 @@ import {
   sanitizeJsonObject,
   trimOptional,
 } from "./crm-util";
+import { buildTextSearch } from "./search-text";
 import { audienceForStudent } from "./audience";
 import {
   isDeliverableEmail,
@@ -229,7 +230,9 @@ export class CrmService {
          and link_user.deleted_at is null
         where ${filter.where}
         group by s.id, p.id, u.id, b.id, link_user.id
-        order by s.created_at desc, s.id desc
+        -- Relevance first when searching, so the caller's "top 5" really is
+        -- the best five and not just the five most recent rows that matched.
+        order by ${filter.searchRank ? `${filter.searchRank} asc,` : ""} s.created_at desc, s.id desc
         limit $${filter.params.length + 1}
       `,
       [...filter.params, limit],
@@ -845,11 +848,18 @@ export class CrmService {
     `);
 
     const q = query.q?.trim();
+    let searchRank: string | null = null;
     if (q) {
-      const p = add(q);
-      filters.push(
-        `lower(concat_ws(' ', p.first_name, p.last_name, u.email, p.phone, s.custom_data::text)) like lower('%' || ${p}::text || '%')`,
-      );
+      const search = buildTextSearch({
+        q,
+        columns: ["p.first_name", "p.last_name", "u.email", "p.phone"],
+        phoneColumn: "p.phone",
+        customDataColumn: "s.custom_data",
+        exactColumn: "concat_ws(' ', p.first_name, p.last_name)",
+        add,
+      });
+      filters.push(search.where);
+      searchRank = search.rank;
     }
     if (query.status?.trim()) {
       filters.push(`s.status = ${add(query.status.trim())}::text`);
@@ -920,7 +930,7 @@ export class CrmService {
         )
       `);
     }
-    return { where: filters.join("\n          and "), params };
+    return { where: filters.join("\n          and "), params, searchRank };
   }
 
   // ponytail: generic case-insensitive text-filter helper (misnamed "Lead" for

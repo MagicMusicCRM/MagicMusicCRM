@@ -7,6 +7,7 @@ import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
 import { sanitizeJsonObject } from "./crm-util";
+import { buildTextSearch } from "./search-text";
 import { CrmPolicy } from "./crm.policy";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { LeadBoardQuery } from "./dto/lead-board.query";
@@ -424,6 +425,30 @@ export class LeadsService {
     this.policy.assertCanWriteCrm(actor);
     const limit = Math.min(query.limit ?? 50, 100);
     const q = query.q?.trim();
+    // This is what the «Объект» picker calls, so it needs the same search the
+    // board has: by phone in any format, and across custom_data values.
+    const params: unknown[] = [];
+    const add = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+    const search = q
+      ? buildTextSearch({
+          q,
+          columns: [
+            "l.first_name",
+            "l.last_name",
+            "l.email",
+            "l.phone",
+            "l.source",
+          ],
+          phoneColumn: "l.phone",
+          customDataColumn: "l.custom_data",
+          exactColumn: "concat_ws(' ', l.first_name, l.last_name)",
+          add,
+        })
+      : null;
+    const limitParam = add(limit);
     const result = await this.database.query<LeadRow>(
       `
         select l.id, l.status_id, ls.name as status_name, l.first_name,
@@ -432,14 +457,11 @@ export class LeadsService {
         from app.leads l
         left join app.lead_statuses ls on ls.id = l.status_id
         where l.deleted_at is null
-          and (
-            $1::text is null
-            or lower(coalesce(l.first_name, '') || ' ' || coalesce(l.last_name, '') || ' ' || coalesce(l.email, '') || ' ' || coalesce(l.phone, '')) like lower('%' || $1 || '%')
-          )
-        order by l.created_at desc, l.id desc
-        limit $2
+          ${search ? `and ${search.where}` : ""}
+        order by ${search ? `${search.rank} asc,` : ""} l.created_at desc, l.id desc
+        limit ${limitParam}
       `,
-      [q || null, limit],
+      params,
     );
     return { items: result.rows.map((row) => this.toLeadDto(row)) };
   }
@@ -656,9 +678,23 @@ export class LeadsService {
     };
     const q = query.q?.trim();
     if (q) {
-      const p = add(q);
+      // Predicate only: the board is cursor-paginated on (created_at, id), so
+      // reordering it by relevance would break the cursor.
       filters.push(
-        `lower(concat_ws(' ', l.first_name, l.last_name, l.email, l.phone, l.source, l.notes, l.custom_data::text)) like lower('%' || ${p}::text || '%')`,
+        buildTextSearch({
+          q,
+          columns: [
+            "l.first_name",
+            "l.last_name",
+            "l.email",
+            "l.phone",
+            "l.source",
+            "l.notes",
+          ],
+          phoneColumn: "l.phone",
+          customDataColumn: "l.custom_data",
+          add,
+        }).where,
       );
     }
     if (query.statusId) {
