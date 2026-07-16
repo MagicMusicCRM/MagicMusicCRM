@@ -44,6 +44,53 @@ export class TimelineService {
     private readonly realtime: RealtimeBus,
   ) {}
 
+  /**
+   * Field edits for one entity («кто поменял телефон и на какой»), already
+   * rendered into readable lines by toTimelineDto. Feeds the client card's
+   * history, which is assembled by hand from comments/tasks/… and so never saw
+   * audit_events at all.
+   *
+   * Manager+ only, and it returns an empty list rather than throwing: the card
+   * aggregate calls this for every reader, including the client portal, where
+   * "who edited your record" is simply not their business.
+   */
+  async listFieldAudit(
+    actor: ActorContext,
+    entityType: string,
+    entityId: string,
+    limit = 50,
+  ) {
+    if (!isManagerOrAdminRole(actor.role)) return { items: [] };
+    const result = await this.database.query<TimelineRow>(
+      `
+        select audit.id::text as id, 'audit'::text as type,
+          audit.action as title, audit.metadata::text as body,
+          audit.entity_type as status, null::numeric as amount,
+          audit.actor_user_id,
+          ap.first_name as actor_first_name,
+          ap.last_name as actor_last_name,
+          audit.created_at as occurred_at
+        from app.audit_events audit
+        left join app.users au on au.id = audit.actor_user_id and au.deleted_at is null
+        left join app.profiles ap on ap.user_id = au.id and ap.deleted_at is null
+        where audit.entity_type = $1
+          and audit.entity_id = $2::text
+          -- Only events that carry a diff. A CASE rather than a bare
+          -- jsonb_array_length: metadata->'changes' is absent on older rows and
+          -- on non-edit actions, and the function throws on a non-array.
+          and case
+            when jsonb_typeof(audit.metadata -> 'changes') = 'array'
+              then jsonb_array_length(audit.metadata -> 'changes') > 0
+            else false
+          end
+        order by audit.created_at desc, audit.id desc
+        limit $3
+      `,
+      [entityType, entityId, Math.min(limit, 200)],
+    );
+    return { items: result.rows.map((row) => toTimelineDto(row)) };
+  }
+
   async listTimeline(actor: ActorContext, query: TimelineQuery) {
     if (!query.entityType || !query.entityId) {
       throw new BadRequestException("Тип и объект timeline обязательны.");

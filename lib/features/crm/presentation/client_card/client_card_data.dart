@@ -107,17 +107,47 @@ extension _ClientCardData on _ClientCardState {
           };
         }).toList(),
       );
+      // Field edits («кто поменял телефон»). Only the audit rows of the lead
+      // timeline: the rest of it (comments, tasks, trials) already has its own
+      // sections on the card and would show up twice here.
+      out.add(
+        _list(_leadCard?['timeline'])
+            .where((t) => t['type']?.toString() == 'audit')
+            .map((t) {
+              return {
+                'id': t['id'],
+                '_origin': 'lead',
+                '_kind': 'event',
+                '_date': t['occurred_at'],
+                '_title': t['title']?.toString() ?? 'Событие',
+                '_subtitle': [
+                  if ((t['actor_name']?.toString().trim() ?? '').isNotEmpty)
+                    t['actor_name'].toString().trim(),
+                  if ((t['body']?.toString().trim() ?? '').isNotEmpty)
+                    t['body'].toString().trim(),
+                ].join('\n'),
+              };
+            })
+            .toList(),
+      );
     }
     if (_mode.hasStudentHalf) {
       out.add(
         _list(_studentCardTimeline).map((t) {
+          final body = t['body']?.toString().trim() ?? '';
+          final actor = t['actor_name']?.toString().trim() ?? '';
+          // For a field edit the author IS the point («кто поменял телефон»);
+          // for a comment or lesson the card already shows it elsewhere.
+          final isAudit = t['type']?.toString() == 'audit';
           return {
             'id': t['id'],
             '_origin': 'student',
             '_kind': 'event',
             '_date': t['occurred_at'],
             '_title': t['title']?.toString() ?? 'Событие',
-            '_subtitle': t['body']?.toString() ?? '',
+            '_subtitle': isAudit && actor.isNotEmpty
+                ? [actor, if (body.isNotEmpty) body].join('\n')
+                : body,
           };
         }).toList(),
       );

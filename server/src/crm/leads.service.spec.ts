@@ -5,6 +5,7 @@ import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { LeadsService } from "./leads.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
+import { TimelineService } from "./timeline.service";
 
 describe("LeadsService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
@@ -20,6 +21,9 @@ describe("LeadsService", () => {
     };
     const realtime = { emitCrmChanged: () => undefined };
     const chatWork = { listForEntity: jest.fn().mockResolvedValue([]) };
+    const timeline = {
+      listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
+    };
     const service = new LeadsService(
       db as unknown as DatabaseService,
       audit as unknown as AuditService,
@@ -27,8 +31,9 @@ describe("LeadsService", () => {
       notifications as unknown as NotificationsService,
       chatWork as unknown as ChatWorkTimelineService,
       realtime as unknown as RealtimeBus,
+      timeline as unknown as TimelineService,
     );
-    return { service, audit, policy, notifications };
+    return { service, audit, policy, notifications, timeline };
   };
 
   const createService = (rows: Record<string, unknown>[] = []) => {
@@ -410,6 +415,56 @@ describe("LeadsService", () => {
       statusId: "11111111-1111-1111-1111-111111111111",
     } as never);
     expect((query.mock.calls[1][1] as unknown[])[10]).toBe(false);
+  });
+
+  it("audits which fields an edit changed, old → new", async () => {
+    const { service, audit } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "lead-1",
+            status_id: "s0",
+            assigned_to: "o0",
+            branch_id: "b0",
+            first_name: "Анна",
+            phone: "+79161234567",
+            source: "site",
+            custom_data: { level: "A1" },
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            id: "lead-1",
+            status_id: "s0",
+            assigned_to: "o0",
+            first_name: "Анна",
+            phone: "+79990000000",
+            source: "site",
+            custom_data: { level: "A2" },
+          },
+        ],
+      },
+    ]);
+
+    await service.updateLead(actor, "lead-1", {
+      phone: "+79990000000",
+    } as never);
+
+    // Before this the event said only «лид обновлён», which answers none of
+    // «кто поменял телефон и на какой».
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.lead_updated",
+        metadata: {
+          changes: [
+            { field: "phone", from: "+79161234567", to: "+79990000000" },
+            { field: "custom_data.level", from: "A1", to: "A2" },
+          ],
+        },
+      }),
+    );
   });
 
   it("records a lead_status_history row when status changes", async () => {

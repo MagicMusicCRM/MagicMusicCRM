@@ -381,4 +381,76 @@ describe("TimelineService", () => {
       }),
     );
   });
+
+  describe("listFieldAudit", () => {
+    it("returns readable field changes for staff", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        {
+          rows: [
+            {
+              id: "audit-1",
+              type: "audit",
+              title: "crm.lead_updated",
+              body: JSON.stringify({
+                changes: [
+                  { field: "phone", from: "+79161234567", to: "+79990000000" },
+                ],
+              }),
+              status: "lead",
+              amount: null,
+              actor_user_id: "manager-a",
+              actor_first_name: "Мария",
+              actor_last_name: "Менеджер",
+              occurred_at: "2026-07-16T10:00:00.000Z",
+            },
+          ],
+        },
+      ]);
+
+      const result = await service.listFieldAudit(actor, "lead", "lead-1");
+
+      expect(result.items).toEqual([
+        expect.objectContaining({
+          title: "Правка полей",
+          body: "Телефон: +79161234567 → +79990000000",
+          actorName: "Мария Менеджер",
+        }),
+      ]);
+      // Only events carrying a diff — a create/delete has no 'changes' key, and
+      // jsonb_array_length would throw on a non-array.
+      expect(String(query.mock.calls[0][0])).toContain(
+        "jsonb_typeof(audit.metadata -> 'changes') = 'array'",
+      );
+    });
+
+    it("tells a client nothing about who edited their record", async () => {
+      const { service, query } = createServiceWithQueryResults([]);
+
+      await expect(
+        service.listFieldAudit(
+          { userId: "client-a", role: "client" },
+          "student",
+          "student-a",
+        ),
+      ).resolves.toEqual({ items: [] });
+
+      // Returns empty rather than throwing: the card aggregate calls this for
+      // every reader, and a 403 would take the whole card down.
+      expect(query).not.toHaveBeenCalled();
+    });
+
+    it("does not show a teacher who changed a client's phone", async () => {
+      const { service, query } = createServiceWithQueryResults([]);
+
+      await expect(
+        service.listFieldAudit(
+          { userId: "teacher-a", role: "teacher" },
+          "student",
+          "student-a",
+        ),
+      ).resolves.toEqual({ items: [] });
+
+      expect(query).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -17,10 +17,24 @@ import {
 import { buildTextSearch } from "./search-text";
 import { audienceForStudent } from "./audience";
 import {
+  diffEntityFields,
   isDeliverableEmail,
   presentableEmail,
   toTimelineDto,
 } from "./crm-mappers";
+
+/**
+ * Student fields worth an audit entry. Name/phone/email live on
+ * profiles/users, but they are what staff edit on the card, so they are audited
+ * as the student's fields. custom_data is diffed per key by diffEntityFields.
+ */
+const STUDENT_AUDITED_FIELDS = [
+  "status",
+  "first_name",
+  "last_name",
+  "phone",
+  "email",
+];
 import { StudentRow, findStudent } from "./student-read";
 import {
   ActorContext,
@@ -376,6 +390,7 @@ export class CrmService {
       subscriptions,
       links,
       chatWork,
+      fieldAudit,
     ] = await Promise.all([
       this.listStudentGroups(actor, studentId, { limit: 100 }),
       this.schedule.listLessons(actor, { studentId, limit: 100 }),
@@ -399,6 +414,12 @@ export class CrmService {
         : Promise.resolve(emptyList),
       this.listUserCrmLinks("student", studentId),
       this.listChatWorkTimeline("student", studentId),
+      // Field edits («кто поменял телефон»). Returns empty for non-staff, and
+      // is caught like the other optional sections: a missing audit list must
+      // not take the whole card down.
+      this.timeline
+        .listFieldAudit(actor, "student", studentId, 50)
+        .catch(() => emptyList),
     ]);
 
     const timeline = [
@@ -435,6 +456,14 @@ export class CrmService {
         occurredAt: payment.paymentDate,
       })),
       ...chatWork,
+      ...fieldAudit.items.map((entry) => ({
+        id: String(entry.id),
+        type: "audit",
+        title: String(entry.title),
+        body: entry.body === null ? null : String(entry.body),
+        status: null,
+        occurredAt: entry.occurredAt,
+      })),
     ].sort(
       (a, b) =>
         new Date(String(b.occurredAt)).getTime() -
@@ -506,13 +535,28 @@ export class CrmService {
     // between would change the status while silently dropping the history.
     const { beforeStudent, result } = await this.database.transaction(
       async (client) => {
+        // Reads every editable field, not just status: the audit diff below is
+        // what makes «кто поменял телефон» answerable, and it can only report
+        // fields it saw beforehand. A student's name/phone/email live on
+        // profiles/users, so the join is part of the snapshot.
         const before =
           (
             await client.query<{
               status: string | null;
               branch_id: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              phone: string | null;
+              email: string | null;
+              custom_data: Record<string, unknown> | null;
             }>(
-              `select status, branch_id from app.students where id = $1 and deleted_at is null for update`,
+              `select s.status, s.branch_id, s.custom_data,
+                 p.first_name, p.last_name, p.phone, u.email
+               from app.students s
+               left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+               left join app.users u on u.id = p.user_id and u.deleted_at is null
+               where s.id = $1 and s.deleted_at is null
+               for update of s`,
               [studentId],
             )
           ).rows[0] ?? null;
@@ -612,6 +656,16 @@ export class CrmService {
       action: "crm.student_updated",
       entityType: "student",
       entityId: student.id,
+      // The diff is the event — see the same note in LeadsService.updateLead.
+      metadata: {
+        changes: beforeStudent
+          ? diffEntityFields(
+              beforeStudent as unknown as Record<string, unknown>,
+              student as unknown as Record<string, unknown>,
+              STUDENT_AUDITED_FIELDS,
+            )
+          : [],
+      },
     });
     this.realtime.emitCrmChanged({
       entity: "student",

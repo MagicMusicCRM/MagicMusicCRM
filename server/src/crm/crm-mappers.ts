@@ -303,14 +303,140 @@ export function toTaskDto(row: TaskRow) {
   return task;
 }
 
+/** One edited field, as stored in audit_events.metadata.changes. */
+export interface FieldChange {
+  field: string;
+  from: string | null;
+  to: string | null;
+}
+
+/**
+ * Fields recorded as "changed" without their values.
+ *
+ * AuditService pipes metadata through redactSensitive, which masks e-mail
+ * values inside strings (152-ФЗ). Storing them anyway would render as
+ * «Почта: [EMAIL] → [EMAIL]» — noise dressed up as an audit trail. So the
+ * change is recorded as a fact and the UI says «Почта изменена».
+ *
+ * Name/phone are NOT here: redactSensitive masks by KEY, and these live under
+ * neutral keys (field/from/to), so their values survive — which is exactly what
+ * the customer asked for («правки полей — телефон, имя, дисциплина»).
+ */
+const VALUELESS_AUDIT_FIELDS = new Set(["email"]);
+
+const toAuditScalar = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") return JSON.stringify(value);
+  const text = String(value);
+  return text.length === 0 ? null : text;
+};
+
+/**
+ * Field-level diff for the client-card history: which fields an edit actually
+ * touched, old → new. Both leads and students are coalesce-updates, so an
+ * unmentioned field arrives as null and must not read as «стёрли значение».
+ *
+ * custom_data is diffed per KEY rather than as a blob: «Уровень: A1 → A2» is
+ * an audit entry, a jsonb dump is not.
+ */
+export function diffEntityFields(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  fields: string[],
+): FieldChange[] {
+  const changes: FieldChange[] = [];
+  for (const field of fields) {
+    const from = toAuditScalar(before[field]);
+    const to = toAuditScalar(after[field]);
+    if (from === to) continue;
+    changes.push(
+      VALUELESS_AUDIT_FIELDS.has(field)
+        ? { field, from: null, to: null }
+        : { field, from, to },
+    );
+  }
+
+  const beforeCustom = (before.custom_data ?? {}) as Record<string, unknown>;
+  const afterCustom = (after.custom_data ?? {}) as Record<string, unknown>;
+  const keys = new Set([
+    ...Object.keys(beforeCustom),
+    ...Object.keys(afterCustom),
+  ]);
+  for (const key of [...keys].sort()) {
+    const from = toAuditScalar(beforeCustom[key]);
+    const to = toAuditScalar(afterCustom[key]);
+    if (from === to) continue;
+    changes.push({ field: `custom_data.${key}`, from, to });
+  }
+  return changes;
+}
+
+/** Russian labels for audited fields; unknown keys fall back to the raw name. */
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  first_name: "Имя",
+  last_name: "Фамилия",
+  phone: "Телефон",
+  email: "Почта",
+  source: "Источник",
+  notes: "Заметки",
+  status_id: "Статус",
+  assigned_to: "Ответственный",
+  branch_id: "Филиал",
+  status: "Статус",
+  "custom_data.birthday": "Дата рождения",
+  "custom_data.gender": "Пол",
+  "custom_data.level": "Уровень",
+  "custom_data.category": "Категория",
+  "custom_data.disciplines": "Дисциплины",
+  "custom_data.adSource": "Рекламный источник",
+  "custom_data.middleName": "Отчество",
+};
+
+const auditFieldLabel = (field: string): string =>
+  AUDIT_FIELD_LABELS[field] ??
+  (field.startsWith("custom_data.") ? field.slice("custom_data.".length) : field);
+
+/**
+ * Turns an audit row into something a human reads. The timeline hands us
+ * metadata as raw JSON text in `body`; rendering that verbatim in the client
+ * card would put `{"changes":[{"field":"phone",...}]}` on screen.
+ */
+function describeAuditRow(row: TimelineRow): { title: string; body: string | null } {
+  const fallbackTitle = row.title;
+  let parsed: unknown = null;
+  try {
+    parsed = row.body ? JSON.parse(row.body) : null;
+  } catch {
+    // Not JSON (or truncated) — leave the row as the raw action name.
+    return { title: fallbackTitle, body: row.body };
+  }
+  const changes = (parsed as { changes?: FieldChange[] } | null)?.changes;
+  if (!Array.isArray(changes) || changes.length === 0) {
+    // An audited action with no diff (created/deleted) — keep the action name,
+    // drop the empty jsonb so it does not render as "{}".
+    return { title: fallbackTitle, body: null };
+  }
+  const lines = changes.map((change) => {
+    const label = auditFieldLabel(change.field);
+    if (change.from === null && change.to === null) return `${label}: изменено`;
+    return `${label}: ${change.from ?? "—"} → ${change.to ?? "—"}`;
+  });
+  return { title: "Правка полей", body: lines.join("\n") };
+}
+
 export function toTimelineDto(row: TimelineRow) {
   const actorName =
     `${row.actor_first_name ?? ""} ${row.actor_last_name ?? ""}`.trim();
+  const { title, body } =
+    row.type === "audit"
+      ? describeAuditRow(row)
+      : { title: row.title, body: row.body };
   return {
     id: row.id,
     type: row.type,
-    title: row.title,
-    body: row.body,
+    title,
+    body,
     status: row.status,
     amount: row.amount === null ? null : Number(row.amount),
     actorUserId: row.actor_user_id,

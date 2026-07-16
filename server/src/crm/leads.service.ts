@@ -4,6 +4,7 @@ import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
+import { TimelineService } from "./timeline.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
 import { sanitizeJsonObject } from "./crm-util";
@@ -16,11 +17,27 @@ import { StudentRow } from "./student-read";
 import {
   LessonRow,
   TaskRow,
+  diffEntityFields,
   presentableEmail,
   toLessonDto,
   toTaskDto,
   toTimelineDto,
 } from "./crm-mappers";
+
+/**
+ * Lead columns worth an audit entry. custom_data is diffed per key by
+ * diffEntityFields and so is deliberately absent from this list.
+ */
+const LEAD_AUDITED_FIELDS = [
+  "status_id",
+  "first_name",
+  "last_name",
+  "phone",
+  "email",
+  "source",
+  "notes",
+  "assigned_to",
+];
 
 interface LeadRow {
   id: string;
@@ -100,6 +117,10 @@ export class LeadsService {
     private readonly notifications: NotificationsService,
     private readonly chatWork: ChatWorkTimelineService,
     private readonly realtime: RealtimeBus,
+    // Field-edit audit for the lead card. TimelineService depends only on
+    // db/policy/audit/realtime, so this adds no cycle — CrmService injects it
+    // the same way for the student card.
+    private readonly timeline: TimelineService,
   ) {}
 
   async listLeadBoard(actor: ActorContext, query: LeadBoardQuery) {
@@ -290,14 +311,20 @@ export class LeadsService {
     const lead = leadResult.rows[0];
     if (!lead) throw new NotFoundException("Лид не найден.");
 
-    const [students, otherLeads, comments, tasks, trials, chatWork] = await Promise.all([
-      this.listStudentsLinkedToLead(leadId),
-      this.listRelatedLeads(lead),
-      this.listLeadComments(leadId),
-      this.listLeadTasks(leadId),
-      this.listLeadTrialLessons(leadId),
-      this.listChatWorkTimeline("lead", leadId),
-    ]);
+    const [students, otherLeads, comments, tasks, trials, chatWork, fieldAudit] =
+      await Promise.all([
+        this.listStudentsLinkedToLead(leadId),
+        this.listRelatedLeads(lead),
+        this.listLeadComments(leadId),
+        this.listLeadTasks(leadId),
+        this.listLeadTrialLessons(leadId),
+        this.listChatWorkTimeline("lead", leadId),
+        // Field edits («кто поменял телефон»). Empty for non-staff; caught so a
+        // missing audit list can not take the whole card down.
+        this.timeline
+          .listFieldAudit(actor, "lead", leadId, 50)
+          .catch(() => ({ items: [] as Record<string, unknown>[] })),
+      ]);
 
     const timeline = [
       ...comments.map((comment) => ({
@@ -325,6 +352,14 @@ export class LeadsService {
         occurredAt: lesson.scheduledAt,
       })),
       ...chatWork,
+      ...fieldAudit.items.map((entry) => ({
+        id: String(entry.id),
+        type: "audit",
+        title: String(entry.title),
+        body: entry.body === null ? null : String(entry.body),
+        status: null,
+        occurredAt: entry.occurredAt,
+      })),
     ].sort(
       (a, b) =>
         new Date(String(b.occurredAt)).getTime() -
@@ -527,12 +562,14 @@ export class LeadsService {
     // The update and its status-history row must land atomically: a failure in
     // between would move the lead while silently dropping the history entry.
     const { before, lead } = await this.database.transaction(async (client) => {
-      const beforeRes = await client.query<{
-        status_id: string | null;
-        assigned_to: string | null;
-        branch_id: string | null;
-      }>(
-        `select status_id, assigned_to, branch_id from app.leads where id = $1 and deleted_at is null for update`,
+      // Reads the whole editable row, not just status/owner: the audit diff
+      // below is what makes «кто поменял телефон» answerable, and it can only
+      // report fields it saw beforehand.
+      const beforeRes = await client.query<LeadRow & { branch_id: string | null }>(
+        `select id, status_id, null::text as status_name, first_name, last_name,
+           phone, email, source, notes, assigned_to, custom_data, created_by,
+           created_at, updated_at, branch_id
+         from app.leads where id = $1 and deleted_at is null for update`,
         [leadId],
       );
       const beforeRow = beforeRes.rows[0] ?? null;
@@ -605,6 +642,17 @@ export class LeadsService {
       action: "crm.lead_updated",
       entityType: "lead",
       entityId: lead.id,
+      // The diff is the event. Without it the card could only say «лид
+      // обновлён», which answers none of «кто поменял телефон и на какой».
+      metadata: {
+        changes: before
+          ? diffEntityFields(
+              before as unknown as Record<string, unknown>,
+              lead as unknown as Record<string, unknown>,
+              LEAD_AUDITED_FIELDS,
+            )
+          : [],
+      },
     });
     this.realtime.emitCrmChanged({
       entity: "lead",
