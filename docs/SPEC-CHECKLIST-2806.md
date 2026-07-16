@@ -18,7 +18,9 @@
 - ✅ **Дата обращения — на стороне students** (`c26eb2eb`). Лид, пришедший через приложение, получает датой обращения момент своего появления здесь; у импортированного побеждает исходная дата HolliHop; при дедупе по телефону **данные HolliHop переживают слияние**.
 
 **Осталось не кодом, а на стороне заказчика:**
-1. ⏳ **Ключи Firebase.** `TASK_REMINDERS_ENABLED=true` уже проставлен в локальном `server/.env`, `FIREBASE_PROJECT_ID` заполнен (`magicmusiccrm-42557` — он не секрет, лежит в `firebase_options.dart`). Но **`FIREBASE_CLIENT_EMAIL` и `FIREBASE_PRIVATE_KEY` пусты и в репозитории их НЕТ** — это service-account, его скачивают в консоли Firebase (Project settings → Service accounts → Generate new private key). Без них push молча пропускается (`status: 'skipped', error: 'not_configured'`), а одноразовый маркер напоминания при этом уже сгорает. На прод — включать вместе с ключами.
+1. ✅ **Firebase настроен и ПРОВЕРЕН** (локальный `server/.env`): заказчик прислал service-account, ключ записан, `TASK_REMINDERS_ENABLED=true`. Проверено не глазами: тем же способом, что и провайдер (`google-auth-library` JWT), запрошен access token — **Google его выдал**, значит push уйдёт.
+   - ⏳ **Осталось: те же три переменные на ПРОДЕ** (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`) + `TASK_REMINDERS_ENABLED=true`. Локальный env — это dev (`localhost:54329`).
+   - ⚠️ **Не включать напоминания на проде раньше ключей**: без них push возвращает `skipped/not_configured`, а маркер напоминания одноразовый и уже сгорает — задача молча теряет своё напоминание навсегда.
 2. ⏳ Выгрузить из HolliHop `tasks.json` / `task-history.json` / `students.json` / `leads.json` и прогнать dry-run импортёра — см. §6.
 3. ✅ **Оплата/переплата по абонементу** — решено 16.07: считаем по личному счёту. Реализовано; новое поле не понадобилось (связь `subscriptions.payment_id` уже была).
 
