@@ -329,10 +329,36 @@ export class ScheduleService {
     // a teacher only their own lessons, a client only their student/lead/group
     // lessons. Any new role must be added to that predicate or it sees nothing.
     const limit = Math.min(query.limit ?? 100, 200);
+    // What the teacher is actually paid for this lesson. l.teacher_rate alone
+    // is only the per-lesson OVERRIDE — null there means "inherit", so showing
+    // it raw would read as "no rate" on most lessons. Precedence must stay in
+    // step with computeLessonAccrual (payroll.service.ts): lesson → group →
+    // the rate history entry in force on the lesson date → 0.
+    //
+    // Gated: this endpoint serves clients too (see the note above), and a
+    // teacher's pay rate is school-finance data — KVA-239 keeps that to
+    // director/system_admin, so everyone else gets null rather than a leak.
+    const canSeeRates = this.policy.canReadSchoolFinance(actor);
+    const appliedRateSql = canSeeRates
+      ? `coalesce(
+            l.teacher_rate,
+            g.teacher_rate,
+            (
+              select tr.rate
+              from app.teacher_rates tr
+              where tr.teacher_id = l.teacher_id
+                and tr.effective_from <= l.scheduled_at::date
+              order by tr.effective_from desc, tr.created_at desc
+              limit 1
+            ),
+            0
+          )`
+      : `null::numeric`;
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
           l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
+          ${appliedRateSql} as applied_teacher_rate,
           sp.user_id as student_user_id, tp.user_id as teacher_user_id,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,

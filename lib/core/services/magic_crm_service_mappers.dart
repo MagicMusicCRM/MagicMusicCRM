@@ -440,6 +440,9 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
     'is_trial': item['isTrial'],
     'notes': item['notes'],
     'teacher_rate': item['teacherRate'],
+    // Rate actually paid for this lesson (lesson → group → history). null when
+    // the caller may not see pay data.
+    'applied_teacher_rate': item['appliedTeacherRate'],
     'student_name': item['studentName'],
     'teacher_name': item['teacherName'],
     'branch_name': item['branchName'],

@@ -26,6 +26,7 @@ export interface LessonRow {
   is_trial: boolean;
   notes: string | null;
   teacher_rate?: string | number | null;
+  applied_teacher_rate?: string | number | null;
   student_user_id: string | null;
   teacher_user_id: string | null;
   student_name: string | null;
@@ -107,6 +108,14 @@ export function toLessonDto(row: LessonRow) {
       row.teacher_rate === null || row.teacher_rate === undefined
         ? null
         : Number(row.teacher_rate),
+    // The rate actually paid for this lesson (lesson → group → history → 0),
+    // as opposed to teacherRate above, which is only the per-lesson override.
+    // null = the caller may not see pay data; see listLessons.
+    appliedTeacherRate:
+      row.applied_teacher_rate === null ||
+      row.applied_teacher_rate === undefined
+        ? null
+        : Number(row.applied_teacher_rate),
     studentName: row.student_name || null,
     teacherName: row.teacher_name || null,
     branchName: row.branch_name || null,

@@ -95,6 +95,12 @@ Widget _lessonRow(
           '${l.groups?['name'] ?? 'Инд.'}',
           if ((l.rooms?['name']?.toString() ?? '').isNotEmpty)
             'Ауд.: ${l.rooms!['name']}',
+          // Only director/system_admin get a non-null rate from the API, so
+          // this row simply does not appear for anyone else.
+          if (l.appliedTeacherRate != null)
+            l.appliedTeacherRate == 0
+                ? 'Ставка: входит в оклад'
+                : 'Ставка: ${l.appliedTeacherRate} ₽/ч',
         ].join(' • '),
       ),
       trailing: Container(

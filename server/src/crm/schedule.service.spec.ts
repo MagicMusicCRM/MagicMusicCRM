@@ -16,6 +16,9 @@ describe("ScheduleService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      // Teacher pay rates are school finance: only director/system_admin see
+      // them, so the default mock says no.
+      canReadSchoolFinance: jest.fn().mockReturnValue(false),
     };
     return { audit, notifications, policy };
   };
@@ -56,6 +59,39 @@ describe("ScheduleService", () => {
     const service = construct(query, deps);
     return { service, query, ...deps };
   };
+
+  describe("applied teacher rate", () => {
+    const clientActor = { userId: "client-1", role: "client" as const };
+
+    it("never selects pay rates for an actor who may not see them", async () => {
+      const { service, query, policy } = createService([]);
+      policy.canReadSchoolFinance.mockReturnValue(false);
+
+      await service.listLessons(clientActor, { limit: 10 });
+
+      const sql = String(query.mock.calls[0][0]);
+      // listLessons serves clients too, so the rate must not merely be hidden
+      // in the UI — it must never leave the database.
+      expect(sql).toContain("null::numeric as applied_teacher_rate");
+      expect(sql).not.toContain("app.teacher_rates");
+    });
+
+    it("resolves lesson → group → history → 0 for finance roles", async () => {
+      const { service, query, policy } = createService([]);
+      policy.canReadSchoolFinance.mockReturnValue(true);
+
+      await service.listLessons(
+        { userId: "dir-1", role: "director" as const },
+        { limit: 10 },
+      );
+
+      const sql = String(query.mock.calls[0][0]);
+      // Same precedence as computeLessonAccrual in payroll.service.ts.
+      expect(sql).toMatch(
+        /coalesce\(\s*l\.teacher_rate,\s*g\.teacher_rate,[\s\S]*app\.teacher_rates[\s\S]*0\s*\)\s*as applied_teacher_rate/,
+      );
+    });
+  });
 
   it("lists trial lessons with actor-scoped query", async () => {
     const { service, query } = createService([

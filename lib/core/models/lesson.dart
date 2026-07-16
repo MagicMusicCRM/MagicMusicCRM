@@ -29,6 +29,16 @@ class Lesson {
   bool get isTrial => _m['is_trial'] == true;
   String? get notes => _m['notes']?.toString();
   Object? get teacherRateRaw => _m['teacher_rate'];
+
+  /// Rate actually paid for this lesson: the per-lesson override, else the
+  /// group's, else the teacher's rate history. null when the caller may not
+  /// see pay data (only director/system_admin do — KVA-239).
+  Object? get appliedTeacherRateRaw => _m['applied_teacher_rate'];
+  num? get appliedTeacherRate {
+    final raw = appliedTeacherRateRaw;
+    if (raw is num) return raw;
+    return num.tryParse(raw?.toString() ?? '');
+  }
   String? get studentName => _m['student_name']?.toString();
   String? get teacherName => _m['teacher_name']?.toString();
   String? get branchName => _m['branch_name']?.toString();
