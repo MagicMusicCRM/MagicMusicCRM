@@ -22,6 +22,7 @@ import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
 import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
 import { LeadBoardQuery } from "./dto/lead-board.query";
 import { QueueLimitQuery } from "./dto/queue-limit.query";
+import { LinkStudentDto } from "./dto/link-student.dto";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 
 @UseGuards(JwtAuthGuard)
@@ -91,6 +92,17 @@ export class CrmLeadsController {
   @Post("leads")
   createLead(@CurrentActor() actor: ActorContext, @Body() dto: UpsertLeadDto) {
     return this.leads.createLead(actor, dto);
+  }
+
+  // Ручное «Прикрепить к ученику»: до этого связать можно было только пару,
+  // которую нашёл автоподбор дублей.
+  @Post("leads/:id/link-student")
+  linkStudentToLead(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: LinkStudentDto,
+  ) {
+    return this.leads.linkStudentToLead(actor, id, dto.studentId);
   }
 
   @Patch("leads/:id")

@@ -6,6 +6,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { TimelineService } from "./timeline.service";
 import { resolveAppealDate } from "./appeal-date";
+import { attachStudentToLead } from "./lead-student-link";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
 import { sanitizeJsonObject } from "./crm-util";
@@ -507,6 +508,45 @@ export class LeadsService {
   // client user whose profile phone matches the lead's phone.
 
 
+
+  /**
+   * Ручное «Прикрепить к ученику» из карточки лида (§1 спеки, эталон
+   * HolliHop — ссылка «Прикрепить к ученику»).
+   *
+   * До этого связать лида с учеником можно было только через автоподбор
+   * дублей: если система пару не нашла, прикрепить вручную было нельзя вовсе.
+   */
+  async linkStudentToLead(
+    actor: ActorContext,
+    leadId: string,
+    studentId: string,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const lead = await this.database.query<{ id: string }>(
+      "select id from app.leads where id = $1 and deleted_at is null limit 1",
+      [leadId],
+    );
+    if (!lead.rows[0]) throw new NotFoundException("Лид не найден.");
+    const student = await this.database.query<{ id: string }>(
+      "select id from app.students where id = $1 and deleted_at is null limit 1",
+      [studentId],
+    );
+    if (!student.rows[0]) throw new NotFoundException("Ученик не найден.");
+
+    // Бросит ConflictException, если ученик уже привязан к ДРУГОМУ лиду —
+    // молча перевесить чужую связь нельзя.
+    await attachStudentToLead(this.database, studentId, leadId);
+
+    await this.audit.record({
+      actor,
+      action: "crm.lead_student_linked",
+      entityType: "lead",
+      entityId: leadId,
+      metadata: { studentId },
+    });
+    this.realtime.emitCrmChanged({ entity: "lead", action: "updated", id: leadId });
+    return { leadId, studentId };
+  }
 
   async createLead(actor: ActorContext, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);

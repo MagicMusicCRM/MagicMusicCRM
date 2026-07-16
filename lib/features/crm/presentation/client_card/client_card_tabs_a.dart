@@ -191,6 +191,23 @@ extension _ClientCardTabsA on _ClientCardState {
                     : const Icon(Icons.person_add_alt_1_rounded, size: 18),
                 label: const Text('Создать ученика'),
               ),
+            // «Прикрепить к ученику» (§1 спеки). Рядом с «Создать ученика»,
+            // потому что это тот же выбор: клиент уже заведён или ещё нет.
+            // Раньше связать можно было только пару, которую нашёл автоподбор
+            // дублей — если он молчал, привязать было нельзя вовсе.
+            if (!_isConverted && !_hasLinkedStudent)
+              OutlinedButton.icon(
+                onPressed: _saving || _converting ? null : _linkExistingStudent,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: cs.onSurface,
+                  side: BorderSide(color: cs.outlineVariant),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                  ),
+                ),
+                icon: const Icon(Icons.link_rounded, size: 18),
+                label: const Text('Прикрепить к ученику'),
+              ),
             TextButton(
               onPressed: _saving || _converting ? null : _handleClose,
               style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),

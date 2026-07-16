@@ -96,6 +96,19 @@ extension MagicCrmLeads on MagicCrmService {
     };
   }
 
+  /// Ручное «Прикрепить к ученику»: связывает лида с уже существующим учеником.
+  /// Бросит ошибку, если ученик уже привязан к другому лиду — молча перевесить
+  /// связь нельзя.
+  Future<Map<String, dynamic>> linkStudentToLead({
+    required String leadId,
+    required String studentId,
+  }) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/leads/$leadId/link-student',
+      data: {'studentId': studentId},
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getLeadStatusHistory(String leadId) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/leads/$leadId/status-history',

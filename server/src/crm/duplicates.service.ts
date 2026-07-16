@@ -7,6 +7,7 @@ import {
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
+import { attachStudentToLead } from "./lead-student-link";
 import { CrmPolicy } from "./crm.policy";
 import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
 import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
@@ -173,20 +174,8 @@ export class DuplicatesService {
     if (!leadId || !studentId) {
       throw new BadRequestException("Прикрепить можно только пару лид-ученик.");
     }
-    const result = await this.database.query<{ id: string }>(
-      `
-        update app.students
-        set lead_id = $2, updated_at = now()
-        where id = $1
-          and deleted_at is null
-          and (lead_id is null or lead_id = $2)
-        returning id
-      `,
-      [studentId, leadId],
-    );
-    if (!result.rows[0]) {
-      throw new ConflictException("Ученик уже связан с другим лидом.");
-    }
+    // Общий с ручным «Прикрепить к ученику» — см. lead-student-link.ts.
+    await attachStudentToLead(this.database, studentId, leadId);
   }
 
   private toDuplicateCandidateDto(row: DuplicateCandidateRow) {

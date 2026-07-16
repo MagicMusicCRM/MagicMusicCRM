@@ -464,6 +464,64 @@ extension _ClientCardData on _ClientCardState {
     }
   }
 
+  /// «Прикрепить к ученику»: связать лида с уже заведённым учеником.
+  ///
+  /// Поиск серверный: учеников тысячи, и подгружать их пачкой в клиент значило
+  /// бы, что нужного в списке просто не окажется.
+  Future<void> _linkExistingStudent() async {
+    final crm = ref.read(magicCrmServiceProvider);
+
+    Future<List<SearchableSelectItem>> search(String query) async {
+      final response = await crm.searchStudents(q: query, limit: 5);
+      final items = response['items'];
+      if (items is! List) return const <SearchableSelectItem>[];
+      return items.whereType<Map<String, dynamic>>().map((student) {
+        final name = [
+          student['first_name'] ?? student['firstName'],
+          student['last_name'] ?? student['lastName'],
+        ].where((v) => (v?.toString().trim() ?? '').isNotEmpty).join(' ');
+        return SearchableSelectItem(
+          id: student['id'].toString(),
+          label: name.isEmpty ? 'Без имени' : name,
+          subtitle: student['phone']?.toString(),
+        );
+      }).toList();
+    }
+
+    SearchableSelect.show(
+      context: context,
+      title: 'Прикрепить к ученику',
+      hintText: 'Имя или телефон…',
+      items: const [],
+      isNullable: false,
+      onSearch: search,
+      onSelected: (item) async {
+        if (item == null) return;
+        try {
+          await crm.linkStudentToLead(
+            leadId: _resolvedLeadId ?? _leadId,
+            studentId: item.id,
+          );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Лид прикреплён к ученику «${item.label}»')),
+          );
+          // Перечитываем карточку: у лида появился связанный ученик, и режим
+          // карточки должен это увидеть.
+          await _fetchCard();
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Не удалось прикрепить: $e'),
+              backgroundColor: AppTheme.danger,
+            ),
+          );
+        }
+      },
+    );
+  }
+
   Future<void> _convertToStudent() async {
     final firstName = (_leadData['name'] ?? '').toString().trim();
     if (firstName.isEmpty) {

@@ -1,3 +1,4 @@
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -415,6 +416,48 @@ describe("LeadsService", () => {
       statusId: "11111111-1111-1111-1111-111111111111",
     } as never);
     expect((query.mock.calls[1][1] as unknown[])[10]).toBe(false);
+  });
+
+  describe("linkStudentToLead — ручное «Прикрепить к ученику»", () => {
+    it("привязывает произвольного ученика, а не только автоподобранный дубль", async () => {
+      const { service, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "lead-1" }] }, // лид есть
+        { rows: [{ id: "student-1" }] }, // ученик есть
+        { rows: [{ id: "student-1" }] }, // update прошёл
+      ]);
+
+      await expect(
+        service.linkStudentToLead(actor, "lead-1", "student-1"),
+      ).resolves.toEqual({ leadId: "lead-1", studentId: "student-1" });
+
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "crm.lead_student_linked" }),
+      );
+    });
+
+    it("не перевешивает ученика, уже связанного с другим лидом", async () => {
+      const { service } = createServiceWithQueryResults([
+        { rows: [{ id: "lead-1" }] },
+        { rows: [{ id: "student-1" }] },
+        { rows: [] }, // update не нашёл строку → связь занята
+      ]);
+
+      // Молча перевесить связь нельзя: прежний лид потерял бы ученика без следа.
+      await expect(
+        service.linkStudentToLead(actor, "lead-1", "student-1"),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it("не выдумывает связь с несуществующим учеником", async () => {
+      const { service } = createServiceWithQueryResults([
+        { rows: [{ id: "lead-1" }] },
+        { rows: [] },
+      ]);
+
+      await expect(
+        service.linkStudentToLead(actor, "lead-1", "ghost"),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
   });
 
   it("audits which fields an edit changed, old → new", async () => {
