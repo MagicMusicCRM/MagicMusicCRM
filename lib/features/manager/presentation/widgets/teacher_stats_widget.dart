@@ -7,6 +7,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 
 /// KVA-238: отчёт «Статистика преподавателей» — учебные единицы (группа /
@@ -38,6 +39,12 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
   String? _category;
   List<Map<String, dynamic>> _disciplines = const [];
   bool _exporting = false;
+
+  /// Units ticked for the month-end «в оклад» pass, keyed by the unit's first
+  /// lesson id: a lesson belongs to exactly one unit, so that id identifies the
+  /// unit without the report having to grow a key field. Value = its lessonIds.
+  final Map<String, List<String>> _selectedUnits = {};
+  bool _applyingBulkRate = false;
 
   final _money = NumberFormat('#,##0', 'ru');
   final _dayFmt = DateFormat('dd.MM');
@@ -76,6 +83,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
     setState(() {
       _loading = true;
       _error = null;
+      // The report is about to be rebuilt from a different set of lessons, so
+      // any held selection would point at rows that are no longer on screen.
+      _selectedUnits.clear();
     });
     try {
       final report = await ref
@@ -176,10 +186,12 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
     if (confirmed != true || !mounted) return;
 
     try {
-      final crm = ref.read(magicCrmServiceProvider);
-      for (final lessonId in lessonIds) {
-        await crm.updateLesson(lessonId, teacherRate: picked);
-      }
+      // One request, one transaction. This used to PATCH each lesson in a loop,
+      // so a failure halfway repriced some lessons and left the rest — with no
+      // way to tell which from the report.
+      await ref
+          .read(magicCrmServiceProvider)
+          .setLessonsTeacherRate(lessonIds: lessonIds, teacherRate: picked);
       if (!mounted) return;
       await _loadReport();
     } catch (e) {
@@ -187,6 +199,81 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Не удалось сохранить: $e')));
+    }
+  }
+
+  /// Month-end bulk pass (spec §3): tick the trials nobody bought, set them all
+  /// to «входит в оклад» in one go.
+  Future<void> _applyBulkRate() async {
+    final lessonIds = [
+      for (final ids in _selectedUnits.values) ...ids,
+    ];
+    if (lessonIds.isEmpty || _applyingBulkRate) return;
+
+    num? picked;
+    var touched = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Ставка выбранным'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Применится к ${_selectedUnits.length} юнитам '
+                '(${lessonIds.length} занятий) за выбранный период.',
+                style: TextStyle(
+                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  fontSize: 12.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TeacherRateSelector(
+                allowInherit: true,
+                onChanged: (value) => setDialogState(() {
+                  picked = value;
+                  touched = true;
+                }),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: touched ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Применить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _applyingBulkRate = true);
+    try {
+      final updated = await ref
+          .read(magicCrmServiceProvider)
+          .setLessonsTeacherRate(lessonIds: lessonIds, teacherRate: picked);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Обновлено занятий: $updated')),
+      );
+      await _loadReport();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Не удалось применить ставку: $e'),
+          backgroundColor: AppColor.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _applyingBulkRate = false);
     }
   }
 
@@ -210,8 +297,53 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(padding: const EdgeInsets.all(12), child: _buildFilters()),
+        if (_selectedUnits.isNotEmpty) _buildSelectionBar(),
         Expanded(child: _buildBody()),
       ],
+    );
+  }
+
+  Widget _buildSelectionBar() {
+    final lessons = _selectedUnits.values.fold<int>(
+      0,
+      (sum, ids) => sum + ids.length,
+    );
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryGold.withAlpha(24),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.primaryGold.withAlpha(60)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Выбрано: ${_selectedUnits.length} · занятий: $lessons',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          TextButton(
+            onPressed: _applyingBulkRate
+                ? null
+                : () => setState(_selectedUnits.clear),
+            child: const Text('Снять'),
+          ),
+          const SizedBox(width: 4),
+          FilledButton.icon(
+            onPressed: _applyingBulkRate ? null : _applyBulkRate,
+            icon: _applyingBulkRate
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.payments_outlined, size: 18),
+            label: const Text('Проставить ставку'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -232,6 +364,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 180,
           child: DropdownButtonFormField<String?>(
+            // Fixed-width filter box: without isExpanded the selected label plus
+            // the arrow overflow the 180px SizedBox and paint the stripes.
+            isExpanded: true,
             key: ValueKey('branch-$_branchId'),
             initialValue: _branchId,
             decoration: const InputDecoration(
@@ -262,6 +397,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 200,
           child: DropdownButtonFormField<String?>(
+            // Fixed-width filter box: without isExpanded the selected label plus
+            // the arrow overflow the 180px SizedBox and paint the stripes.
+            isExpanded: true,
             key: ValueKey('teacher-$_teacherId'),
             initialValue: _teacherId,
             decoration: const InputDecoration(
@@ -295,6 +433,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 180,
           child: DropdownButtonFormField<String?>(
+            // Fixed-width filter box: without isExpanded the selected label plus
+            // the arrow overflow the 180px SizedBox and paint the stripes.
+            isExpanded: true,
             key: ValueKey('unit-$_unitType'),
             initialValue: _unitType,
             decoration: const InputDecoration(
@@ -322,6 +463,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 180,
           child: DropdownButtonFormField<String?>(
+            // Fixed-width filter box: without isExpanded the selected label plus
+            // the arrow overflow the 180px SizedBox and paint the stripes.
+            isExpanded: true,
             key: ValueKey('status-$_status'),
             initialValue: _status,
             decoration: const InputDecoration(
@@ -345,6 +489,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 180,
           child: DropdownButtonFormField<String?>(
+            // Fixed-width filter box: without isExpanded the selected label plus
+            // the arrow overflow the 180px SizedBox and paint the stripes.
+            isExpanded: true,
             key: ValueKey('disc-$_discipline'),
             initialValue: _discipline,
             decoration: const InputDecoration(
@@ -368,6 +515,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 160,
           child: DropdownButtonFormField<String?>(
+            // Fixed-width filter box: without isExpanded the selected label plus
+            // the arrow overflow the 180px SizedBox and paint the stripes.
+            isExpanded: true,
             key: ValueKey('cat-$_category'),
             initialValue: _category,
             decoration: const InputDecoration(
@@ -530,6 +680,15 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
 
   Widget _buildUnitRow(Map<String, dynamic> unit) {
     final isGroup = unit['unitType'] == 'group';
+    final lessonIds = [
+      for (final id in (unit['lessonIds'] as List? ?? const []))
+        if (id != null) id.toString(),
+    ];
+    // Groups are excluded from the bulk pass on purpose: their rate knob is the
+    // GROUP rate (a per-lesson override would silently shadow it). The customer
+    // asked for the trials pass, and that is what this selects.
+    final selectable = !isGroup && lessonIds.isNotEmpty;
+    final unitKey = selectable ? lessonIds.first : null;
     final days = (unit['days'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map((day) {
@@ -558,6 +717,27 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (selectable)
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: Checkbox(
+                  value: _selectedUnits.containsKey(unitKey),
+                  onChanged: _applyingBulkRate
+                      ? null
+                      : (checked) => setState(() {
+                          if (checked == true) {
+                            _selectedUnits[unitKey!] = lessonIds;
+                          } else {
+                            _selectedUnits.remove(unitKey);
+                          }
+                        }),
+                ),
+              )
+            else
+              // Keeps group rows aligned with the ticked ones above/below.
+              const SizedBox(width: 28),
+            const SizedBox(width: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(

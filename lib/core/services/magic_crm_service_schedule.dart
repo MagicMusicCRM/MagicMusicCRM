@@ -141,6 +141,24 @@ extension MagicCrmSchedule on MagicCrmService {
     return _legacyLesson(response);
   }
 
+  /// Applies one per-lesson teacher rate to many lessons at once.
+  ///
+  /// [teacherRate] `0` means «входит в оклад»; `null` clears the per-lesson
+  /// override so the group/history rate applies again. One request, one
+  /// transaction — the old per-lesson loop could fail halfway and leave the
+  /// month half-repriced.
+  Future<int> setLessonsTeacherRate({
+    required List<String> lessonIds,
+    required num? teacherRate,
+  }) async {
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/lessons/teacher-rate',
+      data: {'lessonIds': lessonIds, 'teacherRate': teacherRate},
+    );
+    final updated = response['updated'];
+    return updated is num ? updated.toInt() : 0;
+  }
+
   Future<Map<String, dynamic>> updateLesson(
     String id, {
     String? studentId,

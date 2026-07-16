@@ -1,3 +1,4 @@
+import { ForbiddenException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -16,6 +17,7 @@ describe("ScheduleService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertManagerOnly: jest.fn(),
       // Teacher pay rates are school finance: only director/system_admin see
       // them, so the default mock says no.
       canReadSchoolFinance: jest.fn().mockReturnValue(false),
@@ -871,5 +873,87 @@ describe("ScheduleService", () => {
         entityId: "lesson-lead-a",
       }),
     );
+  });
+
+  describe("bulk teacher rate", () => {
+    it("reprices every lesson in one statement and reports the count", async () => {
+      const { service, query, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a" }, { id: "lesson-b" }] },
+      ]);
+
+      await expect(
+        service.setLessonsTeacherRate(actor, {
+          lessonIds: ["lesson-a", "lesson-b"],
+          teacherRate: 0,
+        }),
+      ).resolves.toEqual({
+        updated: 2,
+        lessonIds: ["lesson-a", "lesson-b"],
+      });
+
+      // One statement, not one per lesson: the client used to PATCH in a loop,
+      // so a failure halfway left some lessons repriced and some not.
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(query.mock.calls[0][1]).toEqual([["lesson-a", "lesson-b"], 0]);
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "crm.lessons_teacher_rate_bulk_set",
+          metadata: expect.objectContaining({ teacherRate: 0, updated: 2 }),
+        }),
+      );
+    });
+
+    it("keeps a rate of 0 rather than treating it as 'no rate given'", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a" }] },
+      ]);
+
+      await service.setLessonsTeacherRate(actor, {
+        lessonIds: ["lesson-a"],
+        teacherRate: 0,
+      });
+
+      // 0 is «входит в оклад» — the whole point of the bulk pass. A `|| null`
+      // anywhere in this path would silently turn it into "clear the override".
+      expect(query.mock.calls[0][1][1]).toBe(0);
+    });
+
+    it("clears the override when no rate is given", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a" }] },
+      ]);
+
+      await service.setLessonsTeacherRate(actor, { lessonIds: ["lesson-a"] });
+
+      // Sets, not coalesces: falling back to the group/history rate has to be
+      // expressible, and coalesce cannot express it.
+      expect(String(query.mock.calls[0][0])).toContain(
+        "teacher_rate = $2::numeric",
+      );
+      expect(query.mock.calls[0][1][1]).toBeNull();
+    });
+
+    it("is manager-only — it writes payroll inputs across the schedule", async () => {
+      const { service, policy } = createServiceWithQueryResults([{ rows: [] }]);
+
+      await service.setLessonsTeacherRate(actor, { lessonIds: ["lesson-a"] });
+
+      expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    });
+  });
+
+  it("stops a teacher from setting the pay rate on their own lesson", async () => {
+    const teacherActor = { userId: "teacher-user-a", role: "teacher" as const };
+    const { service, policy } = createServiceWithQueryResults([{ rows: [] }]);
+    policy.assertCanWriteCrm.mockImplementation(() => {
+      throw new ForbiddenException();
+    });
+
+    // teacher_rate is what the school PAYS: a teacher editing it on their own
+    // lesson is a self-granted raise. They may still edit status/notes there.
+    await expect(
+      service.updateLesson(teacherActor, "lesson-a", { teacherRate: 5000 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(teacherActor);
   });
 });

@@ -15,6 +15,7 @@ import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { AttendanceService } from "./attendance.service";
 import { ScheduleService } from "./schedule.service";
+import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import {
   CreateScheduleSeriesDto,
   UpdateScheduleSeriesDto,
@@ -104,6 +105,16 @@ export class CrmScheduleController {
     @Body() dto: UpsertLessonDto,
   ) {
     return this.schedule.createLesson(actor, dto);
+  }
+
+  // Registered before "lessons/:id" so the literal segment wins the match and
+  // "teacher-rate" is never parsed as a lesson id.
+  @Patch("lessons/teacher-rate")
+  setLessonsTeacherRate(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: BulkLessonRateDto,
+  ) {
+    return this.schedule.setLessonsTeacherRate(actor, dto);
   }
 
   @Patch("lessons/:id")

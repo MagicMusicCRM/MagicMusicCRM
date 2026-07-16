@@ -21,6 +21,7 @@ import {
   CreateScheduleSeriesDto,
   UpdateScheduleSeriesDto,
 } from "./dto/schedule-series.dto";
+import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
 import {
   LessonRow,
@@ -1084,6 +1085,48 @@ export class ScheduleService {
     return { success: true };
   }
 
+  /**
+   * Applies one per-lesson teacher rate to many lessons in a single statement.
+   * Exists for the end-of-month «пробные в оклад» pass (spec §3), which used to
+   * be one PATCH per lesson from the client: a failure halfway left some
+   * lessons repriced and some not, with no way to tell which.
+   *
+   * Unlike updateLesson this SETS rather than coalesces — clearing the override
+   * (rate = null, fall back to the group/history rate) is a thing the caller
+   * must be able to express, and coalesce cannot express it.
+   */
+  async setLessonsTeacherRate(actor: ActorContext, dto: BulkLessonRateDto) {
+    // Manager+ only, deliberately stricter than updateLesson's per-lesson
+    // teacher path: this writes payroll inputs across the schedule.
+    this.policy.assertManagerOnly(actor);
+    const rate = dto.teacherRate ?? null;
+    const result = await this.database.query<{ id: string }>(
+      `
+        update app.lessons
+        set teacher_rate = $2::numeric,
+          updated_at = now()
+        where id = any($1::uuid[]) and deleted_at is null
+        returning id
+      `,
+      [dto.lessonIds, rate],
+    );
+    const updated = result.rows.map((row) => row.id);
+    await this.audit.record({
+      actor,
+      action: "crm.lessons_teacher_rate_bulk_set",
+      entityType: "lesson",
+      metadata: {
+        teacherRate: rate,
+        requested: dto.lessonIds.length,
+        updated: updated.length,
+      },
+    });
+    // One event for the batch: 500 per-lesson events would just make every
+    // connected client refetch 500 times.
+    this.realtime.emitCrmChanged({ entity: "lesson", action: "updated" });
+    return { updated: updated.length, lessonIds: updated };
+  }
+
   private async assertCanUpdateLesson(
     actor: ActorContext,
     lessonId: string,
@@ -1104,6 +1147,11 @@ export class ScheduleService {
       dto.roomId !== undefined ||
       dto.scheduledAt !== undefined ||
       dto.durationMinutes !== undefined ||
+      // teacher_rate is what the school PAYS the teacher. Without this a
+      // teacher could set the rate on their own lesson — a self-granted raise —
+      // even though listLessons will not even let them READ the applied rate
+      // (canReadSchoolFinance is director/system_admin only).
+      dto.teacherRate !== undefined ||
       dto.isTrial !== undefined;
     if (attemptsRestrictedEdit) {
       this.policy.assertCanWriteCrm(actor);
