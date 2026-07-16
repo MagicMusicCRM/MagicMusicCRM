@@ -16,7 +16,10 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { CrmService } from "./crm.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
-import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
+import {
+  CreateAdjustmentDto,
+  UpdateAdjustmentDto,
+} from "./dto/create-adjustment.dto";
 import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { CreateStudentDto } from "./dto/create-student.dto";
@@ -108,6 +111,27 @@ export class CrmStudentsController {
     @Body() dto: CreateAdjustmentDto,
   ) {
     return this.finance.createAccountAdjustment(actor, id, dto);
+  }
+
+  @Patch("students/:id/adjustments/:adjustmentId")
+  updateAccountAdjustment(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("adjustmentId", ParseUUIDPipe) adjustmentId: string,
+    @Body() dto: UpdateAdjustmentDto,
+  ) {
+    return this.finance.updateAccountAdjustment(actor, id, adjustmentId, dto);
+  }
+
+  // DELETE отменяет (сторнирует), а не стирает: строку личного счёта уже
+  // показывали клиенту, и её исчезновение не оставило бы следа.
+  @Delete("students/:id/adjustments/:adjustmentId")
+  voidAccountAdjustment(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("adjustmentId", ParseUUIDPipe) adjustmentId: string,
+  ) {
+    return this.finance.voidAccountAdjustment(actor, id, adjustmentId);
   }
 
   @Post("students/:id/transfer")

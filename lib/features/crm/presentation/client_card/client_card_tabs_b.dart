@@ -335,9 +335,16 @@ extension _ClientCardTabsB on _ClientCardState {
                 final dt = DateTime.tryParse(
                   r['occurred_at']?.toString() ?? '',
                 )?.toLocal();
+                final isVoid = r['status']?.toString() == 'void';
                 final meta = [
                   if (dt != null) DateFormat('dd.MM.yy', 'ru').format(dt),
+                  // Колонки из эталона HolliHop: филиал, способ, № счёта,
+                  // статус, кто добавил.
+                  r['branch_name'],
                   r['method'],
+                  if ((r['invoice_number']?.toString() ?? '').isNotEmpty)
+                    '№ ${r['invoice_number']}',
+                  _ledgerStatusLabel(r['status']),
                   r['author_name'],
                 ].where((v) => v != null && '$v'.isNotEmpty).join(' · ');
                 return Padding(
@@ -352,7 +359,14 @@ extension _ClientCardTabsB on _ClientCardState {
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,
-                            color: amount > 0 ? AppTheme.success : cs.error,
+                            // Отменённая строка видна, но перечёркнута: она уже
+                            // не деньги, а прятать её нельзя.
+                            decoration: isVoid
+                                ? TextDecoration.lineThrough
+                                : null,
+                            color: isVoid
+                                ? cs.onSurfaceVariant
+                                : (amount > 0 ? AppTheme.success : cs.error),
                           ),
                         ),
                       ),
@@ -380,6 +394,14 @@ extension _ClientCardTabsB on _ClientCardState {
                           ],
                         ),
                       ),
+                      // Действия по строке — только у операций, которые завёл
+                      // человек. Платёж и списание за занятие правят там, где
+                      // они возникли, а не тут.
+                      if (r['editable'] == true && !isVoid)
+                        _LedgerRowActions(
+                          onEdit: () => _editAdjustment(r),
+                          onVoid: () => _voidAdjustment(r),
+                        ),
                     ],
                   ),
                 );
@@ -388,6 +410,155 @@ extension _ClientCardTabsB on _ClientCardState {
         );
       },
     );
+  }
+
+  /// Правка записи личного счёта. Сумма и знак пересобираются сервером от вида
+  /// операции, поэтому здесь только величина — «возврат» останется расходом.
+  Future<void> _editAdjustment(Map<String, dynamic> row) async {
+    // Диалог показывает величину без знака: знак — это вид операции, и
+    // пересобирает его сервер.
+    final rawAmount = num.tryParse(row['amount']?.toString() ?? '') ?? 0;
+    final amountCtrl = TextEditingController(
+      text: rawAmount.abs().round().toString(),
+    );
+    final descriptionCtrl = TextEditingController(
+      text: row['description']?.toString() ?? '',
+    );
+    final invoiceCtrl = TextEditingController(
+      text: row['invoice_number']?.toString() ?? '',
+    );
+    var status = row['status']?.toString() == 'pending' ? 'pending' : 'paid';
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Правка операции'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Сумма, ₽'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: descriptionCtrl,
+                  decoration: const InputDecoration(labelText: 'Комментарий'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: invoiceCtrl,
+                  decoration: const InputDecoration(labelText: '№ Счёта'),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: status,
+                  decoration: const InputDecoration(labelText: 'Статус'),
+                  items: const [
+                    DropdownMenuItem(value: 'paid', child: Text('Оплачен')),
+                    DropdownMenuItem(
+                      value: 'pending',
+                      child: Text('Не оплачен'),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => status = value ?? 'paid'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Сохранить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final amount = num.tryParse(amountCtrl.text.trim().replaceAll(',', '.'));
+    amountCtrl.dispose();
+    final description = descriptionCtrl.text;
+    descriptionCtrl.dispose();
+    final invoice = invoiceCtrl.text;
+    invoiceCtrl.dispose();
+    if (saved != true || !mounted) return;
+
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateAdjustment(
+            studentId: _studentId,
+            adjustmentId: row['id'].toString(),
+            amount: amount,
+            description: description,
+            invoiceNumber: invoice,
+            status: status,
+          );
+      if (!mounted) return;
+      _refreshLedger();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Не удалось сохранить: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
+  }
+
+  /// Отмена операции. Спрашиваем подтверждение: это деньги на счёте клиента.
+  Future<void> _voidAdjustment(Map<String, dynamic> row) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Отменить операцию?'),
+        content: const Text(
+          'Операция перестанет учитываться в балансе, но останется в истории '
+          'с пометкой об отмене.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Нет'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Отменить операцию'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .voidAdjustment(
+            studentId: _studentId,
+            adjustmentId: row['id'].toString(),
+          );
+      if (!mounted) return;
+      _refreshLedger();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Не удалось отменить: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
   }
 
   void _refreshLedger() {

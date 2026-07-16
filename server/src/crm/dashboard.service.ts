@@ -215,7 +215,9 @@ export class DashboardService {
               left join (
                 select adj.student_id, sum(adj.amount) as total_adjustments
                 from app.account_adjustments adj
-                where adj.deleted_at is null
+                -- Отменённая запись не деньги — см. тот же фильтр в
+                -- FinanceService.listStudentBalances.
+                where adj.deleted_at is null and adj.status <> 'void'
                 group by adj.student_id
               ) adj on adj.student_id = st.id
               where st.deleted_at is null

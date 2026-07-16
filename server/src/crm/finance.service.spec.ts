@@ -133,6 +133,8 @@ describe("FinanceService", () => {
       null,
       null,
       "manager-a",
+      null, // invoice_number («№ Счёта»)
+      null, // status → coalesce в 'paid'
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -156,6 +158,104 @@ describe("FinanceService", () => {
       }),
     ).resolves.toEqual({ id: "adj-plus", amount: 300, kind: "adjustment" });
     expect(query.mock.calls[1][1]).toContain(300);
+  });
+
+  describe("editing and voiding a ledger entry", () => {
+    it("keeps a refund negative no matter how it is edited", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "adj-a", kind: "refund", status: "paid" }] },
+        { rows: [{ id: "adj-a", amount: "-500" }] },
+      ]);
+
+      await expect(
+        service.updateAccountAdjustment(actor, "student-a", "adj-a", {
+          amount: 500,
+        }),
+      ).resolves.toEqual({ id: "adj-a", amount: -500 });
+
+      // Знак пересобирается от kind записи, а не берётся из DTO: возврат,
+      // ставший приходом, нарисовал бы клиенту деньги из воздуха.
+      expect((query.mock.calls[1][1] as unknown[])[2]).toBe(-500);
+    });
+
+    it("leaves untouched fields alone", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "adj-a", kind: "adjustment", status: "paid" }] },
+        { rows: [{ id: "adj-a", amount: "300" }] },
+      ]);
+
+      await service.updateAccountAdjustment(actor, "student-a", "adj-a", {
+        invoiceNumber: "СЧ-42",
+      });
+
+      const params = query.mock.calls[1][1] as unknown[];
+      expect(params[2]).toBeNull(); // amount не трогали → coalesce оставит своё
+      expect(params[6]).toBe("СЧ-42");
+    });
+
+    it("refuses to edit an entry that was already voided", async () => {
+      const { service } = createServiceWithQueryResults([
+        { rows: [{ id: "adj-a", kind: "refund", status: "void" }] },
+      ]);
+
+      await expect(
+        service.updateAccountAdjustment(actor, "student-a", "adj-a", {
+          amount: 100,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("voids rather than deletes, recording who did it", async () => {
+      const { service, query, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "adj-a" }] },
+      ]);
+
+      await expect(
+        service.voidAccountAdjustment(actor, "student-a", "adj-a"),
+      ).resolves.toEqual({ id: "adj-a", status: "void" });
+
+      const sql = String(query.mock.calls[0][0]);
+      // Строку личного счёта уже показывали клиенту: удаление не оставило бы
+      // следа, кто и что убрал.
+      expect(sql).toContain("set status = 'void'");
+      expect(sql).toContain("voided_by = $3");
+      expect(sql).not.toContain("delete from");
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "crm.account_adjustment_voided" }),
+      );
+    });
+
+    it("does not void the same entry twice", async () => {
+      const { service } = createServiceWithQueryResults([{ rows: [] }]);
+
+      await expect(
+        service.voidAccountAdjustment(actor, "student-a", "adj-a"),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("refuses to touch an entry belonging to another student", async () => {
+      const { service, query } = createServiceWithQueryResults([{ rows: [] }]);
+
+      await expect(
+        service.updateAccountAdjustment(actor, "student-b", "adj-a", {
+          amount: 1,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      // student_id стоит в WHERE, а не только в пути запроса — иначе чужую
+      // операцию можно было бы править, зная её id.
+      expect(String(query.mock.calls[0][0])).toContain("student_id = $2");
+    });
+  });
+
+  it("keeps a voided entry out of the balance", async () => {
+    const { service, query } = createService([]);
+
+    await service.listStudentBalances(actor, { limit: 10 });
+
+    // Без этого фильтра сторнирование не меняло бы баланс — то есть отмена
+    // ничего бы не отменяла.
+    expect(String(query.mock.calls[0][0])).toContain("adj.status <> 'void'");
   });
 
   it("lists payments with date filters and student summary", async () => {

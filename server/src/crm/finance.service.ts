@@ -8,7 +8,10 @@ import { ActorContext } from "../common/security/actor-context";
 import { managerAdminRolesSql } from "../common/security/role-sql";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
-import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
+import {
+  CreateAdjustmentDto,
+  UpdateAdjustmentDto,
+} from "./dto/create-adjustment.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
@@ -68,6 +71,10 @@ interface LedgerRow {
   author_first_name: string | null;
   author_last_name: string | null;
   occurred_at: Date | string;
+  invoice_number: string | null;
+  status: string;
+  /** Правится только то, что завёл человек, — платежи и списания за занятия нет. */
+  editable: boolean;
 }
 
 /**
@@ -327,7 +334,9 @@ export class FinanceService {
             sum(adj.amount) as total_adjustments,
             max(adj.occurred_at) as updated_at
           from app.account_adjustments adj
-          where adj.deleted_at is null
+          -- Отменённая (status='void') запись не деньги: без этого условия
+          -- сторнирование не меняло бы баланс, и отмена ничего бы не отменяла.
+          where adj.deleted_at is null and adj.status <> 'void'
           group by adj.student_id
         ),
         balances as (
@@ -392,7 +401,11 @@ export class FinanceService {
             b.name as branch_name,
             author.first_name as author_first_name,
             author.last_name as author_last_name,
-            coalesce(p.payment_date, p.created_at) as occurred_at
+            coalesce(p.payment_date, p.created_at) as occurred_at,
+            p.invoice_number,
+            -- Платёж существует только когда он получен.
+            'paid'::text as status,
+            false as editable
           from app.payments p
           left join app.students st on st.id = p.student_id
           left join app.branches b on b.id = st.branch_id
@@ -419,7 +432,12 @@ export class FinanceService {
             b.name as branch_name,
             null as author_first_name,
             null as author_last_name,
-            l.scheduled_at as occurred_at
+            l.scheduled_at as occurred_at,
+            null::text as invoice_number,
+            -- Списание за проведённое занятие — свершившийся факт; правят его
+            -- через статус посещаемости, а не строкой личного счёта.
+            'paid'::text as status,
+            false as editable
           from app.lessons l
           left join app.lesson_participation lp on lp.lesson_id = l.id and lp.student_id = $1
           join app.students s on s.id = coalesce(l.student_id, lp.student_id)
@@ -431,11 +449,19 @@ export class FinanceService {
 
           union all
 
-          select adj.id, adj.kind, adj.amount, adj.description, adj.method,
+          select adj.id, adj.kind,
+            -- Сумма остаётся настоящей: отменённая строка должна найтись в той
+            -- же вкладке «Приход»/«Расход», где её оставили, и быть видимой как
+            -- зачёркнутая. Из ИТОГОВ она исключается ниже.
+            adj.amount,
+            adj.description, adj.method,
             b.name as branch_name,
             author.first_name as author_first_name,
             author.last_name as author_last_name,
-            adj.occurred_at
+            adj.occurred_at,
+            adj.invoice_number,
+            adj.status,
+            true as editable
           from app.account_adjustments adj
           left join app.branches b on b.id = adj.branch_id
           left join app.users u on u.id = adj.created_by and u.deleted_at is null
@@ -443,8 +469,12 @@ export class FinanceService {
           where adj.deleted_at is null and adj.student_id = $1
         )
         select *,
-          sum(case when amount > 0 then amount else 0 end) over () as income_total,
-          sum(case when amount < 0 then -amount else 0 end) over () as outcome_total
+          -- Отменённые записи в итоги не входят — иначе «Приход − Расход»
+          -- перестанет сходиться с балансом, который видит клиент.
+          sum(case when status <> 'void' and amount > 0 then amount else 0 end)
+            over () as income_total,
+          sum(case when status <> 'void' and amount < 0 then -amount else 0 end)
+            over () as outcome_total
         from ledger
         where ($2::text is null
           or ($2 = 'income' and amount > 0)
@@ -472,6 +502,9 @@ export class FinanceService {
             .filter(Boolean)
             .join(" ") || null,
         occurredAt: row.occurred_at,
+        invoiceNumber: row.invoice_number,
+        status: row.status,
+        editable: row.editable,
       })),
       incomeTotal: Number(first?.income_total ?? 0),
       outcomeTotal: Number(first?.outcome_total ?? 0),
@@ -493,9 +526,10 @@ export class FinanceService {
     const result = await this.database.query<{ id: string }>(
       `
         insert into app.account_adjustments
-          (student_id, branch_id, kind, amount, description, method, occurred_at, created_by)
+          (student_id, branch_id, kind, amount, description, method, occurred_at,
+           created_by, invoice_number, status)
         values ($1, (select branch_id from app.students where id = $1), $2, $3, $4, $5,
-          coalesce($6::timestamptz, now()), $7)
+          coalesce($6::timestamptz, now()), $7, $8, coalesce($9, 'paid'))
         returning id
       `,
       [
@@ -506,6 +540,8 @@ export class FinanceService {
         dto.method ?? null,
         dto.occurredAt ?? null,
         actor.userId,
+        dto.invoiceNumber ?? null,
+        dto.status ?? null,
       ],
     );
     await this.audit.record({
@@ -516,6 +552,116 @@ export class FinanceService {
       metadata: { kind: dto.kind, amount: signedAmount },
     });
     return { id: result.rows[0].id, amount: signedAmount, kind: dto.kind };
+  }
+
+  /**
+   * Правка записи личного счёта.
+   *
+   * Знак суммы пересобирается от `kind` записи, а не берётся из DTO: возврат
+   * обязан остаться расходом, чем бы его ни правили. Отменённую запись править
+   * нельзя — её сначала возвращают в строй.
+   */
+  async updateAccountAdjustment(
+    actor: ActorContext,
+    studentId: string,
+    adjustmentId: string,
+    dto: UpdateAdjustmentDto,
+  ) {
+    this.policy.assertManagerOnly(actor);
+    const existing = await this.database.query<{
+      id: string;
+      kind: string;
+      status: string;
+    }>(
+      `select id, kind, status from app.account_adjustments
+       where id = $1 and student_id = $2 and deleted_at is null limit 1`,
+      [adjustmentId, studentId],
+    );
+    const row = existing.rows[0];
+    if (!row) throw new NotFoundException("Операция не найдена.");
+    if (row.status === "void") {
+      throw new BadRequestException(
+        "Операция отменена — правкам не подлежит.",
+      );
+    }
+
+    const outcome = row.kind === "refund" || dto.direction === "outcome";
+    const signedAmount =
+      dto.amount === undefined
+        ? null
+        : outcome
+          ? -Math.abs(dto.amount)
+          : Math.abs(dto.amount);
+
+    const updated = await this.database.query<{ id: string; amount: string }>(
+      `
+        update app.account_adjustments
+        set amount = coalesce($3::numeric, amount),
+          description = coalesce($4, description),
+          method = coalesce($5, method),
+          occurred_at = coalesce($6::timestamptz, occurred_at),
+          invoice_number = coalesce($7, invoice_number),
+          status = coalesce($8, status)
+        where id = $1 and student_id = $2 and deleted_at is null
+        returning id, amount
+      `,
+      [
+        adjustmentId,
+        studentId,
+        signedAmount,
+        dto.description ?? null,
+        dto.method ?? null,
+        dto.occurredAt ?? null,
+        dto.invoiceNumber ?? null,
+        dto.status ?? null,
+      ],
+    );
+    if (!updated.rows[0]) throw new NotFoundException("Операция не найдена.");
+    await this.audit.record({
+      actor,
+      action: "crm.account_adjustment_updated",
+      entityType: "student",
+      entityId: studentId,
+      // Деньги на счёте клиента: правку обязательно должно быть кому предъявить.
+      metadata: { adjustmentId, amount: signedAmount, status: dto.status },
+    });
+    return { id: updated.rows[0].id, amount: Number(updated.rows[0].amount) };
+  }
+
+  /**
+   * Отмена (сторно) записи личного счёта.
+   *
+   * Строку НЕ удаляют: баланс её уже показывали клиенту, а исчезнувшая запись
+   * не оставляет следа, кто и что убрал. Вместо этого статус становится 'void',
+   * запись выпадает из баланса и итогов, но остаётся видимой в ленте с автором
+   * отмены и временем.
+   */
+  async voidAccountAdjustment(
+    actor: ActorContext,
+    studentId: string,
+    adjustmentId: string,
+  ) {
+    this.policy.assertManagerOnly(actor);
+    const result = await this.database.query<{ id: string }>(
+      `
+        update app.account_adjustments
+        set status = 'void', voided_by = $3, voided_at = now()
+        where id = $1 and student_id = $2 and deleted_at is null and status <> 'void'
+        returning id
+      `,
+      [adjustmentId, studentId, actor.userId],
+    );
+    if (!result.rows[0]) {
+      throw new NotFoundException("Операция не найдена или уже отменена.");
+    }
+    await this.audit.record({
+      actor,
+      action: "crm.account_adjustment_voided",
+      entityType: "student",
+      entityId: studentId,
+      metadata: { adjustmentId },
+    });
+    return { id: result.rows[0].id, status: "void" };
   }
 
   /**

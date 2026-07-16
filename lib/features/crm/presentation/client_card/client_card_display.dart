@@ -630,6 +630,42 @@ String? _subscriptionCourse(Subscription s) {
   return 'Курс: ${hours(total)} астр.ч.$money';
 }
 
+/// Подпись статуса операции («Статус» из эталона HolliHop). `paid` не
+/// подписываем: это норма, и метка у каждой строки была бы шумом.
+String? _ledgerStatusLabel(Object? status) {
+  return switch (status?.toString()) {
+    'void' => 'отменена',
+    'pending' => 'не оплачен',
+    _ => null,
+  };
+}
+
+/// Правка/отмена строки личного счёта.
+class _LedgerRowActions extends StatelessWidget {
+  final VoidCallback onEdit;
+  final VoidCallback onVoid;
+
+  const _LedgerRowActions({required this.onEdit, required this.onVoid});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Действия',
+      icon: Icon(
+        Icons.more_horiz_rounded,
+        size: 16,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+      padding: EdgeInsets.zero,
+      onSelected: (value) => value == 'edit' ? onEdit() : onVoid(),
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'edit', child: Text('Редактировать')),
+        PopupMenuItem(value: 'void', child: Text('Отменить')),
+      ],
+    );
+  }
+}
+
 String _ledgerKindLabel(Object? kind) {
   return switch (kind?.toString()) {
     'payment' => 'Платёж',
