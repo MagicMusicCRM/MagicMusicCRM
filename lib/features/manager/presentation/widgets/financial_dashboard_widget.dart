@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/widgets/dashboard_legend_item.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -294,9 +295,9 @@ class _FinancialDashboardWidgetState
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _LegendItem(color: AppTheme.success, label: 'Доход'),
+                DashboardLegendItem(color: AppTheme.success, label: 'Доход'),
                 const SizedBox(width: 20),
-                _LegendItem(color: AppTheme.danger, label: 'Расход'),
+                DashboardLegendItem(color: AppTheme.danger, label: 'Расход'),
               ],
             ),
           ],
@@ -437,32 +438,3 @@ class _MonthlyFinancials {
   }
 }
 
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _LegendItem({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
-}

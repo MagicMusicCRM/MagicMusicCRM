@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
+import { managerAdminRolesSql } from "../common/security/role-sql";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmListQuery } from "./dto/crm-list.query";
@@ -110,7 +111,7 @@ export class SubscriptionsService {
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where ($3::uuid is null or sub.student_id = $3)
           and (
-            $1::text in ('manager', 'director', 'admin', 'system_admin')
+            ${managerAdminRolesSql("$1")}
             or ($1::text = 'client' and p.user_id = $2)
             or (
               $1::text = 'client'

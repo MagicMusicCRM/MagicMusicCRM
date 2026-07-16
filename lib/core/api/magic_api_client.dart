@@ -112,12 +112,29 @@ class MagicApiClient {
     );
   }
 
+  /// Authenticated binary GET returning the raw response bytes. Widgets that
+  /// need to download a file (e.g. report exports) go through this instead of
+  /// assembling their own authorized Dio request — token injection, proactive
+  /// refresh, single-flight 401 refresh and retry all stay centralized here.
+  Future<List<int>> downloadBytes(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) {
+    return request<List<int>>(
+      'GET',
+      path,
+      queryParameters: queryParameters,
+      responseType: ResponseType.bytes,
+    );
+  }
+
   Future<T> request<T>(
     String method,
     String path, {
     Object? data,
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
+    ResponseType? responseType,
   }) async {
     _addApiBreadcrumb(method, path, authenticated: authenticated);
     try {
@@ -127,6 +144,7 @@ class MagicApiClient {
         data: data,
         queryParameters: queryParameters,
         authenticated: authenticated,
+        responseType: responseType,
       );
     } on DioException catch (error) {
       if (!authenticated || error.response?.statusCode != 401) {
@@ -147,6 +165,7 @@ class MagicApiClient {
           data: data,
           queryParameters: queryParameters,
           authenticated: authenticated,
+          responseType: responseType,
         );
       } on DioException catch (retryError) {
         await _captureApiException(retryError, method, path);
@@ -167,6 +186,7 @@ class MagicApiClient {
     Object? data,
     Map<String, dynamic>? queryParameters,
     required bool authenticated,
+    ResponseType? responseType,
   }) async {
     const maxAttempts = 2;
     var attempt = 0;
@@ -179,6 +199,7 @@ class MagicApiClient {
           data: data,
           queryParameters: queryParameters,
           authenticated: authenticated,
+          responseType: responseType,
         );
       } on DioException catch (e) {
         if (attempt >= maxAttempts || !_isRetriableConnectionError(e, method)) {
@@ -207,6 +228,7 @@ class MagicApiClient {
     Object? data,
     Map<String, dynamic>? queryParameters,
     required bool authenticated,
+    ResponseType? responseType,
   }) async {
     final headers = <String, dynamic>{};
     if (authenticated) {
@@ -229,7 +251,11 @@ class MagicApiClient {
       _normalizePath(path),
       data: data,
       queryParameters: queryParameters,
-      options: Options(method: method, headers: headers),
+      options: Options(
+        method: method,
+        headers: headers,
+        responseType: responseType,
+      ),
     );
     stopwatch.stop();
     _addApiResponseBreadcrumb(

@@ -1,43 +1,92 @@
-/// Typed view over a payment record in the legacy map shape produced by
-/// `MagicCrmService`'s `_legacyPayment` mapper (snake_case keys). F0 first
-/// domain: replaces `payment['key']` string access with typed getters so the
-/// analyzer catches key typos and the shape lives in one place.
+/// A payment record.
 ///
-/// Getters mirror the exact expressions the widgets previously used against the
-/// raw map, so migrating call sites is behaviour-preserving (verified per site):
-///  - [amount] parses leniently (num or numeric string) — matches finance's
-///    `double.tryParse(...)` and the dashboard's `is num ? ... : num.tryParse`;
-///  - [amountRaw] is the untouched value, for the student tab's raw
-///    `'${payment['amount']} ₽'` interpolation (avoids any format drift);
-///  - the `??` fallbacks ([methodLabel], [note]) match the widgets' chains.
+/// M2 (Map→DTO) pattern reference: unlike the earlier F0 "typed view over the
+/// raw map", this is a real immutable DTO — [Payment.fromMap] parses the legacy
+/// snake_case map produced by `MagicCrmService`'s `_legacyPayment` mapper once,
+/// into typed `final` fields, and holds no reference to the source map. The
+/// public getter surface is byte-for-byte the same as the old wrapper, so every
+/// call site is unchanged (behaviour-preserving); the win is that the shape is
+/// now a genuine parsed contract instead of live `map['key']` access.
+///
+/// Migration recipe for the remaining domains (lead, subscription, comment, …):
+/// lift each wrapper getter into a `final` field, parse it once in `fromMap`,
+/// keep derived getters ([methodLabel], [note], [studentName]) as computed
+/// members, and collapse the mapper's duplicate keys into a single field here.
 class Payment {
-  final Map<String, dynamic> _m;
-
-  const Payment(this._m);
-
-  factory Payment.fromMap(Map<String, dynamic> map) => Payment(map);
-
-  String? get id => _m['id']?.toString();
-  String? get studentId => _m['student_id']?.toString();
+  final String? id;
+  final String? studentId;
 
   /// Untouched amount (num or numeric string) — for faithful raw interpolation.
-  Object? get amountRaw => _m['amount'];
+  final Object? amountRaw;
 
   /// Amount as a number, tolerating a num or a numeric string; 0 when absent.
-  num get amount {
-    final a = _m['amount'];
-    return a is num ? a : num.tryParse(a?.toString() ?? '') ?? 0;
-  }
+  final num amount;
 
-  String? get currency => _m['currency']?.toString();
-  String? get paymentDate => _m['payment_date']?.toString();
-  String? get createdAt => _m['created_at']?.toString();
-  String? get createdBy => _m['created_by']?.toString();
-  String? get method => _m['method']?.toString();
-  String? get type => _m['type']?.toString();
-  String? get notes => _m['notes']?.toString();
-  String? get description => _m['description']?.toString();
-  String? get externalId => _m['external_id']?.toString();
+  final String? currency;
+  final String? paymentDate;
+  final String? createdAt;
+  final String? createdBy;
+  final String? method;
+  final String? type;
+  final String? notes;
+  final String? description;
+  final String? externalId;
+
+  /// True when a linked student is present (the payment row is tappable).
+  final bool hasStudent;
+
+  /// Linked student id from the nested `students` map.
+  final String? studentEntityId;
+  final String? studentFirstName;
+  final String? studentLastName;
+
+  const Payment({
+    this.id,
+    this.studentId,
+    this.amountRaw,
+    this.amount = 0,
+    this.currency,
+    this.paymentDate,
+    this.createdAt,
+    this.createdBy,
+    this.method,
+    this.type,
+    this.notes,
+    this.description,
+    this.externalId,
+    this.hasStudent = false,
+    this.studentEntityId,
+    this.studentFirstName,
+    this.studentLastName,
+  });
+
+  factory Payment.fromMap(Map<String, dynamic> map) {
+    final amountRaw = map['amount'];
+    final students = map['students'] is Map<String, dynamic>
+        ? map['students'] as Map<String, dynamic>
+        : null;
+    return Payment(
+      id: map['id']?.toString(),
+      studentId: map['student_id']?.toString(),
+      amountRaw: amountRaw,
+      amount: amountRaw is num
+          ? amountRaw
+          : num.tryParse(amountRaw?.toString() ?? '') ?? 0,
+      currency: map['currency']?.toString(),
+      paymentDate: map['payment_date']?.toString(),
+      createdAt: map['created_at']?.toString(),
+      createdBy: map['created_by']?.toString(),
+      method: map['method']?.toString(),
+      type: map['type']?.toString(),
+      notes: map['notes']?.toString(),
+      description: map['description']?.toString(),
+      externalId: map['external_id']?.toString(),
+      hasStudent: students != null,
+      studentEntityId: students?['id']?.toString(),
+      studentFirstName: students?['first_name']?.toString(),
+      studentLastName: students?['last_name']?.toString(),
+    );
+  }
 
   /// Method label, falling back to [type] then '' — matches `method ?? type`.
   String get methodLabel => (method ?? type ?? '').trim();
@@ -45,23 +94,8 @@ class Payment {
   /// Note, falling back to [description] then '' — matches `notes ?? description`.
   String get note => (notes ?? description ?? '').trim();
 
-  Map<String, dynamic>? get _students =>
-      _m['students'] as Map<String, dynamic>?;
-
-  /// True when a linked student is present (the payment row is tappable).
-  bool get hasStudent => _students != null;
-
-  /// Linked student id from the nested `students` map (may differ from a raw
-  /// top-level `student_id` only in absence; the mapper sets both alike).
-  String? get studentEntityId => _students?['id']?.toString();
-
-  String? get studentFirstName => _students?['first_name']?.toString();
-  String? get studentLastName => _students?['last_name']?.toString();
-
-  /// «Имя Фамилия» from the nested `students` map; '' when absent.
-  String get studentName {
-    final s = _students;
-    if (s == null) return '';
-    return '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
-  }
+  /// «Имя Фамилия» from the linked student; '' when absent.
+  String get studentName => hasStudent
+      ? '${studentFirstName ?? ''} ${studentLastName ?? ''}'.trim()
+      : '';
 }

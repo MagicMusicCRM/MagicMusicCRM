@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -269,56 +268,26 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   /// `GET /analytics/finance/monthly.<ext>` with the same `from`/`to` window the
   /// widget's other analytics calls use.
   ///
-  /// Unlike chat attachments (pre-signed URLs), these endpoints require the
-  /// `Authorization` header, so we read the Bearer token straight off the shared
-  /// [MagicApiClient] (token store + base URL) and attach it to the `Dio`
-  /// download. Guarded by [_exporting] + `mounted` so it never blocks the UI.
+  /// The bytes come back through [MagicCrmService.exportFinanceMonthly], which
+  /// goes over the shared authenticated [MagicApiClient] (token injection, base
+  /// URL, proactive + 401 refresh, retry). This widget only persists the bytes
+  /// and opens the file. Guarded by [_exporting] + `mounted` so it never blocks
+  /// the UI.
   Future<void> _exportFinance(String ext) async {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
-      final api = ref.read(magicApiClientProvider);
-      final tokens = await api.readTokens();
-      final accessToken = tokens?.accessToken;
-      if (accessToken == null || accessToken.isEmpty) {
-        if (mounted) {
-          MagicToast.show(
-            context,
-            'Не удалось экспортировать',
-            detail: 'Нет авторизации — войдите снова',
-            type: MagicToastType.danger,
+      final bytes = await ref.read(magicCrmServiceProvider).exportFinanceMonthly(
+            format: ext,
+            from: _periodStart(),
+            to: _periodEnd(),
           );
-        }
-        return;
-      }
-      final tokenType = tokens?.tokenType.isNotEmpty == true
-          ? tokens!.tokenType
-          : 'Bearer';
-
-      // Base URL is normalised to a trailing slash by MagicApiClient; the path
-      // is normalised to no leading slash to match its request pipeline.
-      final baseUrl = api.rawDio.options.baseUrl;
-      final url =
-          '$baseUrl'
-          'analytics/finance/monthly.$ext';
-
-      final from = _periodStart().toIso8601String();
-      final to = _periodEnd().toIso8601String();
 
       final dir = await _exportDirectory();
       final stamp = DateFormat('yyyyMM').format(_periodStart());
       final fileName = 'finance-$stamp.$ext';
       final savePath = '${dir.path}${Platform.pathSeparator}$fileName';
-
-      await Dio().download(
-        url,
-        savePath,
-        queryParameters: {'from': from, 'to': to},
-        options: Options(
-          headers: {'Authorization': '$tokenType $accessToken'},
-          responseType: ResponseType.bytes,
-        ),
-      );
+      await File(savePath).writeAsBytes(bytes, flush: true);
 
       await OpenFilex.open(savePath);
       if (mounted) {
@@ -329,13 +298,22 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
           type: MagicToastType.success,
         );
       }
+    } on MagicApiException catch (e) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Ошибка экспорта',
+          detail: e.message,
+          type: MagicToastType.danger,
+        );
+      }
     } catch (e) {
       debugPrint('Finance export error: $e');
       if (mounted) {
         MagicToast.show(
           context,
           'Ошибка экспорта',
-          detail: '$e',
+          detail: 'Не удалось сохранить файл',
           type: MagicToastType.danger,
         );
       }

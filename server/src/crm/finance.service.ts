@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
+import { managerAdminRolesSql } from "../common/security/role-sql";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
@@ -18,24 +19,7 @@ import { UpsertExpenseDto } from "./dto/upsert-expense.dto";
 import { CrmPolicy } from "./crm.policy";
 import { audienceForStudent } from "./audience";
 import { findStudent } from "./student-read";
-
-// ponytail: PaymentRow/toPaymentDto are duplicated from CrmService, which still
-// uses them in getMySummary's recentPayments. Fold into a shared mapper in B5.
-interface PaymentRow {
-  id: string;
-  student_id: string;
-  student_user_id: string | null;
-  student_first_name: string | null;
-  student_last_name: string | null;
-  amount: string;
-  currency: string;
-  payment_date: Date | string;
-  method: string | null;
-  external_id: string | null;
-  notes: string | null;
-  created_by: string | null;
-  created_at: Date | string;
-}
+import { PaymentRow, toPaymentDto } from "./crm-mappers";
 
 interface ExpenseRow {
   id: string;
@@ -103,22 +87,32 @@ export class FinanceService {
     private readonly realtime: RealtimeBus,
   ) {}
 
-  private toPaymentDto(row: PaymentRow) {
-    return {
-      id: row.id,
-      studentId: row.student_id,
-      studentName:
-        `${row.student_first_name ?? ""} ${row.student_last_name ?? ""}`.trim() ||
-        null,
-      amount: Number(row.amount),
-      currency: row.currency,
-      paymentDate: row.payment_date,
-      method: row.method,
-      externalId: row.external_id,
-      notes: row.notes,
-      createdBy: row.created_by,
-      createdAt: row.created_at,
-    };
+  /**
+   * Client self-view: the most recent payments across the caller's own
+   * students, used by CrmService.getMySummary. Deliberately un-gated by
+   * CrmPolicy — the caller has already established student ownership, and this
+   * is a read of the client's own children's payments, not a manager finance
+   * report. Owns the payment SQL that previously lived inline in CrmService.
+   */
+  async listRecentPaymentsForStudents(studentIds: string[]) {
+    if (!studentIds.length) return [];
+    const result = await this.database.query<PaymentRow>(
+      `
+        select pay.id, pay.student_id, p.user_id as student_user_id,
+          p.first_name as student_first_name, p.last_name as student_last_name,
+          pay.amount, pay.currency, pay.payment_date, pay.method,
+          pay.external_id, pay.notes, pay.created_by, pay.created_at
+        from app.payments pay
+        join app.students s on s.id = pay.student_id and s.deleted_at is null
+        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+        where pay.deleted_at is null
+          and pay.student_id = any($1::uuid[])
+        order by pay.payment_date desc, pay.id desc
+        limit 20
+      `,
+      [studentIds],
+    );
+    return (result?.rows ?? []).map((row) => toPaymentDto(row));
   }
 
   private toExpectedPaymentDto(row: ExpectedPaymentRow) {
@@ -181,7 +175,7 @@ export class FinanceService {
           and ($4::timestamptz is null or pay.payment_date >= $4)
           and ($5::timestamptz is null or pay.payment_date < $5)
           and (
-            $1::text in ('manager', 'director', 'admin', 'system_admin')
+            ${managerAdminRolesSql("$1")}
             or ($1::text = 'client' and p.user_id = $2)
             or (
               $1::text = 'client'
@@ -224,7 +218,7 @@ export class FinanceService {
           and ($4::timestamptz is null or pay.payment_date >= $4)
           and ($5::timestamptz is null or pay.payment_date < $5)
           and (
-            $1::text in ('manager', 'director', 'admin', 'system_admin')
+            ${managerAdminRolesSql("$1")}
             or ($1::text = 'client' and p.user_id = $2)
             or (
               $1::text = 'client'
@@ -248,7 +242,7 @@ export class FinanceService {
       ],
     );
     return {
-      items: result.rows.map((row) => this.toPaymentDto(row)),
+      items: result.rows.map((row) => toPaymentDto(row)),
       totalAmount: Number(totals.rows[0]?.total_amount ?? "0"),
       totalCount: Number(totals.rows[0]?.total_count ?? "0"),
     };
@@ -585,7 +579,7 @@ export class FinanceService {
         return { payment: result.rows[0], existing: false };
       },
     );
-    if (existing) return this.toPaymentDto(payment);
+    if (existing) return toPaymentDto(payment);
     await this.audit.record({
       actor,
       action: "crm.payment_created",
@@ -603,7 +597,7 @@ export class FinanceService {
       id: payment.id,
       affectedUserIds,
     });
-    return this.toPaymentDto(payment);
+    return toPaymentDto(payment);
   }
 
   async listExpenses(actor: ActorContext, query: ExpenseQuery) {

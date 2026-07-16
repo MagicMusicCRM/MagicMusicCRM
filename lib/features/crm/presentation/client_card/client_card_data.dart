@@ -208,8 +208,10 @@ extension _ClientCardData on _ClientCardState {
             )
             .toList();
       });
-    } catch (_) {
-      // Card still renders with a fallback status.
+    } catch (e) {
+      // Card still renders with a fallback status; log so the failure is not
+      // completely silent during development.
+      debugPrint('Lead status list load failed: $e');
     }
   }
 
@@ -236,7 +238,8 @@ extension _ClientCardData on _ClientCardState {
         _loadingCard = false;
       });
       then?.call();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Lead card load failed: $e');
       if (mounted) _emitState(() => _loadingCard = false);
     }
   }
@@ -249,8 +252,9 @@ extension _ClientCardData on _ClientCardState {
           .listLeadApplications(leadId);
       if (!mounted) return;
       _emitState(() => _leadApplications = items);
-    } catch (_) {
+    } catch (e) {
       // Секция останется с пустым состоянием «Заявок нет».
+      debugPrint('Lead applications load failed: $e');
     }
   }
 
@@ -271,7 +275,8 @@ extension _ClientCardData on _ClientCardState {
             .toList();
         _loadingDuplicates = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Duplicate candidates load failed: $e');
       if (mounted) _emitState(() => _loadingDuplicates = false);
     }
   }
@@ -291,7 +296,8 @@ extension _ClientCardData on _ClientCardState {
         _statusHistory = items;
         _loadingHistory = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Lead status history load failed: $e');
       if (mounted) _emitState(() => _loadingHistory = false);
     }
   }
@@ -309,7 +315,8 @@ extension _ClientCardData on _ClientCardState {
         _family = result;
         _loadingFamily = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Family load failed: $e');
       if (mounted) _emitState(() => _loadingFamily = false);
     }
   }

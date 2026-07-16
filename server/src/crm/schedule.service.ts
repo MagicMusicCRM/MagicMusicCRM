@@ -9,6 +9,7 @@ import {
   ActorContext,
   isManagerOrAdminRole,
 } from "../common/security/actor-context";
+import { managerAdminRolesSql } from "../common/security/role-sql";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
@@ -21,33 +22,11 @@ import {
   UpdateScheduleSeriesDto,
 } from "./dto/schedule-series.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
-
-// ponytail: LessonRow + toLessonDto copied from crm.service (still used there by
-// getMySummary/listLeadTrialLessons). Shared lesson mapper — consolidate only if
-// a third owner appears.
-interface LessonRow {
-  id: string;
-  student_id: string | null;
-  group_id: string | null;
-  lead_id: string | null;
-  teacher_id: string | null;
-  branch_id: string | null;
-  room_id: string | null;
-  scheduled_at: Date | string;
-  duration_minutes: number;
-  status: string;
-  is_trial: boolean;
-  notes: string | null;
-  teacher_rate?: string | number | null;
-  student_user_id: string | null;
-  teacher_user_id: string | null;
-  student_name: string | null;
-  teacher_name: string | null;
-  branch_name: string | null;
-  room_name: string | null;
-  group_name: string | null;
-  group_price_per_lesson: string | null;
-}
+import {
+  LessonRow,
+  formatLessonTimeMoscow,
+  toLessonDto,
+} from "./crm-mappers";
 
 interface ScheduleLessonRow extends LessonRow {
   conflict_types: string[] | null;
@@ -228,7 +207,7 @@ export class ScheduleService {
       ],
     );
     const items = result.rows.map((row) => ({
-      ...this.toLessonDto(row),
+      ...toLessonDto(row),
       conflictTypes: row.conflict_types ?? [],
     }));
     const groups = this.groupScheduleItems(items, groupBy);
@@ -386,7 +365,7 @@ export class ScheduleService {
           and ($6::timestamptz is null or l.scheduled_at <= $6)
           and ($7::boolean is null or l.is_trial = $7)
           and (
-            $1::text in ('manager', 'director', 'admin', 'system_admin')
+            ${managerAdminRolesSql("$1")}
             or ($1::text = 'teacher' and tp.user_id = $2)
             or ($1::text = 'client' and sp.user_id = $2)
             or (
@@ -432,7 +411,7 @@ export class ScheduleService {
       ],
     );
 
-    return { items: result.rows.map((row) => this.toLessonDto(row)) };
+    return { items: result.rows.map((row) => toLessonDto(row)) };
   }
 
   async createLesson(actor: ActorContext, dto: UpsertLessonDto) {
@@ -487,7 +466,7 @@ export class ScheduleService {
       branchId: lesson.branch_id ?? null,
       affectedUserIds,
     });
-    return this.toLessonDto(lesson);
+    return toLessonDto(lesson);
   }
 
   // ── KVA-236: постоянное расписание (серии) ────────────────────────────────
@@ -899,7 +878,7 @@ export class ScheduleService {
       branchId: lesson.branch_id ?? null,
       affectedUserIds,
     });
-    return this.toLessonDto(lesson);
+    return toLessonDto(lesson);
   }
 
   // KVA-158: when a lesson is actually rescheduled — its time, room or
@@ -931,7 +910,7 @@ export class ScheduleService {
         : null;
     }
 
-    const whenLocal = this.formatLessonTimeMoscow(lesson.scheduled_at);
+    const whenLocal = formatLessonTimeMoscow(lesson.scheduled_at);
     const reasons: string[] = [];
     if (timeChanged) reasons.push("время");
     if (roomChanged) reasons.push("аудитория");
@@ -958,7 +937,7 @@ export class ScheduleService {
         oldTeacherUserId &&
         oldTeacherUserId !== newTeacherUserId
       ) {
-        const oldWhenLocal = this.formatLessonTimeMoscow(
+        const oldWhenLocal = formatLessonTimeMoscow(
           previous.scheduled_at,
         );
         await this.notifications.notifyUser({
@@ -990,22 +969,51 @@ export class ScheduleService {
     return result.rows[0]?.user_id ?? null;
   }
 
-  private formatLessonTimeMoscow(value: Date | string | null): string {
-    if (value === null) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    // Mirror the reminder format ("DD.MM HH24:MI", Europe/Moscow).
-    const parts = new Intl.DateTimeFormat("ru-RU", {
-      timeZone: "Europe/Moscow",
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(date);
-    const get = (type: string) =>
-      parts.find((part) => part.type === type)?.value ?? "";
-    return `${get("day")}.${get("month")} ${get("hour")}:${get("minute")}`;
+  /**
+   * Client self-view: upcoming lessons across the caller's own students (direct
+   * and via group membership), used by CrmService.getMySummary. Un-gated by
+   * CrmPolicy — ownership is established upstream. Owns the lesson SQL that
+   * previously lived inline in CrmService.
+   */
+  async listUpcomingLessonsForStudents(studentIds: string[]) {
+    if (!studentIds.length) return [];
+    const result = await this.database.query<LessonRow>(
+      `
+        select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
+          l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
+          sp.user_id as student_user_id, tp.user_id as teacher_user_id,
+          trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
+          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
+          b.name as branch_name,
+          r.name as room_name,
+          g.name as group_name,
+          g.price_per_lesson as group_price_per_lesson
+        from app.lessons l
+        left join app.students s on s.id = l.student_id and s.deleted_at is null
+        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        left join app.branches b on b.id = l.branch_id and b.deleted_at is null
+        left join app.rooms r on r.id = l.room_id and r.deleted_at is null
+        left join app.groups g on g.id = l.group_id and g.deleted_at is null
+        where l.deleted_at is null
+          and l.scheduled_at >= now()
+          and (
+            l.student_id = any($1::uuid[])
+            or exists (
+              select 1
+              from app.group_students gs
+              where gs.group_id = l.group_id
+                and gs.student_id = any($1::uuid[])
+                and gs.left_at is null
+            )
+          )
+        order by l.scheduled_at asc, l.id asc
+        limit 20
+      `,
+      [studentIds],
+    );
+    return (result?.rows ?? []).map((row) => toLessonDto(row));
   }
 
   async deleteLesson(actor: ActorContext, lessonId: string) {
@@ -1143,33 +1151,4 @@ export class ScheduleService {
     return Array.from(groups.values());
   }
 
-  private toLessonDto(row: LessonRow) {
-    return {
-      id: row.id,
-      studentId: row.student_id,
-      groupId: row.group_id,
-      leadId: row.lead_id,
-      teacherId: row.teacher_id,
-      branchId: row.branch_id,
-      roomId: row.room_id,
-      scheduledAt: row.scheduled_at,
-      durationMinutes: row.duration_minutes,
-      status: row.status,
-      isTrial: row.is_trial,
-      notes: row.notes,
-      teacherRate:
-        row.teacher_rate === null || row.teacher_rate === undefined
-          ? null
-          : Number(row.teacher_rate),
-      studentName: row.student_name || null,
-      teacherName: row.teacher_name || null,
-      branchName: row.branch_name || null,
-      roomName: row.room_name || null,
-      groupName: row.group_name || null,
-      groupPricePerLesson:
-        row.group_price_per_lesson === null
-          ? null
-          : Number(row.group_price_per_lesson),
-    };
-  }
 }

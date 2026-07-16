@@ -3,6 +3,7 @@ import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
 import { sanitizeJsonObject } from "./crm-util";
@@ -11,6 +12,14 @@ import { CrmListQuery } from "./dto/crm-list.query";
 import { LeadBoardQuery } from "./dto/lead-board.query";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { StudentRow } from "./student-read";
+import {
+  LessonRow,
+  TaskRow,
+  presentableEmail,
+  toLessonDto,
+  toTaskDto,
+  toTimelineDto,
+} from "./crm-mappers";
 
 interface LeadRow {
   id: string;
@@ -69,70 +78,10 @@ interface CommentRow {
   created_at: Date | string;
 }
 
-// ponytail: TaskRow/LessonRow/TimelineRow + toTaskDto/toLessonDto/toTimelineDto/
-// toStudentDto/toNumericStat/presentableEmail/listChatWorkTimeline copied from
+// ponytail: toStudentDto/toNumericStat/listChatWorkTimeline are still copied from
 // crm.service — the retained student aggregators (getMySummary/getStudentCard)
-// still own them. Shared read shapes; consolidate only if a third owner appears.
-interface TaskRow {
-  id: string;
-  entity_type: string;
-  entity_id: string;
-  assigned_to: string | null;
-  assigned_first_name?: string | null;
-  assigned_last_name?: string | null;
-  creator_first_name?: string | null;
-  creator_last_name?: string | null;
-  assigned_profile_id?: string | null;
-  creator_profile_id?: string | null;
-  entity_first_name?: string | null;
-  entity_last_name?: string | null;
-  entity_name?: string | null;
-  branch_id?: string | null;
-  branch_name?: string | null;
-  title: string;
-  description: string | null;
-  status: string;
-  due_at: Date | string | null;
-  created_by: string | null;
-  created_at: Date | string;
-}
-
-interface LessonRow {
-  id: string;
-  student_id: string | null;
-  group_id: string | null;
-  lead_id: string | null;
-  teacher_id: string | null;
-  branch_id: string | null;
-  room_id: string | null;
-  scheduled_at: Date | string;
-  duration_minutes: number;
-  status: string;
-  is_trial: boolean;
-  notes: string | null;
-  teacher_rate?: string | number | null;
-  student_user_id: string | null;
-  teacher_user_id: string | null;
-  student_name: string | null;
-  teacher_name: string | null;
-  branch_name: string | null;
-  room_name: string | null;
-  group_name: string | null;
-  group_price_per_lesson: string | null;
-}
-
-interface TimelineRow {
-  id: string;
-  type: string;
-  title: string;
-  body: string | null;
-  status: string | null;
-  amount: string | number | null;
-  actor_user_id: string | null;
-  actor_first_name: string | null;
-  actor_last_name: string | null;
-  occurred_at: Date | string;
-}
+// still own them. The DTO mappers (LessonRow/TaskRow/TimelineRow + toLessonDto/
+// toTaskDto/toTimelineDto) and presentableEmail now live in ./crm-mappers.
 
 /**
  * Lead pipeline (app.leads): board/card/list, CRUD, status history,
@@ -148,6 +97,7 @@ export class LeadsService {
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
     private readonly notifications: NotificationsService,
+    private readonly chatWork: ChatWorkTimelineService,
     private readonly realtime: RealtimeBus,
   ) {}
 
@@ -950,7 +900,7 @@ export class LeadsService {
       `,
       [leadId],
     );
-    return result.rows.map((row) => this.toTaskDto(row));
+    return result.rows.map((row) => toTaskDto(row));
   }
 
   private async listLeadTrialLessons(leadId: string) {
@@ -979,66 +929,18 @@ export class LeadsService {
       `,
       [leadId],
     );
-    return result.rows.map((row) => this.toLessonDto(row));
+    return result.rows.map((row) => toLessonDto(row));
   }
 
+  // Chat "taken into work" events belong to the messenger schema
+  // (app.chats / app.chat_work_events); read them through the messenger-owned
+  // ChatWorkTimelineService instead of inlining that SQL here.
   private async listChatWorkTimeline(
     entityType: "student" | "lead",
     entityId: string,
   ) {
-    const result = await this.database.query<TimelineRow>(
-      `
-        select work.id::text as id, 'chat_work'::text as type,
-          case
-            when work.action = 'unassigned' then 'Снято с работы'
-            else 'Взято в работу'
-          end as title,
-          nullif(
-            trim(coalesce(target_profile.first_name, '') || ' ' || coalesce(target_profile.last_name, '')),
-            ''
-          ) as body,
-          work.action as status, null::numeric as amount,
-          work.actor_user_id,
-          actor_profile.first_name as actor_first_name,
-          actor_profile.last_name as actor_last_name,
-          work.created_at as occurred_at
-        from app.chat_work_events work
-        join app.chats chat on chat.id = work.chat_id and chat.deleted_at is null
-        left join app.users actor_user on actor_user.id = work.actor_user_id and actor_user.deleted_at is null
-        left join app.profiles actor_profile on actor_profile.user_id = actor_user.id and actor_profile.deleted_at is null
-        left join app.users target_user on target_user.id = work.target_user_id and target_user.deleted_at is null
-        left join app.profiles target_profile on target_profile.user_id = target_user.id and target_profile.deleted_at is null
-        where chat.type = 'administration'
-          and (
-            ($1 = 'student' and (
-              chat.student_id = $2::uuid
-              or exists (
-                select 1
-                from app.user_crm_links link
-                where link.entity_type = 'student'
-                  and link.entity_id = $2::uuid
-                  and link.user_id = chat.owner_user_id
-                  and link.deleted_at is null
-              )
-            ))
-            or ($1 = 'lead' and (
-              chat.lead_id = $2::uuid
-              or exists (
-                select 1
-                from app.user_crm_links link
-                where link.entity_type = 'lead'
-                  and link.entity_id = $2::uuid
-                  and link.user_id = chat.owner_user_id
-                  and link.deleted_at is null
-              )
-            ))
-          )
-        order by work.created_at desc, work.id desc
-        limit 50
-      `,
-      [entityType, entityId],
-    );
-    return (result?.rows ?? []).map((row) => this.toTimelineDto(row));
+    const rows = await this.chatWork.listForEntity(entityType, entityId);
+    return rows.map((row) => toTimelineDto(row));
   }
 
   private toLeadDto(row: LeadRow) {
@@ -1049,7 +951,7 @@ export class LeadsService {
       firstName: row.first_name,
       lastName: row.last_name,
       phone: row.phone,
-      email: this.presentableEmail(row.email),
+      email: presentableEmail(row.email),
       source: row.source,
       notes: row.notes,
       assignedTo: row.assigned_to,
@@ -1116,108 +1018,11 @@ export class LeadsService {
       profileUserId: row.profile_user_id,
       firstName: row.first_name,
       lastName: row.last_name,
-      email: this.presentableEmail(row.email),
+      email: presentableEmail(row.email),
       phone: row.phone,
       teacherUserIds: row.teacher_user_ids ?? [],
       createdAt: row.created_at,
     };
-  }
-
-  private toTaskDto(row: TaskRow) {
-    const assignedName =
-      `${row.assigned_first_name ?? ""} ${row.assigned_last_name ?? ""}`.trim();
-    const creatorName =
-      `${row.creator_first_name ?? ""} ${row.creator_last_name ?? ""}`.trim();
-    const personName =
-      `${row.entity_first_name ?? ""} ${row.entity_last_name ?? ""}`.trim();
-    const task: Record<string, unknown> = {
-      id: row.id,
-      entityType: row.entity_type,
-      entityId: row.entity_id,
-      assignedTo: row.assigned_to,
-      assignedName: assignedName || null,
-      assignedProfileId: row.assigned_profile_id ?? null,
-      creatorProfileId: row.creator_profile_id ?? null,
-      entityName: personName || row.entity_name?.trim() || null,
-      title: row.title,
-      description: row.description,
-      status: row.status,
-      dueAt: row.due_at,
-      createdBy: row.created_by,
-      createdAt: row.created_at,
-    };
-    if (
-      row.creator_first_name !== undefined ||
-      row.creator_last_name !== undefined
-    ) {
-      task.creatorName = creatorName || null;
-    }
-    if (row.branch_id !== undefined) {
-      task.branchId = row.branch_id;
-    }
-    if (row.branch_name !== undefined) {
-      task.branchName = row.branch_name;
-    }
-    return task;
-  }
-
-  private toLessonDto(row: LessonRow) {
-    return {
-      id: row.id,
-      studentId: row.student_id,
-      groupId: row.group_id,
-      leadId: row.lead_id,
-      teacherId: row.teacher_id,
-      branchId: row.branch_id,
-      roomId: row.room_id,
-      scheduledAt: row.scheduled_at,
-      durationMinutes: row.duration_minutes,
-      status: row.status,
-      isTrial: row.is_trial,
-      notes: row.notes,
-      teacherRate:
-        row.teacher_rate === null || row.teacher_rate === undefined
-          ? null
-          : Number(row.teacher_rate),
-      studentName: row.student_name || null,
-      teacherName: row.teacher_name || null,
-      branchName: row.branch_name || null,
-      roomName: row.room_name || null,
-      groupName: row.group_name || null,
-      groupPricePerLesson:
-        row.group_price_per_lesson === null
-          ? null
-          : Number(row.group_price_per_lesson),
-    };
-  }
-
-  private toTimelineDto(row: TimelineRow) {
-    const actorName =
-      `${row.actor_first_name ?? ""} ${row.actor_last_name ?? ""}`.trim();
-    return {
-      id: row.id,
-      type: row.type,
-      title: row.title,
-      body: row.body,
-      status: row.status,
-      amount: row.amount === null ? null : Number(row.amount),
-      actorUserId: row.actor_user_id,
-      actorName: actorName || null,
-      occurredAt: row.occurred_at,
-    };
-  }
-
-  private presentableEmail(value: string | null | undefined): string | null {
-    return value && this.isDeliverableEmail(value) ? value : null;
-  }
-
-  private isDeliverableEmail(value: string): boolean {
-    const email = value.trim().toLowerCase();
-    return (
-      email.length > 0 &&
-      !email.endsWith("@local.magicmusiccrm.invalid") &&
-      !email.endsWith("@migration.invalid")
-    );
   }
 
   private toNumericStat(value: string | number | null | undefined): number {

@@ -180,20 +180,10 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                               lesson['branch_name'] as String? ?? 'Без филиала';
 
                           // Unified name resolution from flattened fields
-                          var teacherFirst =
+                          final teacherFirst =
                               lesson['teacher_first_name'] as String? ?? '';
-                          var teacherLast =
+                          final teacherLast =
                               lesson['teacher_last_name'] as String? ?? '';
-                          if (teacherFirst.isEmpty && teacherLast.isEmpty) {
-                            teacherFirst =
-                                lesson['teacher_profile_first_name']
-                                    as String? ??
-                                '';
-                            teacherLast =
-                                lesson['teacher_profile_last_name']
-                                    as String? ??
-                                '';
-                          }
                           final teacherName = '$teacherFirst $teacherLast'
                               .trim();
 

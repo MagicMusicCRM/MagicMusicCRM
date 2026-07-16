@@ -34,8 +34,18 @@ export function isAdminRole(role: UserRole): boolean {
   return role === 'admin' || role === 'system_admin';
 }
 
+// Single source of the "management" role set (manager/director/admin/system_admin).
+// Both the TS predicate below and the SQL predicate helper in ./role-sql.ts derive
+// from this array, so adding or renaming a management role is a one-line change.
+export const MANAGER_ADMIN_ROLES: readonly UserRole[] = [
+  'manager',
+  'director',
+  'admin',
+  'system_admin',
+];
+
 export function isManagerOrAdminRole(role: UserRole): boolean {
-  return role === 'manager' || role === 'director' || isAdminRole(role);
+  return MANAGER_ADMIN_ROLES.includes(role);
 }
 
 // Иерархия ролей (бизнес-правило владельца): Управляющий (manager) ВЫШЕ

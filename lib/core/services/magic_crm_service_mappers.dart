@@ -450,8 +450,6 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
     'student_last_name': studentParts.$2,
     'teacher_first_name': teacherParts.$1,
     'teacher_last_name': teacherParts.$2,
-    'teacher_profile_first_name': teacherParts.$1,
-    'teacher_profile_last_name': teacherParts.$2,
     'groups': {
       'id': item['groupId'],
       'name': item['groupName'],
