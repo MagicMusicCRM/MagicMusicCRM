@@ -336,10 +336,12 @@ export class ScheduleService {
     // step with computeLessonAccrual (payroll.service.ts): lesson → group →
     // the rate history entry in force on the lesson date → 0.
     //
-    // Gated: this endpoint serves clients too (see the note above), and a
-    // teacher's pay rate is school-finance data — KVA-239 keeps that to
-    // director/system_admin, so everyone else gets null rather than a leak.
-    const canSeeRates = this.policy.canReadSchoolFinance(actor);
+    // Gated: this endpoint serves clients and teachers too (see the note
+    // above), so the rate is selected only for staff who may see it — everyone
+    // else gets null rather than a leak. Per the owner's 16.07 decision a
+    // per-lesson rate is NOT school-wide finance, so admin/manager see it;
+    // the aggregate revenue view stays director-only (canReadSchoolFinance).
+    const canSeeRates = this.policy.canReadTeacherRates(actor);
     const appliedRateSql = canSeeRates
       ? `coalesce(
             l.teacher_rate,

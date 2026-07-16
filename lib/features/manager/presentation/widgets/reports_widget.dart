@@ -55,16 +55,28 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   // ── Realtime invalidation (crm.changed) ───────────────────────────────────
   Timer? _realtimeDebounce;
 
-  // KVA-239: финансовая аналитика (саб-табы «Аналитика»/«Финансы») — только
-  // director/system_admin. Управляющий видит Активность/Управление/Абонементы.
+  // KVA-239: обще-суммарная аналитика (саб-табы «Аналитика»/«Финансы») —
+  // только director/system_admin.
   bool get _canSeeFinance => crmHasSchoolFinanceAccess(widget.role);
+
+  // Поразрезные финансы: ставки/ЗП педагогов. ✔ Решение владельца 16.07 —
+  // доступны и Администратору, и Управляющему.
+  bool get _canSeeTeacherRates => crmHasTeacherRatesAccess(widget.role);
 
   /// Canonical sub-tab indices (0 Аналитика · 1 Финансы · 2 Активность ·
   /// 3 Управление · 4 Абонементы · 5 Преподаватели/ЗП) visible to the current
-  /// role. «Преподаватели» — зарплатный модуль (KVA-238), по KVA-239 это
-  /// общешкольные финансы: только director/system_admin.
-  List<int> get _visibleReportTabs =>
-      _canSeeFinance ? const [0, 1, 2, 3, 4, 5] : const [2, 3, 4];
+  /// role. «Преподаватели» — зарплатный модуль (KVA-238): это ставки
+  /// конкретных педагогов, а не обще-суммарная сводка, поэтому он открыт
+  /// Администратору и Управляющему. Без этого получалась нестыковка: массово
+  /// проставить «входит в оклад» Управляющий мог, а открыть отчёт, из которого
+  /// это делается, — нет.
+  List<int> get _visibleReportTabs => [
+    if (_canSeeFinance) ...[0, 1],
+    2,
+    3,
+    4,
+    if (_canSeeTeacherRates) 5,
+  ];
 
   int _positionForCanonicalTab(int canonical) {
     final pos = _visibleReportTabs.indexOf(canonical.clamp(0, 5));
@@ -251,9 +263,9 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             const Tab(text: 'Активность'),
             const Tab(text: 'Управление'),
             const Tab(text: 'Абонементы'),
-            // KVA-238: «Статистика преподавателей» (зарплатный модуль);
-            // по KVA-239 — общешкольные финансы, только director/system_admin.
-            if (_canSeeFinance) const Tab(text: 'Преподаватели'),
+            // KVA-238 «Статистика преподавателей» — ставки конкретных
+            // педагогов, не обще-суммарная сводка → админ и управляющий тоже.
+            if (_canSeeTeacherRates) const Tab(text: 'Преподаватели'),
           ],
         ),
         Expanded(
@@ -265,7 +277,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               const _ActivityLogTab(),
               ManagementDashboardWidget(role: widget.role),
               const SubscriptionCatalogWidget(),
-              if (_canSeeFinance) const TeacherStatsWidget(),
+              if (_canSeeTeacherRates) const TeacherStatsWidget(),
             ],
           ),
         ),

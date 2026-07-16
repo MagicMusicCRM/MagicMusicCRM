@@ -101,20 +101,33 @@ describe("CrmPolicy", () => {
     ).not.toThrow();
   });
 
-  // KVA-238 + KVA-239: зарплатный модуль — часть общешкольных финансов,
-  // доступ унифицирован: только director/system_admin (manager отрезан
-  // решением заказчика 2026-07-10).
-  it("restricts payroll to director and system_admin only", () => {
-    expect(() =>
-      policy.assertCanReadPayroll({ userId: "s", role: "system_admin" }),
-    ).not.toThrow();
-    expect(() =>
-      policy.assertCanReadPayroll({ userId: "d", role: "director" }),
-    ).not.toThrow();
-    for (const role of ["manager", "admin", "teacher", "client"] as const) {
+  // ✔ Решение владельца 16.07.2026: ставки педагогов и зарплатный раздел —
+  // ПОРАЗРЕЗНАЯ финансовая информация, а не обще-суммарная сводка, поэтому
+  // открыты Администратору и Управляющему. Раньше приравнивались к
+  // общешкольным финансам (только director) — и получалась нестыковка:
+  // Управляющий мог массово проставить «входит в оклад», но не мог открыть
+  // отчёт, из которого это делается.
+  it("opens payroll to admin and manager, not just the director", () => {
+    for (const role of ["system_admin", "director", "manager", "admin"] as const) {
+      expect(() =>
+        policy.assertCanReadPayroll({ userId: "u", role }),
+      ).not.toThrow();
+    }
+  });
+
+  it("still keeps payroll away from teachers and clients", () => {
+    for (const role of ["teacher", "client"] as const) {
       expect(() =>
         policy.assertCanReadPayroll({ userId: "u", role }),
       ).toThrow(ForbiddenException);
+    }
+  });
+
+  it("draws teacher rates wider than the aggregate finance view", () => {
+    // Именно эта разница и есть суть решения.
+    for (const role of ["admin", "manager"] as const) {
+      expect(policy.canReadTeacherRates({ userId: "u", role })).toBe(true);
+      expect(policy.canReadSchoolFinance({ userId: "u", role })).toBe(false);
     }
   });
 

@@ -31,6 +31,34 @@ void main() {
     });
   });
 
+  group('crmHasTeacherRatesAccess — поразрезные финансы (решение 16.07)', () {
+    test('ставки педагогов видят и админ, и управляющий', () {
+      // Ставка за занятие — не обще-суммарная сводка, поэтому граница шире,
+      // чем у crmHasSchoolFinanceAccess.
+      expect(crmHasTeacherRatesAccess('director'), isTrue);
+      expect(crmHasTeacherRatesAccess('system_admin'), isTrue);
+      expect(crmHasTeacherRatesAccess('manager'), isTrue);
+      expect(crmHasTeacherRatesAccess('admin'), isTrue);
+    });
+
+    test('но не педагог и не клиент', () {
+      expect(crmHasTeacherRatesAccess('teacher'), isFalse);
+      expect(crmHasTeacherRatesAccess('client'), isFalse);
+    });
+
+    test('шире общешкольных финансов, но у́же операционного доступа', () {
+      // Именно эта разница и есть суть решения: раньше ставки приравнивались
+      // к общешкольным финансам, и управляющий мог массово менять ставки, но
+      // не мог открыть отчёт, из которого это делается.
+      for (final role in ['admin', 'manager']) {
+        expect(crmHasSchoolFinanceAccess(role), isFalse);
+        expect(crmHasTeacherRatesAccess(role), isTrue);
+      }
+      expect(crmHasManagerAccess('teacher'), isFalse);
+      expect(crmHasTeacherRatesAccess('teacher'), isFalse);
+    });
+  });
+
   group('crmVisibleTabs — per-role destination matrix', () {
     test('Администратор: operational CRM без раздела «Финансы» (5)', () {
       expect(crmVisibleTabs('admin', isDesktop: true), [0, 1, 2, 3, 4, 6, 7]);

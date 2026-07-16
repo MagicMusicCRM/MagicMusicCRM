@@ -24,12 +24,22 @@ bool crmHasManagerAccess(String role) =>
     role == 'director' ||
     role == 'system_admin';
 
-/// KVA-239: ОБЩЕШКОЛЬНЫЕ финансы и финансовая аналитика (раздел «Финансы»,
+/// KVA-239: ОБЩЕ-СУММАРНЫЕ финансы и финансовая аналитика (раздел «Финансы»,
 /// отчёт по выручке, расходы, помесячные финансы) — только Директор и
 /// Администратор системы. Управляющий/Администратор исключены; финансы в
 /// КАРТОЧКАХ клиентов (история оплат, баланс, личный счёт) у них остаются.
 bool crmHasSchoolFinanceAccess(String role) =>
     role == 'director' || role == 'system_admin';
+
+/// ПОРАЗРЕЗНЫЕ финансы: ставка педагога за занятие, зарплатный раздел, отчёт
+/// «Статистика преподавателей».
+///
+/// ✔ Решение владельца 16.07.2026 — «ставки педагога и иная подобная НЕ
+/// обще-суммарная фин. информация» доступна Администратору и Управляющему.
+/// Зеркалит серверный CrmPolicy.canReadTeacherRates; шире, чем
+/// [crmHasSchoolFinanceAccess], но у́же операционного доступа: педагог и клиент
+/// ставок не видят.
+bool crmHasTeacherRatesAccess(String role) => crmHasManagerAccess(role);
 
 /// Canonical CRM tab indices visible to [role], in display order.
 List<int> crmVisibleTabs(String role, {required bool isDesktop}) {

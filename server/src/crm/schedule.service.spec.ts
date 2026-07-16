@@ -18,8 +18,10 @@ describe("ScheduleService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertManagerOnly: jest.fn(),
-      // Teacher pay rates are school finance: only director/system_admin see
-      // them, so the default mock says no.
+      // Per-lesson teacher rates: staff-only (admin/manager/director), not
+      // clients or teachers — the default mock says no so a leak has to be
+      // opted into explicitly by a test.
+      canReadTeacherRates: jest.fn().mockReturnValue(false),
       canReadSchoolFinance: jest.fn().mockReturnValue(false),
     };
     return { audit, notifications, policy };
@@ -67,7 +69,7 @@ describe("ScheduleService", () => {
 
     it("never selects pay rates for an actor who may not see them", async () => {
       const { service, query, policy } = createService([]);
-      policy.canReadSchoolFinance.mockReturnValue(false);
+      policy.canReadTeacherRates.mockReturnValue(false);
 
       await service.listLessons(clientActor, { limit: 10 });
 
@@ -80,7 +82,7 @@ describe("ScheduleService", () => {
 
     it("resolves lesson → group → history → 0 for finance roles", async () => {
       const { service, query, policy } = createService([]);
-      policy.canReadSchoolFinance.mockReturnValue(true);
+      policy.canReadTeacherRates.mockReturnValue(true);
 
       await service.listLessons(
         { userId: "dir-1", role: "director" as const },
@@ -92,6 +94,19 @@ describe("ScheduleService", () => {
       expect(sql).toMatch(
         /coalesce\(\s*l\.teacher_rate,\s*g\.teacher_rate,[\s\S]*app\.teacher_rates[\s\S]*0\s*\)\s*as applied_teacher_rate/,
       );
+    });
+
+    it("asks the per-lesson gate, not the aggregate-finance one", async () => {
+      const { service, policy } = createService([]);
+      const managerActor = { userId: "mgr-1", role: "manager" as const };
+
+      await service.listLessons(managerActor, { limit: 10 });
+
+      // The owner's 16.07 decision: a per-lesson rate is not a school-wide
+      // total, so admin/manager see it. Gating this on canReadSchoolFinance
+      // would hide it from exactly the people who set it.
+      expect(policy.canReadTeacherRates).toHaveBeenCalledWith(managerActor);
+      expect(policy.canReadSchoolFinance).not.toHaveBeenCalled();
     });
   });
 
