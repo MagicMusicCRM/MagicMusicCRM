@@ -13,6 +13,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/firebase_options.dart';
+import 'package:magic_music_crm/core/services/alert_sound_service.dart';
 
 void _logNotification(String message) {
   if (kDebugMode) {
@@ -238,37 +239,12 @@ class NotificationService {
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       _logNotification('Foreground notification received.');
-
-      final notification = message.notification;
-      final title =
-          notification?.title ?? message.data['title'] ?? 'Новое сообщение';
-      final body = notification?.body ?? message.data['body'] ?? '';
-
-      // Encode data as JSON payload so we can parse it on click
-      final payloadStr = jsonEncode(message.data);
-
-      await _localNotifications.show(
-        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        title: title,
-        body: body,
-        notificationDetails: NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channel.id,
-            _channel.name,
-            channelDescription: _channel.description,
-            icon: '@mipmap/ic_launcher',
-            importance: Importance.max,
-            priority: Priority.high,
-            playSound: true,
-          ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-          ),
-        ),
-        payload: payloadStr,
-      );
+      // The user is already looking at the app, so it plays its own tone and
+      // does NOT raise a notification banner: a banner over the open app is
+      // noise, and it would sound the system tone on top of ours. Backgrounded,
+      // the system shows the push with the system sound instead — see
+      // firebaseMessagingBackgroundHandler.
+      await ref.read(alertSoundServiceProvider).play();
     });
   }
 
