@@ -207,6 +207,60 @@ extension _ClientCardEditors on _ClientCardState {
     );
   }
 
+  /// Редактор возраста.
+  ///
+  /// ✔ Решение владельца 17.07: возраст можно вписать руками, а можно поставить
+  /// дату рождения — и тогда он считается сам. Отсюда два вида этого поля:
+  ///
+  ///  - дата рождения стоит → возраст **только показываем**. Считает его сервер
+  ///    (`age.ts`), и он сам меняется с годами. Поле для ввода здесь было бы
+  ///    обманом: вписанное в него число не читается никем;
+  ///  - даты рождения нет → обычное числовое поле.
+  ///
+  /// Условие — наличие даты рождения, а не повторение правила расчёта: сам
+  /// возраст здесь не вычисляется, иначе правило разъехалось бы с сервером.
+  Widget _buildAgeCustomField(ColorScheme cs, String entity) {
+    final matches = _customFieldSchema.where(
+      (f) => f.entity == entity && f.key == 'age',
+    );
+    if (matches.isEmpty) return const SizedBox.shrink();
+    final field = matches.first;
+
+    final customData = _customDataForEntity(entity);
+    final hasBirthday =
+        (customData['birthday']?.toString().trim() ?? '').isNotEmpty;
+
+    if (!hasBirthday) {
+      return _buildCustomTextField(
+        cs,
+        field.label,
+        field,
+        customData['age']?.toString(),
+        keyboard: TextInputType.number,
+      );
+    }
+
+    final label = _ageLabel();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: InputDecorator(
+        decoration: _inputDecoration(
+          cs,
+          label: field.label,
+          helperText: 'Считается по дате рождения',
+          isDense: true,
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.cake_outlined, size: 16, color: AppColor.gold),
+            const SizedBox(width: AppSpace.sm),
+            Text(label ?? 'Не удалось разобрать дату рождения'),
+          ],
+        ),
+      ),
+    );
+  }
+
   TextInputType? _keyboardForCustomField(String type) {
     return switch (type) {
       'number' => TextInputType.number,

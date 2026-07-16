@@ -5,6 +5,7 @@ import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { TimelineService } from "./timeline.service";
+import { resolveAge } from "./age";
 import { resolveAppealDate } from "./appeal-date";
 import { attachStudentToLead } from "./lead-student-link";
 import { RealtimeBus } from "../realtime/realtime-bus";
@@ -1080,6 +1081,10 @@ export class LeadsService {
     // датой обращения момент, когда он тут появился; у импортированного
     // побеждает исходная дата HolliHop (custom_data.addressDate).
     const appeal = resolveAppealDate(row.custom_data, row.created_at);
+    // ✔ Решение владельца 17.07: возраст либо вписан руками, либо считается из
+    // даты рождения и сам меняется с годами. Резолвится на чтении: хранить
+    // посчитанное число было бы обещанием пересчитывать его каждую ночь.
+    const age = resolveAge(row.custom_data);
     return {
       id: row.id,
       statusId: row.status_id,
@@ -1097,6 +1102,9 @@ export class LeadsService {
       updatedAt: row.updated_at,
       appealAt: appeal.value,
       appealAtSource: appeal.source,
+      age: age.years,
+      ageMonths: age.months,
+      ageSource: age.source,
     };
   }
 

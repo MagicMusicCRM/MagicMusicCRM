@@ -303,6 +303,25 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     required: false,
   },
   {
+    // ✔ Решение владельца 17.07: возраст можно вписать руками. Если стоит дата
+    // рождения, он считается из неё и сам меняется с годами — тогда это поле
+    // не читается (`resolveAge`, приоритет объяснён в age.ts).
+    entity: "leads",
+    key: "age",
+    label: "Возраст",
+    type: "number",
+    required: false,
+    hint: "Если заполнена дата рождения, возраст считается по ней автоматически",
+  },
+  {
+    entity: "students",
+    key: "age",
+    label: "Возраст",
+    type: "number",
+    required: false,
+    hint: "Если заполнена дата рождения, возраст считается по ней автоматически",
+  },
+  {
     entity: "leads",
     key: "source",
     label: "Источник заявки",

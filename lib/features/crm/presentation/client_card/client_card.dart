@@ -253,6 +253,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'middleName',
     'gender',
     'birthday',
+    'age',
     'source',
     'adSource',
     'requestType',
@@ -278,7 +279,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // KVA-234: одиночные contactPerson*-поля заменены редактором списка
   // «Контактные лица», discipline — мультивыбором чипами; из общей формы
   // custom-полей они исключаются.
+  //
+  // `age` — свой редактор по другой причине: при заполненной дате рождения
+  // возраст считается из неё, и вписанное руками число не читается. Обычное
+  // поле ввода в этом случае врало бы, что его слушают.
   static const Set<String> _customKeysWithDedicatedEditor = {
+    'age',
     'contactPersonName',
     'contactPersonRelation',
     'contactPersonPhone',

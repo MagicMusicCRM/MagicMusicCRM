@@ -16,6 +16,7 @@ import {
 } from "./crm-util";
 import { buildTextSearch } from "./search-text";
 import { audienceForStudent } from "./audience";
+import { resolveAge } from "./age";
 import { APPEAL_KEY, resolveAppealDate } from "./appeal-date";
 import {
   diffEntityFields,
@@ -1161,6 +1162,9 @@ export class CrmService {
     // появления записи здесь. Резолвится на чтении, а не хранится, потому что
     // 3105 импортированных учеников уже несут её как custom_data.addressDate.
     const appeal = resolveAppealDate(row.custom_data, row.created_at);
+    // Возраст: дата рождения (считается и не устаревает) → вписанный руками.
+    // См. age.ts — там же объяснено, почему приоритет обратный appeal-date.
+    const age = resolveAge(row.custom_data);
     return {
       id: row.id,
       leadId: row.lead_id,
@@ -1176,6 +1180,9 @@ export class CrmService {
       createdAt: row.created_at,
       appealAt: appeal.value,
       appealAtSource: appeal.source,
+      age: age.years,
+      ageMonths: age.months,
+      ageSource: age.source,
     };
   }
 

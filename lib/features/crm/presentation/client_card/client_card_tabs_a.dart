@@ -320,6 +320,9 @@ extension _ClientCardTabsA on _ClientCardState {
               includeKeys: _ClientCardState._commonClientCustomFieldKeys,
               excludedKeys: _ClientCardState._customKeysWithDedicatedEditor,
             ),
+            // Возраст: поле ввода, пока нет даты рождения, иначе — посчитанное
+            // сервером значение только на просмотр.
+            _buildAgeCustomField(cs, _isStudent ? 'students' : 'leads'),
             // KVA-234: мультидисциплины чипами + список контактных лиц.
             _buildDisciplinesChips(cs, _isStudent ? 'students' : 'leads'),
             _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),

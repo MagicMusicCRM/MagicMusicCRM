@@ -671,42 +671,37 @@ extension _ClientCardTabsB on _ClientCardState {
     }
   }
 
-  /// Возраст «N лет» из custom-поля birthday (ISO или дд.мм.гггг).
+  /// Возраст «N лет». Считает **сервер** (`age.ts`): дата рождения, если она
+  /// есть, иначе вписанное руками число. Здесь только подпись — правило одно
+  /// для лида и ученика, и две копии разъехались бы.
   String? _ageLabel() {
-    Object? raw;
-    if (_mode.hasStudentHalf && _student != null) {
-      raw = _customDataForEntity('students')['birthday'];
+    Map<String, dynamic>? source;
+    if (_mode.hasStudentHalf && _student != null && _student!['age'] != null) {
+      source = _student;
     }
-    raw ??= _customDataForEntity('leads')['birthday'];
-    final s = raw?.toString().trim() ?? '';
-    if (s.isEmpty) return null;
-    var birth = DateTime.tryParse(s);
-    if (birth == null) {
-      final m = RegExp(r'^(\d{2})\.(\d{2})\.(\d{4})').firstMatch(s);
-      if (m == null) return null;
-      birth = DateTime(
-        int.parse(m.group(3)!),
-        int.parse(m.group(2)!),
-        int.parse(m.group(1)!),
-      );
-    }
-    final now = DateTime.now();
-    var years = now.year - birth.year;
-    if (now.month < birth.month ||
-        (now.month == birth.month && now.day < birth.day)) {
-      years--;
-    }
-    if (years < 0 || years > 120) return null;
-    final mod100 = years % 100;
-    final mod10 = years % 10;
-    final word = (mod100 >= 11 && mod100 <= 14)
-        ? 'лет'
-        : mod10 == 1
-        ? 'год'
-        : (mod10 >= 2 && mod10 <= 4)
-        ? 'года'
-        : 'лет';
-    return '$years $word';
+    source ??= _leadData['age'] != null ? _leadData : null;
+    if (source == null) return null;
+
+    final years = (source['age'] as num?)?.toInt();
+    if (years == null) return null;
+    // Младенцу «0 лет» — не ответ. Сервер отдаёт месяцы только для
+    // посчитанного из даты рождения возраста, у вписанного руками их нет.
+    final months = (source['age_months'] as num?)?.toInt();
+    if (years == 0 && months != null) return _monthsLabel(months);
+    return '$years ${_pluralRu(years, 'год', 'года', 'лет')}';
+  }
+
+  String _monthsLabel(int months) =>
+      '$months ${_pluralRu(months, 'месяц', 'месяца', 'месяцев')}';
+
+  /// Русское склонение по числу: 1 год / 2 года / 5 лет, с оговоркой на 11–14.
+  String _pluralRu(int n, String one, String few, String many) {
+    final mod100 = n % 100;
+    final mod10 = n % 10;
+    if (mod100 >= 11 && mod100 <= 14) return many;
+    if (mod10 == 1) return one;
+    if (mod10 >= 2 && mod10 <= 4) return few;
+    return many;
   }
 
   /// Дата обращения. Берём разрешённое сервером `appeal_at` (исходная дата из

@@ -71,6 +71,11 @@ Map<String, dynamic> _legacyStudent(Map<String, dynamic> item) {
     // правило одно для лида и ученика и живёт в appeal-date.ts.
     'appeal_at': item['appealAt'],
     'appeal_at_source': item['appealAtSource'],
+    // Возраст, разрешённый сервером: дата рождения → вписанный руками.
+    // Правило одно для лида и ученика и живёт в age.ts.
+    'age': item['age'],
+    'age_months': item['ageMonths'],
+    'age_source': item['ageSource'],
     'profiles': {
       'id': item['profileId'],
       'user_id': item['profileUserId'],
@@ -409,9 +414,12 @@ Map<String, dynamic> _legacyLead(Map<String, dynamic> item) {
     'created_by': item['createdBy'],
     'created_at': item['createdAt'],
     'updated_at': item['updatedAt'],
-    // См. комментарий в _legacyStudent: дату обращения разрешает сервер.
+    // См. комментарий в _legacyStudent: дату обращения и возраст разрешает сервер.
     'appeal_at': item['appealAt'],
     'appeal_at_source': item['appealAtSource'],
+    'age': item['age'],
+    'age_months': item['ageMonths'],
+    'age_source': item['ageSource'],
   };
 }
 

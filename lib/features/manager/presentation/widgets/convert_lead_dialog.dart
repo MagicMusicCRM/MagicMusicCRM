@@ -18,6 +18,7 @@ class ConvertLeadDialog extends ConsumerStatefulWidget {
   /// `attachedToStudent`) which have no student-side counterpart.
   static const _carriedCustomFieldKeys = <String>{
     'birthday', // drives «Возраст» on the student card
+    'age', // возраст, вписанный руками, — когда дня рождения не знают
     'gender',
     'middleName',
     'source',
