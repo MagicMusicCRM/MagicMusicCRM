@@ -464,6 +464,9 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
     // Rate actually paid for this lesson (lesson → group → history). null when
     // the caller may not see pay data.
     'applied_teacher_rate': item['appliedTeacherRate'],
+    // «Оплаты по дням»: сколько пришло за этот день. null — платежа за него
+    // нет (или роль его не видит), и это НЕ «оплачено 0».
+    'paid_amount': item['paidAmount'],
     'student_name': item['studentName'],
     'teacher_name': item['teacherName'],
     'branch_name': item['branchName'],

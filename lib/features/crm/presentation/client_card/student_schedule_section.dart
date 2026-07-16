@@ -136,7 +136,52 @@ class _StudentScheduleSectionState
         ),
         const SizedBox(height: AppSpace.md),
         _lessonStrip(cs),
+        _paidLegend(cs),
       ],
+    );
+  }
+
+  /// Легенда к зелёному уголку с рублём.
+  ///
+  /// Показывается, только когда в ленте есть хоть один оплаченный день: иначе
+  /// это подпись к тому, чего не видно. И важнее самой легенды — оговорка:
+  /// отсутствие метки НЕ означает «не оплачено». Платёж к занятию привязывать
+  /// не обязательно, а у импортированных из HolliHop такой связи нет вовсе.
+  Widget _paidLegend(ColorScheme cs) {
+    final anyPaid = widget.lessons.any((l) => l['paid_amount'] != null);
+    if (!anyPaid) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColor.success,
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: const Text(
+              '₽',
+              style: TextStyle(
+                fontSize: 6,
+                height: 1,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '— за день есть платёж. Без метки — платёж к этому дню не '
+              'привязан (это не значит «не оплачено»).',
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -257,9 +302,16 @@ class _StudentScheduleSectionState
       fg = Colors.white;
     }
     final notes = (lesson['notes'] ?? '').toString().trim();
+    // ✔ Владелец 17.07: «оплаты по дням в расписании». Считает сервер — сумма
+    // платежей, привязанных к этому занятию. null означает «за этот день
+    // платежа нет», а не «оплачено 0»: привязывать платёж к занятию не
+    // обязательно (аванс на счёт, абонемент, импорт из HolliHop), поэтому
+    // отсутствие метки НЕ значит «не оплачено».
+    final paid = (lesson['paid_amount'] as num?)?.toDouble();
     final tooltip = [
       DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt.toLocal()),
       _statusLabel(status),
+      if (paid != null) 'Оплачено: ${_money(paid)} ₽',
       if (notes.isNotEmpty) notes,
     ].join('\n');
     return Tooltip(
@@ -306,10 +358,44 @@ class _StudentScheduleSectionState
                   ),
                 ),
               ),
+            // Оплаченный день — уголок с рублём внизу слева: правый верхний уже
+            // занят пропуском, а день бывает и пропущенным, и оплаченным.
+            if (paid != null)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                child: Container(
+                  width: 12,
+                  height: 10,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: AppColor.success,
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(4),
+                      topRight: Radius.circular(4),
+                    ),
+                  ),
+                  child: const Text(
+                    '₽',
+                    style: TextStyle(
+                      fontSize: 7,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  /// «1 500» вместо «1500.0»: сумма в тултипе читается человеком.
+  String _money(double value) {
+    final rounded = value.roundToDouble() == value ? value.round() : value;
+    return NumberFormat.decimalPattern('ru').format(rounded);
   }
 
   String _statusLabel(String status) {

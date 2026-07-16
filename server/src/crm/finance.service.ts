@@ -109,7 +109,8 @@ export class FinanceService {
         select pay.id, pay.student_id, p.user_id as student_user_id,
           p.first_name as student_first_name, p.last_name as student_last_name,
           pay.amount, pay.currency, pay.payment_date, pay.method,
-          pay.external_id, pay.notes, pay.created_by, pay.created_at
+          pay.external_id, pay.notes, pay.created_by, pay.created_at,
+          pay.lesson_id
         from app.payments pay
         join app.students s on s.id = pay.student_id and s.deleted_at is null
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -174,7 +175,7 @@ export class FinanceService {
         select pay.id, pay.student_id, p.user_id as student_user_id,
           p.first_name as student_first_name, p.last_name as student_last_name, pay.amount,
           pay.currency, pay.payment_date, pay.method, pay.external_id,
-          pay.notes, pay.created_by, pay.created_at
+          pay.notes, pay.created_by, pay.created_at, pay.lesson_id
         from app.payments pay
         join app.students s on s.id = pay.student_id and s.deleted_at is null
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -754,11 +755,27 @@ export class FinanceService {
           `select pg_advisory_xact_lock(hashtext('payment:' || $1 || ':' || $2))`,
           [dto.studentId, actor.userId],
         );
+        // Занятие обязано быть этого ученика. Молча обнулить чужую ссылку было
+        // бы хуже отказа: платёж записался бы «не разнесённым», а тот, кто его
+        // привязывал, ушёл бы уверенный, что привязал.
+        if (dto.lessonId) {
+          const lesson = await client.query<{ id: string }>(
+            `select id from app.lessons
+             where id = $1 and student_id = $2 and deleted_at is null`,
+            [dto.lessonId, dto.studentId],
+          );
+          if (!lesson.rows[0]) {
+            throw new NotFoundException(
+              "Занятие не найдено у этого ученика — платёж к нему не привязать.",
+            );
+          }
+        }
         const dup = await client.query<PaymentRow>(
           `
         select id, student_id, null::uuid as student_user_id, amount,
           null::text as student_first_name, null::text as student_last_name,
-          currency, payment_date, method, external_id, notes, created_by, created_at
+          currency, payment_date, method, external_id, notes, created_by, created_at,
+          lesson_id
         from app.payments
         where student_id = $1 and amount = $2 and created_by = $3
           and coalesce(method, '') = coalesce($4, '')
@@ -781,12 +798,16 @@ export class FinanceService {
           `
         insert into app.payments (
           student_id, amount, currency, payment_date, method,
-          external_id, notes, created_by
+          external_id, notes, created_by, lesson_id
         )
-        values ($1, $2, coalesce($3, 'RUB'), $4, $5, $6, $7, $8)
+        -- ✔ Владелец 17.07: платёж можно привязать к занятию. Что занятие
+        -- принадлежит этому ученику, проверено выше — здесь ссылка уже
+        -- доверенная.
+        values ($1, $2, coalesce($3, 'RUB'), $4, $5, $6, $7, $8, $9::uuid)
         returning id, student_id, null::uuid as student_user_id, amount,
           null::text as student_first_name, null::text as student_last_name,
-          currency, payment_date, method, external_id, notes, created_by, created_at
+          currency, payment_date, method, external_id, notes, created_by, created_at,
+          lesson_id
       `,
           [
             dto.studentId,
@@ -797,6 +818,7 @@ export class FinanceService {
             dto.externalId?.trim() || null,
             dto.notes?.trim() || null,
             actor.userId,
+            dto.lessonId ?? null,
           ],
         );
         return { payment: result.rows[0], existing: false };

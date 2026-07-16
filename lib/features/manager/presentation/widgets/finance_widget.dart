@@ -167,6 +167,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
             amount: result['amount'] as num,
             paymentDate: DateTime.now().toIso8601String(),
             method: result['type']?.toString(),
+            lessonId: result['lesson_id']?.toString(),
           );
       messenger.showSnackBar(
         const SnackBar(

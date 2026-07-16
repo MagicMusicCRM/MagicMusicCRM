@@ -27,6 +27,11 @@ export interface LessonRow {
   notes: string | null;
   teacher_rate?: string | number | null;
   applied_teacher_rate?: string | number | null;
+  /**
+   * Сумма платежей, привязанных к этому занятию. `null` — платежа за этот день
+   * нет (или роль его не видит), и это НЕ то же самое, что «оплачено 0».
+   */
+  paid_amount?: string | number | null;
   student_user_id: string | null;
   teacher_user_id: string | null;
   student_name: string | null;
@@ -225,6 +230,8 @@ export interface PaymentRow {
   notes: string | null;
   created_by: string | null;
   created_at: Date | string;
+  /** Занятие, за которое пришёл платёж. NULL — платёж не разнесён по занятиям. */
+  lesson_id?: string | null;
 }
 
 export function toLessonDto(row: LessonRow) {
@@ -253,6 +260,12 @@ export function toLessonDto(row: LessonRow) {
       row.applied_teacher_rate === undefined
         ? null
         : Number(row.applied_teacher_rate),
+    // «Оплаты по дням»: сколько пришло за этот день. null — платежа за него
+    // нет, и это не «оплачено 0»: привязывать платёж к занятию не обязательно.
+    paidAmount:
+      row.paid_amount === null || row.paid_amount === undefined
+        ? null
+        : Number(row.paid_amount),
     studentName: row.student_name || null,
     teacherName: row.teacher_name || null,
     branchName: row.branch_name || null,
@@ -460,6 +473,7 @@ export function toPaymentDto(row: PaymentRow) {
     notes: row.notes,
     createdBy: row.created_by,
     createdAt: row.created_at,
+    lessonId: row.lesson_id ?? null,
   };
 }
 

@@ -23,6 +23,9 @@ describe("ScheduleService", () => {
       // opted into explicitly by a test.
       canReadTeacherRates: jest.fn().mockReturnValue(false),
       canReadSchoolFinance: jest.fn().mockReturnValue(false),
+      // «Оплаты по дням»: деньги клиента — не для педагога. Мок по умолчанию
+      // говорит «нет», чтобы утечку пришлось включить тестом осознанно.
+      canReadStudentFinance: jest.fn().mockReturnValue(false),
     };
     return { audit, notifications, policy };
   };
@@ -63,6 +66,64 @@ describe("ScheduleService", () => {
     const service = construct(query, deps);
     return { service, query, ...deps };
   };
+
+  describe("«оплаты по дням» (✔ владелец 17.07)", () => {
+    it("sums the payments tied to each lesson", async () => {
+      const { service, query, policy } = createService([]);
+      policy.canReadStudentFinance.mockReturnValue(true);
+
+      await service.listLessons(actor, { limit: 10 });
+
+      const sql = String(query.mock.calls[0][0]);
+      expect(sql).toContain("from app.payments pay");
+      expect(sql).toContain("pay.lesson_id = l.id");
+      // Отменённый платёж — не оплата.
+      expect(sql).toContain("pay.deleted_at is null");
+      expect(sql).toContain("as paid_amount");
+    });
+
+    it("does not turn «нет платежа» into a confident zero", async () => {
+      // Привязывать платёж к занятию не обязательно (аванс на счёт, абонемент,
+      // импорт из HolliHop — там связи нет вовсе). coalesce(…, 0) объявил бы
+      // все такие дни неоплаченными.
+      const { service, query, policy } = createService([]);
+      policy.canReadStudentFinance.mockReturnValue(true);
+
+      await service.listLessons(actor, { limit: 10 });
+
+      const sql = String(query.mock.calls[0][0]);
+      expect(sql).not.toMatch(/coalesce\(sum\(pay\.amount\)/);
+    });
+
+    it("never lets a teacher see the client's money", async () => {
+      const { service, query, policy } = createService([]);
+      policy.canReadStudentFinance.mockReturnValue(false);
+
+      await service.listLessons(
+        { userId: "teacher-1", role: "teacher" as const },
+        { limit: 10 },
+      );
+
+      const sql = String(query.mock.calls[0][0]);
+      // Не «скрыто в UI», а не выбрано из базы вовсе.
+      expect(sql).toContain("null::numeric as paid_amount");
+      expect(sql).not.toContain("app.payments");
+    });
+
+    it("shows a client the payments for their own lesson", async () => {
+      // Клиенту его собственные платежи не тайна, а выборка и так отдаёт ему
+      // только его занятия.
+      const { service, query, policy } = createService([]);
+      policy.canReadStudentFinance.mockReturnValue(false);
+
+      await service.listLessons(
+        { userId: "client-1", role: "client" as const },
+        { limit: 10 },
+      );
+
+      expect(String(query.mock.calls[0][0])).toContain("pay.lesson_id = l.id");
+    });
+  });
 
   describe("applied teacher rate", () => {
     const clientActor = { userId: "client-1", role: "client" as const };

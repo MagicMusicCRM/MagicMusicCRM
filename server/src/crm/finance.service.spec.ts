@@ -565,6 +565,89 @@ describe("FinanceService", () => {
     expect(String(query.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
   });
 
+  describe("привязка платежа к занятию (✔ владелец 17.07)", () => {
+    const paymentRow = {
+      id: "pay-a",
+      student_id: "student-a",
+      student_user_id: null,
+      amount: "1500.00",
+      student_first_name: null,
+      student_last_name: null,
+      currency: "RUB",
+      payment_date: "2026-06-23",
+      method: "cash",
+      external_id: null,
+      notes: null,
+      created_by: "manager-a",
+      created_at: "2026-06-23T00:00:00.000Z",
+      lesson_id: "lesson-a",
+    };
+
+    it("ties the payment to the lesson", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [] }, // advisory lock
+        { rows: [{ id: "lesson-a" }] }, // занятие принадлежит ученику
+        { rows: [] }, // dup-check
+        { rows: [paymentRow] }, // insert
+        { rows: [] }, // realtime audience
+      ]);
+
+      const result = await service.createPayment(actor, {
+        studentId: "student-a",
+        amount: 1500,
+        paymentDate: "2026-06-23",
+        method: "cash",
+        lessonId: "lesson-a",
+      } as never);
+
+      expect(result.lessonId).toBe("lesson-a");
+      const insertParams = query.mock.calls[3][1] as unknown[];
+      expect(insertParams[insertParams.length - 1]).toBe("lesson-a");
+    });
+
+    it("refuses a lesson that is not this student's, instead of silently unlinking", async () => {
+      // Молча обнулить чужую ссылку было бы хуже отказа: платёж записался бы
+      // «не разнесённым», а тот, кто его привязывал, ушёл бы уверенный, что
+      // привязал. И «оплачено» загорелось бы у чужого дня.
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [] }, // advisory lock
+        { rows: [] }, // занятия у этого ученика нет
+      ]);
+
+      await expect(
+        service.createPayment(actor, {
+          studentId: "student-a",
+          amount: 1500,
+          paymentDate: "2026-06-23",
+          lessonId: "lesson-of-someone-else",
+        } as never),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      // Главное: вставки не было.
+      expect(query).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not ask about a lesson when the payment is not tied to one", async () => {
+      // Пополнение счёта авансом ни к какому занятию не относится — это норма,
+      // а не пропуск, и лишний запрос ради этого не нужен.
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [] }, // advisory lock
+        { rows: [] }, // dup-check
+        { rows: [{ ...paymentRow, lesson_id: null }] }, // insert
+        { rows: [] }, // realtime audience
+      ]);
+
+      const result = await service.createPayment(actor, {
+        studentId: "student-a",
+        amount: 1500,
+        paymentDate: "2026-06-23",
+      } as never);
+
+      expect(result.lessonId).toBeNull();
+      expect(String(query.mock.calls[1][0])).toContain("from app.payments");
+    });
+  });
+
   it("lists expenses with branch/category filters and a total (P5-5)", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       {

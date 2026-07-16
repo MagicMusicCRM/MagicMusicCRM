@@ -173,6 +173,9 @@ extension MagicCrmFinance on MagicCrmService {
     String? method,
     String? externalId,
     String? notes,
+    /// Занятие, за которое пришёл платёж (✔ владелец 17.07). Необязательно:
+    /// пополнение счёта авансом ни к какому занятию не относится.
+    String? lessonId,
   }) async {
     final data = <String, dynamic>{
       'studentId': studentId,
@@ -180,6 +183,9 @@ extension MagicCrmFinance on MagicCrmService {
       'paymentDate': paymentDate,
       'currency': currency,
     };
+    if (lessonId != null && lessonId.trim().isNotEmpty) {
+      data['lessonId'] = lessonId.trim();
+    }
     if (method != null && method.trim().isNotEmpty) {
       data['method'] = method.trim();
     }

@@ -357,11 +357,31 @@ export class ScheduleService {
             0
           )`
       : `null::numeric`;
+    // «Оплаты по дням» (✔ владелец 17.07): сколько пришло за ЭТОТ день.
+    //
+    // Намеренно без coalesce(…, 0): пустая сумма — это «за этот день платежа
+    // нет», а не «оплачено 0». Разница существенная, потому что платёж к
+    // занятию привязывать не обязательно (аванс на счёт, абонемент, импорт из
+    // HolliHop — там такой связи нет вовсе), и рисовать всем этим дням
+    // уверенный ноль значило бы называть их неоплаченными.
+    //
+    // Гейт: педагогу деньги клиента не показываем. Клиент видит свои — выборка
+    // выше и так отдаёт ему только его занятия.
+    const canSeePayments =
+      this.policy.canReadStudentFinance(actor) || actor.role === "client";
+    const paidSql = canSeePayments
+      ? `(
+            select sum(pay.amount)
+            from app.payments pay
+            where pay.lesson_id = l.id and pay.deleted_at is null
+          )`
+      : `null::numeric`;
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
           l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
           ${appliedRateSql} as applied_teacher_rate,
+          ${paidSql} as paid_amount,
           sp.user_id as student_user_id, tp.user_id as teacher_user_id,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
