@@ -120,7 +120,13 @@ export class TeachersService {
     return teacher;
   }
 
-  async listTeachers(actor: ActorContext, query: TeacherListQuery) {
+  // teacherId narrows the very same query (and, crucially, the very same
+  // visibility clause) to one row — see getTeacher below.
+  async listTeachers(
+    actor: ActorContext,
+    query: TeacherListQuery,
+    teacherId: string | null = null,
+  ) {
     const limit = Math.min(query.limit ?? 50, 100);
     const q = query.q?.trim();
     const result = await this.database.query<TeacherRow>(
@@ -348,6 +354,7 @@ export class TeachersService {
               end
             ) = $13
           )
+          and ($15::uuid is null or t.id = $15)
         order by p.last_name nulls last, p.first_name nulls last, t.id
         limit $14
       `,
@@ -366,10 +373,27 @@ export class TeachersService {
         query.ratingTo ?? null,
         query.birthdayMonth ?? null,
         limit,
+        teacherId,
       ],
     );
 
     return { items: result.rows.map((row) => this.toTeacherDto(row)) };
+  }
+
+  // Single teacher by id. Deliberately routed through listTeachers so the
+  // role visibility clause is shared verbatim: a client who may not see this
+  // teacher in the list gets a 404 here too, instead of a second, divergent
+  // copy of the rules. The list endpoint caps at 100 rows, so scanning it
+  // client-side would silently miss teachers.
+  async getTeacher(actor: ActorContext, teacherId: string) {
+    const { items } = await this.listTeachers(
+      actor,
+      { limit: 1 } as TeacherListQuery,
+      teacherId,
+    );
+    const teacher = items[0];
+    if (!teacher) throw new NotFoundException("Преподаватель не найден.");
+    return teacher;
   }
 
   async createTeacher(actor: ActorContext, dto: CreateTeacherDto) {

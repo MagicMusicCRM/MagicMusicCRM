@@ -242,6 +242,10 @@ describe('NotificationsService', () => {
         // claim (task-1, day)
         .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
         // due (hour) -> none
+        .mockResolvedValueOnce({ rows: [] } as never)
+        // due (min10) -> none
+        .mockResolvedValueOnce({ rows: [] } as never)
+        // due (overdue) -> none
         .mockResolvedValueOnce({ rows: [] } as never);
       (database.transaction as jest.Mock).mockResolvedValue('notif-1');
 
@@ -269,6 +273,8 @@ describe('NotificationsService', () => {
         } as never)
         // claim returns no row -> another tick already claimed it
         .mockResolvedValueOnce({ rows: [], rowCount: 0 } as never)
+        .mockResolvedValueOnce({ rows: [] } as never)
+        .mockResolvedValueOnce({ rows: [] } as never)
         .mockResolvedValueOnce({ rows: [] } as never);
 
       const result = await service.dispatchTaskReminders();
@@ -284,12 +290,51 @@ describe('NotificationsService', () => {
           rows: [{ id: 'task-1', title: 'Позвонить', when_local: '19.06 18:00', user_ids: [] }]
         } as never)
         .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
+        .mockResolvedValueOnce({ rows: [] } as never)
+        .mockResolvedValueOnce({ rows: [] } as never)
         .mockResolvedValueOnce({ rows: [] } as never);
 
       const result = await service.dispatchTaskReminders();
 
       expect(result.sent).toBe(0);
       expect(database.transaction).not.toHaveBeenCalled();
+    });
+
+    it('scans four kinds: day, hour, min10 and overdue', async () => {
+      const { service, database } = createService();
+      database.query.mockResolvedValue({ rows: [] } as never);
+
+      await service.dispatchTaskReminders();
+
+      // One "due" scan per kind, in order, each claiming its own marker kind.
+      expect(database.query).toHaveBeenCalledTimes(4);
+      const kinds = database.query.mock.calls.map((call) => (call[1] as string[])[0]);
+      expect(kinds).toEqual(['day', 'hour', 'min10', 'overdue']);
+    });
+
+    it('fires min10 inside the last ten minutes before the deadline', async () => {
+      const { service, database } = createService();
+      database.query.mockResolvedValue({ rows: [] } as never);
+
+      await service.dispatchTaskReminders();
+
+      const min10Sql = String(database.query.mock.calls[2][0]);
+      expect(min10Sql).toContain("t.due_at <= now() + interval '10 minutes'");
+      expect(min10Sql).toContain('t.due_at > now()');
+    });
+
+    it('floors the overdue window so enabling it never blasts old tasks', async () => {
+      const { service, database } = createService();
+      database.query.mockResolvedValue({ rows: [] } as never);
+
+      await service.dispatchTaskReminders();
+
+      const overdueSql = String(database.query.mock.calls[3][0]);
+      // Fires a minute past the deadline...
+      expect(overdueSql).toContain("t.due_at <= now() - interval '1 minute'");
+      // ...but never for tasks that went overdue long ago: without this floor
+      // the first enabled tick would notify every stale task in the database.
+      expect(overdueSql).toContain("t.due_at > now() - interval '1 hour'");
     });
   });
 

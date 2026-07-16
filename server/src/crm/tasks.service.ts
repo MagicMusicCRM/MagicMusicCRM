@@ -272,6 +272,9 @@ export class TasksService {
           userId,
           title: "У вас новая задача",
           body: `«${title}»${when}`,
+          // Without an explicit list notifyUser defaults to ['in_app'], which
+          // only lights up the bell: mobile assignees would never be told.
+          channels: ["in_app", "push"],
         })
         .catch((error: unknown) => {
           this.logger.warn(`New task notification failed: ${String(error)}`);

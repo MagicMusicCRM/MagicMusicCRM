@@ -84,7 +84,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       );
     }
     if (!lessonsEnabled && !tasksEnabled) return;
-    // Scan for upcoming lessons/tasks and enqueue -24h / -1h reminders every 5 min.
+    // Scan every minute: the -10m and overdue task reminders are only as
+    // punctual as the tick, so a 5-minute scan would deliver "10 minutes left"
+    // anywhere from 5 to 10 minutes out. Each tick is a bounded (limit 200)
+    // indexed lookup, so the extra frequency is cheap.
     this.reminderTimer = setInterval(() => {
       if (lessonsEnabled) {
         void this.dispatchLessonReminders()
@@ -108,9 +111,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
             );
           });
       }
-    }, 5 * 60_000);
+    }, 60_000);
     this.reminderTimer.unref?.();
-    this.logger.log('Reminder scheduler started (every 5m)');
+    this.logger.log('Reminder scheduler started (every 1m)');
   }
 
   onModuleDestroy(): void {
@@ -252,12 +255,29 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       'Задача: срок через час',
       (title, when) => `«${title}» — срок ${when} (по Москве).`
     );
+    // "За 10 минут": the last stretch before the deadline. Overlapping the
+    // 'hour' window is intended — they are separate kinds, so both land.
+    sent += await this.processTaskReminderKind(
+      'min10',
+      "t.due_at > now() and t.due_at <= now() + interval '10 minutes'",
+      'Задача: срок через 10 минут',
+      (title, when) => `«${title}» — срок ${when} (по Москве).`
+    );
+    // "Просрочено": one minute past the deadline. The 1-hour floor is what
+    // stops a first-enable blast — without it, every task overdue since the
+    // dawn of the database would fire on the first tick.
+    sent += await this.processTaskReminderKind(
+      'overdue',
+      "t.due_at <= now() - interval '1 minute' and t.due_at > now() - interval '1 hour'",
+      'Задача просрочена',
+      (title, when) => `«${title}» — срок был ${when} (по Москве).`
+    );
     if (sent > 0) this.schedulePushDispatch();
     return { sent };
   }
 
   private async processTaskReminderKind(
-    kind: 'day' | 'hour',
+    kind: 'day' | 'hour' | 'min10' | 'overdue',
     windowSql: string,
     title: string,
     bodyFor: (taskTitle: string, when: string) => string

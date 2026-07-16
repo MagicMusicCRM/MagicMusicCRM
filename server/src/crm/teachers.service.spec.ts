@@ -22,6 +22,36 @@ describe("TeachersService", () => {
     return { service, query, audit, policy };
   };
 
+  describe("getTeacher", () => {
+    it("narrows the shared list query to one id", async () => {
+      const { service, query } = createService([
+        {
+          id: "teacher-a",
+          status: "active",
+          specialization: "Вокал",
+          custom_data: {},
+          first_name: "Иван",
+          last_name: "Петров",
+        },
+      ]);
+
+      const teacher = await service.getTeacher(actor, "teacher-a");
+
+      expect(teacher.id).toBe("teacher-a");
+      // Reuses listTeachers so the role visibility clause stays single-source.
+      expect(String(query.mock.calls[0][0])).toContain("t.id = $15");
+      expect(query.mock.calls[0][1]).toContain("teacher-a");
+    });
+
+    it("throws when the teacher is absent or invisible to the actor", async () => {
+      const { service } = createService([]);
+
+      await expect(service.getTeacher(actor, "missing")).rejects.toThrow(
+        "Преподаватель не найден.",
+      );
+    });
+  });
+
   it("creates teachers through v3 identity/profile contract and audit", async () => {
     const { service, query, audit, policy } = createService([
       {
@@ -124,6 +154,8 @@ describe("TeachersService", () => {
       null,
       null,
       10,
+      // teacherId: null for a list scan, set only by getTeacher.
+      null,
     ]);
   });
 
@@ -215,6 +247,8 @@ describe("TeachersService", () => {
       5,
       6,
       20,
+      // teacherId: null for a list scan, set only by getTeacher.
+      null,
     ]);
   });
 

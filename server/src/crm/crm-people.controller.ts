@@ -51,6 +51,14 @@ export class CrmPeopleController {
     return this.teachers.createTeacher(actor, dto);
   }
 
+  @Get("teachers/:id")
+  getTeacher(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.teachers.getTeacher(actor, id);
+  }
+
   @Patch("teachers/:id")
   updateTeacher(
     @CurrentActor() actor: ActorContext,
