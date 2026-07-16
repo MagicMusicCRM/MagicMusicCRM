@@ -61,6 +61,143 @@ export interface TaskRow {
   created_at: Date | string;
 }
 
+export interface TaskHistoryRow {
+  id: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_at: Date | string;
+  source: string;
+  changed_by: string | null;
+  author_profile_id: string | null;
+  author_first_name: string | null;
+  author_last_name: string | null;
+  old_user_id: string | null;
+  old_user_first_name: string | null;
+  old_user_last_name: string | null;
+  new_user_id: string | null;
+  new_user_first_name: string | null;
+  new_user_last_name: string | null;
+  // Present only in the cross-task supervisor feed, which joins app.tasks.
+  task_id?: string;
+  task_title?: string | null;
+  task_entity_type?: string | null;
+  task_entity_id?: string | null;
+}
+
+/** One field-level change, ready to be inserted into app.task_history. */
+export interface TaskChange {
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  oldUserId?: string | null;
+  newUserId?: string | null;
+}
+
+const toIsoOrNull = (value: Date | string | null): string | null => {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+};
+
+/**
+ * Field-level diff between a task before and after an update, in the shape the
+ * AmoCRM-style feed renders. Only actually-changed fields produce a row: the
+ * PATCH is a coalesce-update, so an unmentioned field arrives as null and must
+ * not be logged as «изменено на пусто».
+ */
+export function diffTaskRows(before: TaskRow, after: TaskRow): TaskChange[] {
+  const changes: TaskChange[] = [];
+
+  if (before.status !== after.status) {
+    changes.push({
+      field: "status",
+      oldValue: before.status,
+      newValue: after.status,
+    });
+  }
+
+  // Compared as instants, not strings: the same moment can arrive as a Date
+  // from one driver path and an ISO string from another, and a string compare
+  // would log a phantom reschedule.
+  const dueBefore = toIsoOrNull(before.due_at);
+  const dueAfter = toIsoOrNull(after.due_at);
+  if (dueBefore !== dueAfter) {
+    changes.push({ field: "due_at", oldValue: dueBefore, newValue: dueAfter });
+  }
+
+  if (before.assigned_to !== after.assigned_to) {
+    changes.push({
+      field: "assigned_to",
+      // Names are NOT frozen here — the feed joins profiles at read time, so a
+      // later rename reads correctly in old events.
+      oldValue: null,
+      newValue: null,
+      oldUserId: before.assigned_to,
+      newUserId: after.assigned_to,
+    });
+  }
+
+  if (before.title !== after.title) {
+    changes.push({
+      field: "title",
+      oldValue: before.title,
+      newValue: after.title,
+    });
+  }
+
+  if ((before.description ?? null) !== (after.description ?? null)) {
+    changes.push({
+      field: "description",
+      oldValue: before.description ?? null,
+      newValue: after.description ?? null,
+    });
+  }
+
+  if (
+    before.entity_type !== after.entity_type ||
+    before.entity_id !== after.entity_id
+  ) {
+    changes.push({
+      field: "entity",
+      oldValue: `${before.entity_type}:${before.entity_id}`,
+      newValue: `${after.entity_type}:${after.entity_id}`,
+    });
+  }
+
+  return changes;
+}
+
+export function toTaskHistoryDto(row: TaskHistoryRow) {
+  const name = (first: string | null, last: string | null) =>
+    `${first ?? ""} ${last ?? ""}`.trim() || null;
+  const entry: Record<string, unknown> = {
+    id: row.id,
+    field: row.field,
+    oldValue: row.old_value,
+    newValue: row.new_value,
+    changedAt:
+      row.changed_at instanceof Date
+        ? row.changed_at.toISOString()
+        : row.changed_at,
+    source: row.source,
+    changedBy: row.changed_by,
+    authorProfileId: row.author_profile_id,
+    authorName: name(row.author_first_name, row.author_last_name),
+    oldUserId: row.old_user_id,
+    oldUserName: name(row.old_user_first_name, row.old_user_last_name),
+    newUserId: row.new_user_id,
+    newUserName: name(row.new_user_first_name, row.new_user_last_name),
+  };
+  if (row.task_id) {
+    entry.taskId = row.task_id;
+    entry.taskTitle = row.task_title ?? null;
+    entry.taskEntityType = row.task_entity_type ?? null;
+    entry.taskEntityId = row.task_entity_id ?? null;
+  }
+  return entry;
+}
+
 export interface TimelineRow {
   id: string;
   type: string;

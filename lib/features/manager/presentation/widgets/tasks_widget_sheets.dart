@@ -9,13 +9,23 @@ class _TaskTimelineSheet extends ConsumerStatefulWidget {
   ConsumerState<_TaskTimelineSheet> createState() => _TaskTimelineSheetState();
 }
 
-class _TaskTimelineSheetState extends ConsumerState<_TaskTimelineSheet> {
+class _TaskTimelineSheetState extends ConsumerState<_TaskTimelineSheet>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 2, vsync: this);
   late Future<List<Map<String, dynamic>>> _timelineFuture;
+  late Future<List<Map<String, dynamic>>> _historyFuture;
 
   @override
   void initState() {
     super.initState();
     _timelineFuture = _fetchTimeline();
+    _historyFuture = _fetchHistory();
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
   }
 
   Future<List<Map<String, dynamic>>> _fetchTimeline() {
@@ -27,6 +37,12 @@ class _TaskTimelineSheetState extends ConsumerState<_TaskTimelineSheet> {
           includeAudit: true,
           limit: 40,
         );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchHistory() {
+    return ref
+        .read(magicCrmServiceProvider)
+        .listTaskHistory(widget.task['id'].toString());
   }
 
   Future<void> _addHistory() async {
@@ -131,9 +147,14 @@ class _TaskTimelineSheetState extends ConsumerState<_TaskTimelineSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'История объекта',
-                          style: TextStyle(
+                        Text(
+                          widget.task['title']?.toString().trim().isNotEmpty ==
+                                  true
+                              ? widget.task['title'].toString()
+                              : 'История',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
                           ),
@@ -163,48 +184,34 @@ class _TaskTimelineSheetState extends ConsumerState<_TaskTimelineSheet> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              TabBar(
+                controller: _tabs,
+                tabs: const [
+                  Tab(text: 'Задача'),
+                  Tab(text: 'Объект'),
+                ],
+              ),
+              const SizedBox(height: 8),
               Expanded(
-                child: FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _timelineFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const ListSkeleton(count: 5);
-                    }
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Text(
-                          'История временно недоступна',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      );
-                    }
-                    final timeline =
-                        snapshot.data ?? const <Map<String, dynamic>>[];
-                    if (timeline.isEmpty) {
-                      return Center(
-                        child: Text(
-                          'История по объекту пока пустая',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      );
-                    }
-                    return ListView.separated(
-                      itemCount: timeline.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        return _TimelineTile(item: timeline[index]);
-                      },
-                    );
-                  },
+                child: TabBarView(
+                  controller: _tabs,
+                  children: [
+                    // The task's own change log — what the customer means by
+                    // «история задач как в AmoCRM».
+                    _HistoryList<Map<String, dynamic>>(
+                      future: _historyFuture,
+                      emptyLabel: 'Изменений по задаче пока нет',
+                      itemBuilder: (item) => _TaskHistoryTile(entry: item),
+                    ),
+                    // The related client/lead's timeline: what this sheet
+                    // showed before the task log existed. Kept — it answers a
+                    // different question («что вообще происходило с клиентом»).
+                    _HistoryList<Map<String, dynamic>>(
+                      future: _timelineFuture,
+                      emptyLabel: 'История по объекту пока пустая',
+                      itemBuilder: (item) => _TimelineTile(item: item),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -212,6 +219,290 @@ class _TaskTimelineSheetState extends ConsumerState<_TaskTimelineSheet> {
         ),
       ),
     );
+  }
+}
+
+/// Supervisor control feed: who moved which deadline, and when. Read-only by
+/// design — this answers «кто перенёс», it is not another place to edit tasks.
+class _TaskHistoryFeedSheet extends ConsumerStatefulWidget {
+  const _TaskHistoryFeedSheet();
+
+  @override
+  ConsumerState<_TaskHistoryFeedSheet> createState() =>
+      _TaskHistoryFeedSheetState();
+}
+
+class _TaskHistoryFeedSheetState extends ConsumerState<_TaskHistoryFeedSheet> {
+  static const _fields = <String, String>{
+    'due_at': 'Переносы срока',
+    'assigned_to': 'Смена исполнителя',
+    'status': 'Смена статуса',
+  };
+
+  String _field = 'due_at';
+  late Future<List<Map<String, dynamic>>> _future = _fetch();
+
+  Future<List<Map<String, dynamic>>> _fetch() {
+    return ref
+        .read(magicCrmServiceProvider)
+        .listTaskHistoryFeed(field: _field, limit: 100);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.76,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withAlpha(70),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Контроль изменений задач',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: _fields.entries
+                    .map(
+                      (entry) => ChoiceChip(
+                        label: Text(entry.value),
+                        selected: _field == entry.key,
+                        onSelected: (_) => setState(() {
+                          _field = entry.key;
+                          _future = _fetch();
+                        }),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: _HistoryList<Map<String, dynamic>>(
+                  future: _future,
+                  emptyLabel: 'Изменений за этот период нет',
+                  itemBuilder: (item) => _TaskHistoryTile(
+                    entry: item,
+                    // Cross-task feed: without the task name a line reading
+                    // «Срок перенесён: 12.06 → 20.06» names no task at all.
+                    showTaskTitle: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shared skeleton/error/empty/list plumbing for both tabs of the history sheet.
+class _HistoryList<T> extends StatelessWidget {
+  final Future<List<T>> future;
+  final String emptyLabel;
+  final Widget Function(T item) itemBuilder;
+
+  const _HistoryList({
+    required this.future,
+    required this.emptyLabel,
+    required this.itemBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<T>>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const ListSkeleton(count: 5);
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'История временно недоступна',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+        final items = snapshot.data ?? const [];
+        if (items.isEmpty) {
+          return Center(
+            child: Text(
+              emptyLabel,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+        return ListView.separated(
+          itemCount: items.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (context, index) => itemBuilder(items[index]),
+        );
+      },
+    );
+  }
+}
+
+/// One field change, rendered as «Срок: было → стало», with author and time.
+class _TaskHistoryTile extends StatelessWidget {
+  final Map<String, dynamic> entry;
+
+  /// Cross-task feeds need the task name; the per-task feed already has it in
+  /// the sheet header and would just repeat it on every row.
+  final bool showTaskTitle;
+
+  const _TaskHistoryTile({required this.entry, this.showTaskTitle = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final field = entry['field']?.toString() ?? '';
+    final author = entry['author_name']?.toString().trim();
+    final when = _formatTaskHistoryDate(entry['changed_at']);
+    // Backfilled HolliHop rows carry the ORIGINAL date, so without this badge a
+    // 2023 import event is indistinguishable from something a colleague just did.
+    final imported = entry['source']?.toString() == 'hollihop';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(_taskHistoryIcon(field), size: 18, color: muted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (showTaskTitle) ...[
+                  Text(
+                    entry['task_title']?.toString() ?? 'Задача',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                ],
+                Text(
+                  _taskHistoryHeadline(entry),
+                  style: TextStyle(
+                    fontWeight: showTaskTitle
+                        ? FontWeight.w500
+                        : FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    if (author != null && author.isNotEmpty) author,
+                    ?when,
+                    if (imported) 'из HolliHop',
+                  ].join(' · '),
+                  style: TextStyle(fontSize: 12, color: muted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+IconData _taskHistoryIcon(String field) {
+  return switch (field) {
+    'created' => Icons.add_circle_outline_rounded,
+    'due_at' => Icons.event_repeat_rounded,
+    'assigned_to' => Icons.person_outline_rounded,
+    'status' => Icons.flag_outlined,
+    'entity' => Icons.link_rounded,
+    _ => Icons.edit_outlined,
+  };
+}
+
+/// Renders one change as a sentence. Values are formatted per field: a raw
+/// timestamp or a bare `done` would be readable to us and to nobody else.
+String _taskHistoryHeadline(Map<String, dynamic> entry) {
+  final field = entry['field']?.toString() ?? '';
+  String value(Object? raw) {
+    final text = raw?.toString().trim();
+    return (text == null || text.isEmpty) ? '—' : text;
+  }
+
+  switch (field) {
+    case 'created':
+      return 'Задача создана';
+    case 'status':
+      return 'Статус: ${_taskStatusLabel(entry['old_value']?.toString())} → '
+          '${_taskStatusLabel(entry['new_value']?.toString())}';
+    case 'due_at':
+      final from = _formatTaskHistoryDate(entry['old_value']) ?? '—';
+      final to = _formatTaskHistoryDate(entry['new_value']) ?? '—';
+      return 'Срок перенесён: $from → $to';
+    case 'assigned_to':
+      return 'Исполнитель: ${value(entry['old_user_name'])} → '
+          '${value(entry['new_user_name'])}';
+    case 'title':
+      return 'Название: ${value(entry['old_value'])} → ${value(entry['new_value'])}';
+    case 'description':
+      return 'Описание изменено';
+    case 'entity':
+      return 'Связанный объект изменён';
+    default:
+      return 'Изменение: $field';
+  }
+}
+
+String? _formatTaskHistoryDate(Object? raw) {
+  final text = raw?.toString();
+  if (text == null || text.trim().isEmpty) return null;
+  final parsed = DateTime.tryParse(text);
+  if (parsed == null) return null;
+  return DateFormat('dd.MM.yyyy HH:mm').format(parsed.toLocal());
+}
+
+String _taskStatusLabel(String? status) {
+  switch (status) {
+    case 'in_progress':
+      return 'В работе';
+    case 'done':
+      return 'Завершена';
+    case 'cancelled':
+      return 'Отменена';
+    default:
+      return 'К выполнению';
   }
 }
 

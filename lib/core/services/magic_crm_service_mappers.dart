@@ -586,6 +586,29 @@ Map<String, dynamic> _legacyStatusHistoryItem(Map<String, dynamic> item) {
   };
 }
 
+Map<String, dynamic> _legacyTaskHistoryItem(Map<String, dynamic> item) {
+  return {
+    'id': item['id'],
+    'field': item['field'],
+    'old_value': item['oldValue'],
+    'new_value': item['newValue'],
+    'changed_at': item['changedAt'],
+    'source': item['source'],
+    'changed_by': item['changedBy'],
+    'author_profile_id': item['authorProfileId'],
+    'author_name': item['authorName'],
+    'old_user_id': item['oldUserId'],
+    'old_user_name': item['oldUserName'],
+    'new_user_id': item['newUserId'],
+    'new_user_name': item['newUserName'],
+    // Only present in the cross-task supervisor feed.
+    'task_id': item['taskId'],
+    'task_title': item['taskTitle'],
+    'task_entity_type': item['taskEntityType'],
+    'task_entity_id': item['taskEntityId'],
+  };
+}
+
 Map<String, dynamic> _legacyFamilyMember(Map<String, dynamic> item) {
   return {
     'id': item['id'],

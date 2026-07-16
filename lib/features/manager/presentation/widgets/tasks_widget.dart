@@ -14,6 +14,8 @@ import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 
 part 'tasks_widget_cards.dart';
 part 'tasks_widget_sheets.dart';
@@ -402,19 +404,92 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     }
   }
 
-  Future<void> _showTaskTimeline(Map<String, dynamic> task) async {
-    final entityType = task['entity_type']?.toString();
-    final entityId = task['entity_id']?.toString();
-    if (entityType == null ||
-        entityType.trim().isEmpty ||
-        entityId == null ||
-        entityId.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('У задачи нет связанного объекта.')),
-      );
-      return;
-    }
+  /// Moves a task's deadline. A plain PATCH — the server logs who moved it from
+  /// what to what into task_history, which is what makes the change auditable
+  /// for the director rather than just silently applied.
+  Future<void> _rescheduleTask(Map<String, dynamic> task) async {
+    final id = task['id']?.toString();
+    if (id == null || id.isEmpty || _pendingTaskIds.contains(id)) return;
 
+    final current = task['due_at'] != null
+        ? DateTime.tryParse(task['due_at'].toString())?.toLocal()
+        : null;
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      // Unlike task creation, a reschedule may legitimately move a deadline
+      // into the past (logging when it was actually meant to be done).
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 2),
+      helpText: 'Перенести срок',
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: current == null
+          ? const TimeOfDay(hour: 12, minute: 0)
+          : TimeOfDay.fromDateTime(current),
+      helpText: 'Время выполнения',
+    );
+    if (!mounted) return;
+    final picked =
+        time ??
+        (current == null
+            ? const TimeOfDay(hour: 12, minute: 0)
+            : TimeOfDay.fromDateTime(current));
+    final dueAt = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      picked.hour,
+      picked.minute,
+    );
+
+    setState(() => _pendingTaskIds.add(id));
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          // toUtc(): a local ISO string without an offset gets read in the
+          // server's zone and the deadline drifts.
+          .updateTask(id, dueAt: dueAt.toUtc().toIso8601String());
+      await _loadTasks(showLoading: false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Срок перенесён на ${DateFormat('dd.MM.yyyy HH:mm').format(dueAt)}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Не удалось перенести срок: $e'),
+          backgroundColor: AppColor.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _pendingTaskIds.remove(id));
+    }
+  }
+
+  /// Supervisor view: every due-date move across tasks, newest first.
+  /// Spec §2.2 — «чтобы директор и управляющий могли видеть, кто какие задачи
+  /// когда переносит и тд».
+  Future<void> _showRescheduleControl() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (ctx) => const _TaskHistoryFeedSheet(),
+    );
+  }
+
+  Future<void> _showTaskTimeline(Map<String, dynamic> task) async {
+    // Deliberately not gated on the related object: the sheet's first tab is
+    // the task's own change log, which exists even for an orphaned task.
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -438,6 +513,10 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
         _loadTasks(showLoading: false);
       });
     });
+    // Mirrors the server's assertManagerOnly on the history feed: showing the
+    // button to a teacher would just hand them a 403.
+    final role = ref.watch(releaseGateStatusProvider).asData?.value.role;
+    final canControl = role != null && crmHasManagerAccess(role);
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
@@ -483,6 +562,18 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
               onClear: _clearFilters,
             ),
           ),
+          if (canControl)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _showRescheduleControl,
+                  icon: const Icon(Icons.fact_check_outlined, size: 18),
+                  label: const Text('Контроль переносов'),
+                ),
+              ),
+            ),
           if (_dueFilter == 'day')
             _DayNavigator(
               day: _selectedDay,
@@ -527,6 +618,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                         ),
                         onStatusChange: _updateStatus,
                         onTimelineTap: _showTaskTimeline,
+                        onRescheduleTap: _rescheduleTask,
                         onReassignTap: _reassignTask,
                         onOpenEntity: _openTaskEntity,
                       ),

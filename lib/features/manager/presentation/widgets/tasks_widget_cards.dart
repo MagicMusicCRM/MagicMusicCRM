@@ -419,6 +419,7 @@ class _TaskCard extends StatelessWidget {
   final Future<void> Function(String, String) onStatusChange;
   final Future<void> Function(Map<String, dynamic>) onTimelineTap;
   final Future<void> Function(Map<String, dynamic>) onReassignTap;
+  final Future<void> Function(Map<String, dynamic>) onRescheduleTap;
   final Future<void> Function(Map<String, dynamic>) onOpenEntity;
 
   const _TaskCard({
@@ -427,21 +428,9 @@ class _TaskCard extends StatelessWidget {
     required this.onStatusChange,
     required this.onTimelineTap,
     required this.onReassignTap,
+    required this.onRescheduleTap,
     required this.onOpenEntity,
   });
-
-  String _statusLabel(String? status) {
-    switch (status) {
-      case 'in_progress':
-        return 'В работе';
-      case 'done':
-        return 'Завершена';
-      case 'cancelled':
-        return 'Отменена';
-      default:
-        return 'К выполнению';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -472,9 +461,6 @@ class _TaskCard extends StatelessWidget {
     final branchText = task['branch_name']?.toString();
     final entityText = _taskEntityLabel(task);
     final onEntityTap = _entityTap(context, task);
-    final hasEntity =
-        task['entity_type']?.toString().trim().isNotEmpty == true &&
-        task['entity_id']?.toString().trim().isNotEmpty == true;
 
     return Opacity(
       opacity: isPending ? 0.65 : 1,
@@ -526,10 +512,10 @@ class _TaskCard extends StatelessWidget {
                     icon: const Icon(Icons.open_in_new_rounded),
                   ),
                   IconButton(
-                    tooltip: 'История объекта',
-                    onPressed: hasEntity && !isPending
-                        ? () => onTimelineTap(task)
-                        : null,
+                    tooltip: 'История задачи',
+                    // No longer gated on hasEntity: the task's own change log
+                    // exists even when the related object does not.
+                    onPressed: isPending ? null : () => onTimelineTap(task),
                     icon: const Icon(Icons.history_rounded),
                   ),
                   PopupMenuButton<String>(
@@ -550,6 +536,10 @@ class _TaskCard extends StatelessWidget {
                     onSelected: (value) async {
                       if (value == 'reassign') {
                         onReassignTap(task);
+                        return;
+                      }
+                      if (value == 'reschedule') {
+                        onRescheduleTap(task);
                         return;
                       }
                       // Cancelling drops the task out of the active workflow —
@@ -586,6 +576,10 @@ class _TaskCard extends StatelessWidget {
                       const PopupMenuItem(
                         value: 'reassign',
                         child: Text('Назначить ответственного'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'reschedule',
+                        child: Text('Перенести срок'),
                       ),
                       const PopupMenuDivider(),
                       if (status != 'in_progress')
@@ -633,7 +627,7 @@ class _TaskCard extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  _Tag(label: _statusLabel(status), color: AppColor.gold),
+                  _Tag(label: _taskStatusLabel(status), color: AppColor.gold),
                   if (dueDate != null)
                     _Tag(
                       label: 'До: $dueDate',

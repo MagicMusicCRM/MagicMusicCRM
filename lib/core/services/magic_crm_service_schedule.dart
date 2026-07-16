@@ -286,6 +286,43 @@ extension MagicCrmSchedule on MagicCrmService {
     return _items(response).map(_legacyTimelineItem).toList();
   }
 
+  /// AmoCRM-style change feed for a single task: who changed what, when.
+  Future<List<Map<String, dynamic>>> listTaskHistory(String taskId) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/tasks/$taskId/history',
+    );
+    return _items(response).map(_legacyTaskHistoryItem).toList();
+  }
+
+  /// Supervisor control feed: every change of one field across tasks. Defaults
+  /// server-side to due-date moves — the case the director needs to watch.
+  Future<List<Map<String, dynamic>>> listTaskHistoryFeed({
+    String? field,
+    String? changedBy,
+    String? from,
+    String? to,
+    int limit = 50,
+  }) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    if (field != null && field.trim().isNotEmpty) {
+      queryParameters['field'] = field.trim();
+    }
+    if (changedBy != null && changedBy.trim().isNotEmpty) {
+      queryParameters['changedBy'] = changedBy.trim();
+    }
+    if (from != null && from.trim().isNotEmpty) {
+      queryParameters['from'] = from.trim();
+    }
+    if (to != null && to.trim().isNotEmpty) {
+      queryParameters['to'] = to.trim();
+    }
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/tasks/history',
+      queryParameters: queryParameters,
+    );
+    return _items(response).map(_legacyTaskHistoryItem).toList();
+  }
+
   Future<Map<String, dynamic>> createTask({
     required String entityType,
     required String entityId,

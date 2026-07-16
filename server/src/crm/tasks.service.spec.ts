@@ -10,7 +10,13 @@ describe("TasksService", () => {
 
   const createService = (rows: Record<string, unknown>[] = []) => {
     const query = jest.fn().mockResolvedValue({ rows });
-    const database = { query };
+    const database = {
+      query,
+      // Transactional writes share the same query mock so sequential
+      // mockResolvedValueOnce chains keep working.
+      transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query }),
+    };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const policy = {
       assertCanReadOperationalData: jest.fn(),
@@ -183,5 +189,142 @@ describe("TasksService", () => {
       "2026-06-01T00:00:00.000Z",
       "2026-07-01T00:00:00.000Z",
     ]);
+  });
+
+  const taskRow = (overrides: Record<string, unknown> = {}) => ({
+    id: "task-a",
+    entity_type: "student",
+    entity_id: "student-a",
+    assigned_to: "manager-a",
+    title: "Позвонить",
+    description: null,
+    status: "open",
+    due_at: "2026-06-13T10:00:00.000Z",
+    created_by: "admin-a",
+    created_at: "2026-06-12T00:00:00.000Z",
+    ...overrides,
+  });
+
+  it("logs a due-date move with the author, so supervisors can see who moved it", async () => {
+    const { service, query } = createService();
+    query
+      .mockResolvedValueOnce({ rows: [taskRow()] }) // select ... for update
+      .mockResolvedValueOnce({
+        rows: [taskRow({ due_at: "2026-06-20T10:00:00.000Z" })],
+      }) // update
+      .mockResolvedValueOnce({ rows: [] }); // history insert
+
+    await service.updateTask(actor, "task-a", {
+      dueAt: "2026-06-20T10:00:00.000Z",
+    } as never);
+
+    // The "before" read must lock the row: two concurrent PATCHes would
+    // otherwise both log the same old value.
+    expect(String(query.mock.calls[0][0])).toContain("for update");
+
+    const historySql = String(query.mock.calls[2][0]);
+    expect(historySql).toContain("app.task_history");
+    expect(query.mock.calls[2][1]).toEqual([
+      "task-a",
+      "due_at",
+      "2026-06-13T10:00:00.000Z",
+      "2026-06-20T10:00:00.000Z",
+      null,
+      null,
+      "manager-a",
+    ]);
+  });
+
+  it("logs one row per changed field and leaves untouched fields alone", async () => {
+    const { service, query } = createService();
+    query
+      .mockResolvedValueOnce({ rows: [taskRow()] })
+      .mockResolvedValueOnce({
+        rows: [taskRow({ status: "done", assigned_to: "manager-b" })],
+      })
+      .mockResolvedValue({ rows: [] });
+
+    await service.updateTask(actor, "task-a", {
+      status: "done",
+      assignedTo: "manager-b",
+    } as never);
+
+    const inserts = query.mock.calls
+      .slice(2)
+      .map((call) => call[1] as unknown[]);
+    expect(inserts.map((params) => params[1])).toEqual([
+      "status",
+      "assigned_to",
+    ]);
+    // Reassignment carries user ids, not names: the feed joins profiles at read
+    // time so a later rename reads correctly in old events.
+    const assignment = inserts[1];
+    expect(assignment[2]).toBeNull();
+    expect(assignment[3]).toBeNull();
+    expect(assignment[4]).toBe("manager-a");
+    expect(assignment[5]).toBe("manager-b");
+  });
+
+  it("writes no history when a PATCH changes nothing", async () => {
+    const { service, query } = createService();
+    query
+      .mockResolvedValueOnce({ rows: [taskRow()] })
+      .mockResolvedValueOnce({ rows: [taskRow()] });
+
+    await service.updateTask(actor, "task-a", { status: "open" } as never);
+
+    // Two calls only — select + update. A coalesce-update turns an unmentioned
+    // field into null, and logging that as «изменено на пусто» would be a lie.
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not log a phantom reschedule when the driver returns a Date", async () => {
+    const { service, query } = createService();
+    // Same instant, different representations: a naive string compare would
+    // record a reschedule that never happened.
+    query
+      .mockResolvedValueOnce({
+        rows: [taskRow({ due_at: new Date("2026-06-13T10:00:00.000Z") })],
+      })
+      .mockResolvedValueOnce({
+        rows: [taskRow({ due_at: "2026-06-13T10:00:00.000Z" })],
+      });
+
+    await service.updateTask(actor, "task-a", {
+      dueAt: "2026-06-13T10:00:00.000Z",
+    } as never);
+
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it("anchors the feed with a 'created' event", async () => {
+    const { service, query } = createService();
+    query
+      .mockResolvedValueOnce({ rows: [taskRow()] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await service.createTask(actor, {
+      entityType: "student",
+      entityId: "student-a",
+      title: "Позвонить",
+    } as never);
+
+    expect(String(query.mock.calls[1][0])).toContain("'created'");
+    expect(query.mock.calls[1][1]).toEqual([
+      "task-a",
+      "Позвонить",
+      "manager-a",
+      "manager-a",
+    ]);
+  });
+
+  it("defaults the supervisor feed to due-date moves", async () => {
+    const { service, query, policy } = createService([]);
+
+    await service.listTaskHistoryFeed(actor, {});
+
+    expect(query.mock.calls[0][1][0]).toBe("due_at");
+    // Cross-task oversight, not shop-floor operational data.
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
   });
 });

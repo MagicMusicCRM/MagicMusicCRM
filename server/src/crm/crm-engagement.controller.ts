@@ -24,6 +24,7 @@ import { UpdateHomeworkDto } from "./dto/update-homework.dto";
 import { HomeworkQuery } from "./dto/homework.query";
 import { AddHomeworkAttachmentDto } from "./dto/add-homework-attachment.dto";
 import { TaskBoardQuery } from "./dto/task-board.query";
+import { TaskHistoryQuery } from "./dto/task-history.query";
 import { TimelineQuery } from "./dto/timeline.query";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
 
@@ -42,6 +43,24 @@ export class CrmEngagementController {
     @Query() query: TaskBoardQuery,
   ) {
     return this.tasks.listTasks(actor, query);
+  }
+
+  // Registered before "tasks/:id/history" so the literal segment wins the match
+  // and "history" is never parsed as a task id.
+  @Get("tasks/history")
+  listTaskHistoryFeed(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: TaskHistoryQuery,
+  ) {
+    return this.tasks.listTaskHistoryFeed(actor, query);
+  }
+
+  @Get("tasks/:id/history")
+  listTaskHistory(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.tasks.listTaskHistory(actor, id);
   }
 
   @Get("timeline")
