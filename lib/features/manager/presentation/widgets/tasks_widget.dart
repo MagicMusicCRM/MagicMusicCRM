@@ -41,7 +41,14 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   String _priorityFilter = 'all';
   String _branchFilter = 'all';
   String _assigneeFilter = 'all';
-  String _dueFilter = 'all';
+  // Day-by-day to-do is the default view: staff work today's list, not the
+  // whole backlog. 'all'/'overdue'/'week' stay available in the Срок filter.
+  String _dueFilter = 'day';
+  DateTime _selectedDay = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  );
 
   @override
   void initState() {
@@ -131,6 +138,12 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
 
     return switch (_dueFilter) {
       'overdue' => (null, now.toUtc().toIso8601String()),
+      // The picked day, not necessarily today — the day view pages back and
+      // forward.
+      'day' => (
+        _selectedDay.toUtc().toIso8601String(),
+        _selectedDay.add(const Duration(days: 1)).toUtc().toIso8601String(),
+      ),
       'today' => (
         todayStart.toUtc().toIso8601String(),
         tomorrow.toUtc().toIso8601String(),
@@ -469,6 +482,20 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
               onClear: _clearFilters,
             ),
           ),
+          if (_dueFilter == 'day')
+            _DayNavigator(
+              day: _selectedDay,
+              onShift: (days) => _setDropdownFilter(
+                () => _selectedDay = _selectedDay.add(Duration(days: days)),
+              ),
+              onPick: _pickDay,
+              onToday: () {
+                final now = DateTime.now();
+                _setDropdownFilter(
+                  () => _selectedDay = DateTime(now.year, now.month, now.day),
+                );
+              },
+            ),
           Expanded(
             child: _loading
                 ? const Padding(
@@ -510,6 +537,19 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     );
   }
 
+  Future<void> _pickDay() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDay,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null || !mounted) return;
+    _setDropdownFilter(
+      () => _selectedDay = DateTime(picked.year, picked.month, picked.day),
+    );
+  }
+
   void _setStatusFilter(String value) {
     if (_statusFilter == value) return;
     setState(() => _statusFilter = value);
@@ -531,7 +571,10 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
       _priorityFilter = 'all';
       _branchFilter = 'all';
       _assigneeFilter = 'all';
-      _dueFilter = 'all';
+      // Back to the default view (today's list), not to the whole backlog.
+      _dueFilter = 'day';
+      final now = DateTime.now();
+      _selectedDay = DateTime(now.year, now.month, now.day);
     });
     _loadTasks();
   }

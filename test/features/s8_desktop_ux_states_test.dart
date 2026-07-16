@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
@@ -40,6 +41,10 @@ Widget _host(Widget child, {bool fail = false}) {
 }
 
 void main() {
+  // The tasks day pager formats its date in ru, like the app does after
+  // main.dart initialises the locale.
+  setUpAll(() => initializeDateFormatting('ru', null));
+
   group('S8 desktop UX states', () {
     testWidgets('T8.1 schedule renders the calendar grid even with no lessons', (
       tester,

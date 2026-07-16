@@ -1,5 +1,85 @@
 part of 'tasks_widget.dart';
 
+/// Day pager for the to-do view: ‹ day › plus a jump back to today.
+class _DayNavigator extends StatelessWidget {
+  final DateTime day;
+  final void Function(int days) onShift;
+  final VoidCallback onPick;
+  final VoidCallback onToday;
+
+  const _DayNavigator({
+    required this.day,
+    required this.onShift,
+    required this.onPick,
+    required this.onToday,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = day.difference(today).inDays;
+    // Relative names read faster than a date when you are working the list.
+    final label = switch (diff) {
+      0 => 'Сегодня',
+      1 => 'Завтра',
+      -1 => 'Вчера',
+      _ => DateFormat('EEEE, d MMMM', 'ru').format(day),
+    };
+    final sub = diff.abs() <= 1
+        ? DateFormat('EEEE, d MMMM', 'ru').format(day)
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Предыдущий день',
+            onPressed: () => onShift(-1),
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: onPick,
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Column(
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    if (sub != null)
+                      Text(
+                        sub,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Следующий день',
+            onPressed: () => onShift(1),
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+          if (diff != 0)
+            TextButton(onPressed: onToday, child: const Text('Сегодня')),
+        ],
+      ),
+    );
+  }
+}
+
 class _TasksError extends StatelessWidget {
   final Object? error;
   final VoidCallback onRetry;
@@ -130,6 +210,9 @@ class _TaskFilters extends StatelessWidget {
               value: due,
               icon: Icons.event_rounded,
               options: const [
+                // 'day' is the day-by-day to-do (with the pager below);
+                // 'today' is the same range but pinned, without paging.
+                ('day', 'По дням'),
                 ('all', 'Любой срок'),
                 ('overdue', 'Просрочено'),
                 ('today', 'Сегодня'),
