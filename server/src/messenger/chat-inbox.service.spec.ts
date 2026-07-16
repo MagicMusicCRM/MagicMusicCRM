@@ -70,8 +70,8 @@ describe("ChatInboxService", () => {
           query: jest.fn()
             // requireStaffTarget: user role lookup
             .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
-            // update query
-            .mockResolvedValueOnce({ rows: [] })
+            // conditional claim update (1 row = won the claim)
+            .mockResolvedValueOnce({ rows: [], rowCount: 1 })
             // chat_work_events insert
             .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
         },
@@ -98,7 +98,7 @@ describe("ChatInboxService", () => {
         database: {
           query: jest.fn()
             .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
-            .mockResolvedValueOnce({ rows: [] })
+            .mockResolvedValueOnce({ rows: [], rowCount: 1 })
             .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
         },
         policy: {
@@ -114,6 +114,26 @@ describe("ChatInboxService", () => {
         "chat.updated",
         expect.objectContaining({ id: "chat-admin" }),
       );
+    });
+
+    it("assignChat reports a conflict when another staffer claimed the chat first", async () => {
+      const { service, realtime } = createService({
+        database: {
+          query: jest.fn()
+            .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
+            // conditional claim update: 0 rows — someone else won the race
+            .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(adminChat),
+          assertCanAssign: jest.fn(),
+        },
+      });
+
+      await expect(
+        service.assignChat(staffActor, "chat-admin", undefined),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(realtime.publishAdminInboxEvent).not.toHaveBeenCalled();
     });
 
     it("unassignChat clears assignment and publishes chat.updated with assignedTo null", async () => {

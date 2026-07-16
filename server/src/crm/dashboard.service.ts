@@ -172,11 +172,56 @@ export class DashboardService {
               and ($3::uuid is null or ${branchIdExpr("s")} = $3::text)
           ) as expected_payments,
           (
+            -- Live balance (paid − lesson costs + adjustments), mirroring
+            -- FinanceService.listStudentBalances. The app.student_balances
+            -- table is written by nothing, so counting it always showed
+            -- «Должники: 0» while the drill-down listed real debtors.
             select count(*)
-            from app.student_balances sb
-            join app.students s on s.id = sb.student_id and s.deleted_at is null
-            where sb.balance < 0
-              and ($3::uuid is null or ${branchIdExpr("s")} = $3::text)
+            from (
+              select st.id,
+                coalesce(pay.total_paid, 0) - coalesce(cost.total_cost, 0)
+                  + coalesce(adj.total_adjustments, 0) as balance
+              from app.students st
+              left join (
+                select p.student_id, sum(p.amount) as total_paid
+                from app.payments p
+                where p.deleted_at is null
+                group by p.student_id
+              ) pay on pay.student_id = st.id
+              left join (
+                select coalesce(l.student_id, lp.student_id) as student_id,
+                  sum(
+                    coalesce(
+                      g.price_per_lesson,
+                      case
+                        when s2.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
+                          then (s2.custom_data->>'individualPrice')::numeric
+                        when s2.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
+                          then (s2.custom_data->>'individual_price')::numeric
+                        else null
+                      end,
+                      0
+                    )
+                  ) as total_cost
+                from app.lessons l
+                left join app.lesson_participation lp on lp.lesson_id = l.id
+                join app.students s2 on s2.id = coalesce(l.student_id, lp.student_id)
+                left join app.groups g on g.id = l.group_id and g.deleted_at is null
+                where l.deleted_at is null
+                  and l.status in ('completed', 'done')
+                  and coalesce(l.student_id, lp.student_id) is not null
+                group by coalesce(l.student_id, lp.student_id)
+              ) cost on cost.student_id = st.id
+              left join (
+                select adj.student_id, sum(adj.amount) as total_adjustments
+                from app.account_adjustments adj
+                where adj.deleted_at is null
+                group by adj.student_id
+              ) adj on adj.student_id = st.id
+              where st.deleted_at is null
+                and ($3::uuid is null or ${branchIdExpr("st")} = $3::text)
+            ) b
+            where b.balance < 0
           ) as debt_students,
           (
             select count(*)

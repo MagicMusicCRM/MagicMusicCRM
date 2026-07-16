@@ -193,14 +193,23 @@ export class AttendanceService {
    * Выбор абонемента: свой активный, иначе — члена семьи (KVA-235).
    */
   private async reconcileSubscriptionUsage(lessonId: string, studentId: string) {
-    const state = await this.database.query<{
-      attendance_kind: string;
-      charge_share: string | number;
-      charged_hours: string | number;
-      subscription_id: string | null;
-      hours: string | number;
-    }>(
-      `
+    // Read-compute-write on charged_hours/lessons_used: runs inside one
+    // transaction serialized by a per-participation advisory lock, otherwise a
+    // double-submit (teacher retry) reads charged=0 twice and decrements the
+    // subscription twice for one attended lesson.
+    await this.database.transaction(async (client) => {
+      await client.query(
+        `select pg_advisory_xact_lock(hashtext('attendance:' || $1 || ':' || $2))`,
+        [lessonId, studentId],
+      );
+      const state = await client.query<{
+        attendance_kind: string;
+        charge_share: string | number;
+        charged_hours: string | number;
+        subscription_id: string | null;
+        hours: string | number;
+      }>(
+        `
         select lp.attendance_kind, lp.charge_share, lp.charged_hours,
           lp.subscription_id,
           coalesce(l.duration_minutes, 60)::numeric / 60 as hours
@@ -208,29 +217,29 @@ export class AttendanceService {
         join app.lessons l on l.id = lp.lesson_id
         where lp.lesson_id = $1 and lp.student_id = $2
       `,
-      [lessonId, studentId],
-    );
-    const row = state.rows[0];
-    if (!row) return;
-    const hours = Number(row.hours);
-    const target =
-      Math.round(
-        hours *
-          AttendanceService.chargeShareForKind(
-            row.attendance_kind,
-            Number(row.charge_share),
-          ) *
-          100,
-      ) / 100;
-    const charged = Number(row.charged_hours);
-    const delta = Math.round((target - charged) * 100) / 100;
-    if (delta === 0) return;
+        [lessonId, studentId],
+      );
+      const row = state.rows[0];
+      if (!row) return;
+      const hours = Number(row.hours);
+      const target =
+        Math.round(
+          hours *
+            AttendanceService.chargeShareForKind(
+              row.attendance_kind,
+              Number(row.charge_share),
+            ) *
+            100,
+        ) / 100;
+      const charged = Number(row.charged_hours);
+      const delta = Math.round((target - charged) * 100) / 100;
+      if (delta === 0) return;
 
-    if (delta > 0) {
-      // Дописываем: на уже привязанный абонемент, иначе подбираем (свой →
-      // семейный). Если абонемента нет — списывать не с чего, charged не растёт.
-      await this.database.query(
-        `
+      if (delta > 0) {
+        // Дописываем: на уже привязанный абонемент, иначе подбираем (свой →
+        // семейный). Если абонемента нет — списывать не с чего, charged не растёт.
+        await client.query(
+          `
           with pick as (
             select s.id
             from app.subscriptions s
@@ -274,22 +283,22 @@ export class AttendanceService {
           where lp.lesson_id = $1 and lp.student_id = $2
             and exists (select 1 from dec)
         `,
-        [lessonId, studentId, row.subscription_id, delta, target],
-      );
-      return;
-    }
+          [lessonId, studentId, row.subscription_id, delta, target],
+        );
+        return;
+      }
 
-    // Возвращаем часть/всё: только на привязанном абонементе.
-    if (!row.subscription_id) {
-      await this.database.query(
-        `update app.lesson_participation set charged_hours = $3
+      // Возвращаем часть/всё: только на привязанном абонементе.
+      if (!row.subscription_id) {
+        await client.query(
+          `update app.lesson_participation set charged_hours = $3
          where lesson_id = $1 and student_id = $2`,
-        [lessonId, studentId, target],
-      );
-      return;
-    }
-    await this.database.query(
-      `
+          [lessonId, studentId, target],
+        );
+        return;
+      }
+      await client.query(
+        `
         with inc as (
           update app.subscriptions s
           set lessons_used = greatest(lessons_used + $4::numeric, 0),
@@ -303,8 +312,9 @@ export class AttendanceService {
         from inc
         where lp.lesson_id = $1 and lp.student_id = $2
       `,
-      [lessonId, studentId, row.subscription_id, delta, target],
-    );
+        [lessonId, studentId, row.subscription_id, delta, target],
+      );
+    });
   }
 
   /** KVA-237: пуш/in-app «изменение по занятию» клиентам с аккаунтами. */

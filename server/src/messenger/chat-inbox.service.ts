@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -107,10 +108,18 @@ export class ChatInboxService {
     this.policy.assertCanAssign(actor, chat);
 
     const event = await this.database.transaction(async (client) => {
-      await client.query(
-        "update app.chats set assigned_to_user_id = $2, assigned_at = now() where id = $1",
-        [chatId, targetUserId],
+      // Conditional on the assignee we showed the actor: if someone claimed
+      // the chat in between, 0 rows update and we report the conflict instead
+      // of silently overwriting their claim (check-then-act race).
+      const updated = await client.query(
+        `update app.chats
+         set assigned_to_user_id = $2, assigned_at = now()
+         where id = $1 and assigned_to_user_id is not distinct from $3`,
+        [chatId, targetUserId, chat.assignedToUserId ?? null],
       );
+      if (!updated.rowCount) {
+        throw new ConflictException("Чат уже взят в работу другим сотрудником.");
+      }
       const inserted = await client.query<{ id: string }>(
         `insert into app.chat_work_events (
            chat_id, actor_user_id, target_user_id, previous_assigned_user_id, action

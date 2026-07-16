@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
@@ -87,6 +88,8 @@ interface ScheduleSeriesRow {
 
 @Injectable()
 export class ScheduleService {
+  private readonly logger = new Logger(ScheduleService.name);
+
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
@@ -342,6 +345,10 @@ export class ScheduleService {
   }
 
   async listLessons(actor: ActorContext, query: LessonQuery) {
+    // No CrmPolicy assert on purpose: this endpoint serves EVERY role, and the
+    // row filter below ($1/$2 predicate) IS the authorization — staff see all,
+    // a teacher only their own lessons, a client only their student/lead/group
+    // lessons. Any new role must be added to that predicate or it sees nothing.
     const limit = Math.min(query.limit ?? 100, 200);
     const result = await this.database.query<LessonRow>(
       `
@@ -527,7 +534,11 @@ export class ScheduleService {
   }
 
   /** Продлить все живые серии (вкл. «до бесконечности») — вызывается воркером. */
-  async extendAllSeriesHorizon(): Promise<{ series: number; created: number }> {
+  async extendAllSeriesHorizon(): Promise<{
+    series: number;
+    created: number;
+    failed: number;
+  }> {
     const rows = await this.database.query<{ id: string }>(
       `
         select id from app.schedule_series
@@ -536,10 +547,20 @@ export class ScheduleService {
       `,
     );
     let created = 0;
+    let failed = 0;
     for (const row of rows.rows) {
-      created += await this.materializeSeries(row.id);
+      // Per-series isolation: one poison series must not starve every series
+      // after it in the batch until the next worker tick.
+      try {
+        created += await this.materializeSeries(row.id);
+      } catch (error) {
+        failed += 1;
+        this.logger.error(
+          `Failed to materialize schedule series ${row.id}: ${String(error)}`,
+        );
+      }
     }
-    return { series: rows.rows.length, created };
+    return { series: rows.rows.length, created, failed };
   }
 
   async listScheduleSeries(
@@ -644,9 +665,13 @@ export class ScheduleService {
       dto.effectiveFrom ??
       new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
 
-    // Закрываем старую серию накануне effectiveFrom (если она уже шла).
-    await this.database.query(
-      `
+    // Close-old / detach-future / insert-continuation must be atomic: a crash
+    // in between would leave the series closed with no continuation (or future
+    // lessons removed for a series that was never rewritten).
+    const newSeriesId = await this.database.transaction(async (client) => {
+      // Закрываем старую серию накануне effectiveFrom (если она уже шла).
+      await client.query(
+        `
         update app.schedule_series
         set valid_until = least(
             coalesce(valid_until, ($2::date - 1)::date),
@@ -655,22 +680,22 @@ export class ScheduleService {
           updated_at = now()
         where id = $1
       `,
-      [seriesId, effectiveFrom],
-    );
-    // Снимаем будущие нетронутые занятия старой серии.
-    await this.database.query(
-      `
+        [seriesId, effectiveFrom],
+      );
+      // Снимаем будущие нетронутые занятия старой серии.
+      await client.query(
+        `
         update app.lessons
         set deleted_at = now(), updated_at = now()
         where series_id = $1 and series_date >= $2::date
           and status = 'scheduled' and original_scheduled_at is null
           and deleted_at is null
       `,
-      [seriesId, effectiveFrom],
-    );
-    // Продолжение с новыми параметрами.
-    const inserted = await this.database.query<{ id: string }>(
-      `
+        [seriesId, effectiveFrom],
+      );
+      // Продолжение с новыми параметрами.
+      const inserted = await client.query<{ id: string }>(
+        `
         insert into app.schedule_series (
           student_id, group_id, teacher_id, room_id, branch_id,
           weekday, begin_time, duration_minutes, valid_from, valid_until,
@@ -679,22 +704,23 @@ export class ScheduleService {
         values ($1, $2, $3, $4, $5, $6, $7::time, $8, $9::date, $10::date, $11, $12)
         returning id
       `,
-      [
-        series.student_id,
-        series.group_id,
-        dto.teacherId ?? series.teacher_id,
-        dto.roomId ?? series.room_id,
-        series.branch_id,
-        dto.weekday ?? series.weekday,
-        dto.beginTime ?? String(series.begin_time).slice(0, 5),
-        dto.durationMinutes ?? series.duration_minutes,
-        effectiveFrom,
-        dto.validUntil ?? series.valid_until,
-        dto.notes?.trim() ?? series.notes,
-        actor.userId,
-      ],
-    );
-    const newSeriesId = inserted.rows[0].id;
+        [
+          series.student_id,
+          series.group_id,
+          dto.teacherId ?? series.teacher_id,
+          dto.roomId ?? series.room_id,
+          series.branch_id,
+          dto.weekday ?? series.weekday,
+          dto.beginTime ?? String(series.begin_time).slice(0, 5),
+          dto.durationMinutes ?? series.duration_minutes,
+          effectiveFrom,
+          dto.validUntil ?? series.valid_until,
+          dto.notes?.trim() ?? series.notes,
+          actor.userId,
+        ],
+      );
+      return inserted.rows[0].id;
+    });
     const created = await this.materializeSeries(newSeriesId);
     await this.audit.record({
       actor,
@@ -719,27 +745,30 @@ export class ScheduleService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     const stopFrom = from ?? new Date().toISOString().slice(0, 10);
-    const result = await this.database.query(
-      `
+    // Closing the series and detaching its future lessons must be atomic.
+    await this.database.transaction(async (client) => {
+      const result = await client.query(
+        `
         update app.schedule_series
         set valid_until = ($2::date - 1)::date,
           deleted_at = case when valid_from >= $2::date then now() else deleted_at end,
           updated_at = now()
         where id = $1 and deleted_at is null
       `,
-      [seriesId, stopFrom],
-    );
-    if (!result.rowCount) throw new NotFoundException("Серия расписания не найдена.");
-    await this.database.query(
-      `
+        [seriesId, stopFrom],
+      );
+      if (!result.rowCount) throw new NotFoundException("Серия расписания не найдена.");
+      await client.query(
+        `
         update app.lessons
         set deleted_at = now(), updated_at = now()
         where series_id = $1 and series_date >= $2::date
           and status = 'scheduled' and original_scheduled_at is null
           and deleted_at is null
       `,
-      [seriesId, stopFrom],
-    );
+        [seriesId, stopFrom],
+      );
+    });
     await this.audit.record({
       actor,
       action: "crm.schedule_series_stopped",

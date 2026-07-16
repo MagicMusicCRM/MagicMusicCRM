@@ -114,7 +114,15 @@ export class PayrollService {
     ) {
       coefficient = Number(lesson.charge_share ?? 1);
     }
-    return { hours, rate, coefficient, amount: hours * rate * coefficient };
+    return {
+      hours,
+      rate,
+      coefficient,
+      // Round each lesson to kopecks BEFORE the callers sum: non-round
+      // durations (50 min = 0.8333…h) leave binary-float residue that
+      // accumulates across a month of lessons if only the total is rounded.
+      amount: Math.round(hours * rate * coefficient * 100) / 100,
+    };
   }
 
   /** Проведённые занятия педагога(ов) для проекции начислений. */

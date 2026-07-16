@@ -25,7 +25,13 @@ describe("ScheduleService", () => {
     deps: ReturnType<typeof buildDeps>,
   ) =>
     new ScheduleService(
-      { query } as unknown as DatabaseService,
+      {
+        query,
+        // Transactional writes share the same query mock so call indices in
+        // the assertions below stay stable.
+        transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+          work({ query }),
+      } as unknown as DatabaseService,
       deps.audit as unknown as AuditService,
       deps.policy as unknown as CrmPolicy,
       deps.notifications as unknown as NotificationsService,

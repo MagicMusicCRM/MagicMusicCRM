@@ -68,9 +68,9 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   async dispatchPendingEmails(limit = 20): Promise<{ processed: number; failed: number }> {
-    const outbox = await this.database.query<OutboxRow>(
+    const candidates = await this.database.query<{ id: string }>(
       `
-        select eo.id, eo.user_id, u.email, eo.template, eo.payload, eo.attempt_count
+        select eo.id
         from app.email_outbox eo
         join app.users u on u.id = eo.user_id and u.deleted_at is null
         where eo.status in ('queued', 'failed')
@@ -82,8 +82,29 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
       [limit, NotificationWorker.emailRetryLimit]
     );
 
+    let processed = 0;
     let failed = 0;
-    for (const item of outbox.rows) {
+    for (const candidate of candidates.rows) {
+      // Atomically claim the row by pushing next_attempt_at into the future —
+      // overlapping drains (30s timer + on-enqueue trigger) then can't pick
+      // the same row, so an OTP/reset email is never sent twice. If the
+      // process dies mid-send the claim expires and the row retries.
+      const claimed = await this.database.query<OutboxRow>(
+        `
+          update app.email_outbox eo
+          set next_attempt_at = now() + interval '5 minutes', updated_at = now()
+          from app.users u
+          where eo.id = $1
+            and u.id = eo.user_id and u.deleted_at is null
+            and eo.status in ('queued', 'failed')
+            and eo.next_attempt_at <= now()
+          returning eo.id, eo.user_id, u.email, eo.template, eo.payload, eo.attempt_count
+        `,
+        [candidate.id]
+      );
+      const item = claimed.rows[0];
+      if (!item) continue;
+      processed += 1;
       try {
         const delivered = await this.dispatchEmail(item);
         if (!delivered) failed += 1;
@@ -93,7 +114,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
         await this.recordDispatchFailure(item, error);
       }
     }
-    return { processed: outbox.rows.length, failed };
+    return { processed, failed };
   }
 
   async dispatchPendingPush(limit = 50): Promise<{ processed: number; failed: number }> {
