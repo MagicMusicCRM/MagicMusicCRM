@@ -618,6 +618,18 @@ String _subscriptionRemainder(Subscription s) {
   return 'Остаток: ${hours(left)} из ${hours(total)} астр.ч.$money$suffix';
 }
 
+/// «Курс» — what the whole subscription is: its hours and its price, as
+/// opposed to «Остаток», which is what is left of it.
+String? _subscriptionCourse(Subscription s) {
+  final total = s.lessonsTotal;
+  if (total <= 0) return null;
+  String hours(num v) =>
+      v == v.truncate() ? v.toInt().toString() : v.toStringAsFixed(1);
+  final price = s.packagePriceRaw;
+  final money = price is num ? ' / ${price.round()} ₽' : '';
+  return 'Курс: ${hours(total)} астр.ч.$money';
+}
+
 String _ledgerKindLabel(Object? kind) {
   return switch (kind?.toString()) {
     'payment' => 'Платёж',

@@ -355,7 +355,12 @@ extension _ClientCardTabsA on _ClientCardState {
                     label: (s.packageName?.trim().isNotEmpty ?? false)
                         ? s.packageName!
                         : 'Абонемент',
-                    value: _subscriptionRemainder(s),
+                    value: [
+                      _subscriptionRemainder(s),
+                      // «Курс» — the whole subscription, next to what is left
+                      // of it, as on the reference card.
+                      ?_subscriptionCourse(s),
+                    ].join('\n'),
                   ),
               ]),
             ],

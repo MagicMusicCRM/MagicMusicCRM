@@ -10,6 +10,7 @@ import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
+import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { ExpenseQuery } from "./dto/expense.query";
 import { PaymentQuery } from "./dto/payment.query";
@@ -515,6 +516,82 @@ export class FinanceService {
       metadata: { kind: dto.kind, amount: signedAmount },
     });
     return { id: result.rows[0].id, amount: signedAmount, kind: dto.kind };
+  }
+
+  /**
+   * Move money between two clients' personal accounts.
+   *
+   * Both legs are written in ONE transaction: a transfer that half-lands
+   * either invents money or destroys it, and this is a balance clients are
+   * shown. Each row points at the other party via counterparty_student_id, so
+   * the ledger can say where the money went.
+   */
+  async createAccountTransfer(
+    actor: ActorContext,
+    fromStudentId: string,
+    dto: CreateTransferDto,
+  ) {
+    this.policy.assertManagerOnly(actor);
+    if (fromStudentId === dto.toStudentId) {
+      throw new BadRequestException("Нельзя перевести деньги самому себе.");
+    }
+    const from = await findStudent(this.database, fromStudentId);
+    if (!from) throw new NotFoundException("Ученик-отправитель не найден.");
+    const to = await findStudent(this.database, dto.toStudentId);
+    if (!to) throw new NotFoundException("Ученик-получатель не найден.");
+
+    const amount = Math.abs(dto.amount);
+    const ids = await this.database.transaction(async (client) => {
+      const insertLeg = async (
+        studentId: string,
+        counterpartyId: string,
+        kind: "transfer_in" | "transfer_out",
+        signedAmount: number,
+      ) => {
+        const result = await client.query<{ id: string }>(
+          `
+            insert into app.account_adjustments
+              (student_id, branch_id, kind, amount, description,
+               counterparty_student_id, occurred_at, created_by)
+            values ($1, (select branch_id from app.students where id = $1), $2,
+              $3, $4, $5, coalesce($6::timestamptz, now()), $7)
+            returning id
+          `,
+          [
+            studentId,
+            kind,
+            signedAmount,
+            dto.description ?? null,
+            counterpartyId,
+            dto.occurredAt ?? null,
+            actor.userId,
+          ],
+        );
+        return result.rows[0].id;
+      };
+      const outId = await insertLeg(
+        fromStudentId,
+        dto.toStudentId,
+        "transfer_out",
+        -amount,
+      );
+      const inId = await insertLeg(
+        dto.toStudentId,
+        fromStudentId,
+        "transfer_in",
+        amount,
+      );
+      return { outId, inId };
+    });
+
+    await this.audit.record({
+      actor,
+      action: "crm.account_transfer_created",
+      entityType: "student",
+      entityId: fromStudentId,
+      metadata: { toStudentId: dto.toStudentId, amount },
+    });
+    return { fromAdjustmentId: ids.outId, toAdjustmentId: ids.inId, amount };
   }
 
   async createPayment(actor: ActorContext, dto: CreatePaymentDto) {

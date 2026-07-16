@@ -17,6 +17,7 @@ import { CrmService } from "./crm.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
 import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
+import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { CreateStudentDto } from "./dto/create-student.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
@@ -107,6 +108,15 @@ export class CrmStudentsController {
     @Body() dto: CreateAdjustmentDto,
   ) {
     return this.finance.createAccountAdjustment(actor, id, dto);
+  }
+
+  @Post("students/:id/transfer")
+  createAccountTransfer(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: CreateTransferDto,
+  ) {
+    return this.finance.createAccountTransfer(actor, id, dto);
   }
 
   @Get("students/:id")

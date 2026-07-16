@@ -1,3 +1,4 @@
+import { NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -155,6 +156,9 @@ describe("AttendanceService", () => {
       "Болеет",
       "unpaid_miss",
       1,
+      // subscription_id: null → reconcile falls back to the student's own
+      // subscription, then a family member's, as before.
+      null,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -163,6 +167,88 @@ describe("AttendanceService", () => {
         entityId: "lesson-a",
       }),
     );
+  });
+
+  it("pins an explicitly chosen subscription so a non-family client can pay", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      },
+      {
+        rows: [
+          { student_id: "student-a", first_name: "Анна", last_name: "Иванова" },
+        ],
+      },
+      { rows: [{ id: "sub-friend" }] }, // subscription exists check
+      { rows: [] }, // participation upsert
+      { rows: [] }, // reconcile advisory lock
+      { rows: [] }, // reconcile state read
+      { rows: [] }, // lesson status
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      },
+      {
+        rows: [
+          { student_id: "student-a", first_name: "Анна", last_name: "Иванова" },
+        ],
+      },
+      { rows: [] },
+    ]);
+
+    await service.upsertLessonAttendance(actor, "lesson-a", {
+      items: [
+        { studentId: "student-a", kind: "attended", subscriptionId: "sub-friend" },
+      ],
+    });
+
+    // Validated first, then stored on the participation row —
+    // reconcileSubscriptionUsage reads it back and charges THAT subscription
+    // instead of hunting for the student's own or a family member's.
+    expect(String(query.mock.calls[2][0])).toContain("app.subscriptions");
+    expect(query.mock.calls[2][1]).toEqual(["sub-friend"]);
+    expect(String(query.mock.calls[3][0])).toContain("subscription_id");
+    expect(query.mock.calls[3][1]).toContain("sub-friend");
+  });
+
+  it("rejects an attendance pinned to a subscription that does not exist", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            teacher_user_id: "teacher-user-a",
+          },
+        ],
+      },
+      {
+        rows: [
+          { student_id: "student-a", first_name: "Анна", last_name: "Иванова" },
+        ],
+      },
+      { rows: [] }, // subscription missing
+    ]);
+
+    await expect(
+      service.upsertLessonAttendance(actor, "lesson-a", {
+        items: [{ studentId: "student-a", subscriptionId: "ghost" }],
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("counts a subscription lesson when a student is marked present (P5b-4/KVA-237)", async () => {

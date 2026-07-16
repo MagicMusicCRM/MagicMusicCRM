@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { NotFoundException, BadRequestException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
@@ -523,4 +523,79 @@ describe("FinanceService", () => {
       missing.service.deleteExpense(actor, "exp-x"),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  describe("createAccountTransfer", () => {
+    it("writes both legs with opposite signs and links the counterparties", async () => {
+      const { service, query, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "student-a", profile_user_id: "client-a" }] }, // from
+        { rows: [{ id: "student-b", profile_user_id: "client-b" }] }, // to
+        { rows: [{ id: "adj-out" }] },
+        { rows: [{ id: "adj-in" }] },
+      ]);
+
+      await expect(
+        service.createAccountTransfer(actor, "student-a", {
+          toStudentId: "student-b",
+          amount: 1500,
+          description: "Перенос на друга",
+        }),
+      ).resolves.toEqual({
+        fromAdjustmentId: "adj-out",
+        toAdjustmentId: "adj-in",
+        amount: 1500,
+      });
+
+      // Payer leg: negative, pointing at the receiver.
+      expect(query.mock.calls[2][1]).toEqual([
+        "student-a",
+        "transfer_out",
+        -1500,
+        "Перенос на друга",
+        "student-b",
+        null,
+        "manager-a",
+      ]);
+      // Receiver leg: positive, pointing back. Money is conserved.
+      expect(query.mock.calls[3][1]).toEqual([
+        "student-b",
+        "transfer_in",
+        1500,
+        "Перенос на друга",
+        "student-a",
+        null,
+        "manager-a",
+      ]);
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "crm.account_transfer_created" }),
+      );
+    });
+
+    it("rejects a transfer to self", async () => {
+      const { service } = createService([]);
+
+      await expect(
+        service.createAccountTransfer(actor, "student-a", {
+          toStudentId: "student-a",
+          amount: 100,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("does not write a leg when the receiver does not exist", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "student-a", profile_user_id: "client-a" }] },
+        { rows: [] }, // receiver missing
+      ]);
+
+      await expect(
+        service.createAccountTransfer(actor, "student-a", {
+          toStudentId: "ghost",
+          amount: 100,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      // Nothing inserted: a half-landed transfer would invent or destroy money.
+      expect(query).toHaveBeenCalledTimes(2);
+    });
+  });
+
 });

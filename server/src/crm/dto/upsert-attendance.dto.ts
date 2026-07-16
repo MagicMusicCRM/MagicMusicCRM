@@ -48,6 +48,15 @@ class AttendanceItemDto {
   @IsString()
   @MaxLength(500)
   passReason?: string;
+
+  /**
+   * Charge THIS subscription instead of letting the reconciler pick one.
+   * Without it the fallback only reaches the student's own subscription or a
+   * family member's, so a friend paying for a friend was impossible.
+   */
+  @IsOptional()
+  @IsUUID()
+  subscriptionId?: string;
 }
 
 export class UpsertAttendanceDto {
