@@ -483,16 +483,21 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   {
     entity: "teachers",
     key: "levels",
-    label: "Уровни",
-    type: "text",
+    // Free text before: every teacher spelled the same level differently, so
+    // filtering by it could not work. The option list is the same one students
+    // and leads already pick from.
+    label: "Уровни обучения",
+    type: "select",
     required: false,
+    options: HOLLIHOP_LEVEL_OPTIONS,
   },
   {
     entity: "teachers",
     key: "categories",
     label: "Категории",
-    type: "text",
+    type: "select",
     required: false,
+    options: HOLLIHOP_CATEGORY_OPTIONS,
   },
   {
     entity: "teachers",
