@@ -453,6 +453,18 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
                 child: Text('Групповые'),
               ),
               DropdownMenuItem<String?>(value: 'trial', child: Text('Пробные')),
+              // ✔ Владелец 17.07: «Индивидуальный пробный» — свой разрез.
+              // «Пробные» выше остались как есть (любое пробное): их разрезом
+              // уже пользуются, и сузить его молча значило бы поменять цифры
+              // под теми, кто на него смотрит.
+              DropdownMenuItem<String?>(
+                value: 'individual_trial',
+                child: Text('— индивидуальные'),
+              ),
+              DropdownMenuItem<String?>(
+                value: 'group_trial',
+                child: Text('— групповые'),
+              ),
             ],
             onChanged: (value) {
               setState(() => _unitType = value);
@@ -679,7 +691,11 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
   }
 
   Widget _buildUnitRow(Map<String, dynamic> unit) {
-    final isGroup = unit['unitType'] == 'group';
+    // Групповое пробное — тоже группа: его ставка групповая. Проверка на одну
+    // строку 'group' отправила бы его в поурочную правку, а та молча
+    // перекрыла бы ставку группы — ровно то, от чего оберегает комментарий ниже.
+    final isGroup =
+        unit['unitType'] == 'group' || unit['unitType'] == 'group_trial';
     final lessonIds = [
       for (final id in (unit['lessonIds'] as List? ?? const []))
         if (id != null) id.toString(),
@@ -701,7 +717,8 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         .join(', ');
     final typeLabel = switch (unit['unitType']) {
       'group' => 'Группа',
-      'trial' => 'Пробное',
+      'group_trial' => 'Групп. пробный',
+      'individual_trial' => 'Индив. пробный',
       _ => 'Индивид.',
     };
     return InkWell(

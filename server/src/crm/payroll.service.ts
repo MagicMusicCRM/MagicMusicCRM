@@ -8,14 +8,32 @@ import { TeacherStatsQuery } from "./dto/teacher-stats.query";
 import { CrmPolicy } from "./crm.policy";
 import { trimOptional } from "./crm-util";
 
+/**
+ * Вид учебной единицы в отчёте «Статистика преподавателей».
+ *
+ * ✔ Решение владельца 17.07: «индивидуальный пробный» — это обычное занятие с
+ * пометкой «пробное», а не отдельный тип занятия. Но в отчёте он **свой
+ * разрез**: раньше `trial` схлопывал все негрупповые пробные, и хуже — пробные
+ * РАЗНЫХ лидов сходились в одну строку «Пробное занятие», потому что ключом
+ * был `student_id`, а у пробного его нет.
+ */
+export type TeacherStatsUnitType =
+  | "group"
+  | "individual"
+  | "group_trial"
+  | "individual_trial";
+
 /** Проведённое занятие для расчёта начисления (проекция, не материализуется). */
 interface PayrollLessonRow {
   id: string;
   teacher_id: string;
   student_id: string | null;
+  /** Пробное занятие вешается на лида — ученика у него ещё нет. */
+  lead_id: string | null;
   group_id: string | null;
   group_name: string | null;
   student_name: string | null;
+  lead_name: string | null;
   scheduled_at: Date | string;
   duration_minutes: number | string;
   is_trial: boolean;
@@ -136,15 +154,19 @@ export class PayrollService {
     // (сотни строк). При росте добавить помесячный материализованный снапшот.
     const result = await this.database.query<PayrollLessonRow>(
       `
-        select l.id, l.teacher_id, l.student_id, l.group_id,
+        select l.id, l.teacher_id, l.student_id, l.lead_id, l.group_id,
           l.scheduled_at, l.duration_minutes, l.is_trial,
           l.teacher_rate, g.teacher_rate as group_rate, g.name as group_name,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
+          trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
           lp.attendance_kind, lp.charge_share
         from app.lessons l
         left join app.groups g on g.id = l.group_id and g.deleted_at is null
         left join app.students s on s.id = l.student_id and s.deleted_at is null
         left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        -- Пробное занятие висит на лиде: без него все пробные разных людей
+        -- сходились в одну безымянную строку отчёта.
+        left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
         left join app.lesson_participation lp
           on lp.lesson_id = l.id and lp.student_id = l.student_id
         where l.deleted_at is null
@@ -164,6 +186,46 @@ export class PayrollService {
       ],
     );
     return result.rows;
+  }
+
+  /**
+   * Вид учебной единицы. Пробность — отдельная ось от «группа/индивидуально»:
+   * пробное занятие бывает и групповым.
+   */
+  private unitTypeFor(lesson: PayrollLessonRow): TeacherStatsUnitType {
+    if (lesson.group_id) return lesson.is_trial ? "group_trial" : "group";
+    return lesson.is_trial ? "individual_trial" : "individual";
+  }
+
+  /**
+   * Ключ учебной единицы.
+   *
+   * Пробные отделены от обычных, а не подмешаны к ним: иначе ученик, у которого
+   * было пробное, а потом начались занятия, показывал бы пробное как обычное —
+   * и обратно, пробные часы исчезали бы из своего разреза.
+   *
+   * Пробное ключуется по лиду (`lead_id`), у которого оно и висит. Раньше ключ
+   * был `s:${student_id ?? "trial"}`, а у пробного `student_id` пуст — поэтому
+   * ВСЕ пробные педагога за период сходились в одну строку.
+   */
+  private unitKeyFor(lesson: PayrollLessonRow): string {
+    if (lesson.group_id) {
+      return lesson.is_trial ? `gt:${lesson.group_id}` : `g:${lesson.group_id}`;
+    }
+    if (!lesson.is_trial) return `s:${lesson.student_id ?? "unknown"}`;
+    // Пробное: сначала лид, потом ученик (пробное можно назначить и ему).
+    const subject = lesson.lead_id ?? lesson.student_id;
+    // `t:unknown` — занятие без лида и без ученика: данные битые, но
+    // сваливать его в чужую строку хуже, чем показать отдельной.
+    return `t:${subject ?? "unknown"}`;
+  }
+
+  private unitNameFor(lesson: PayrollLessonRow): string {
+    if (lesson.group_id) return lesson.group_name ?? "Группа";
+    const person =
+      lesson.student_name?.trim() || lesson.lead_name?.trim() || "";
+    if (person) return person;
+    return lesson.is_trial ? "Пробное занятие" : "Без имени";
   }
 
   /** История ставок педагогов, отсортированная по effective_from. */
@@ -370,10 +432,11 @@ export class PayrollService {
       })
     ).filter((lesson) => {
       if (!query.unitType) return true;
+      // `trial` — любое пробное, групповое или нет. Оставлен как есть: это
+      // разрез, которым уже пользуются, и сузить его молча значило бы менять
+      // цифры под теми, кто на него смотрит.
       if (query.unitType === "trial") return lesson.is_trial;
-      if (query.unitType === "group")
-        return !!lesson.group_id && !lesson.is_trial;
-      return !lesson.group_id && !lesson.is_trial;
+      return this.unitTypeFor(lesson) === query.unitType;
     });
     const teacherIds = [...new Set(lessons.map((l) => l.teacher_id))];
     if (!teacherIds.length) {
@@ -446,7 +509,7 @@ export class PayrollService {
     );
 
     interface UnitAcc {
-      unitType: "group" | "individual" | "trial";
+      unitType: TeacherStatsUnitType;
       groupId: string | null;
       studentId: string | null;
       unitName: string;
@@ -457,7 +520,6 @@ export class PayrollService {
       lessonIds: string[];
       hoursTotal: number;
       accruedTotal: number;
-      hasRegular: boolean;
     }
     const teachers = new Map<
       string,
@@ -474,16 +536,12 @@ export class PayrollService {
         units: new Map<string, UnitAcc>(),
       };
       teachers.set(lesson.teacher_id, teacher);
-      const unitKey = lesson.group_id
-        ? `g:${lesson.group_id}`
-        : `s:${lesson.student_id ?? "trial"}`;
+      const unitKey = this.unitKeyFor(lesson);
       const unit = teacher.units.get(unitKey) ?? {
-        unitType: lesson.group_id ? ("group" as const) : ("trial" as const),
+        unitType: this.unitTypeFor(lesson),
         groupId: lesson.group_id,
         studentId: lesson.group_id ? null : lesson.student_id,
-        unitName: lesson.group_id
-          ? (lesson.group_name ?? "Группа")
-          : lesson.student_name?.trim() || "Пробное занятие",
+        unitName: this.unitNameFor(lesson),
         teacherRate:
           lesson.group_rate === null || lesson.group_rate === undefined
             ? null
@@ -492,11 +550,9 @@ export class PayrollService {
         lessonIds: [],
         hoursTotal: 0,
         accruedTotal: 0,
-        hasRegular: false,
       };
       teacher.units.set(unitKey, unit);
       unit.lessonIds.push(lesson.id);
-      if (!lesson.is_trial) unit.hasRegular = true;
       const day = this.toDateOnly(lesson.scheduled_at);
       unit.days.set(day, (unit.days.get(day) ?? 0) + hours);
       unit.hoursTotal += hours;
@@ -526,12 +582,7 @@ export class PayrollService {
         accruedTotal: this.round2(teacher.accruedTotal),
         paidTotal: this.round2(paidTotal),
         units: [...teacher.units.values()].map((unit) => ({
-          unitType:
-            unit.unitType === "group"
-              ? "group"
-              : unit.hasRegular
-                ? "individual"
-                : "trial",
+          unitType: unit.unitType,
           groupId: unit.groupId,
           studentId: unit.studentId,
           unitName: unit.unitName,
@@ -569,11 +620,12 @@ export class PayrollService {
   ): Promise<string> {
     const report = await this.getTeacherStatsReport(actor, query);
     const unitTypeLabel = (unitType: string) =>
-      unitType === "group"
-        ? "Группа"
-        : unitType === "trial"
-          ? "Пробное"
-          : "Индивидуально";
+      ({
+        group: "Группа",
+        individual: "Индивидуально",
+        group_trial: "Групповой пробный",
+        individual_trial: "Индивидуальный пробный",
+      })[unitType] ?? "Индивидуально";
     const rows: string[][] = [
       [
         "Преподаватель",

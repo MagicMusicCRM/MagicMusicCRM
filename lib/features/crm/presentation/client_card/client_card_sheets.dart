@@ -132,123 +132,13 @@ class SubscriptionPackageTile extends StatelessWidget {
   }
 }
 
-/// Collected values from [showScheduleTrialDialog].
-typedef TrialLessonInput = ({
-  String teacherId,
-  String? roomId,
-  DateTime scheduledAt,
-});
-
-/// «Пробное занятие» dialog (teacher/room/date/time picker). [teachers] must be
-/// non-empty (the caller guards). Returns the chosen slot, or `null` on cancel.
-Future<TrialLessonInput?> showScheduleTrialDialog(
-  BuildContext context, {
-  required List<Map<String, dynamic>> teachers,
-  required List<Map<String, dynamic>> rooms,
-}) async {
-  String? selectedTeacher = teachers.first['id']?.toString();
-  String? selectedRoom = rooms.isNotEmpty ? rooms.first['id']?.toString() : null;
-  DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
-  TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
-
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setLocalState) => AlertDialog(
-        title: const Text('Пробное занятие'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SearchablePickerField(
-              label: 'Учитель',
-              placeholder: 'Выберите учителя',
-              selectedId: selectedTeacher,
-              items: [
-                for (final t in teachers)
-                  SearchableSelectItem(
-                    id: t['id'].toString(),
-                    label: '${t['first_name'] ?? ''} ${t['last_name'] ?? ''}'
-                        .trim(),
-                  ),
-              ],
-              onSelected: (item) =>
-                  setLocalState(() => selectedTeacher = item?.id),
-            ),
-            const SizedBox(height: 12),
-            SearchablePickerField(
-              label: 'Кабинет',
-              placeholder: 'Выберите кабинет',
-              selectedId: selectedRoom,
-              items: [
-                for (final r in rooms)
-                  SearchableSelectItem(
-                    id: r['id'].toString(),
-                    label: r['name']?.toString() ?? '—',
-                  ),
-              ],
-              onSelected: (item) => setLocalState(() => selectedRoom = item?.id),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              title: Text(
-                'Дата: ${DateFormat('dd.MM.yyyy').format(selectedDate)}',
-              ),
-              trailing: const Icon(Icons.calendar_today_rounded),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: ctx,
-                  initialDate: selectedDate,
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 90)),
-                );
-                if (picked != null) {
-                  setLocalState(() => selectedDate = picked);
-                }
-              },
-            ),
-            ListTile(
-              title: Text('Время: ${selectedTime.format(ctx)}'),
-              trailing: const Icon(Icons.access_time_rounded),
-              onTap: () async {
-                final picked = await showTimePicker(
-                  context: ctx,
-                  initialTime: selectedTime,
-                );
-                if (picked != null) {
-                  setLocalState(() => selectedTime = picked);
-                }
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Назначить'),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  if (confirmed != true || selectedTeacher == null) return null;
-  final scheduledAt = DateTime(
-    selectedDate.year,
-    selectedDate.month,
-    selectedDate.day,
-    selectedTime.hour,
-    selectedTime.minute,
-  );
-  return (
-    teacherId: selectedTeacher!,
-    roomId: selectedRoom,
-    scheduledAt: scheduledAt,
-  );
-}
+// `showScheduleTrialDialog` удалён (✔ владелец 17.07: «при назначении пробного
+// это просто готовый пресет под создание нового занятия — можно не дублировать
+// функционал, а переиспользовать создание нового занятия»). Это была отдельная
+// форма на четыре поля: без филиала, длительности, ставки и проверки конфликта
+// аудитории. Аудитории в ней не фильтровались по филиалу ровно потому, что
+// филиала в ней не было. Теперь пробное открывает
+// `CreateLessonDialog.showTrialPreset` — см. trial_lesson_booking.dart.
 
 /// Collected values from [showAddTaskSheet].
 typedef TaskInput = ({String title, DateTime? due, String? assignedTo});

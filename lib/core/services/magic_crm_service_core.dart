@@ -376,7 +376,8 @@ extension MagicCrmCore on MagicCrmService {
   }
 
   /// KVA-238: отчёт «Статистика преподавателей» — учебные единицы, дни, часы,
-  /// ставка, начислено/оплачено. unitType: individual | group | trial.
+  /// ставка, начислено/оплачено.
+  /// unitType: individual | group | trial | individual_trial | group_trial.
   Future<Map<String, dynamic>> getTeacherStatsReport({
     String? from,
     String? to,

@@ -26,9 +26,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     id: "l-1",
     teacher_id: "t-1",
     student_id: null,
+    lead_id: null,
     group_id: null,
     group_name: null,
     student_name: null,
+    lead_name: null,
     scheduled_at: "2026-07-05T10:00:00.000Z",
     duration_minutes: 60,
     is_trial: false,
@@ -242,8 +244,157 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
 
     expect(report.items).toHaveLength(1);
     expect(report.items[0].units).toHaveLength(1);
-    expect(report.items[0].units[0].unitType).toBe("trial");
+    // `trial` — любое пробное; сам разрез теперь называет его точнее.
+    expect(report.items[0].units[0].unitType).toBe("individual_trial");
     expect(report.totals.accruedTotal).toBe(600);
+  });
+
+  describe("«Индивидуальный пробный» — свой разрез (✔ владелец 17.07)", () => {
+    it("не сваливает пробные разных лидов в одну строку", async () => {
+      // Ключом единицы был `s:${student_id ?? "trial"}`, а у пробного
+      // student_id пуст → ВСЕ пробные педагога за период сходились в одну
+      // безымянную строку «Пробное занятие».
+      const { service } = createServiceWithQueryResults([
+        {
+          rows: [
+            lessonRow({
+              id: "l-1",
+              student_id: null,
+              lead_id: "lead-1",
+              lead_name: "Анна Смирнова",
+              is_trial: true,
+            }),
+            lessonRow({
+              id: "l-2",
+              student_id: null,
+              lead_id: "lead-2",
+              lead_name: "Пётр Кузнецов",
+              is_trial: true,
+            }),
+          ],
+        },
+        { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+        { rows: [{ id: "t-1", name: "Иван Петров" }] },
+        { rows: [] },
+      ]);
+
+      const report = await service.getTeacherStatsReport(actor, {
+        from: "2026-07-01T00:00:00.000Z",
+      });
+
+      const units = report.items[0].units;
+      expect(units).toHaveLength(2);
+      expect(units.map((u) => u.unitName).sort()).toEqual([
+        "Анна Смирнова",
+        "Пётр Кузнецов",
+      ]);
+      expect(units.every((u) => u.unitType === "individual_trial")).toBe(true);
+    });
+
+    it("keeps a student's trial apart from their regular lessons", async () => {
+      // Раньше единица с любым обычным занятием целиком считалась
+      // «individual» — пробные часы исчезали из своего разреза.
+      const { service } = createServiceWithQueryResults([
+        {
+          rows: [
+            lessonRow({
+              id: "l-1",
+              student_id: "s-1",
+              student_name: "Мария Иванова",
+              is_trial: true,
+            }),
+            lessonRow({
+              id: "l-2",
+              student_id: "s-1",
+              student_name: "Мария Иванова",
+              is_trial: false,
+            }),
+          ],
+        },
+        { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+        { rows: [{ id: "t-1", name: "Иван Петров" }] },
+        { rows: [] },
+      ]);
+
+      const report = await service.getTeacherStatsReport(actor, {
+        from: "2026-07-01T00:00:00.000Z",
+      });
+
+      const units = report.items[0].units;
+      expect(units).toHaveLength(2);
+      expect(units.map((u) => u.unitType).sort()).toEqual([
+        "individual",
+        "individual_trial",
+      ]);
+    });
+
+    it("считает групповое пробное групповым пробным, а не индивидуальным", async () => {
+      // Пробность — отдельная ось от «группа/индивидуально».
+      const { service } = createServiceWithQueryResults([
+        {
+          rows: [
+            lessonRow({
+              id: "l-1",
+              group_id: "g-1",
+              group_name: "Вокал (группа)",
+              is_trial: true,
+            }),
+          ],
+        },
+        { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+        { rows: [{ id: "t-1", name: "Иван Петров" }] },
+        { rows: [] },
+      ]);
+
+      const report = await service.getTeacherStatsReport(actor, {
+        from: "2026-07-01T00:00:00.000Z",
+      });
+
+      expect(report.items[0].units[0].unitType).toBe("group_trial");
+      expect(report.items[0].units[0].unitName).toBe("Вокал (группа)");
+    });
+
+    it("filters down to individual trials only", async () => {
+      const { service } = createServiceWithQueryResults([
+        {
+          rows: [
+            lessonRow({
+              id: "l-1",
+              student_id: null,
+              lead_id: "lead-1",
+              lead_name: "Анна Смирнова",
+              is_trial: true,
+            }),
+            lessonRow({ id: "l-2", group_id: "g-1", is_trial: true }),
+            lessonRow({ id: "l-3", student_id: "s-9", is_trial: false }),
+          ],
+        },
+        { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+        { rows: [{ id: "t-1", name: "Иван Петров" }] },
+        { rows: [] },
+      ]);
+
+      const report = await service.getTeacherStatsReport(actor, {
+        from: "2026-07-01T00:00:00.000Z",
+        unitType: "individual_trial",
+      });
+
+      expect(report.items[0].units).toHaveLength(1);
+      expect(report.items[0].units[0].unitName).toBe("Анна Смирнова");
+    });
+
+    it("reads the lead behind a trial, since a trial has no student", async () => {
+      // Строки замоканы, SQL не исполняется — проверяем сам запрос текстом.
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [] },
+      ]);
+      await service.getTeacherStatsReport(actor, {
+        from: "2026-07-01T00:00:00.000Z",
+      });
+      const sql = String(query.mock.calls[0][0]);
+      expect(sql).toContain("l.lead_id");
+      expect(sql).toContain("left join app.leads ld on ld.id = l.lead_id");
+    });
   });
 
   it("отбрасывает педагогов, не прошедших фильтр статуса/дисциплины", async () => {
