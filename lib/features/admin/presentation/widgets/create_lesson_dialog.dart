@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 import 'package:intl/intl.dart';
@@ -456,29 +457,21 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
             const SizedBox(height: 16),
 
             // Group Selection
-            DropdownButtonFormField<String>(
-              initialValue: _selectedGroupId,
-              isExpanded: true,
-              dropdownColor: Theme.of(context).colorScheme.surface,
-              decoration: const InputDecoration(
-                labelText: 'Группа',
-                prefixIcon: Icon(Icons.group_rounded),
-              ),
+            SearchablePickerField(
+              label: 'Группа',
+              placeholder: 'Индивидуально',
+              selectedId: _selectedGroupId,
               items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('Индивидуально'),
-                ),
-                ..._groups.map(
-                  (g) => DropdownMenuItem(
-                    value: g['id'].toString(),
-                    child: Text(g['name']?.toString() ?? 'Без названия'),
+                for (final g in _groups)
+                  SearchableSelectItem(
+                    id: g['id'].toString(),
+                    label: g['name']?.toString() ?? 'Без названия',
                   ),
-                ),
               ],
-              onChanged: (val) => setState(() {
-                _selectedGroupId = val;
-                if (val != null) _selectedStudentId = null;
+              onSelected: (item) => setState(() {
+                _selectedGroupId = item?.id;
+                // A group lesson has no single student.
+                if (item != null) _selectedStudentId = null;
               }),
             ),
 
@@ -542,27 +535,22 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 if (_selectedBranchId != null) ...[
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedRoomId,
-                      isExpanded: true,
-                      dropdownColor: Theme.of(context).colorScheme.surface,
-                      decoration: const InputDecoration(labelText: 'Аудитория'),
-                      items: _rooms.isEmpty
-                          ? [
-                              const DropdownMenuItem(
-                                value: null,
-                                child: Text('Нет доступных'),
-                              ),
-                            ]
-                          : _rooms
-                                .map(
-                                  (r) => DropdownMenuItem(
-                                    value: r['id'].toString(),
-                                    child: Text(r['name']?.toString() ?? ''),
-                                  ),
-                                )
-                                .toList(),
-                      onChanged: (val) => setState(() => _selectedRoomId = val),
+                    child: SearchablePickerField(
+                      label: 'Аудитория',
+                      placeholder: _rooms.isEmpty
+                          ? 'Нет доступных'
+                          : 'Выберите аудиторию',
+                      enabled: _rooms.isNotEmpty,
+                      selectedId: _selectedRoomId,
+                      items: [
+                        for (final r in _rooms)
+                          SearchableSelectItem(
+                            id: r['id'].toString(),
+                            label: r['name']?.toString() ?? '—',
+                          ),
+                      ],
+                      onSelected: (item) =>
+                          setState(() => _selectedRoomId = item?.id),
                     ),
                   ),
                 ],

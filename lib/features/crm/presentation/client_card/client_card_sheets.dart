@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 import 'client_card_ui.dart';
@@ -157,32 +159,34 @@ Future<TrialLessonInput?> showScheduleTrialDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<String>(
-              initialValue: selectedTeacher,
-              decoration: const InputDecoration(labelText: 'Учитель'),
-              items: teachers
-                  .map(
-                    (t) => DropdownMenuItem(
-                      value: t['id'].toString(),
-                      child: Text('${t['first_name']} ${t['last_name']}'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setLocalState(() => selectedTeacher = v),
+            SearchablePickerField(
+              label: 'Учитель',
+              placeholder: 'Выберите учителя',
+              selectedId: selectedTeacher,
+              items: [
+                for (final t in teachers)
+                  SearchableSelectItem(
+                    id: t['id'].toString(),
+                    label: '${t['first_name'] ?? ''} ${t['last_name'] ?? ''}'
+                        .trim(),
+                  ),
+              ],
+              onSelected: (item) =>
+                  setLocalState(() => selectedTeacher = item?.id),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: selectedRoom,
-              decoration: const InputDecoration(labelText: 'Кабинет'),
-              items: rooms
-                  .map(
-                    (r) => DropdownMenuItem(
-                      value: r['id'].toString(),
-                      child: Text(r['name']),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setLocalState(() => selectedRoom = v),
+            SearchablePickerField(
+              label: 'Кабинет',
+              placeholder: 'Выберите кабинет',
+              selectedId: selectedRoom,
+              items: [
+                for (final r in rooms)
+                  SearchableSelectItem(
+                    id: r['id'].toString(),
+                    label: r['name']?.toString() ?? '—',
+                  ),
+              ],
+              onSelected: (item) => setLocalState(() => selectedRoom = item?.id),
             ),
             const SizedBox(height: 12),
             ListTile(
@@ -364,30 +368,22 @@ Future<TaskInput?> showAddTaskSheet(
               ),
               if (staff.isNotEmpty) ...[
                 const SizedBox(height: AppSpace.md),
-                DropdownButtonFormField<String?>(
-                  initialValue: assignedTo,
-                  isExpanded: true,
-                  decoration: clientCardInputDecoration(
-                    cs,
-                    label: 'Исполнитель',
-                    isDense: true,
-                  ),
+                SearchablePickerField(
+                  label: 'Исполнитель',
+                  placeholder: 'Не назначен',
+                  selectedId: assignedTo,
                   items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Не назначен'),
-                    ),
                     for (final s in staff)
                       if (s['profile_user_id'] != null)
-                        DropdownMenuItem<String?>(
-                          value: s['profile_user_id'].toString(),
-                          child: Text(
-                            '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
-                                .trim(),
-                          ),
+                        SearchableSelectItem(
+                          id: s['profile_user_id'].toString(),
+                          label:
+                              '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                  .trim(),
                         ),
                   ],
-                  onChanged: (v) => setSheetState(() => assignedTo = v),
+                  onSelected: (item) =>
+                      setSheetState(() => assignedTo = item?.id),
                 ),
               ],
             ],

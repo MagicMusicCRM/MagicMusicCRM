@@ -668,27 +668,20 @@ class _TaskDialogState extends State<_TaskDialog> {
               ),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedEmployeeUserId,
-              isExpanded: true,
-              dropdownColor: Theme.of(context).colorScheme.surface,
-              decoration: const InputDecoration(labelText: 'Ответственный'),
+            SearchablePickerField(
+              label: 'Ответственный',
+              placeholder: 'Не назначен',
+              selectedId: _selectedEmployeeUserId,
               items: [
-                const DropdownMenuItem<String>(
-                  value: null,
-                  child: Text('Не назначен'),
-                ),
-                ...widget.employees
-                    .where((profile) => profile['user_id'] != null)
-                    .map(
-                      (profile) => DropdownMenuItem<String>(
-                        value: profile['user_id'].toString(),
-                        child: Text(_profileName(profile)),
-                      ),
+                for (final profile in widget.employees)
+                  if (profile['user_id'] != null)
+                    SearchableSelectItem(
+                      id: profile['user_id'].toString(),
+                      label: _profileName(profile),
                     ),
               ],
-              onChanged: (value) =>
-                  setState(() => _selectedEmployeeUserId = value),
+              onSelected: (item) =>
+                  setState(() => _selectedEmployeeUserId = item?.id),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

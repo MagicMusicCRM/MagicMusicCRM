@@ -5,6 +5,8 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 
 /// KVA-236: «График занятий» в карточке ученика — серии постоянного
 /// расписания (UX HolliHop image2/3: строка «день · время · педагог ·
@@ -449,40 +451,33 @@ class _StudentScheduleSectionState
               ],
             ),
             const SizedBox(height: AppSpace.md),
-            DropdownButtonFormField<String>(
-              initialValue: teacherId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Педагог',
-                isDense: true,
-              ),
-              items: teachers
-                  .map(
-                    (t) => DropdownMenuItem(
-                      value: t['id'].toString(),
-                      child: Text('${t['first_name']} ${t['last_name']}'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setSheetState(() => teacherId = v),
+            SearchablePickerField(
+              label: 'Педагог',
+              placeholder: 'Выберите педагога',
+              selectedId: teacherId,
+              items: [
+                for (final t in teachers)
+                  SearchableSelectItem(
+                    id: t['id'].toString(),
+                    label: '${t['first_name'] ?? ''} ${t['last_name'] ?? ''}'
+                        .trim(),
+                  ),
+              ],
+              onSelected: (item) => setSheetState(() => teacherId = item?.id),
             ),
             const SizedBox(height: AppSpace.md),
-            DropdownButtonFormField<String>(
-              initialValue: roomId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Аудитория',
-                isDense: true,
-              ),
-              items: rooms
-                  .map(
-                    (r) => DropdownMenuItem(
-                      value: r['id'].toString(),
-                      child: Text('${r['name']}'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setSheetState(() => roomId = v),
+            SearchablePickerField(
+              label: 'Аудитория',
+              placeholder: 'Выберите аудиторию',
+              selectedId: roomId,
+              items: [
+                for (final r in rooms)
+                  SearchableSelectItem(
+                    id: r['id'].toString(),
+                    label: r['name']?.toString() ?? '—',
+                  ),
+              ],
+              onSelected: (item) => setSheetState(() => roomId = item?.id),
             ),
             const SizedBox(height: AppSpace.md),
             InkWell(

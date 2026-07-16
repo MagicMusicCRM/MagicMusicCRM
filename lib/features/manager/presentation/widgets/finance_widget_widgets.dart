@@ -59,6 +59,7 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
   String _type = 'extra_lesson';
   List<Map<String, dynamic>> _students = [];
   String? _selectedStudentId;
+  String? _selectedStudentName;
 
   @override
   void initState() {
@@ -85,6 +86,49 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
     super.dispose();
   }
 
+  static String _studentName(Map<String, dynamic> student) {
+    final name = '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
+        .trim();
+    return name.isEmpty ? 'Без имени' : name;
+  }
+
+  Future<void> _pickStudent() async {
+    SearchableSelect.show(
+      context: context,
+      title: 'Ученик',
+      hintText: 'Имя, телефон, email…',
+      selectedId: _selectedStudentId,
+      isNullable: false,
+      items: [
+        for (final student in _students)
+          SearchableSelectItem(
+            id: student['id'].toString(),
+            label: _studentName(student),
+            subtitle: student['phone']?.toString(),
+          ),
+      ],
+      onSearch: (query) async {
+        final response = await ref
+            .read(magicCrmServiceProvider)
+            .searchStudents(q: query, limit: 30);
+        final items = response['items'];
+        if (items is! List) return const <SearchableSelectItem>[];
+        return [
+          for (final row in items.whereType<Map<String, dynamic>>())
+            SearchableSelectItem(
+              id: row['id'].toString(),
+              label: _studentName(row),
+              subtitle: row['phone']?.toString(),
+            ),
+        ];
+      },
+      onSelected: (item) => setState(() {
+        _selectedStudentId = item?.id;
+        _selectedStudentName = item?.label;
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final amount = double.tryParse(_amountCtrl.text.trim());
@@ -97,19 +141,34 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: _selectedStudentId,
-            dropdownColor: Theme.of(context).colorScheme.surface,
-            decoration: const InputDecoration(labelText: 'Ученик'),
-            items: _students.map((s) {
-              final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
-                  .trim();
-              return DropdownMenuItem(
-                value: s['id'] as String,
-                child: Text(name.isEmpty ? 'Без имени' : name),
-              );
-            }).toList(),
-            onChanged: (v) => setState(() => _selectedStudentId = v),
+          // Searchable, not a dropdown: the pre-loaded page is capped at 100
+          // students, so a longer roster simply could not be paid for. Typing
+          // hits the server, which also matches phone and custom fields.
+          InkWell(
+            onTap: _pickStudent,
+            borderRadius: BorderRadius.circular(8),
+            child: InputDecorator(
+              decoration: const InputDecoration(labelText: 'Ученик'),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _selectedStudentName ?? 'Выберите ученика',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _selectedStudentName == null
+                          ? TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            )
+                          : null,
+                    ),
+                  ),
+                  const Icon(Icons.search_rounded, size: 18),
+                ],
+              ),
+            ),
           ),
           SizedBox(height: 10),
           TextField(
