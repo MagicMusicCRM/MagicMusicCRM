@@ -264,6 +264,13 @@ extension MagicCrmCore on MagicCrmService {
     return _items(response).map(_legacyTeacher).toList();
   }
 
+  /// One teacher by id. Callers holding only an id (a task pointing at a
+  /// teacher) can't use listTeachers: it is capped, so the row may be absent.
+  Future<Map<String, dynamic>> getTeacher(String id) async {
+    final response = await _api.get<Map<String, dynamic>>('/crm/teachers/$id');
+    return _legacyTeacher(response);
+  }
+
   Future<Map<String, dynamic>> createTeacher({
     required String firstName,
     String? lastName,

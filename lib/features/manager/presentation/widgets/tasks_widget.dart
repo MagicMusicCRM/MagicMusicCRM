@@ -11,6 +11,8 @@ import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
 
 part 'tasks_widget_cards.dart';
 part 'tasks_widget_sheets.dart';
@@ -346,6 +348,46 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     return _taskFilterProfileName(profile.first);
   }
 
+  /// Opens the object a task points at. Lives here rather than in _TaskCard
+  /// because groups and teachers have no route: their cards are dialogs that
+  /// want a whole record, so the row has to be fetched by id first — and that
+  /// needs `ref`, which a StatelessWidget card does not have.
+  Future<void> _openTaskEntity(Map<String, dynamic> task) async {
+    final entityType = task['entity_type']?.toString();
+    final entityId = task['entity_id']?.toString();
+    if (entityId == null || entityId.trim().isEmpty) return;
+
+    try {
+      switch (entityType) {
+        case 'student':
+          showClientCard(context, entityType: 'student', entityId: entityId);
+        case 'lead':
+          showClientCard(context, entityType: 'lead', entityId: entityId);
+        case 'lesson':
+          context.push('/lessons/$entityId');
+        case 'profile':
+          context.push('/admin/profiles/$entityId');
+        case 'group':
+          final group = await ref
+              .read(magicCrmServiceProvider)
+              .getGroup(entityId);
+          if (!mounted) return;
+          await GroupDetailDialog.show(context, group);
+        case 'teacher':
+          final teacher = await ref
+              .read(magicCrmServiceProvider)
+              .getTeacher(entityId);
+          if (!mounted) return;
+          await TeacherDetailDialog.show(context, teacher);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Не удалось открыть: $e')));
+    }
+  }
+
   Future<void> _showTaskTimeline(Map<String, dynamic> task) async {
     final entityType = task['entity_type']?.toString();
     final entityId = task['entity_id']?.toString();
@@ -458,6 +500,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                         onStatusChange: _updateStatus,
                         onTimelineTap: _showTaskTimeline,
                         onReassignTap: _reassignTask,
+                        onOpenEntity: _openTaskEntity,
                       ),
                     ),
                   ),

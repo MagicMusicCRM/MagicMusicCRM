@@ -274,7 +274,7 @@ Future<TaskInput?> showAddTaskSheet(
         builder: (context, setSheetState) {
           final dueLabel = due == null
               ? 'Без срока'
-              : DateFormat('dd.MM.yyyy', 'ru').format(due!);
+              : DateFormat('dd.MM.yyyy HH:mm', 'ru').format(due!);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -308,7 +308,29 @@ Future<TaskInput?> showAddTaskSheet(
                     firstDate: DateTime(2020),
                     lastDate: DateTime(2100),
                   );
-                  if (picked != null) setSheetState(() => due = picked);
+                  if (picked == null || !context.mounted) return;
+                  // Time as well as date: the deadline drives the -1h/-10m and
+                  // overdue reminders, and a midnight due date fires them in
+                  // the middle of the night.
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: due == null
+                        ? const TimeOfDay(hour: 12, minute: 0)
+                        : TimeOfDay.fromDateTime(due!),
+                  );
+                  final fallback = due == null
+                      ? const TimeOfDay(hour: 12, minute: 0)
+                      : TimeOfDay.fromDateTime(due!);
+                  final at = time ?? fallback;
+                  setSheetState(
+                    () => due = DateTime(
+                      picked.year,
+                      picked.month,
+                      picked.day,
+                      at.hour,
+                      at.minute,
+                    ),
+                  );
                 },
                 child: InputDecorator(
                   decoration: clientCardInputDecoration(cs, isDense: true),

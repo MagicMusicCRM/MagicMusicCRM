@@ -408,6 +408,9 @@ Widget _statusHistorySection(
         if (to != null && to.isNotEmpty) to else '—',
       ].join(' ');
       final comment = h['comment']?.toString().trim() ?? '';
+      // Who made the change: stored all along, but the card only ever showed
+      // the transition and the date.
+      final author = h['changed_by_name']?.toString().trim() ?? '';
       return Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: ListTile(
@@ -427,6 +430,7 @@ Widget _statusHistorySection(
           subtitle: Text(
             [
               _formatDate(h['changed_at']),
+              if (author.isNotEmpty) author,
               if (comment.isNotEmpty) comment,
             ].where((value) => value.isNotEmpty).join(' · '),
             maxLines: 2,

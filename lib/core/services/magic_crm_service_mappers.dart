@@ -576,6 +576,7 @@ Map<String, dynamic> _legacyStatusHistoryItem(Map<String, dynamic> item) {
     'old_owner_id': item['oldOwnerId'],
     'new_owner_id': item['newOwnerId'],
     'changed_by': item['changedBy'],
+    'changed_by_name': item['changedByName'],
     'changed_at': item['changedAt'],
     'reason_id': item['reasonId'],
     'comment': item['comment'],

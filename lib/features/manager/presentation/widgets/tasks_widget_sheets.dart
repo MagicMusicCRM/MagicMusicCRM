@@ -566,6 +566,41 @@ class _TaskDialogState extends State<_TaskDialog> {
     if (mounted) setState(() {});
   }
 
+  /// Date THEN time: the deadline drives the -1h/-10m/overdue reminders, so a
+  /// date-only due date (i.e. midnight) would fire them in the small hours.
+  Future<void> _pickDueAt() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _dueDate ?? now,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: _dueDate == null
+          ? const TimeOfDay(hour: 12, minute: 0)
+          : TimeOfDay.fromDateTime(_dueDate!),
+    );
+    if (!mounted) return;
+    setState(() {
+      // Cancelling the time step keeps whatever time was already set (noon for
+      // a fresh deadline) rather than silently snapping back to midnight.
+      final fallback = _dueDate == null
+          ? const TimeOfDay(hour: 12, minute: 0)
+          : TimeOfDay.fromDateTime(_dueDate!);
+      final picked = time ?? fallback;
+      _dueDate = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        picked.hour,
+        picked.minute,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final entityItems = _entityItems();
@@ -657,20 +692,12 @@ class _TaskDialogState extends State<_TaskDialog> {
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
-              onPressed: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _dueDate ?? DateTime.now(),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                );
-                if (date != null) setState(() => _dueDate = date);
-              },
-              icon: const Icon(Icons.calendar_today_rounded, size: 18),
+              onPressed: _pickDueAt,
+              icon: const Icon(Icons.event_rounded, size: 18),
               label: Text(
                 _dueDate == null
                     ? 'Установить срок'
-                    : DateFormat('dd.MM.yyyy').format(_dueDate!),
+                    : DateFormat('dd.MM.yyyy HH:mm').format(_dueDate!),
               ),
             ),
           ],
@@ -690,7 +717,10 @@ class _TaskDialogState extends State<_TaskDialog> {
                     'entity_type': _entityType,
                     'entity_id': _selectedEntityId,
                     'assigned_to': _selectedEmployeeUserId,
-                    'due_at': _dueDate?.toIso8601String(),
+                    // toUtc() matters: a bare local ISO string carries no
+                    // offset, so the timestamptz column would read it in the
+                    // server's zone and shift the deadline.
+                    'due_at': _dueDate?.toUtc().toIso8601String(),
                   });
                 }
               : null,

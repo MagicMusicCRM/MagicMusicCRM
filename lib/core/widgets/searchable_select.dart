@@ -77,6 +77,10 @@ class SearchableSelect extends StatefulWidget {
 class _SearchableSelectState extends State<SearchableSelect> {
   final TextEditingController _searchController = TextEditingController();
   List<SearchableSelectItem> _filteredItems = [];
+  /// How many matches a search shows. Requirement: the five best, not a wall
+  /// of results to scroll through.
+  static const _maxResults = 5;
+
   Timer? _searchDebounce;
   bool _searching = false;
   // Latest-wins guard: a slow response for an old query must not overwrite
@@ -97,15 +101,64 @@ class _SearchableSelectState extends State<SearchableSelect> {
     super.dispose();
   }
 
+  /// Score a match: lower is better. A plain `contains` filter puts «Петров
+  /// Иван» and «Иванов Пётр» in whatever order the list happened to be in, so
+  /// the five shown for "иван" were not the five best.
+  static int _matchScore(SearchableSelectItem item, String query) {
+    final label = item.label.toLowerCase();
+    if (label == query) return 0;
+    if (label.startsWith(query)) return 1;
+    // A hit at a word boundary («Иван» in «Петров Иван») beats one buried
+    // mid-word («иван» in «Селиванов»).
+    if (label.contains(' $query')) return 2;
+    if (label.contains(query)) return 3;
+    final subtitle = item.subtitle?.toLowerCase();
+    if (subtitle != null && subtitle.contains(query)) return 4;
+    return 5;
+  }
+
+  /// Best [_maxResults] matches, ranked. An empty query is not a search — the
+  /// user is browsing, so the list stays whole.
+  ///
+  /// [drop] must be false for server-side results: the server matches fields
+  /// this widget cannot see (phone, custom data), so a row it returned may
+  /// score as "no match" here. Dropping those would hide exactly the records
+  /// the search just found — they are ranked last instead.
+  List<SearchableSelectItem> _rankAndLimit(
+    List<SearchableSelectItem> items,
+    String rawQuery, {
+    required bool drop,
+  }) {
+    final query = rawQuery.trim().toLowerCase();
+    if (query.isEmpty) return items;
+    final scored = <(int, SearchableSelectItem)>[];
+    for (final item in items) {
+      final score = _matchScore(item, query);
+      if (!drop || score < 5) scored.add((score, item));
+    }
+    scored.sort((a, b) {
+      final byScore = a.$1.compareTo(b.$1);
+      // Alphabetical within a tier, so the order is stable between keystrokes
+      // instead of jumping around as the source list reorders.
+      return byScore != 0
+          ? byScore
+          : a.$2.label.toLowerCase().compareTo(b.$2.label.toLowerCase());
+    });
+    return [
+      for (final entry in scored.take(_maxResults)) entry.$2,
+    ];
+  }
+
   void _onSearchChanged() {
     final onSearch = widget.onSearch;
     if (onSearch == null) {
-      final query = _searchController.text.toLowerCase();
       setState(() {
-        _filteredItems = widget.items.where((item) {
-          return item.label.toLowerCase().contains(query) ||
-              (item.subtitle?.toLowerCase().contains(query) ?? false);
-        }).toList();
+        // Local mode: this filter IS the search, so non-matches go.
+        _filteredItems = _rankAndLimit(
+          widget.items,
+          _searchController.text,
+          drop: true,
+        );
       });
       return;
     }
@@ -121,7 +174,9 @@ class _SearchableSelectState extends State<SearchableSelect> {
         final results = query.isEmpty ? widget.items : await onSearch(query);
         if (!mounted || seq != _searchSeq) return;
         setState(() {
-          _filteredItems = results;
+          // Rank server results too: the endpoint filters, it does not order
+          // by relevance. Nothing is dropped — see _rankAndLimit.
+          _filteredItems = _rankAndLimit(results, query, drop: false);
           _searching = false;
         });
       } catch (_) {

@@ -336,6 +336,7 @@ class _TaskCard extends StatelessWidget {
   final Future<void> Function(String, String) onStatusChange;
   final Future<void> Function(Map<String, dynamic>) onTimelineTap;
   final Future<void> Function(Map<String, dynamic>) onReassignTap;
+  final Future<void> Function(Map<String, dynamic>) onOpenEntity;
 
   const _TaskCard({
     required this.task,
@@ -343,6 +344,7 @@ class _TaskCard extends StatelessWidget {
     required this.onStatusChange,
     required this.onTimelineTap,
     required this.onReassignTap,
+    required this.onOpenEntity,
   });
 
   String _statusLabel(String? status) {
@@ -366,7 +368,9 @@ class _TaskCard extends StatelessWidget {
     final status = task['status']?.toString();
     final dueDate = task['due_date'] != null
         ? DateFormat(
-            'd MMM yyyy',
+            // Deadlines carry a time of day now, and it drives the -1h/-10m
+            // reminders — showing the date alone hides why one just fired.
+            'd MMM, HH:mm',
             'ru',
           ).format(DateTime.parse(task['due_date'].toString()).toLocal())
         : null;
@@ -394,12 +398,21 @@ class _TaskCard extends StatelessWidget {
       child: Card(
         margin: const EdgeInsets.only(bottom: 10),
         elevation: 0,
-        color: Theme.of(context).colorScheme.surface,
+        // An overdue task has to be findable at a glance in a long list, so
+        // the whole card burns red rather than just the due-date tag.
+        color: isOverdue
+            ? Color.alphaBlend(
+                AppColor.danger.withValues(alpha: 0.06),
+                Theme.of(context).colorScheme.surface,
+              )
+            : Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.card),
           side: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant,
-            width: 1,
+            color: isOverdue
+                ? AppColor.danger
+                : Theme.of(context).colorScheme.outlineVariant,
+            width: isOverdue ? 1.5 : 1,
           ),
         ),
         child: Padding(
@@ -417,6 +430,17 @@ class _TaskCard extends StatelessWidget {
                         fontSize: 15,
                       ),
                     ),
+                  ),
+                  // One tap straight to the object, without hunting for the
+                  // small entity tag at the bottom of the card.
+                  IconButton(
+                    tooltip: entityText == null
+                        ? 'Перейти к объекту'
+                        : 'Перейти: $entityText',
+                    onPressed: (onEntityTap == null || isPending)
+                        ? null
+                        : onEntityTap,
+                    icon: const Icon(Icons.open_in_new_rounded),
                   ),
                   IconButton(
                     tooltip: 'История объекта',
@@ -575,20 +599,24 @@ class _TaskCard extends StatelessWidget {
     );
   }
 
+  // Every entity type a task can point at is now reachable; the parent does
+  // the opening (groups/teachers need a fetch by id). Previously group,
+  // teacher and profile fell through to null and the tap was simply dead.
+  static const _openableEntityTypes = {
+    'student',
+    'lead',
+    'lesson',
+    'profile',
+    'group',
+    'teacher',
+  };
+
   VoidCallback? _entityTap(BuildContext context, Map<String, dynamic> task) {
-    final entityId = task['entity_id'];
-    if (entityId == null) return null;
-    switch (task['entity_type']) {
-      case 'student':
-        return () =>
-            showClientCard(context, entityType: 'student', entityId: entityId);
-      case 'lead':
-        return () =>
-            showClientCard(context, entityType: 'lead', entityId: entityId);
-      case 'lesson':
-        return () => context.push('/lessons/$entityId');
-      default:
-        return null;
+    final entityId = task['entity_id']?.toString();
+    if (entityId == null || entityId.trim().isEmpty) return null;
+    if (!_openableEntityTypes.contains(task['entity_type']?.toString())) {
+      return null;
     }
+    return () => onOpenEntity(task);
   }
 }

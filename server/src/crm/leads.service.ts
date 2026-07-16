@@ -350,18 +350,24 @@ export class LeadsService {
       old_owner_id: string | null;
       new_owner_id: string | null;
       changed_by: string | null;
+      changed_by_name: string | null;
       changed_at: string;
       reason_id: string | null;
       comment: string | null;
     }>(
+      // changed_by alone is a raw user id — useless to a human reading the
+      // history, so resolve the author's name here.
       `select h.id,
               os.name as old_status,
               ns.name as new_status,
               h.old_owner_id, h.new_owner_id, h.changed_by, h.changed_at,
-              h.reason_id, h.comment
+              h.reason_id, h.comment,
+              nullif(trim(coalesce(cp.first_name, '') || ' ' || coalesce(cp.last_name, '')), '') as changed_by_name
          from app.lead_status_history h
          left join app.lead_statuses os on os.id = h.old_status_id
          left join app.lead_statuses ns on ns.id = h.new_status_id
+         left join app.users cu on cu.id = h.changed_by and cu.deleted_at is null
+         left join app.profiles cp on cp.user_id = cu.id and cp.deleted_at is null
         where h.lead_id = $1
         order by h.changed_at desc`,
       [leadId],
@@ -374,6 +380,7 @@ export class LeadsService {
         oldOwnerId: row.old_owner_id,
         newOwnerId: row.new_owner_id,
         changedBy: row.changed_by,
+        changedByName: row.changed_by_name,
         changedAt: row.changed_at,
         reasonId: row.reason_id,
         comment: row.comment,
