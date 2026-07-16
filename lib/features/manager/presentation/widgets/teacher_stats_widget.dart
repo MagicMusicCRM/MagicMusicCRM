@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
@@ -29,6 +33,11 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
   String? _branchId;
   String? _teacherId;
   String? _unitType;
+  String? _status;
+  String? _discipline;
+  String? _category;
+  List<Map<String, dynamic>> _disciplines = const [];
+  bool _exporting = false;
 
   final _money = NumberFormat('#,##0', 'ru');
   final _dayFmt = DateFormat('dd.MM');
@@ -50,11 +59,13 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       final results = await Future.wait([
         crm.listBranches(limit: 100),
         crm.listTeachers(limit: 100),
+        crm.listDisciplines(),
       ]);
       if (!mounted) return;
       setState(() {
         _branches = results[0];
         _teachers = results[1];
+        _disciplines = results[2];
       });
     } catch (_) {
       // Фильтры-справочники не критичны для отчёта — молча оставляем пустыми.
@@ -75,6 +86,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
             branchId: _branchId,
             teacherId: _teacherId,
             unitType: _unitType,
+            status: _status,
+            discipline: _discipline,
+            category: _category,
           );
       if (!mounted) return;
       setState(() {
@@ -107,6 +121,73 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       _to = picked.end.add(const Duration(days: 1));
     });
     await _loadReport();
+  }
+
+  /// Sets the per-lesson rate on every lesson of an individual/trial unit.
+  Future<void> _editUnitLessonRate(Map<String, dynamic> unit) async {
+    final lessonIds = [
+      for (final id in (unit['lessonIds'] as List? ?? const []))
+        if (id != null) id.toString(),
+    ];
+    if (lessonIds.isEmpty) return;
+
+    num? picked;
+    var touched = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(unit['unitName']?.toString() ?? 'Занятия'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Ставка применится к ${lessonIds.length} занятиям этого периода.',
+                style: TextStyle(
+                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  fontSize: 12.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TeacherRateSelector(
+                initialRate: unit['rate'] as num?,
+                allowInherit: true,
+                onChanged: (value) => setDialogState(() {
+                  picked = value;
+                  touched = true;
+                }),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: touched ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Применить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final crm = ref.read(magicCrmServiceProvider);
+      for (final lessonId in lessonIds) {
+        await crm.updateLesson(lessonId, teacherRate: picked);
+      }
+      if (!mounted) return;
+      await _loadReport();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Не удалось сохранить: $e')));
+    }
   }
 
   Future<void> _editGroupRate(Map<String, dynamic> unit) async {
@@ -238,13 +319,134 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
             },
           ),
         ),
+        SizedBox(
+          width: 180,
+          child: DropdownButtonFormField<String?>(
+            key: ValueKey('status-$_status'),
+            initialValue: _status,
+            decoration: const InputDecoration(
+              labelText: 'Статус преподавателя',
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem<String?>(value: null, child: Text('Любой')),
+              DropdownMenuItem<String?>(value: 'active', child: Text('Работает')),
+              DropdownMenuItem<String?>(
+                value: 'inactive',
+                child: Text('Не работает'),
+              ),
+            ],
+            onChanged: (value) {
+              setState(() => _status = value);
+              _loadReport();
+            },
+          ),
+        ),
+        SizedBox(
+          width: 180,
+          child: DropdownButtonFormField<String?>(
+            key: ValueKey('disc-$_discipline'),
+            initialValue: _discipline,
+            decoration: const InputDecoration(
+              labelText: 'Дисциплина',
+              isDense: true,
+            ),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('Все')),
+              for (final discipline in _disciplines)
+                DropdownMenuItem<String?>(
+                  value: discipline['name']?.toString(),
+                  child: Text(discipline['name']?.toString() ?? '—'),
+                ),
+            ],
+            onChanged: (value) {
+              setState(() => _discipline = value);
+              _loadReport();
+            },
+          ),
+        ),
+        SizedBox(
+          width: 160,
+          child: DropdownButtonFormField<String?>(
+            key: ValueKey('cat-$_category'),
+            initialValue: _category,
+            decoration: const InputDecoration(
+              labelText: 'Категория',
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem<String?>(value: null, child: Text('Все')),
+              DropdownMenuItem<String?>(
+                value: 'Взрослые',
+                child: Text('Взрослые'),
+              ),
+              DropdownMenuItem<String?>(value: 'Дети', child: Text('Дети')),
+            ],
+            onChanged: (value) {
+              setState(() => _category = value);
+              _loadReport();
+            },
+          ),
+        ),
         IconButton(
           tooltip: 'Обновить',
           onPressed: _loadReport,
           icon: const Icon(Icons.refresh_rounded),
         ),
+        FilledButton.icon(
+          onPressed: _exporting ? null : _export,
+          icon: _exporting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.file_download_outlined, size: 18),
+          label: const Text('Экспорт'),
+        ),
       ],
     );
+  }
+
+  /// Saves the report as CSV and opens it — the month-end process is "export,
+  /// check the trial lessons, hand it over".
+  Future<void> _export() async {
+    setState(() => _exporting = true);
+    try {
+      final csv = await ref
+          .read(magicCrmServiceProvider)
+          .exportTeacherStatsReport(
+            from: _from.toUtc().toIso8601String(),
+            to: _to.toUtc().toIso8601String(),
+            branchId: _branchId,
+            teacherId: _teacherId,
+            unitType: _unitType,
+            status: _status,
+            discipline: _discipline,
+            category: _category,
+          );
+      final dir = await getApplicationDocumentsDirectory();
+      final stamp = DateFormat('yyyy-MM-dd').format(_from);
+      final file = File('${dir.path}/teacher-stats-$stamp.csv');
+      await file.writeAsString(csv);
+      if (!mounted) return;
+      final opened = await OpenFilex.open(file.path);
+      if (!mounted) return;
+      if (opened.type != ResultType.done) {
+        // No CSV handler (common on a bare desktop): the file is still saved,
+        // so tell the user where instead of just failing.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Сохранено: ${file.path}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Не удалось выгрузить: $e')));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   Widget _buildBody() {
@@ -344,8 +546,12 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       _ => 'Индивид.',
     };
     return InkWell(
-      // Drill-down: ставка по группе редактируется кликом по строке.
-      onTap: isGroup ? () => _editGroupRate(unit) : null,
+      // Drill-down: a group edits its group rate; an individual/trial unit
+      // edits the per-lesson rate of the lessons behind it — that is the
+      // month-end move (a trial nobody bought becomes «входит в оклад»).
+      onTap: isGroup
+          ? () => _editGroupRate(unit)
+          : () => _editUnitLessonRate(unit),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),

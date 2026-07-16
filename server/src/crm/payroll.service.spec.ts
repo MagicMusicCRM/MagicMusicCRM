@@ -246,6 +246,60 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(report.totals.accruedTotal).toBe(600);
   });
 
+  it("отбрасывает педагогов, не прошедших фильтр статуса/дисциплины", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          lessonRow({ id: "l-1", teacher_id: "t-1", student_id: "s-1" }),
+          lessonRow({ id: "l-2", teacher_id: "t-2", student_id: "s-2" }),
+        ],
+      },
+      { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+      // Only t-1 passes the filter, so t-2's lessons must not reach the report.
+      { rows: [{ id: "t-1", name: "Иван Петров" }] },
+      { rows: [] },
+    ]);
+
+    const report = await service.getTeacherStatsReport(actor, {
+      from: "2026-07-01T00:00:00.000Z",
+      status: "active",
+      discipline: "Гитара",
+    });
+
+    expect(report.items.map((item) => item.teacherId)).toEqual(["t-1"]);
+    const namesSql = String(query.mock.calls[2][0]);
+    expect(namesSql).toContain("t.status = $2");
+    expect(namesSql).toContain("app.teacher_disciplines");
+    expect(query.mock.calls[2][1]).toEqual([
+      ["t-1", "t-2"],
+      "active",
+      "Гитара",
+      null,
+    ]);
+  });
+
+  it("экспортирует отчёт в CSV для Excel", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [lessonRow({ id: "l-1", student_id: "s-1", is_trial: true })] },
+      { rows: [{ teacher_id: "t-1", rate: "0", effective_from: "2026-01-01" }] },
+      { rows: [{ id: "t-1", name: 'Иван "Гитарист"; Петров' }] },
+      { rows: [] },
+    ]);
+
+    const csv = await service.exportTeacherStatsReport(actor, {
+      from: "2026-07-01T00:00:00.000Z",
+    });
+
+    // BOM + ';' so Excel in a RU locale opens it in columns, not mojibake.
+    expect(csv.startsWith("﻿")).toBe(true);
+    expect(csv).toContain("Преподаватель;Учебная единица;Тип");
+    // A name containing ';' and '"' must not break the column layout.
+    expect(csv).toContain('"Иван ""Гитарист""; Петров"');
+    // A zero rate is the trial "входит в оклад" case, not a missing value.
+    expect(csv).toContain("Входит в оклад");
+    expect(csv).toContain("ИТОГО");
+  });
+
   it("createTeacherPayout сохраняет выплату и пишет аудит", async () => {
     const { service, query, audit } = createServiceWithQueryResults([
       { rows: [{ id: "t-1" }] },

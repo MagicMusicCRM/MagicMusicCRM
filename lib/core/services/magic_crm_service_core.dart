@@ -383,6 +383,60 @@ extension MagicCrmCore on MagicCrmService {
     String? branchId,
     String? teacherId,
     String? unitType,
+    String? status,
+    String? discipline,
+    String? category,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/crm/reports/teacher-stats',
+      queryParameters: _teacherStatsQuery(
+        from: from,
+        to: to,
+        branchId: branchId,
+        teacherId: teacherId,
+        unitType: unitType,
+        status: status,
+        discipline: discipline,
+        category: category,
+      ),
+    );
+  }
+
+  /// The same report as CSV (see «Экспорт»); the caller saves the bytes.
+  Future<String> exportTeacherStatsReport({
+    String? from,
+    String? to,
+    String? branchId,
+    String? teacherId,
+    String? unitType,
+    String? status,
+    String? discipline,
+    String? category,
+  }) {
+    return _api.get<String>(
+      '/crm/reports/teacher-stats/export',
+      queryParameters: _teacherStatsQuery(
+        from: from,
+        to: to,
+        branchId: branchId,
+        teacherId: teacherId,
+        unitType: unitType,
+        status: status,
+        discipline: discipline,
+        category: category,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _teacherStatsQuery({
+    String? from,
+    String? to,
+    String? branchId,
+    String? teacherId,
+    String? unitType,
+    String? status,
+    String? discipline,
+    String? category,
   }) {
     final queryParameters = <String, dynamic>{};
     if (from != null) queryParameters['from'] = from;
@@ -390,10 +444,10 @@ extension MagicCrmCore on MagicCrmService {
     if (branchId != null) queryParameters['branchId'] = branchId;
     if (teacherId != null) queryParameters['teacherId'] = teacherId;
     if (unitType != null) queryParameters['unitType'] = unitType;
-    return _api.get<Map<String, dynamic>>(
-      '/crm/reports/teacher-stats',
-      queryParameters: queryParameters,
-    );
+    if (status != null) queryParameters['status'] = status;
+    if (discipline != null) queryParameters['discipline'] = discipline;
+    if (category != null) queryParameters['category'] = category;
+    return queryParameters;
   }
 
   Future<Map<String, dynamic>> createStaff({

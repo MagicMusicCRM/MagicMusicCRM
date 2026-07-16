@@ -385,6 +385,9 @@ export class PayrollService {
       };
     }
     const rates = await this.loadTeacherRates(teacherIds);
+    // Doubles as the teacher-attribute filter: a teacher missing from this
+    // result is dropped from the report below, so status/discipline/category
+    // need no second pass over the lessons.
     const namesResult = await this.database.query<{ id: string; name: string }>(
       `
         select t.id,
@@ -392,8 +395,32 @@ export class PayrollService {
         from app.teachers t
         left join app.profiles p on p.id = t.profile_id and p.deleted_at is null
         where t.id = any($1::uuid[])
+          and ($2::text is null or t.status = $2)
+          and (
+            $3::text is null
+            or exists (
+              select 1
+              from app.teacher_disciplines td
+              join app.disciplines d
+                on d.id = td.discipline_id and d.deleted_at is null
+              where td.teacher_id = t.id and lower(d.name) = lower($3)
+            )
+            -- Legacy rows carry the discipline as free text instead of the m2m.
+            or lower(coalesce(t.specialization, '')) like '%' || lower($3) || '%'
+          )
+          and (
+            $4::text is null
+            or lower(
+              coalesce(t.custom_data->>'categories', t.custom_data->>'category', '')
+            ) like '%' || lower($4) || '%'
+          )
       `,
-      [teacherIds],
+      [
+        teacherIds,
+        query.status ?? null,
+        query.discipline ?? null,
+        query.category ?? null,
+      ],
     );
     const teacherNames = new Map(
       namesResult.rows.map((row) => [row.id, row.name || "Без имени"]),
@@ -425,6 +452,9 @@ export class PayrollService {
       unitName: string;
       teacherRate: number | null;
       days: Map<string, number>;
+      // Lesson ids behind this unit: the report's drill-down sets the
+      // per-lesson rate, and only an id can address a lesson.
+      lessonIds: string[];
       hoursTotal: number;
       accruedTotal: number;
       hasRegular: boolean;
@@ -434,6 +464,9 @@ export class PayrollService {
       { hoursTotal: number; accruedTotal: number; units: Map<string, UnitAcc> }
     >();
     for (const lesson of lessons) {
+      // teacherNames holds exactly the teachers that passed the status/
+      // discipline/category filter above.
+      if (!teacherNames.has(lesson.teacher_id)) continue;
       const { hours, amount } = this.computeLessonAccrual(lesson, rates);
       const teacher = teachers.get(lesson.teacher_id) ?? {
         hoursTotal: 0,
@@ -456,11 +489,13 @@ export class PayrollService {
             ? null
             : Number(lesson.group_rate),
         days: new Map<string, number>(),
+        lessonIds: [],
         hoursTotal: 0,
         accruedTotal: 0,
         hasRegular: false,
       };
       teacher.units.set(unitKey, unit);
+      unit.lessonIds.push(lesson.id);
       if (!lesson.is_trial) unit.hasRegular = true;
       const day = this.toDateOnly(lesson.scheduled_at);
       unit.days.set(day, (unit.days.get(day) ?? 0) + hours);
@@ -504,6 +539,7 @@ export class PayrollService {
           days: [...unit.days.entries()]
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([date, hours]) => ({ date, hours: this.round2(hours) })),
+          lessonIds: unit.lessonIds,
           hoursTotal: this.round2(unit.hoursTotal),
           accruedTotal: this.round2(unit.accruedTotal),
         })),
@@ -520,5 +556,78 @@ export class PayrollService {
         paidTotal: this.round2(totals.paidTotal),
       },
     };
+  }
+
+  /**
+   * The same report as CSV, one row per unit — that is the shape the month-end
+   * process needs (open it, sum it, hand it over), and it is what «Экспорт»
+   * does in HolliHop.
+   */
+  async exportTeacherStatsReport(
+    actor: ActorContext,
+    query: TeacherStatsQuery,
+  ): Promise<string> {
+    const report = await this.getTeacherStatsReport(actor, query);
+    const unitTypeLabel = (unitType: string) =>
+      unitType === "group"
+        ? "Группа"
+        : unitType === "trial"
+          ? "Пробное"
+          : "Индивидуально";
+    const rows: string[][] = [
+      [
+        "Преподаватель",
+        "Учебная единица",
+        "Тип",
+        "Дни",
+        "Часы",
+        "Ставка за ак. час",
+        "Начислено",
+        "Оплачено",
+      ],
+    ];
+    for (const item of report.items) {
+      for (const unit of item.units) {
+        rows.push([
+          item.teacherName,
+          unit.unitName,
+          unitTypeLabel(unit.unitType),
+          unit.days.map((day) => day.date).join(" "),
+          String(unit.hoursTotal),
+          // 0 means «входит в оклад» — spell it out, a bare 0 reads as a bug.
+          unit.rate === 0 ? "Входит в оклад" : String(unit.rate),
+          String(unit.accruedTotal),
+          "",
+        ]);
+      }
+      rows.push([
+        item.teacherName,
+        "ИТОГО по преподавателю",
+        "",
+        "",
+        String(item.hoursTotal),
+        "",
+        String(item.accruedTotal),
+        String(item.paidTotal),
+      ]);
+    }
+    rows.push([
+      "ИТОГО",
+      "",
+      "",
+      "",
+      String(report.totals.hoursTotal),
+      "",
+      String(report.totals.accruedTotal),
+      String(report.totals.paidTotal),
+    ]);
+
+    const escape = (value: string) =>
+      /[";\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+    // ';' separator + BOM: Excel with RU locale splits on ';', and without the
+    // BOM it renders UTF-8 Cyrillic as mojibake.
+    return (
+      "﻿" + rows.map((row) => row.map(escape).join(";")).join("\r\n")
+    );
   }
 }
