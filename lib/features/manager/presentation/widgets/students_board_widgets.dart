@@ -242,18 +242,7 @@ class _StudentCard extends StatelessWidget {
     final name = displayName.isEmpty ? 'Без имени' : displayName;
     final phone = student['phone']?.toString() ?? '';
 
-    return LongPressDraggable<Map<String, dynamic>>(
-      data: student,
-      maxSimultaneousDrags: isPending ? 0 : null,
-      // Snappier than the platform 500ms long-press while still separating a
-      // click (tap → open) from a deliberate drag on mouse and touch.
-      delay: const Duration(milliseconds: 250),
-      hapticFeedbackOnStart: true,
-      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
-      onDragEnd: (_) => onDragEnd(),
-      onDraggableCanceled: (_, _) => onDragEnd(),
-      onDragCompleted: onDragEnd,
-      feedback: Transform.rotate(
+    final Widget feedback = Transform.rotate(
         angle: 0.03,
         child: Material(
           color: Colors.transparent,
@@ -314,9 +303,9 @@ class _StudentCard extends StatelessWidget {
             },
           ),
         ),
-      ),
-      // Faded placeholder gap in the source column while dragging.
-      childWhenDragging: Opacity(
+      );
+    // Faded placeholder gap in the source column while dragging.
+    final Widget childWhenDragging = Opacity(
         opacity: 0.3,
         child: Card(
           margin: const EdgeInsets.only(bottom: 10),
@@ -328,17 +317,54 @@ class _StudentCard extends StatelessWidget {
           ),
           child: const SizedBox(height: 64, width: double.infinity),
         ),
-      ),
-      child: Opacity(
-        opacity: isPending ? 0.62 : 1,
-        child: AbsorbPointer(
-          absorbing: isPending,
-          child: GestureDetector(
-            onTap: onTap,
-            child: _CardBody(student: student, isPending: isPending),
-          ),
+      );
+    final Widget cardChild = Opacity(
+      opacity: isPending ? 0.62 : 1,
+      child: AbsorbPointer(
+        absorbing: isPending,
+        child: GestureDetector(
+          onTap: onTap,
+          child: _CardBody(student: student, isPending: isPending),
         ),
       ),
+    );
+
+    final platform = Theme.of(context).platform;
+    final desktop =
+        platform == TargetPlatform.windows ||
+        platform == TargetPlatform.linux ||
+        platform == TargetPlatform.macOS;
+
+    // Desktop (mouse): an immediate Draggable so a plain click-drag moves the
+    // card — press-and-hold is a touch idiom. A motionless click still falls
+    // through to onTap (same pattern as the schedule day canvas).
+    if (desktop) {
+      return Draggable<Map<String, dynamic>>(
+        data: student,
+        maxSimultaneousDrags: isPending ? 0 : null,
+        onDragUpdate: (details) => onDragUpdate(details.globalPosition),
+        onDragEnd: (_) => onDragEnd(),
+        onDraggableCanceled: (_, _) => onDragEnd(),
+        onDragCompleted: onDragEnd,
+        feedback: feedback,
+        childWhenDragging: childWhenDragging,
+        child: cardChild,
+      );
+    }
+    return LongPressDraggable<Map<String, dynamic>>(
+      data: student,
+      maxSimultaneousDrags: isPending ? 0 : null,
+      // Snappier than the platform 500ms long-press while still separating a
+      // tap (tap → open) from a deliberate drag on touch.
+      delay: const Duration(milliseconds: 250),
+      hapticFeedbackOnStart: true,
+      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
+      onDragEnd: (_) => onDragEnd(),
+      onDraggableCanceled: (_, _) => onDragEnd(),
+      onDragCompleted: onDragEnd,
+      feedback: feedback,
+      childWhenDragging: childWhenDragging,
+      child: cardChild,
     );
   }
 }

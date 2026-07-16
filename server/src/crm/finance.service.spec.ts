@@ -9,7 +9,13 @@ describe("FinanceService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
 
   const build = (query: jest.Mock) => {
-    const database = { query };
+    const database = {
+      query,
+      // Transactional writes share the same query mock so sequential
+      // mockResolvedValueOnce chains keep working.
+      transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query }),
+    };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const policy = {
       assertManagerOnly: jest.fn(),
@@ -434,9 +440,11 @@ describe("FinanceService", () => {
       created_at: "2026-06-23T00:00:00.000Z",
     };
     const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // 1st: advisory lock
       { rows: [] }, // 1st: dup-check empty
       { rows: [paymentRow] }, // insert
       { rows: [] }, // affected client users for realtime fan-out
+      { rows: [] }, // 2nd: advisory lock
       { rows: [paymentRow] }, // 2nd: dup-check returns existing
     ]);
     const dto = {
@@ -451,9 +459,10 @@ describe("FinanceService", () => {
 
     expect(first.id).toBe("pay-a");
     expect(second.id).toBe("pay-a");
-    // dup-check, insert, realtime affected users, dup-check — the second submit
-    // must NOT insert again.
-    expect(query).toHaveBeenCalledTimes(4);
+    // lock, dup-check, insert, realtime affected users, lock, dup-check — the
+    // second submit must NOT insert again.
+    expect(query).toHaveBeenCalledTimes(6);
+    expect(String(query.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
   });
 
   it("lists expenses with branch/category filters and a total (P5-5)", async () => {

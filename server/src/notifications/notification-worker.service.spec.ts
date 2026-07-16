@@ -9,6 +9,9 @@ describe('NotificationWorker', () => {
   it('falls back to SMTP when primary email provider fails', async () => {
     const query = jest
       .fn()
+      // candidate ids
+      .mockResolvedValueOnce({ rows: [{ id: 'outbox-a' }] })
+      // claim returns the full outbox row
       .mockResolvedValueOnce({
         rows: [
           {
@@ -63,6 +66,9 @@ describe('NotificationWorker', () => {
   it('marks outbox failed and audits when both email providers fail', async () => {
     const query = jest
       .fn()
+      // candidate ids
+      .mockResolvedValueOnce({ rows: [{ id: 'outbox-a' }] })
+      // claim returns the full outbox row
       .mockResolvedValueOnce({
         rows: [
           {
@@ -123,6 +129,9 @@ describe('NotificationWorker', () => {
   it('keeps transient email failures retryable with backoff before final failure', async () => {
     const query = jest
       .fn()
+      // candidate ids
+      .mockResolvedValueOnce({ rows: [{ id: 'outbox-a' }] })
+      // claim returns the full outbox row
       .mockResolvedValueOnce({
         rows: [
           {

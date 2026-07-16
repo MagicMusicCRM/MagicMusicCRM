@@ -32,6 +32,28 @@ class _StudentScheduleSectionState
     extends ConsumerState<StudentScheduleSection> {
   static const _weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
   int _refreshKey = 0;
+  // Cached so parent rebuilds don't re-fire the API call: a FutureBuilder
+  // given a fresh future instance restarts on every build.
+  late Future<List<Map<String, dynamic>>> _seriesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _seriesFuture = _loadSeries();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadSeries() {
+    return ref
+        .read(magicCrmServiceProvider)
+        .listScheduleSeries(studentId: widget.studentId);
+  }
+
+  void _reloadSeries() {
+    setState(() {
+      _refreshKey++;
+      _seriesFuture = _loadSeries();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,14 +87,37 @@ class _StudentScheduleSectionState
         const SizedBox(height: 4),
         FutureBuilder<List<Map<String, dynamic>>>(
           key: ValueKey('series-$_refreshKey'),
-          future: ref
-              .read(magicCrmServiceProvider)
-              .listScheduleSeries(studentId: widget.studentId),
+          future: _seriesFuture,
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
               return const Padding(
                 padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
                 child: LinearProgressIndicator(color: AppColor.gold),
+              );
+            }
+            if (snap.hasError) {
+              // A failed load must not look like "no schedule configured".
+              return Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Не удалось загрузить график занятий',
+                      style: TextStyle(color: cs.error, fontSize: 12),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _reloadSeries,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColor.gold,
+                      visualDensity: VisualDensity.compact,
+                      textStyle: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                    child: const Text('Повторить'),
+                  ),
+                ],
               );
             }
             final series = snap.data ?? const [];
@@ -547,7 +592,7 @@ class _StudentScheduleSectionState
         );
       }
       if (mounted) {
-        setState(() => _refreshKey++);
+        _reloadSeries();
         widget.onChanged();
         MagicToast.show(
           context,
@@ -596,7 +641,7 @@ class _StudentScheduleSectionState
           .read(magicCrmServiceProvider)
           .deleteScheduleSeries(series['id'].toString());
       if (mounted) {
-        setState(() => _refreshKey++);
+        _reloadSeries();
         widget.onChanged();
         MagicToast.show(
           context,

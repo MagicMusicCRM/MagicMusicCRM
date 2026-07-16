@@ -11,7 +11,9 @@ extension _ClientCardEditors on _ClientCardState {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: TextFormField(
-        key: ValueKey('$label-${value ?? ''}'),
+        // Keyed on the data epoch, NOT the live value: a value-derived key
+        // recreated the field on every keystroke, dropping cursor/IME state.
+        key: ValueKey('$label-$_editorEpoch'),
         initialValue: value ?? '',
         decoration: _inputDecoration(cs, label: label, isDense: true),
         keyboardType: keyboard,
@@ -132,7 +134,8 @@ extension _ClientCardEditors on _ClientCardState {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: TextFormField(
-        key: ValueKey('${field.entity}-${field.key}-${value ?? ''}'),
+        // Epoch key, not value key — see _buildClientTextField.
+        key: ValueKey('${field.entity}-${field.key}-$_editorEpoch'),
         initialValue: value ?? '',
         decoration: _inputDecoration(
           cs,
@@ -170,6 +173,8 @@ extension _ClientCardEditors on _ClientCardState {
             initialDate: dt ?? DateTime.now(),
             firstDate: DateTime(1950),
             lastDate: DateTime(2100),
+            // Dates here are often far away (birthdates) — allow typing.
+            initialEntryMode: DatePickerEntryMode.input,
           );
           if (picked != null) {
             _updateCustomDataForEntity(

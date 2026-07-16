@@ -3,7 +3,10 @@ part of 'messenger_screen.dart';
 extension _MessengerMessaging on _MessengerScreenState {
   // ── Send message ───────────────────────────────────────────────────────────
 
-  void _upsertMessage(Map<String, dynamic> message) {
+  /// Pass [sort]: false when upserting a batch — sort once after the loop
+  /// instead of re-sorting the whole list per message (O(n²·log n) on the
+  /// 100-message fallback poll).
+  void _upsertMessage(Map<String, dynamic> message, {bool sort = true}) {
     final id = message['id']?.toString();
     if (id == null || id.isEmpty) return;
     final index = _messages.indexWhere((item) => item['id']?.toString() == id);
@@ -12,22 +15,33 @@ extension _MessengerMessaging on _MessengerScreenState {
     } else {
       _messages[index] = {..._messages[index], ...message};
     }
-    _sortMessagesChronologically();
+    if (sort) _sortMessagesChronologically();
   }
 
   void _sortMessagesChronologically() {
-    _messages.sort((a, b) {
-      final aCreated = DateTime.tryParse(a['created_at']?.toString() ?? '');
-      final bCreated = DateTime.tryParse(b['created_at']?.toString() ?? '');
-      if (aCreated == null && bCreated == null) {
-        return (a['id']?.toString() ?? '').compareTo(b['id']?.toString() ?? '');
-      }
+    // Decorate-sort-undecorate: parse each created_at ONCE per sort instead of
+    // O(n log n) DateTime.tryParse calls inside the comparator.
+    final decorated = [
+      for (final m in _messages)
+        (
+          DateTime.tryParse(m['created_at']?.toString() ?? ''),
+          m['id']?.toString() ?? '',
+          m,
+        ),
+    ];
+    decorated.sort((a, b) {
+      final aCreated = a.$1;
+      final bCreated = b.$1;
+      if (aCreated == null && bCreated == null) return a.$2.compareTo(b.$2);
       if (aCreated == null) return 1;
       if (bCreated == null) return -1;
       final byDate = aCreated.compareTo(bCreated);
       if (byDate != 0) return byDate;
-      return (a['id']?.toString() ?? '').compareTo(b['id']?.toString() ?? '');
+      return a.$2.compareTo(b.$2);
     });
+    for (var i = 0; i < decorated.length; i++) {
+      _messages[i] = decorated[i].$3;
+    }
   }
 
   void _applySentMessage(Map<String, dynamic> message, {bool channel = false}) {

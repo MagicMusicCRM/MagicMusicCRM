@@ -269,7 +269,8 @@ extension _ClientCardTabsA on _ClientCardState {
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: RuPhoneField(
-              key: ValueKey('client-phone-${_clientPhone ?? ''}'),
+              // Epoch key, not value key — see _buildClientTextField.
+              key: ValueKey('client-phone-$_editorEpoch'),
               initialCanonical: _clientPhone,
               onCanonicalChanged: (c) {
                 _updateClientCore('phone', c.isEmpty ? null : c);

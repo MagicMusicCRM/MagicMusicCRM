@@ -60,20 +60,7 @@ class _LeadCard extends ConsumerWidget {
       ),
     );
 
-    return LongPressDraggable<String>(
-      data: id,
-      maxSimultaneousDrags: isPending ? 0 : null,
-      // Snappier than the platform 500ms long-press, but still long enough that a
-      // normal click (tap → open) doesn't linger past the threshold and silently
-      // move the lead (a 180ms delay mis-fired that way). 250ms reads as instant
-      // while keeping click vs. deliberate-drag cleanly separated on mouse+touch.
-      delay: const Duration(milliseconds: 250),
-      hapticFeedbackOnStart: true,
-      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
-      onDragEnd: (_) => onDragEnd(),
-      onDraggableCanceled: (_, _) => onDragEnd(),
-      onDragCompleted: onDragEnd,
-      feedback: Transform.rotate(
+    final Widget feedback = Transform.rotate(
         angle: 0.03,
         child: Material(
           color: Colors.transparent,
@@ -139,9 +126,9 @@ class _LeadCard extends ConsumerWidget {
             },
           ),
         ),
-      ),
-      // Leave a faded placeholder gap in the source column while dragging.
-      childWhenDragging: Opacity(
+      );
+    // Leave a faded placeholder gap in the source column while dragging.
+    final Widget childWhenDragging = Opacity(
         opacity: 0.3,
         child: Card(
           margin: const EdgeInsets.only(bottom: 10),
@@ -154,8 +141,8 @@ class _LeadCard extends ConsumerWidget {
           ),
           child: const SizedBox(height: 64, width: double.infinity),
         ),
-      ),
-      child: Opacity(
+      );
+    final Widget cardChild = Opacity(
         opacity: beingTransferred ? 0.4 : (isPending ? 0.62 : 1),
         child: AbsorbPointer(
           absorbing: isPending,
@@ -441,76 +428,147 @@ class _LeadCard extends ConsumerWidget {
             ),
           ),
         ),
-      ),
+      );
+
+    final platform = Theme.of(context).platform;
+    final desktop =
+        platform == TargetPlatform.windows ||
+        platform == TargetPlatform.linux ||
+        platform == TargetPlatform.macOS;
+
+    // Desktop (mouse): an immediate Draggable so a plain click-drag moves the
+    // card — press-and-hold is a touch idiom. A motionless click still falls
+    // through to onTap (same pattern as the schedule day canvas).
+    if (desktop) {
+      return Draggable<String>(
+        data: id,
+        maxSimultaneousDrags: isPending ? 0 : null,
+        onDragUpdate: (details) => onDragUpdate(details.globalPosition),
+        onDragEnd: (_) => onDragEnd(),
+        onDraggableCanceled: (_, _) => onDragEnd(),
+        onDragCompleted: onDragEnd,
+        feedback: feedback,
+        childWhenDragging: childWhenDragging,
+        child: cardChild,
+      );
+    }
+    return LongPressDraggable<String>(
+      data: id,
+      maxSimultaneousDrags: isPending ? 0 : null,
+      // Snappier than the platform 500ms long-press, but still long enough that a
+      // normal tap (tap → open) doesn't linger past the threshold and silently
+      // move the lead (a 180ms delay mis-fired that way). 250ms reads as instant
+      // while keeping tap vs. deliberate-drag cleanly separated on touch.
+      delay: const Duration(milliseconds: 250),
+      hapticFeedbackOnStart: true,
+      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
+      onDragEnd: (_) => onDragEnd(),
+      onDraggableCanceled: (_, _) => onDragEnd(),
+      onDragCompleted: onDragEnd,
+      feedback: feedback,
+      childWhenDragging: childWhenDragging,
+      child: cardChild,
     );
   }
 
   Future<void> _addComment(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final content = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Комментарий к лиду'),
-        content: TextField(
-          controller: controller,
-          maxLines: 3,
-          decoration: const InputDecoration(hintText: 'Текст...'),
+    final messenger = ScaffoldMessenger.of(context);
+    // On a failed save the dialog reopens with the typed text preserved.
+    var draft = '';
+    while (true) {
+      if (!context.mounted) return;
+      final controller = TextEditingController(text: draft);
+      final content = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Комментарий к лиду'),
+          content: TextField(
+            controller: controller,
+            maxLines: 3,
+            decoration: const InputDecoration(hintText: 'Текст...'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('Сохранить'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
+      );
+      if (content == null || content.trim().isEmpty) return;
+      try {
+        await ref
+            .read(magicCrmServiceProvider)
+            .createComment(
+              entityType: 'lead',
+              entityId: lead.id,
+              body: content.trim(),
+            );
+        onRefresh();
+        return;
+      } catch (e) {
+        draft = content;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось сохранить комментарий: $e'),
+            backgroundColor: AppColor.danger,
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
-    );
-    if (content != null && content.trim().isNotEmpty) {
-      await ref
-          .read(magicCrmServiceProvider)
-          .createComment(
-            entityType: 'lead',
-            entityId: lead.id,
-            body: content.trim(),
-          );
-      onRefresh();
+        );
+      }
     }
   }
 
   Future<void> _addTask(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final title = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Задача по лиду'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Что сделать?'),
+    final messenger = ScaffoldMessenger.of(context);
+    // On a failed save the dialog reopens with the typed text preserved.
+    var draft = '';
+    while (true) {
+      if (!context.mounted) return;
+      final controller = TextEditingController(text: draft);
+      final title = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Задача по лиду'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(labelText: 'Что сделать?'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('Создать'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
+      );
+      if (title == null || title.trim().isEmpty) return;
+      try {
+        await ref
+            .read(magicCrmServiceProvider)
+            .createTask(
+              entityType: 'lead',
+              entityId: lead.id,
+              title: title.trim(),
+            );
+        onRefresh();
+        return;
+      } catch (e) {
+        draft = title;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось создать задачу: $e'),
+            backgroundColor: AppColor.danger,
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Создать'),
-          ),
-        ],
-      ),
-    );
-    if (title != null && title.trim().isNotEmpty) {
-      await ref
-          .read(magicCrmServiceProvider)
-          .createTask(
-            entityType: 'lead',
-            entityId: lead.id,
-            title: title.trim(),
-          );
-      onRefresh();
+        );
+      }
     }
   }
 

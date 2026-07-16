@@ -10,10 +10,17 @@ extension MagicCrmLeads on MagicCrmService {
     return _items(response).map(_legacyLeadStatus).toList();
   }
 
-  Future<List<Map<String, dynamic>>> listLeads({int limit = 100}) async {
+  Future<List<Map<String, dynamic>>> listLeads({
+    int limit = 100,
+    String? q,
+  }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/leads',
-      queryParameters: {'limit': limit},
+      queryParameters: {
+        'limit': limit,
+        // Server-side name/phone filter — the endpoint has always accepted it.
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+      },
     );
     return _items(response).map(_legacyLead).toList();
   }

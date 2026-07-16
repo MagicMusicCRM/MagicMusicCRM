@@ -11,7 +11,13 @@ describe("AttendanceService", () => {
   ) => {
     const query = jest.fn();
     for (const result of results) query.mockResolvedValueOnce(result);
-    const database = { query };
+    const database = {
+      query,
+      // Transactional writes share the same query mock so sequential
+      // mockResolvedValueOnce chains keep working.
+      transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query }),
+    };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const notifications = { notifyUser: jest.fn().mockResolvedValue(undefined) };
     const service = new AttendanceService(
@@ -96,7 +102,8 @@ describe("AttendanceService", () => {
         ],
       },
       { rows: [] },
-      { rows: [] },
+      { rows: [] }, // reconcile advisory lock
+      { rows: [] }, // reconcile state read (empty → no-op)
       // P5b-4: subscription lessons_used reconciliation query (no-op here).
       { rows: [] },
       {
@@ -176,6 +183,7 @@ describe("AttendanceService", () => {
         ],
       },
       { rows: [] }, // participation insert
+      { rows: [] }, // reconcile advisory lock
       // reconcile state: attended, ничего ещё не списано, урок = 1 час
       {
         rows: [
@@ -215,9 +223,9 @@ describe("AttendanceService", () => {
     });
 
     // Дельта-списание: charged 0 → target 1, списывается ровно 1 час.
-    const chargeSql = String(query.mock.calls[4][0]);
+    const chargeSql = String(query.mock.calls[5][0]);
     expect(chargeSql).toContain("lessons_used = lessons_used + $4::numeric");
-    expect(query.mock.calls[4][1]).toEqual([
+    expect(query.mock.calls[5][1]).toEqual([
       "lesson-a",
       "student-a",
       null,
@@ -244,6 +252,7 @@ describe("AttendanceService", () => {
         ],
       },
       { rows: [] }, // participation upsert
+      { rows: [] }, // reconcile advisory lock
       // Ранее списан полный час, статус меняется задним числом на partially_paid 0.5
       {
         rows: [
@@ -276,9 +285,9 @@ describe("AttendanceService", () => {
     });
 
     // Возврат ровно дельты: −0.5 часа; charged_hours станет 0.5, связь остаётся.
-    const refundSql = String(query.mock.calls[4][0]);
+    const refundSql = String(query.mock.calls[5][0]);
     expect(refundSql).toContain("greatest(lessons_used + $4::numeric, 0)");
-    expect(query.mock.calls[4][1]).toEqual([
+    expect(query.mock.calls[5][1]).toEqual([
       "lesson-a",
       "student-a",
       "sub-a",

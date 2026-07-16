@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 
 part 'tasks_widget_cards.dart';
@@ -187,6 +188,22 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
         leads: results[2],
         groups: results[3],
         teachers: results[4],
+        // Server search so tasks can reference students/leads beyond the
+        // 100-row pre-loaded page.
+        onSearchEntities: (entityType, query) async {
+          final crmService = ref.read(magicCrmServiceProvider);
+          if (entityType == 'lead') {
+            return crmService.listLeads(limit: 30, q: query);
+          }
+          final response = await crmService.searchStudents(
+            q: query,
+            limit: 30,
+          );
+          final items = response['items'];
+          return items is List
+              ? items.whereType<Map<String, dynamic>>().toList()
+              : <Map<String, dynamic>>[];
+        },
       ),
     );
 

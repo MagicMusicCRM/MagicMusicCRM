@@ -528,8 +528,17 @@ export class FinanceService {
     // Idempotency guard (KVA): an identical payment by the same actor within a
     // short window (double-click / network retry) returns the existing row
     // instead of creating a duplicate that would corrupt the balance/reports.
-    const dup = await this.database.query<PaymentRow>(
-      `
+    // Check + insert run in ONE transaction serialized by a per-(student,
+    // actor) advisory lock — a bare check-then-insert let two concurrent
+    // double-submits both pass the check and both insert.
+    const { payment, existing } = await this.database.transaction(
+      async (client) => {
+        await client.query(
+          `select pg_advisory_xact_lock(hashtext('payment:' || $1 || ':' || $2))`,
+          [dto.studentId, actor.userId],
+        );
+        const dup = await client.query<PaymentRow>(
+          `
         select id, student_id, null::uuid as student_user_id, amount,
           null::text as student_first_name, null::text as student_last_name,
           currency, payment_date, method, external_id, notes, created_by, created_at
@@ -541,18 +550,18 @@ export class FinanceService {
         order by created_at desc
         limit 1
       `,
-      [
-        dto.studentId,
-        dto.amount,
-        actor.userId,
-        dto.method?.trim() || null,
-        dto.paymentDate,
-      ],
-    );
-    if (dup.rows[0]) return this.toPaymentDto(dup.rows[0]);
+          [
+            dto.studentId,
+            dto.amount,
+            actor.userId,
+            dto.method?.trim() || null,
+            dto.paymentDate,
+          ],
+        );
+        if (dup.rows[0]) return { payment: dup.rows[0], existing: true };
 
-    const result = await this.database.query<PaymentRow>(
-      `
+        const result = await client.query<PaymentRow>(
+          `
         insert into app.payments (
           student_id, amount, currency, payment_date, method,
           external_id, notes, created_by
@@ -562,18 +571,21 @@ export class FinanceService {
           null::text as student_first_name, null::text as student_last_name,
           currency, payment_date, method, external_id, notes, created_by, created_at
       `,
-      [
-        dto.studentId,
-        dto.amount,
-        dto.currency ?? null,
-        dto.paymentDate,
-        dto.method?.trim() || null,
-        dto.externalId?.trim() || null,
-        dto.notes?.trim() || null,
-        actor.userId,
-      ],
+          [
+            dto.studentId,
+            dto.amount,
+            dto.currency ?? null,
+            dto.paymentDate,
+            dto.method?.trim() || null,
+            dto.externalId?.trim() || null,
+            dto.notes?.trim() || null,
+            actor.userId,
+          ],
+        );
+        return { payment: result.rows[0], existing: false };
+      },
     );
-    const payment = result.rows[0];
+    if (existing) return this.toPaymentDto(payment);
     await this.audit.record({
       actor,
       action: "crm.payment_created",

@@ -545,17 +545,20 @@ export class LeadsService {
   async updateLead(actor: ActorContext, leadId: string, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
     const branchId = extractBranchId(dto.customDataPatch);
-    const beforeRes = await this.database.query<{
-      status_id: string | null;
-      assigned_to: string | null;
-      branch_id: string | null;
-    }>(
-      `select status_id, assigned_to, branch_id from app.leads where id = $1 and deleted_at is null`,
-      [leadId],
-    );
-    const before = beforeRes.rows[0] ?? null;
-    const result = await this.database.query<LeadRow>(
-      `
+    // The update and its status-history row must land atomically: a failure in
+    // between would move the lead while silently dropping the history entry.
+    const { before, lead } = await this.database.transaction(async (client) => {
+      const beforeRes = await client.query<{
+        status_id: string | null;
+        assigned_to: string | null;
+        branch_id: string | null;
+      }>(
+        `select status_id, assigned_to, branch_id from app.leads where id = $1 and deleted_at is null for update`,
+        [leadId],
+      );
+      const beforeRow = beforeRes.rows[0] ?? null;
+      const result = await client.query<LeadRow>(
+        `
         update app.leads
         set status_id = case when $11::boolean then null
                              else coalesce($2, status_id) end,
@@ -574,22 +577,49 @@ export class LeadsService {
           last_name, phone, email, source, notes, assigned_to,
           custom_data, created_by, created_at, updated_at
       `,
-      [
-        leadId,
-        dto.statusId ?? null,
-        dto.firstName?.trim() || null,
-        dto.lastName?.trim() || null,
-        dto.phone?.trim() || null,
-        dto.email?.trim().toLowerCase() || null,
-        dto.source?.trim() || null,
-        dto.notes?.trim() || null,
-        dto.assignedTo ?? null,
-        sanitizeJsonObject(dto.customDataPatch),
-        dto.clearStatus ?? false,
-        branchId,
-      ],
-    );
-    const lead = result.rows[0];
+        [
+          leadId,
+          dto.statusId ?? null,
+          dto.firstName?.trim() || null,
+          dto.lastName?.trim() || null,
+          dto.phone?.trim() || null,
+          dto.email?.trim().toLowerCase() || null,
+          dto.source?.trim() || null,
+          dto.notes?.trim() || null,
+          dto.assignedTo ?? null,
+          sanitizeJsonObject(dto.customDataPatch),
+          dto.clearStatus ?? false,
+          branchId,
+        ],
+      );
+      const updatedLead = result.rows[0];
+      if (
+        updatedLead &&
+        beforeRow &&
+        (beforeRow.status_id !== updatedLead.status_id ||
+          beforeRow.assigned_to !== updatedLead.assigned_to)
+      ) {
+        await client.query(
+          `insert into app.lead_status_history
+           (lead_id, old_status_id, new_status_id, old_owner_id, new_owner_id,
+            changed_by, reason_id, comment, branch_id, source_snapshot)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            leadId,
+            beforeRow.status_id,
+            updatedLead.status_id,
+            beforeRow.assigned_to,
+            updatedLead.assigned_to,
+            actor.userId,
+            dto.reasonId ?? null,
+            dto.statusComment ?? null,
+            branchId ?? beforeRow.branch_id,
+            updatedLead.source,
+          ],
+        );
+      }
+      return { before: beforeRow, lead: updatedLead };
+    });
     if (!lead) throw new NotFoundException("Лид не найден.");
     await this.audit.record({
       actor,
@@ -597,29 +627,6 @@ export class LeadsService {
       entityType: "lead",
       entityId: lead.id,
     });
-    if (
-      before &&
-      (before.status_id !== lead.status_id || before.assigned_to !== lead.assigned_to)
-    ) {
-      await this.database.query(
-        `insert into app.lead_status_history
-           (lead_id, old_status_id, new_status_id, old_owner_id, new_owner_id,
-            changed_by, reason_id, comment, branch_id, source_snapshot)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [
-          leadId,
-          before.status_id,
-          lead.status_id,
-          before.assigned_to,
-          lead.assigned_to,
-          actor.userId,
-          dto.reasonId ?? null,
-          dto.statusComment ?? null,
-          branchId ?? before.branch_id,
-          lead.source,
-        ],
-      );
-    }
     this.realtime.emitCrmChanged({
       entity: "lead",
       action: "updated",
@@ -906,7 +913,7 @@ export class LeadsService {
       `
         select c.id, c.entity_type, c.entity_id, c.author_id,
           p.first_name as author_first_name, p.last_name as author_last_name,
-          c.body, c.created_at
+          c.body, c.kind, c.created_at
         from app.entity_comments c
         left join app.users u on u.id = c.author_id and u.deleted_at is null
         left join app.profiles p on p.user_id = u.id and p.deleted_at is null

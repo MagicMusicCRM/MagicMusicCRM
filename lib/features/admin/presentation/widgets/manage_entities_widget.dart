@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -100,6 +102,10 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  // Debounces the server-backed search providers (students/teachers/staff)
+  // so typing a name doesn't fire one API call per keystroke. Mirrors the
+  // leads-board toolbar (leads_actions.dart).
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -115,9 +121,21 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    // Refresh the clear button instantly; commit the query (and thus the
+    // provider refetch) only after the user pauses typing.
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() => _searchQuery = value);
+    });
   }
 
   @override
@@ -132,17 +150,18 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: TextField(
                 controller: _searchController,
-                onChanged: (val) => setState(() => _searchQuery = val),
+                onChanged: _onSearchChanged,
                 decoration: InputDecoration(
                   hintText: 'Поиск...',
                   prefixIcon: Icon(
                     Icons.search_rounded,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                  suffixIcon: _searchQuery.isNotEmpty
+                  suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
                           icon: Icon(Icons.close_rounded, size: 20),
                           onPressed: () {
+                            _searchDebounce?.cancel();
                             _searchController.clear();
                             setState(() => _searchQuery = '');
                           },

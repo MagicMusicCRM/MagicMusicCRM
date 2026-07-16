@@ -566,14 +566,22 @@ export class CrmService {
     this.policy.assertCanWriteCrm(actor);
     const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
     const branchId = extractBranchId(dto.customDataPatch);
-    const beforeStudent = (
-      await this.database.query<{ status: string | null; branch_id: string | null }>(
-        `select status, branch_id from app.students where id = $1 and deleted_at is null`,
-        [studentId],
-      )
-    ).rows[0] ?? null;
-    const result = await this.database.query<StudentRow>(
-      `
+    // The update and its status-history row must land atomically: a failure in
+    // between would change the status while silently dropping the history.
+    const { beforeStudent, result } = await this.database.transaction(
+      async (client) => {
+        const before =
+          (
+            await client.query<{
+              status: string | null;
+              branch_id: string | null;
+            }>(
+              `select status, branch_id from app.students where id = $1 and deleted_at is null for update`,
+              [studentId],
+            )
+          ).rows[0] ?? null;
+        const updated = await client.query<StudentRow>(
+          `
         with target as (
           select s.id, s.profile_id, p.user_id
           from app.students s
@@ -635,16 +643,31 @@ export class CrmService {
           updated_user_dependency.email
         limit 1
       `,
-      [
-        studentId,
-        trimOptional(dto.firstName),
-        trimOptional(dto.lastName),
-        trimOptional(dto.phone),
-        trimOptional(dto.email)?.toLowerCase() ?? null,
-        trimOptional(dto.status),
-        JSON.stringify(customDataPatch),
-        branchId,
-      ],
+          [
+            studentId,
+            trimOptional(dto.firstName),
+            trimOptional(dto.lastName),
+            trimOptional(dto.phone),
+            trimOptional(dto.email)?.toLowerCase() ?? null,
+            trimOptional(dto.status),
+            JSON.stringify(customDataPatch),
+            branchId,
+          ],
+        );
+        const updatedStudent = updated.rows[0];
+        if (
+          updatedStudent &&
+          before &&
+          before.status !== updatedStudent.status
+        ) {
+          await client.query(
+            `insert into app.student_status_history (student_id, status, branch_id)
+         values ($1, $2, $3)`,
+            [studentId, updatedStudent.status, branchId ?? before.branch_id],
+          );
+        }
+        return { beforeStudent: before, result: updated };
+      },
     );
     const student = result.rows[0];
     if (!student) throw new NotFoundException("Ученик не найден.");
@@ -654,13 +677,6 @@ export class CrmService {
       entityType: "student",
       entityId: student.id,
     });
-    if (beforeStudent && beforeStudent.status !== student.status) {
-      await this.database.query(
-        `insert into app.student_status_history (student_id, status, branch_id)
-         values ($1, $2, $3)`,
-        [studentId, student.status, branchId ?? beforeStudent.branch_id],
-      );
-    }
     this.realtime.emitCrmChanged({
       entity: "student",
       action: "updated",
