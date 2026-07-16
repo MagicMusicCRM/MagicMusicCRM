@@ -77,6 +77,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // Личный счёт (KVA-235): 0 = Приход, 1 = Расход; ключ перегружает FutureBuilder.
   int _ledgerTab = 0;
   int _ledgerRefreshKey = 0;
+  // Cached so card rebuilds (keystrokes, tab switches, Приход/Расход toggle)
+  // don't re-fetch the ledger — an inline future restarts a FutureBuilder on
+  // every build. Reset to null by _refreshLedger.
+  Future<Map<String, dynamic>>? _ledgerFuture;
   // Resolved status list: either the one passed in or self-fetched.
   List<StatusRecord> _statuses = const [];
   bool _saving = false;
@@ -187,6 +191,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _loadingStudent = true;
   String? _studentError;
   bool _realtimeRefreshQueued = false;
+  // Bumped ONLY when field values are replaced from the server (fetch/merge).
+  // Text editors key on this instead of their live value, so local keystrokes
+  // never recreate the field (which would drop cursor/focus/IME state), while
+  // a server refresh still re-seeds initialValue.
+  int _editorEpoch = 0;
 
   Future<void> _handleClose() async {
     if (!_edited) {

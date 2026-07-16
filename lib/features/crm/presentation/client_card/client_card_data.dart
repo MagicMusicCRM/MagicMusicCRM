@@ -157,6 +157,7 @@ extension _ClientCardData on _ClientCardState {
           : <String, dynamic>{};
       _emitState(() {
         _student = student;
+        _editorEpoch++;
         _balance = card['balance'] is Map<String, dynamic>
             ? StudentBalance.fromMap(card['balance'] as Map<String, dynamic>)
             : null;
@@ -227,6 +228,7 @@ extension _ClientCardData on _ClientCardState {
         _leadCard = card;
         if (card['lead'] is Map<String, dynamic>) {
           _leadData = {..._leadData, ...(card['lead'] as Map<String, dynamic>)};
+          _editorEpoch++;
           // After merging the lead record, `_leadData['id']` is the lead id —
           // keep `_resolvedLeadId` in sync so lead-side ops target it.
           _resolvedLeadId = _leadData['id']?.toString() ?? id;

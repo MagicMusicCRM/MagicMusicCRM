@@ -3,16 +3,24 @@ part of 'leads_widget.dart';
 // Create/edit lead dialog.
 
 class _LeadDialog extends StatefulWidget {
-  const _LeadDialog();
+  // Pre-filled values let a failed create reopen the dialog without losing
+  // what the manager already typed.
+  const _LeadDialog({this.initial});
+
+  final Map<String, String>? initial;
 
   @override
   State<_LeadDialog> createState() => _LeadDialogState();
 }
 
 class _LeadDialogState extends State<_LeadDialog> {
-  final _nameCtrl = TextEditingController();
-  String _canonicalPhone = '';
-  final _sourceCtrl = TextEditingController();
+  late final _nameCtrl = TextEditingController(
+    text: widget.initial?['name'] ?? '',
+  );
+  late String _canonicalPhone = widget.initial?['phone'] ?? '';
+  late final _sourceCtrl = TextEditingController(
+    text: widget.initial?['source'] ?? '',
+  );
 
   @override
   void dispose() {
@@ -35,6 +43,7 @@ class _LeadDialogState extends State<_LeadDialog> {
           ),
           const SizedBox(height: 10),
           RuPhoneField(
+            initialCanonical: _canonicalPhone.isEmpty ? null : _canonicalPhone,
             onCanonicalChanged: (c) => _canonicalPhone = c,
           ),
           const SizedBox(height: 10),

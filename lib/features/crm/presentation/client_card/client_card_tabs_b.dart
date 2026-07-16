@@ -232,9 +232,12 @@ extension _ClientCardTabsB on _ClientCardState {
   /// пропорционально оставшимся часам; без пакета показываем только часы.
   // ── Личный счёт (KVA-235, формат HolliHop: вкладки Приход/Расход) ────────
   Widget _buildLedgerSection(ColorScheme cs) {
+    _ledgerFuture ??= ref
+        .read(magicCrmServiceProvider)
+        .getStudentLedger(_studentId);
     return FutureBuilder<Map<String, dynamic>>(
       key: ValueKey('ledger-$_ledgerRefreshKey'),
-      future: ref.read(magicCrmServiceProvider).getStudentLedger(_studentId),
+      future: _ledgerFuture,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return const Padding(
@@ -388,7 +391,10 @@ extension _ClientCardTabsB on _ClientCardState {
   }
 
   void _refreshLedger() {
-    _emitState(() => _ledgerRefreshKey++);
+    _emitState(() {
+      _ledgerFuture = null;
+      _ledgerRefreshKey++;
+    });
     _fetchStudentData();
   }
 

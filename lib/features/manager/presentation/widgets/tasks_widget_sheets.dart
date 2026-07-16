@@ -496,12 +496,22 @@ class _TaskDialog extends StatefulWidget {
   final List<Map<String, dynamic>> groups;
   final List<Map<String, dynamic>> teachers;
 
+  /// Server search for the «Объект» picker (students/leads): the pre-loaded
+  /// lists are capped at 100, so without this a task simply can't reference
+  /// record #101+.
+  final Future<List<Map<String, dynamic>>> Function(
+    String entityType,
+    String query,
+  )?
+  onSearchEntities;
+
   const _TaskDialog({
     required this.employees,
     required this.students,
     required this.leads,
     required this.groups,
     required this.teachers,
+    this.onSearchEntities,
   });
 
   @override
@@ -513,6 +523,7 @@ class _TaskDialogState extends State<_TaskDialog> {
   final _descCtrl = TextEditingController();
   String _entityType = 'student';
   String? _selectedEntityId;
+  String? _selectedEntityLabel;
   String? _selectedEmployeeUserId;
   DateTime? _dueDate;
 
@@ -574,21 +585,31 @@ class _TaskDialogState extends State<_TaskDialog> {
               onChanged: (value) => setState(() {
                 _entityType = value ?? 'student';
                 _selectedEntityId = null;
+                _selectedEntityLabel = null;
               }),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedEntityId,
-              isExpanded: true,
-              dropdownColor: Theme.of(context).colorScheme.surface,
-              decoration: const InputDecoration(labelText: 'Объект'),
-              items: entityItems
-                  .map(
-                    (item) =>
-                        DropdownMenuItem(value: item.$1, child: Text(item.$2)),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(() => _selectedEntityId = value),
+            // Searchable picker instead of a plain dropdown: a school has
+            // hundreds of students/leads and the dropdown was capped at the
+            // first 100 with no way to type a name.
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _pickEntity(entityItems),
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Объект',
+                  suffixIcon: Icon(Icons.search_rounded, size: 20),
+                ),
+                child: Text(
+                  _selectedEntityLabel ?? 'Выбрать…',
+                  overflow: TextOverflow.ellipsis,
+                  style: _selectedEntityId == null
+                      ? TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        )
+                      : null,
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -656,6 +677,58 @@ class _TaskDialogState extends State<_TaskDialog> {
         ),
       ],
     );
+  }
+
+  void _pickEntity(List<(String, String)> entityItems) {
+    final items = [
+      for (final (id, label) in entityItems)
+        SearchableSelectItem(id: id, label: label),
+    ];
+    // Server search only where the dataset is unbounded; groups/teachers/
+    // profiles fit in the pre-loaded page and filter locally.
+    final serverSearch =
+        widget.onSearchEntities != null &&
+        (_entityType == 'student' || _entityType == 'lead');
+    SearchableSelect.show(
+      context: context,
+      title: _entityTypeLabel(_entityType),
+      hintText: 'Поиск по имени…',
+      items: items,
+      selectedId: _selectedEntityId,
+      isNullable: false,
+      onSearch: !serverSearch
+          ? null
+          : (query) async {
+              final rows = await widget.onSearchEntities!(_entityType, query);
+              return [
+                for (final row in rows)
+                  SearchableSelectItem(
+                    id: row['id'].toString(),
+                    label: _entityType == 'lead'
+                        ? _leadName(row)
+                        : _personName(row),
+                    subtitle: row['phone']?.toString(),
+                  ),
+              ];
+            },
+      onSelected: (item) {
+        if (item == null) return;
+        setState(() {
+          _selectedEntityId = item.id;
+          _selectedEntityLabel = item.label;
+        });
+      },
+    );
+  }
+
+  String _entityTypeLabel(String type) {
+    return switch (type) {
+      'lead' => 'Лид',
+      'group' => 'Группа',
+      'teacher' => 'Учитель',
+      'profile' => 'Профиль',
+      _ => 'Ученик',
+    };
   }
 
   List<(String, String)> _entityItems() {

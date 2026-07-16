@@ -41,6 +41,8 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
   bool _converting = false;
   _SuccessInfo? _success;
   Timer? _successTimer;
+  // Captured in initState so dispose can unhook without touching ref.
+  LeadTransferController? _transferController;
 
   @override
   void initState() {
@@ -50,6 +52,7 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final controller = ref.read(leadTransferControllerProvider);
+      _transferController = controller;
       controller.configure(
         onEnterStudents: () {
           if (mounted) setState(() => _segment = 1);
@@ -63,6 +66,9 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
   @override
   void dispose() {
     _successTimer?.cancel();
+    // Unhook this State's closures from the app-scoped controller — otherwise
+    // it retains a disposed State and a late onCommit would setState on it.
+    _transferController?.configure();
     super.dispose();
   }
 
@@ -81,6 +87,7 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
   /// `createStudent` contract (status = column, branch/discipline/sourceLeadId
   /// in `customDataPatch`) — no backend contract is added or changed.
   Future<void> _commitTransfer(TransferDropResult result) async {
+    if (!mounted) return;
     final lead = result.lead;
     if (lead == null || _converting) return;
     final leadId = lead['id']?.toString() ?? '';

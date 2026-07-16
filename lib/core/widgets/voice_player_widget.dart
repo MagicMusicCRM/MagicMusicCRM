@@ -26,6 +26,7 @@ class VoicePlayerWidget extends ConsumerStatefulWidget {
 
 class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
   final _player = AudioPlayer();
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
   bool _isPlaying = false;
   bool _isLoading = false;
   Duration _position = Duration.zero;
@@ -57,15 +58,15 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
       _duration = Duration(milliseconds: widget.durationMs!);
     }
 
-    _player.positionStream.listen((pos) {
+    _subscriptions.add(_player.positionStream.listen((pos) {
       if (mounted) setState(() => _position = pos);
-    });
+    }));
 
-    _player.durationStream.listen((dur) {
+    _subscriptions.add(_player.durationStream.listen((dur) {
       if (mounted && dur != null) setState(() => _duration = dur);
-    });
+    }));
 
-    _player.playerStateStream.listen((state) {
+    _subscriptions.add(_player.playerStateStream.listen((state) {
       if (mounted) {
         setState(() {
           _isPlaying = state.playing;
@@ -82,7 +83,7 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
           }
         });
       }
-    });
+    }));
   }
 
   /// Resolve a short-lived download URL (POST /files/:id/download-token) and
@@ -146,6 +147,9 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
 
   @override
   void dispose() {
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
     _player.dispose();
     super.dispose();
   }

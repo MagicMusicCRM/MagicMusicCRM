@@ -152,6 +152,8 @@ class _DateField extends StatelessWidget {
           initialDate: value ?? DateTime(2000),
           firstDate: DateTime(1940),
           lastDate: DateTime(2035),
+          // Birthdates are decades away — typing beats paging a calendar.
+          initialEntryMode: DatePickerEntryMode.input,
         );
         if (picked != null) onChanged(picked);
       },

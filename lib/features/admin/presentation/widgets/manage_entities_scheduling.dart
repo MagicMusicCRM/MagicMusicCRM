@@ -231,10 +231,20 @@ class _LessonsList extends ConsumerWidget {
     );
 
     if (confirm == true) {
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateLesson(lessonId, status: 'cancelled');
-      ref.invalidate(entitiesProvider('lessons'));
+      try {
+        await ref
+            .read(magicCrmServiceProvider)
+            .updateLesson(lessonId, status: 'cancelled');
+        ref.invalidate(entitiesProvider('lessons'));
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Не удалось отменить занятие: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
     }
   }
 
@@ -266,10 +276,20 @@ class _LessonsList extends ConsumerWidget {
       time.minute,
     );
 
-    await ref
-        .read(magicCrmServiceProvider)
-        .updateLesson(lessonId, scheduledAt: newDateTime.toIso8601String());
-    ref.invalidate(entitiesProvider('lessons'));
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateLesson(lessonId, scheduledAt: newDateTime.toIso8601String());
+      ref.invalidate(entitiesProvider('lessons'));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Не удалось перенести занятие: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
   }
 }
 

@@ -162,7 +162,7 @@ extension _MessengerRealtime on _MessengerScreenState {
       if (!mounted || _selectedChatId != chatId) return;
       _emitState(() {
         for (final item in items) {
-          _upsertMessage(item);
+          _upsertMessage(item, sort: false);
         }
         _sortMessagesChronologically();
       });

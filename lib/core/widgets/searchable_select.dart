@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
@@ -25,6 +27,12 @@ class SearchableSelect extends StatefulWidget {
   final Function(SearchableSelectItem?) onSelected;
   final bool isNullable;
 
+  /// Optional SERVER-side search. When set, keystrokes are debounced (350 ms)
+  /// and this callback replaces the local filter, so the picker can find
+  /// records beyond the pre-loaded page ([items] then only seeds the initial
+  /// list). Without it the sheet filters [items] client-side as before.
+  final Future<List<SearchableSelectItem>> Function(String query)? onSearch;
+
   const SearchableSelect({
     super.key,
     required this.title,
@@ -33,6 +41,7 @@ class SearchableSelect extends StatefulWidget {
     required this.onSelected,
     this.selectedId,
     this.isNullable = true,
+    this.onSearch,
   });
 
   @override
@@ -46,6 +55,7 @@ class SearchableSelect extends StatefulWidget {
     required Function(SearchableSelectItem?) onSelected,
     String? selectedId,
     bool isNullable = true,
+    Future<List<SearchableSelectItem>> Function(String query)? onSearch,
   }) {
     showModalBottomSheet(
       context: context,
@@ -58,6 +68,7 @@ class SearchableSelect extends StatefulWidget {
         onSelected: onSelected,
         selectedId: selectedId,
         isNullable: isNullable,
+        onSearch: onSearch,
       ),
     );
   }
@@ -66,6 +77,11 @@ class SearchableSelect extends StatefulWidget {
 class _SearchableSelectState extends State<SearchableSelect> {
   final TextEditingController _searchController = TextEditingController();
   List<SearchableSelectItem> _filteredItems = [];
+  Timer? _searchDebounce;
+  bool _searching = false;
+  // Latest-wins guard: a slow response for an old query must not overwrite
+  // the results of the query typed after it.
+  int _searchSeq = 0;
 
   @override
   void initState() {
@@ -76,17 +92,42 @@ class _SearchableSelectState extends State<SearchableSelect> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   void _onSearchChanged() {
-    final query = _searchController.text.toLowerCase();
-    setState(() {
-      _filteredItems = widget.items.where((item) {
-        return item.label.toLowerCase().contains(query) ||
-            (item.subtitle?.toLowerCase().contains(query) ?? false);
-      }).toList();
+    final onSearch = widget.onSearch;
+    if (onSearch == null) {
+      final query = _searchController.text.toLowerCase();
+      setState(() {
+        _filteredItems = widget.items.where((item) {
+          return item.label.toLowerCase().contains(query) ||
+              (item.subtitle?.toLowerCase().contains(query) ?? false);
+        }).toList();
+      });
+      return;
+    }
+    // Server-side mode: debounce, then fetch; keep showing current results
+    // (with a progress hint) while the request is in flight.
+    setState(() {}); // refresh the clear button
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () async {
+      final query = _searchController.text.trim();
+      final seq = ++_searchSeq;
+      if (mounted) setState(() => _searching = true);
+      try {
+        final results = query.isEmpty ? widget.items : await onSearch(query);
+        if (!mounted || seq != _searchSeq) return;
+        setState(() {
+          _filteredItems = results;
+          _searching = false;
+        });
+      } catch (_) {
+        if (!mounted || seq != _searchSeq) return;
+        setState(() => _searching = false);
+      }
     });
   }
 
@@ -159,6 +200,9 @@ class _SearchableSelectState extends State<SearchableSelect> {
               ),
             ),
           ),
+
+          if (_searching)
+            const LinearProgressIndicator(minHeight: 2),
 
           // List
           Expanded(
