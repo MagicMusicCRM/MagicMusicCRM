@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { DatabaseService } from '../db/database.service';
 import { NotificationTokenCrypto } from './notification-token-crypto.service';
@@ -230,52 +231,157 @@ describe('NotificationsService', () => {
   });
 
   describe('task reminders', () => {
+    // Each kind now runs two queries before any claim: load the subscribed
+    // roles (app.notification_preferences), then scan for due tasks.
+    const PREFS_ROW = { role: 'manager', channels: ['push'] };
+    const prefs = (rows: Record<string, unknown>[] = [PREFS_ROW]) =>
+      ({ rows } as never);
+    const noTasks = () => ({ rows: [] } as never);
+
     it('claims the marker and notifies recipients for a due task', async () => {
       const { service, database } = createService();
       database.query
+        // prefs (day)
+        .mockResolvedValueOnce(prefs())
         // due (day)
         .mockResolvedValueOnce({
           rows: [
-            { id: 'task-1', title: 'Позвонить', when_local: '19.06 18:00', user_ids: ['u1', 'u2'] }
+            {
+              id: 'task-1',
+              title: 'Позвонить',
+              when_local: '19.06 18:00',
+              assigned_to: 'u2',
+              recipients: [
+                { id: 'u1', role: 'manager' },
+                { id: 'u2', role: 'manager' }
+              ]
+            }
           ]
         } as never)
         // claim (task-1, day)
         .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
-        // due (hour) -> none
-        .mockResolvedValueOnce({ rows: [] } as never)
-        // due (min10) -> none
-        .mockResolvedValueOnce({ rows: [] } as never)
-        // due (overdue) -> none
-        .mockResolvedValueOnce({ rows: [] } as never);
+        // hour / min10 / overdue -> prefs + no tasks each
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks());
       (database.transaction as jest.Mock).mockResolvedValue('notif-1');
 
       const result = await service.dispatchTaskReminders();
 
       expect(result.sent).toBe(1);
-      // createNotification runs in a transaction exactly once (the day task).
+      // Both recipients want the same channels, so they share one notification.
       expect(database.transaction).toHaveBeenCalledTimes(1);
-      // The recipients query never casts roles to the enum, so an absent
-      // 'director' role can not break the scan.
-      const dueSql = String(database.query.mock.calls[0][0]);
-      expect(dueSql).toContain("u.role::text in ('admin', 'manager', 'director')");
+      // Recipients come from configuration now, not a literal role list.
+      const dueSql = String(database.query.mock.calls[1][0]);
+      expect(dueSql).toContain('u.role::text = any($2::text[])');
+      expect(dueSql).not.toContain("in ('admin', 'manager', 'director')");
+      // Still never casts to the enum: an absent 'director' role must not break
+      // the scan.
       expect(dueSql).not.toContain('::app.user_role');
-      // The claim targets the idempotency table.
-      const claimSql = String(database.query.mock.calls[1][0]);
+      const claimSql = String(database.query.mock.calls[2][0]);
       expect(claimSql).toContain('app.task_reminders');
       expect(claimSql).toContain('on conflict (task_id, kind) do nothing');
+    });
+
+    it('splits recipients who want different channels into separate sends', async () => {
+      const { service, database } = createService();
+      database.query
+        .mockResolvedValueOnce(
+          prefs([
+            { role: 'manager', channels: ['push'] },
+            { role: 'director', channels: ['in_app'] }
+          ])
+        )
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'task-1',
+              title: 'Позвонить',
+              when_local: '19.06 18:00',
+              assigned_to: null,
+              recipients: [
+                { id: 'u1', role: 'manager' },
+                { id: 'u2', role: 'director' }
+              ]
+            }
+          ]
+        } as never)
+        .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks());
+      (database.transaction as jest.Mock).mockResolvedValue('notif-1');
+
+      const result = await service.dispatchTaskReminders();
+
+      // createNotification applies ONE channel list to everyone it is given, so
+      // honouring both preferences takes two sends. Still one reminder per task.
+      expect(database.transaction).toHaveBeenCalledTimes(2);
+      expect(result.sent).toBe(1);
+    });
+
+    it('notifies the assignee even when their role opted out', async () => {
+      const { service, database } = createService();
+      database.query
+        // Only managers subscribed; the assignee is a teacher.
+        .mockResolvedValueOnce(prefs([{ role: 'manager', channels: ['push'] }]))
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'task-1',
+              title: 'Позвонить',
+              when_local: '19.06 18:00',
+              assigned_to: 'teacher-1',
+              recipients: [{ id: 'teacher-1', role: 'teacher' }]
+            }
+          ]
+        } as never)
+        .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks());
+      (database.transaction as jest.Mock).mockResolvedValue('notif-1');
+
+      const result = await service.dispatchTaskReminders();
+
+      // "Assigned to you" is not a preference — a role toggle must not silence
+      // the reminder for the person who owns the task.
+      expect(result.sent).toBe(1);
+      expect(database.transaction).toHaveBeenCalledTimes(1);
     });
 
     it('does not send when the marker was already claimed (race)', async () => {
       const { service, database } = createService();
       database.query
+        .mockResolvedValueOnce(prefs())
         .mockResolvedValueOnce({
-          rows: [{ id: 'task-1', title: 'Позвонить', when_local: '19.06 18:00', user_ids: ['u1'] }]
+          rows: [
+            {
+              id: 'task-1',
+              title: 'Позвонить',
+              when_local: '19.06 18:00',
+              assigned_to: null,
+              recipients: [{ id: 'u1', role: 'manager' }]
+            }
+          ]
         } as never)
         // claim returns no row -> another tick already claimed it
         .mockResolvedValueOnce({ rows: [], rowCount: 0 } as never)
-        .mockResolvedValueOnce({ rows: [] } as never)
-        .mockResolvedValueOnce({ rows: [] } as never)
-        .mockResolvedValueOnce({ rows: [] } as never);
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks());
 
       const result = await service.dispatchTaskReminders();
 
@@ -286,13 +392,25 @@ describe('NotificationsService', () => {
     it('claims but does not notify a task with no recipients', async () => {
       const { service, database } = createService();
       database.query
+        .mockResolvedValueOnce(prefs())
         .mockResolvedValueOnce({
-          rows: [{ id: 'task-1', title: 'Позвонить', when_local: '19.06 18:00', user_ids: [] }]
+          rows: [
+            {
+              id: 'task-1',
+              title: 'Позвонить',
+              when_local: '19.06 18:00',
+              assigned_to: null,
+              recipients: []
+            }
+          ]
         } as never)
         .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
-        .mockResolvedValueOnce({ rows: [] } as never)
-        .mockResolvedValueOnce({ rows: [] } as never)
-        .mockResolvedValueOnce({ rows: [] } as never);
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks())
+        .mockResolvedValueOnce(prefs())
+        .mockResolvedValueOnce(noTasks());
 
       const result = await service.dispatchTaskReminders();
 
@@ -306,10 +424,22 @@ describe('NotificationsService', () => {
 
       await service.dispatchTaskReminders();
 
-      // One "due" scan per kind, in order, each claiming its own marker kind.
-      expect(database.query).toHaveBeenCalledTimes(4);
-      const kinds = database.query.mock.calls.map((call) => (call[1] as string[])[0]);
+      // Two queries per kind: load subscribed roles, then scan for due tasks.
+      expect(database.query).toHaveBeenCalledTimes(8);
+      const kinds = database.query.mock.calls
+        .filter((call) => String(call[0]).includes('app.tasks'))
+        .map((call) => (call[1] as string[])[0]);
       expect(kinds).toEqual(['day', 'hour', 'min10', 'overdue']);
+      // Each kind reads its own preference row.
+      const events = database.query.mock.calls
+        .filter((call) => String(call[0]).includes('notification_preferences'))
+        .map((call) => (call[1] as string[])[0]);
+      expect(events).toEqual([
+        'task_reminder_day',
+        'task_reminder_hour',
+        'task_reminder_min10',
+        'task_reminder_overdue'
+      ]);
     });
 
     it('fires min10 inside the last ten minutes before the deadline', async () => {
@@ -318,7 +448,7 @@ describe('NotificationsService', () => {
 
       await service.dispatchTaskReminders();
 
-      const min10Sql = String(database.query.mock.calls[2][0]);
+      const min10Sql = String(database.query.mock.calls[5][0]);
       expect(min10Sql).toContain("t.due_at <= now() + interval '10 minutes'");
       expect(min10Sql).toContain('t.due_at > now()');
     });
@@ -329,7 +459,7 @@ describe('NotificationsService', () => {
 
       await service.dispatchTaskReminders();
 
-      const overdueSql = String(database.query.mock.calls[3][0]);
+      const overdueSql = String(database.query.mock.calls[7][0]);
       // Fires a minute past the deadline...
       expect(overdueSql).toContain("t.due_at <= now() - interval '1 minute'");
       // ...but never for tasks that went overdue long ago: without this floor
@@ -339,11 +469,22 @@ describe('NotificationsService', () => {
   });
 
   describe('new lead notification', () => {
-    it('targets admin/manager/director by text role and queues in_app+push', async () => {
+    it('targets the subscribed roles by text role and queues their channels', async () => {
       const { service, database, worker } = createService();
-      database.query.mockResolvedValueOnce({
-        rows: [{ id: 'admin-1' }, { id: 'manager-1' }]
-      } as never);
+      database.query
+        // subscribed roles come from configuration, not a literal
+        .mockResolvedValueOnce({
+          rows: [
+            { role: 'admin', channels: ['in_app', 'push'] },
+            { role: 'manager', channels: ['in_app', 'push'] }
+          ]
+        } as never)
+        .mockResolvedValueOnce({
+          rows: [
+            { id: 'admin-1', role: 'admin' },
+            { id: 'manager-1', role: 'manager' }
+          ]
+        } as never);
       const client = {
         query: jest
           .fn()
@@ -354,12 +495,11 @@ describe('NotificationsService', () => {
 
       await service.notifyNewLead({ leadId: 'lead-1', name: 'Иван', source: 'site' });
 
-      const rolesSql = String(database.query.mock.calls[0][0]);
+      const rolesSql = String(database.query.mock.calls[1][0]);
       expect(rolesSql).toContain('role::text = any');
       expect(rolesSql).not.toContain('::app.user_role');
-      expect(database.query.mock.calls[0][1]).toEqual([
-        ['admin', 'manager', 'director']
-      ]);
+      // Exactly the roles the settings say, not a hardcoded trio.
+      expect(database.query.mock.calls[1][1]).toEqual([['admin', 'manager']]);
       expect(client.query).toHaveBeenCalledWith(
         expect.stringContaining("'push', 'firebase', 'queued'"),
         ['notification-a', 'admin-1']
@@ -367,13 +507,80 @@ describe('NotificationsService', () => {
       expect(worker.dispatchPendingPush).toHaveBeenCalled();
     });
 
-    it('is a no-op when no staff users exist', async () => {
+    it('is a no-op when every role opted out', async () => {
       const { service, database } = createService();
       database.query.mockResolvedValueOnce({ rows: [] } as never);
 
       await service.notifyNewLead({ leadId: 'lead-1', name: 'Иван', source: 'site' });
 
+      // Nobody subscribed is a valid setting, not an error: it must not fall
+      // back to notifying everyone.
+      expect(database.query).toHaveBeenCalledTimes(1);
       expect(database.transaction).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when no staff users exist', async () => {
+      const { service, database } = createService();
+      database.query
+        .mockResolvedValueOnce({
+          rows: [{ role: 'admin', channels: ['push'] }]
+        } as never)
+        .mockResolvedValueOnce({ rows: [] } as never);
+
+      await service.notifyNewLead({ leadId: 'lead-1', name: 'Иван', source: 'site' });
+
+      expect(database.transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('preferences', () => {
+    const actor = { userId: 'director-1', role: 'director' as const };
+
+    it('upserts a preference and audits who changed it', async () => {
+      const { service, database, audit } = createService();
+      database.query.mockResolvedValueOnce({
+        rows: [
+          {
+            role: 'teacher',
+            event_type: 'new_lead',
+            enabled: true,
+            channels: ['in_app']
+          }
+        ]
+      } as never);
+
+      await expect(
+        service.updatePreference(actor, {
+          role: 'teacher',
+          eventType: 'new_lead',
+          enabled: true,
+          channels: ['in_app']
+        })
+      ).resolves.toEqual({
+        role: 'teacher',
+        eventType: 'new_lead',
+        enabled: true,
+        channels: ['in_app']
+      });
+
+      // Upsert, not update: a role added after the seed has no row yet.
+      expect(String(database.query.mock.calls[0][0])).toContain(
+        'on conflict (role, event_type) do update'
+      );
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'notifications.preference_updated',
+          metadata: expect.objectContaining({ role: 'teacher' })
+        })
+      );
+    });
+
+    it('refuses to let a teacher reroute the school notifications', async () => {
+      const { service } = createService();
+
+      await expect(
+        service.listPreferences({ userId: 'teacher-1', role: 'teacher' })
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 });
