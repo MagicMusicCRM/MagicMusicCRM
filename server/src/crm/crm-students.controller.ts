@@ -21,6 +21,7 @@ import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { CreateStudentDto } from "./dto/create-student.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { StudentBalanceQuery } from "./dto/student-balance.query";
+import { StudentLedgerQuery } from "./dto/student-ledger.query";
 import { StudentSearchQuery } from "./dto/student-search.query";
 import { UpdateStudentDto } from "./dto/update-student.dto";
 
@@ -91,12 +92,11 @@ export class CrmStudentsController {
   listStudentLedger(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
-    @Query("direction") direction?: string,
-    @Query("limit") limit?: string,
+    @Query() query: StudentLedgerQuery,
   ) {
     return this.finance.listStudentLedger(actor, id, {
-      direction,
-      limit: limit ? Number(limit) : undefined,
+      direction: query.direction,
+      limit: query.limit,
     });
   }
 

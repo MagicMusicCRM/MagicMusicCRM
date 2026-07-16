@@ -21,6 +21,7 @@ import { CrmListQuery } from "./dto/crm-list.query";
 import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
 import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
 import { LeadBoardQuery } from "./dto/lead-board.query";
+import { QueueLimitQuery } from "./dto/queue-limit.query";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 
 @UseGuards(JwtAuthGuard)
@@ -117,17 +118,17 @@ export class CrmLeadsController {
   @Get("phone-review-queue")
   listPhoneReviewQueue(
     @CurrentActor() actor: ActorContext,
-    @Query("limit") limit?: string,
+    @Query() query: QueueLimitQuery,
   ) {
-    return this.phoneReview.listPhoneReviewQueue(actor, limit ? Number(limit) : undefined);
+    return this.phoneReview.listPhoneReviewQueue(actor, query.limit);
   }
 
   @Get("merge-candidates")
   listMergeCandidates(
     @CurrentActor() actor: ActorContext,
-    @Query("limit") limit?: string,
+    @Query() query: QueueLimitQuery,
   ) {
-    return this.merge.listMergeCandidates(actor, limit ? Number(limit) : undefined);
+    return this.merge.listMergeCandidates(actor, query.limit);
   }
 
   @Post("leads/:winnerId/merge/:loserId")

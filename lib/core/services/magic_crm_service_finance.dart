@@ -3,6 +3,24 @@ part of 'magic_crm_service.dart';
 /// Finance: adjustments, payments, expenses, subscription packages,
 /// homework, task status, analytics.
 extension MagicCrmFinance on MagicCrmService {
+  /// Downloads the monthly finance report (`csv`/`xlsx`) as raw bytes through
+  /// the shared authenticated client. The caller only persists the bytes — the
+  /// Bearer token, base URL and refresh handling stay inside [MagicApiClient].
+  Future<List<int>> exportFinanceMonthly({
+    required String format,
+    required DateTime from,
+    required DateTime to,
+  }) {
+    return _api.downloadBytes(
+      '/analytics/finance/monthly.$format',
+      queryParameters: <String, dynamic>{
+        'from': from.toIso8601String(),
+        'to': to.toIso8601String(),
+      },
+    );
+  }
+
+
   /// KVA-235: ручная операция личного счёта (возврат/корректировка).
   Future<Map<String, dynamic>> createAdjustment({
     required String studentId,

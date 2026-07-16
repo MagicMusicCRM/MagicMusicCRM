@@ -90,12 +90,12 @@ export class MergeService {
           [loserId, winnerId],
         )).rows,
       );
-      repointed["lead_comments.lead_id"] = ids(
-        (await client.query<{ id: string }>(
-          `update app.lead_comments set lead_id = $2 where lead_id = $1 returning id`,
-          [loserId, winnerId],
-        )).rows,
-      );
+      // app.lead_comments (migration 0002) is a legacy table the app no longer
+      // reads or writes — lead comments live in app.entity_comments (repointed
+      // below). Re-pointing it here only muddied where comments live, so the
+      // branch is dropped. Historical undo is unaffected: undoMerge is driven by
+      // UNDO_REPOINT's keys, so old merge_log rows carrying "lead_comments.lead_id"
+      // are simply skipped, and nothing reads that table anyway.
       // Polymorphic (no unique constraint).
       repointed["tasks.entity_id"] = ids(
         (await client.query<{ id: string }>(
@@ -147,7 +147,6 @@ export class MergeService {
     "students.lead_id": "update app.students set lead_id = $1, updated_at = now() where id = any($2::uuid[])",
     "lessons.lead_id": "update app.lessons set lead_id = $1 where id = any($2::uuid[])",
     "lead_status_history.lead_id": "update app.lead_status_history set lead_id = $1 where id = any($2::uuid[])",
-    "lead_comments.lead_id": "update app.lead_comments set lead_id = $1 where id = any($2::uuid[])",
     "tasks.entity_id": "update app.tasks set entity_id = $1 where id = any($2::uuid[])",
     "chats.lead_id": "update app.chats set lead_id = $1 where id = any($2::uuid[])",
     "entity_comments.entity_id": "update app.entity_comments set entity_id = $1 where id = any($2::uuid[])",

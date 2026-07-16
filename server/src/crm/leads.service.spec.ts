@@ -4,6 +4,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { LeadsService } from "./leads.service";
+import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 
 describe("LeadsService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
@@ -18,11 +19,13 @@ describe("LeadsService", () => {
       notifyNewLead: jest.fn().mockResolvedValue(undefined),
     };
     const realtime = { emitCrmChanged: () => undefined };
+    const chatWork = { listForEntity: jest.fn().mockResolvedValue([]) };
     const service = new LeadsService(
       db as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       notifications as unknown as NotificationsService,
+      chatWork as unknown as ChatWorkTimelineService,
       realtime as unknown as RealtimeBus,
     );
     return { service, audit, policy, notifications };
@@ -285,7 +288,8 @@ describe("LeadsService", () => {
           },
         ],
       },
-      { rows: [] },
+      // chat-work timeline is fetched via the injected ChatWorkTimelineService
+      // (stubbed to []), so it no longer consumes a db.query result here.
     ]);
 
     await expect(service.getLeadCard(actor, "lead-a")).resolves.toEqual(
@@ -310,7 +314,10 @@ describe("LeadsService", () => {
     );
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    expect(query).toHaveBeenCalledTimes(7);
+    // 6 direct db.query calls: lead + linked students + related leads + comments
+    // + tasks + trial lessons. Chat-work timeline is delegated to the injected
+    // ChatWorkTimelineService, so it does not hit db.query.
+    expect(query).toHaveBeenCalledTimes(6);
   });
 
   it("lists a lead's status history newest-first", async () => {

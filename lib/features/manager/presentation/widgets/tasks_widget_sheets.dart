@@ -440,6 +440,16 @@ class _TaskAssigneeDialogState extends State<_TaskAssigneeDialog> {
         : (userIds.isEmpty ? null : userIds.first);
   }
 
+  String? _selectedEmployeeName(List<Map<String, dynamic>> employees) {
+    if (_selectedUserId == null) return null;
+    for (final profile in employees) {
+      if (profile['user_id']?.toString() == _selectedUserId) {
+        return _taskFilterProfileName(profile);
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final employees = widget.employees.where((profile) {
@@ -451,25 +461,36 @@ class _TaskAssigneeDialogState extends State<_TaskAssigneeDialog> {
       title: const Text('Назначить ответственного'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
-        child: DropdownButtonFormField<String>(
-          initialValue: _selectedUserId,
-          isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: 'Ответственный',
-            prefixIcon: Icon(Icons.person_search_rounded),
-          ),
-          items: employees
-              .map(
-                (profile) => DropdownMenuItem<String>(
-                  value: profile['user_id']?.toString() ?? '',
-                  child: Text(
-                    _taskFilterProfileName(profile),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => SearchableSelect.show(
+            context: context,
+            title: 'Ответственный',
+            hintText: 'Поиск по имени…',
+            selectedId: _selectedUserId,
+            isNullable: false,
+            items: [
+              for (final profile in employees)
+                SearchableSelectItem(
+                  id: profile['user_id']?.toString() ?? '',
+                  label: _taskFilterProfileName(profile),
                 ),
-              )
-              .toList(),
-          onChanged: (value) => setState(() => _selectedUserId = value),
+            ],
+            onSelected: (item) {
+              if (item == null) return;
+              setState(() => _selectedUserId = item.id);
+            },
+          ),
+          child: InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'Ответственный',
+              prefixIcon: Icon(Icons.person_search_rounded),
+            ),
+            child: Text(
+              _selectedEmployeeName(employees) ?? 'Выберите сотрудника',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ),
       ),
       actions: [

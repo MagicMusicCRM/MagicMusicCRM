@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
+import { managerAdminRolesSql } from "../common/security/role-sql";
 import { DatabaseService } from "../db/database.service";
 import { CreateTeacherDto } from "./dto/create-teacher.dto";
 import { TeacherListQuery } from "./dto/teacher-list.query";
@@ -215,7 +216,7 @@ export class TeachersService {
         ) agg on true
         where t.deleted_at is null
           and (
-            $1::text in ('manager', 'director', 'admin', 'system_admin')
+            ${managerAdminRolesSql("$1")}
             or ($1::text = 'teacher' and p.user_id = $2)
             or ($1::text = 'client' and (
               exists (

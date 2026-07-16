@@ -38,7 +38,11 @@ final entitiesProvider =
       } else if (table == 'teachers') {
         return crm.listTeachers(limit: 100);
       } else if (table == 'lessons') {
-        return crm.listLessons(limit: 50);
+        // Was 50 (the smallest cap on this screen); raised to 100 for parity
+        // with the other tabs. A real fix — "load more" / server keyset
+        // pagination — is tracked as debt: searchStudents/listLessons expose
+        // only `limit`, no offset/cursor, and that query is perf-sensitive.
+        return crm.listLessons(limit: 100);
       } else if (table == 'groups') {
         return crm.listGroups(limit: 100);
       } else if (table == 'rooms') {

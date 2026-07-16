@@ -21,6 +21,10 @@ import {
 } from "./dto/schedule-series.dto";
 import { LessonQuery } from "./dto/lesson.query";
 import { ScheduleMatrixQuery } from "./dto/schedule-matrix.query";
+import {
+  ScheduleSeriesDeleteQuery,
+  ScheduleSeriesQuery,
+} from "./dto/schedule-series.query";
 import { UpsertAttendanceDto } from "./dto/upsert-attendance.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
 
@@ -35,14 +39,12 @@ export class CrmScheduleController {
   @Get("schedule-series")
   listScheduleSeries(
     @CurrentActor() actor: ActorContext,
-    @Query("studentId") studentId?: string,
-    @Query("groupId") groupId?: string,
-    @Query("includeExpired") includeExpired?: string,
+    @Query() query: ScheduleSeriesQuery,
   ) {
     return this.schedule.listScheduleSeries(actor, {
-      studentId,
-      groupId,
-      includeExpired: includeExpired === "true",
+      studentId: query.studentId,
+      groupId: query.groupId,
+      includeExpired: query.includeExpired ?? false,
     });
   }
 
@@ -67,9 +69,9 @@ export class CrmScheduleController {
   deleteScheduleSeries(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
-    @Query("from") from?: string,
+    @Query() query: ScheduleSeriesDeleteQuery,
   ) {
-    return this.schedule.deleteScheduleSeries(actor, id, from);
+    return this.schedule.deleteScheduleSeries(actor, id, query.from);
   }
 
   @Get("lessons")

@@ -42,7 +42,6 @@ describe("MergeService", () => {
       { rows: [{ id: "s1" }] },                    // students.lead_id
       { rows: [{ id: "le1" }] },                   // lessons.lead_id
       { rows: [{ id: "h1" }] },                    // lead_status_history.lead_id
-      { rows: [] },                                // lead_comments.lead_id
       { rows: [{ id: "t1" }] },                    // tasks.entity_id
       { rows: [] },                                // entity_comments.entity_id
       { rows: [{ id: "ch1" }] },                   // chats.lead_id

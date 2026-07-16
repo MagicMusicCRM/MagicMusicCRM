@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/widgets/dashboard_legend_item.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/analytics_providers.dart';
@@ -108,39 +109,6 @@ class _SectionCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Legend item reused from financial_dashboard_widget.dart pattern.
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-
-  const _LegendItem({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -328,7 +296,7 @@ class _FunnelChart extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _LegendItem(color: AppTheme.primaryGold, label: 'Лиды в стадии'),
+            DashboardLegendItem(color: AppTheme.primaryGold, label: 'Лиды в стадии'),
           ],
         ),
       ],
@@ -455,7 +423,7 @@ class _BranchesContent extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _LegendItem(color: AppTheme.success, label: 'Выручка'),
+            DashboardLegendItem(color: AppTheme.success, label: 'Выручка'),
           ],
         ),
         const SizedBox(height: 16),

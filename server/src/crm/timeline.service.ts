@@ -16,22 +16,12 @@ import { CommentQuery } from "./dto/comment.query";
 import { CreateCommentDto } from "./dto/create-comment.dto";
 import { TimelineQuery } from "./dto/timeline.query";
 import { findStudent } from "./student-read";
+import { TimelineRow, toTimelineDto } from "./crm-mappers";
+import { CHAT_WORK_TIMELINE_FRAGMENT } from "../messenger/chat-work-timeline.service";
 
-// ponytail: TimelineRow/CommentRow + toTimelineDto/toCommentDto copied from
-// crm.service (retained getLeadCard readers — listLeadComments / lead timeline —
-// still map these). Shared activity mappers; consolidate only if a third owner appears.
-interface TimelineRow {
-  id: string;
-  type: string;
-  title: string;
-  body: string | null;
-  status: string | null;
-  amount: string | number | null;
-  actor_user_id: string | null;
-  actor_first_name: string | null;
-  actor_last_name: string | null;
-  occurred_at: Date | string;
-}
+// ponytail: CommentRow + toCommentDto remain here (retained getLeadCard readers —
+// listLeadComments — still map these). The timeline mapper now lives in
+// ./crm-mappers.
 
 interface CommentRow {
   id: string;
@@ -139,51 +129,7 @@ export class TimelineService {
 
           union all
 
-          select work.id::text as id, 'chat_work'::text as type,
-            case
-              when work.action = 'unassigned' then 'Снято с работы'
-              else 'Взято в работу'
-            end as title,
-            nullif(
-              trim(coalesce(target_profile.first_name, '') || ' ' || coalesce(target_profile.last_name, '')),
-              ''
-            ) as body,
-            work.action as status, null::numeric as amount,
-            work.actor_user_id,
-            actor_profile.first_name as actor_first_name,
-            actor_profile.last_name as actor_last_name,
-            work.created_at as occurred_at
-          from app.chat_work_events work
-          join app.chats chat on chat.id = work.chat_id and chat.deleted_at is null
-          left join app.users actor_user on actor_user.id = work.actor_user_id and actor_user.deleted_at is null
-          left join app.profiles actor_profile on actor_profile.user_id = actor_user.id and actor_profile.deleted_at is null
-          left join app.users target_user on target_user.id = work.target_user_id and target_user.deleted_at is null
-          left join app.profiles target_profile on target_profile.user_id = target_user.id and target_profile.deleted_at is null
-          where chat.type = 'administration'
-            and (
-              ($1 = 'student' and (
-                chat.student_id = $2::uuid
-                or exists (
-                  select 1
-                  from app.user_crm_links link
-                  where link.entity_type = 'student'
-                    and link.entity_id = $2::uuid
-                    and link.user_id = chat.owner_user_id
-                    and link.deleted_at is null
-                )
-              ))
-              or ($1 = 'lead' and (
-                chat.lead_id = $2::uuid
-                or exists (
-                  select 1
-                  from app.user_crm_links link
-                  where link.entity_type = 'lead'
-                    and link.entity_id = $2::uuid
-                    and link.user_id = chat.owner_user_id
-                    and link.deleted_at is null
-                )
-              ))
-            )
+          ${CHAT_WORK_TIMELINE_FRAGMENT}
 
           union all
 
@@ -218,7 +164,7 @@ export class TimelineService {
         this.allowedCommentKinds(actor.role),
       ],
     );
-    return { items: result.rows.map((row) => this.toTimelineDto(row)) };
+    return { items: result.rows.map((row) => toTimelineDto(row)) };
   }
 
   async listComments(actor: ActorContext, query: CommentQuery) {
@@ -413,22 +359,6 @@ export class TimelineService {
     if (!result.rows[0]?.exists) {
       throw new NotFoundException("Объект комментария не найден.");
     }
-  }
-
-  private toTimelineDto(row: TimelineRow) {
-    const actorName =
-      `${row.actor_first_name ?? ""} ${row.actor_last_name ?? ""}`.trim();
-    return {
-      id: row.id,
-      type: row.type,
-      title: row.title,
-      body: row.body,
-      status: row.status,
-      amount: row.amount === null ? null : Number(row.amount),
-      actorUserId: row.actor_user_id,
-      actorName: actorName || null,
-      occurredAt: row.occurred_at,
-    };
   }
 
   private toCommentDto(row: CommentRow) {

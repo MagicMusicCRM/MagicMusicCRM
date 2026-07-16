@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 
 class CreateGroupDialog extends ConsumerStatefulWidget {
@@ -92,6 +93,16 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
     }
   }
 
+  String? _selectedTeacherName() {
+    if (_teacherId == null) return null;
+    for (final teacher in _teachers) {
+      if (teacher['id']?.toString() == _teacherId) {
+        return _personName(teacher);
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleRooms = _branchId == null
@@ -109,8 +120,10 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
               height: 180,
               child: Center(child: CircularProgressIndicator()),
             )
-          : SizedBox(
-              width: 420,
+          : ConstrainedBox(
+              // maxWidth (not fixed width) so the dialog shrinks on narrow phones
+              // instead of overflowing.
+              constraints: const BoxConstraints(maxWidth: 420),
               child: Form(
                 key: _formKey,
                 child: SingleChildScrollView(
@@ -130,26 +143,32 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
                         },
                       ),
                       const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('teacher-$_teacherId'),
-                        initialValue: _teacherId,
-                        decoration: const InputDecoration(
-                          labelText: 'Преподаватель',
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => SearchableSelect.show(
+                          context: context,
+                          title: 'Преподаватель',
+                          hintText: 'Поиск по имени…',
+                          selectedId: _teacherId,
+                          items: [
+                            for (final teacher in _teachers)
+                              SearchableSelectItem(
+                                id: teacher['id']?.toString() ?? '',
+                                label: _personName(teacher),
+                              ),
+                          ],
+                          onSelected: (item) =>
+                              setState(() => _teacherId = item?.id),
                         ),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: null,
-                            child: Text('Без преподавателя'),
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Преподаватель',
                           ),
-                          ..._teachers.map(
-                            (teacher) => DropdownMenuItem<String>(
-                              value: teacher['id']?.toString(),
-                              child: Text(_personName(teacher)),
-                            ),
+                          child: Text(
+                            _selectedTeacherName() ?? 'Без преподавателя',
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                        onChanged: (value) =>
-                            setState(() => _teacherId = value),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(

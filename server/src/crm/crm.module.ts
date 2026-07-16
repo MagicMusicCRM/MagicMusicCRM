@@ -5,6 +5,7 @@ import { LEAD_INTAKE_PORT } from '../common/lead-intake.port';
 import { JwtAuthGuard } from '../common/security/jwt-auth.guard';
 import { DatabaseModule } from '../db/database.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ChatWorkTimelineModule } from '../messenger/chat-work-timeline.module';
 import { CrmStudentsController } from './crm-students.controller';
 import { CrmDashboardController } from './crm-dashboard.controller';
 import { CrmScheduleController } from './crm-schedule.controller';
@@ -44,7 +45,13 @@ import { LeadWebhookController } from './lead-webhook.controller';
 import { ScheduleSeriesWorker } from './schedule-series.worker';
 
 @Module({
-  imports: [AuditModule, DatabaseModule, JwtModule.register({}), NotificationsModule],
+  imports: [
+    AuditModule,
+    DatabaseModule,
+    JwtModule.register({}),
+    NotificationsModule,
+    ChatWorkTimelineModule,
+  ],
   controllers: [
     CrmStudentsController,
     CrmDashboardController,
@@ -91,6 +98,9 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     // binding is the single point that moves — messenger stays untouched.
     { provide: LEAD_INTAKE_PORT, useExisting: LeadIntakeService },
   ],
-  exports: [CrmService, CrmPolicy, DashboardService, LEAD_INTAKE_PORT]
+  // CrmService is not exported: it is only injected by this module's own
+  // controllers. Other modules consume the stable contract surface —
+  // DashboardService (analytics), CrmPolicy, and LEAD_INTAKE_PORT (messenger).
+  exports: [CrmPolicy, DashboardService, LEAD_INTAKE_PORT]
 })
 export class CrmModule {}

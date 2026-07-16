@@ -11,6 +11,7 @@ import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
 import { TasksService } from "./tasks.service";
 import { CrmPolicy } from "./crm.policy";
+import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
 import { CrmService } from "./crm.service";
@@ -54,12 +55,15 @@ describe("CrmService", () => {
         .mockResolvedValue({ items: [], totalAmount: 0, totalCount: 0 }),
       listExpectedPayments: jest.fn().mockResolvedValue({ items: [] }),
       listStudentBalances: jest.fn().mockResolvedValue({ items: [] }),
+      listRecentPaymentsForStudents: jest.fn().mockResolvedValue([]),
     };
     const tasks = {
       listTasks: jest.fn().mockResolvedValue({ items: [] }),
+      listOpenTasksForStudents: jest.fn().mockResolvedValue([]),
     };
     const schedule = {
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
+      listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
     };
     const timeline = {
       listComments: jest.fn().mockResolvedValue({ items: [] }),
@@ -75,6 +79,9 @@ describe("CrmService", () => {
       schedule as unknown as ScheduleService,
       timeline as unknown as TimelineService,
       notifications as unknown as NotificationsService,
+      {
+        listForEntity: jest.fn().mockResolvedValue([]),
+      } as unknown as ChatWorkTimelineService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
@@ -122,12 +129,15 @@ describe("CrmService", () => {
         .mockResolvedValue({ items: [], totalAmount: 0, totalCount: 0 }),
       listExpectedPayments: jest.fn().mockResolvedValue({ items: [] }),
       listStudentBalances: jest.fn().mockResolvedValue({ items: [] }),
+      listRecentPaymentsForStudents: jest.fn().mockResolvedValue([]),
     };
     const tasks = {
       listTasks: jest.fn().mockResolvedValue({ items: [] }),
+      listOpenTasksForStudents: jest.fn().mockResolvedValue([]),
     };
     const schedule = {
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
+      listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
     };
     const timeline = {
       listComments: jest.fn().mockResolvedValue({ items: [] }),
@@ -143,6 +153,9 @@ describe("CrmService", () => {
       schedule as unknown as ScheduleService,
       timeline as unknown as TimelineService,
       notifications as unknown as NotificationsService,
+      {
+        listForEntity: jest.fn().mockResolvedValue([]),
+      } as unknown as ChatWorkTimelineService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
