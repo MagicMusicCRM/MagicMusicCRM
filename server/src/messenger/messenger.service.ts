@@ -323,6 +323,7 @@ export class MessengerService implements OnModuleInit {
   async sendMessage(actor: ActorContext, chatId: string, dto: SendMessageDto) {
     const chat = await this.requireChat(actor, chatId);
     this.policy.assertCanWriteChat(actor, chat);
+    await this.policy.assertNotBlacklisted(actor);
     const content = dto.content?.trim() || null;
     if (!content && !dto.attachmentFileId) {
       throw new BadRequestException("Сообщение не может быть пустым.");

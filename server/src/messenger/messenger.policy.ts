@@ -6,6 +6,7 @@ import {
   isManagerRole,
   isStaffRole
 } from '../common/security/actor-context';
+import { BLACKLIST_MESSAGE, isUserBlacklisted } from '../crm/blacklist';
 import { DatabaseService } from '../db/database.service';
 
 export interface ChatAccessRecord {
@@ -47,6 +48,24 @@ export class MessengerPolicy {
     if (chat.type === 'administration' && this.isStaff(actor)) return;
     if (chat.memberUserId === actor.userId) return;
     throw new ForbiddenException('Недостаточно прав для отправки сообщения.');
+  }
+
+  /**
+   * Чёрный список = бан на отправку (✔ решение владельца 17.07: «этот клиент
+   * не может писать далее в чатах школы и админам»).
+   *
+   * Проверяется на КАЖДОЙ отправке, а не при входе: бан должен действовать
+   * сразу, а не со следующего логина. Смотрим только клиентов — чёрный список
+   * в карточке педагога это другое понятие и другой процесс.
+   *
+   * Отдельно от `assertCanWriteChat`, потому что тот синхронный и про права в
+   * конкретном чате, а бан — про человека и во всех чатах разом.
+   */
+  async assertNotBlacklisted(actor: ActorContext): Promise<void> {
+    if (actor.role !== 'client') return;
+    if (await isUserBlacklisted(this.database, actor.userId)) {
+      throw new ForbiddenException(BLACKLIST_MESSAGE);
+    }
   }
 
   assertCanManageGroup(actor: ActorContext, chat: ChatAccessRecord): void {

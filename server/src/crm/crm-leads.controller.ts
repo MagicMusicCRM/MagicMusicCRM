@@ -13,6 +13,7 @@ import {
 import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
+import { BlacklistService } from "./blacklist.service";
 import { DuplicatesService } from "./duplicates.service";
 import { MergeService } from "./merge.service";
 import { PhoneReviewService } from "./phone-review.service";
@@ -23,12 +24,14 @@ import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
 import { LeadBoardQuery } from "./dto/lead-board.query";
 import { QueueLimitQuery } from "./dto/queue-limit.query";
 import { LinkStudentDto } from "./dto/link-student.dto";
+import { SetBlacklistDto } from "./dto/set-blacklist.dto";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
 export class CrmLeadsController {
   constructor(
+    private readonly blacklist: BlacklistService,
     private readonly duplicates: DuplicatesService,
     private readonly leads: LeadsService,
     private readonly merge: MergeService,
@@ -103,6 +106,17 @@ export class CrmLeadsController {
     @Body() dto: LinkStudentDto,
   ) {
     return this.leads.linkStudentToLead(actor, id, dto.studentId);
+  }
+
+  // Бан ставится и на лид-половину карточки: клиентский аккаунт цепляется к
+  // любой из половин, и бан только на ученике оставил бы лиду открытый чат.
+  @Patch("leads/:id/blacklist")
+  setLeadBlacklist(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: SetBlacklistDto,
+  ) {
+    return this.blacklist.setLeadBlacklist(actor, id, dto);
   }
 
   @Patch("leads/:id")

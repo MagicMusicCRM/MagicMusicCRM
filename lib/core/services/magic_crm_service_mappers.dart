@@ -76,6 +76,9 @@ Map<String, dynamic> _legacyStudent(Map<String, dynamic> item) {
     'age': item['age'],
     'age_months': item['ageMonths'],
     'age_source': item['ageSource'],
+    // Чёрный список = бан: карточка красится, чаты клиенту закрыты.
+    'blacklisted': item['blacklisted'] == true,
+    'blacklist_reason': item['blacklistReason'],
     'profiles': {
       'id': item['profileId'],
       'user_id': item['profileUserId'],
@@ -420,6 +423,8 @@ Map<String, dynamic> _legacyLead(Map<String, dynamic> item) {
     'age': item['age'],
     'age_months': item['ageMonths'],
     'age_source': item['ageSource'],
+    'blacklisted': item['blacklisted'] == true,
+    'blacklist_reason': item['blacklistReason'],
   };
 }
 

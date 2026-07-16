@@ -150,7 +150,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
         from app.students s
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -185,7 +185,7 @@ export class CrmService {
     const result = await this.database.query<StudentSearchRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone,
           s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids,
           ${branchIdExpr('s')} as branch_id,
@@ -330,7 +330,7 @@ export class CrmService {
             returning id, status, profile_id, lead_id, custom_data, created_at
           )
           select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-            s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+            s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
             '{}'::uuid[] as teacher_user_ids
           from inserted_student s
           join inserted_profile p on p.id = s.profile_id
@@ -612,11 +612,12 @@ export class CrmService {
             updated_at = now()
           from target
           where s.id = target.id
-          returning s.id, s.status, s.profile_id, s.lead_id, s.custom_data, s.created_at
+          returning s.id, s.status, s.profile_id, s.lead_id, s.custom_data,
+            s.blacklisted, s.blacklist_reason, s.created_at
         )
         select us.id, us.status, us.profile_id,
           coalesce(updated_profile_dependency.user_id, p.user_id) as profile_user_id,
-          us.lead_id, us.custom_data,
+          us.lead_id, us.custom_data, us.blacklisted, us.blacklist_reason,
           coalesce(updated_profile_dependency.first_name, p.first_name) as first_name,
           coalesce(updated_profile_dependency.last_name, p.last_name) as last_name,
           coalesce(updated_user_dependency.email, u.email) as email,
@@ -632,7 +633,8 @@ export class CrmService {
         left join app.lessons l on l.student_id = s.id and l.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        group by us.id, us.status, us.profile_id, us.lead_id, us.custom_data, us.created_at, p.id, u.id,
+        group by us.id, us.status, us.profile_id, us.lead_id, us.custom_data,
+          us.blacklisted, us.blacklist_reason, us.created_at, p.id, u.id,
           updated_profile_dependency.user_id,
           updated_profile_dependency.first_name,
           updated_profile_dependency.last_name,
@@ -737,7 +739,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
         from app.group_students gs
         join app.groups g on g.id = gs.group_id and g.deleted_at is null
@@ -1076,7 +1078,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.students s
         join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -1104,7 +1106,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.profiles acct
         join app.family_members parent_m
@@ -1136,7 +1138,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.user_crm_links link
         join app.students s
@@ -1183,6 +1185,9 @@ export class CrmService {
       age: age.years,
       ageMonths: age.months,
       ageSource: age.source,
+      // Чёрный список = бан (✔ владелец 17.07). См. blacklist.ts.
+      blacklisted: row.blacklisted === true,
+      blacklistReason: row.blacklist_reason ?? null,
     };
   }
 

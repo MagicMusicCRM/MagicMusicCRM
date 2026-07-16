@@ -57,6 +57,9 @@ interface LeadRow {
   created_by: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  /** Чёрный список = бан на чаты. См. blacklist.ts. */
+  blacklisted?: boolean | null;
+  blacklist_reason?: string | null;
 }
 
 interface LeadBoardRow extends LeadRow {
@@ -157,7 +160,7 @@ export class LeadsService {
         with filtered as (
           select l.id, l.status_id, ls.name as status_name, ls.color as status_color,
             ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
-            l.email, l.source, l.notes, l.assigned_to, l.custom_data,
+            l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
             assigned_profile.first_name as assigned_first_name,
             assigned_profile.last_name as assigned_last_name,
             ${branchIdExpr("l")} as branch_id,
@@ -267,7 +270,7 @@ export class LeadsService {
       `
         select l.id, l.status_id, ls.name as status_name, ls.color as status_color,
           ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
-          l.email, l.source, l.notes, l.assigned_to, l.custom_data,
+          l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
           assigned_profile.first_name as assigned_first_name,
           assigned_profile.last_name as assigned_last_name,
           ${branchIdExpr("l")} as branch_id,
@@ -490,7 +493,7 @@ export class LeadsService {
     const result = await this.database.query<LeadRow>(
       `
         select l.id, l.status_id, ls.name as status_name, l.first_name,
-          l.last_name, l.phone, l.email, l.source, l.notes, l.assigned_to, l.custom_data,
+          l.last_name, l.phone, l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
           l.created_by, l.created_at, l.updated_at
         from app.leads l
         left join app.lead_statuses ls on ls.id = l.status_id
@@ -561,7 +564,8 @@ export class LeadsService {
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         returning id, status_id, null::text as status_name, first_name,
           last_name, phone, email, source, notes, assigned_to,
-          custom_data, created_by, created_at, updated_at
+          blacklisted, blacklist_reason, custom_data, created_by, created_at,
+          updated_at
       `,
       [
         dto.statusId ?? null,
@@ -633,7 +637,8 @@ export class LeadsService {
         where id = $1 and deleted_at is null
         returning id, status_id, null::text as status_name, first_name,
           last_name, phone, email, source, notes, assigned_to,
-          custom_data, created_by, created_at, updated_at
+          blacklisted, blacklist_reason, custom_data, created_by, created_at,
+          updated_at
       `,
         [
           leadId,
@@ -954,7 +959,7 @@ export class LeadsService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone,
           s.created_at, '{}'::uuid[] as teacher_user_ids
         from app.students s
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -1105,6 +1110,10 @@ export class LeadsService {
       age: age.years,
       ageMonths: age.months,
       ageSource: age.source,
+      // Чёрный список = бан (✔ владелец 17.07). Карточка красит себя по нему,
+      // мессенджер по нему же запрещает отправку — см. blacklist.ts.
+      blacklisted: row.blacklisted === true,
+      blacklistReason: row.blacklist_reason ?? null,
     };
   }
 

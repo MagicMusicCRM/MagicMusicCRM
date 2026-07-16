@@ -19,6 +19,7 @@ import { CrmContactsController } from './crm-contacts.controller';
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
 import { CrmPolicy } from './crm.policy';
 import { CrmService } from './crm.service';
+import { BlacklistService } from './blacklist.service';
 import { HomeworkService } from './homework.service';
 import { ReferenceDataService } from './reference-data.service';
 import { SubscriptionsService } from './subscriptions.service';
@@ -67,6 +68,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
   ],
   providers: [
     CrmService,
+    BlacklistService,
     HomeworkService,
     ReferenceDataService,
     SubscriptionsService,

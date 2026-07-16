@@ -109,6 +109,30 @@ extension MagicCrmLeads on MagicCrmService {
     );
   }
 
+  /// Чёрный список = бан (✔ решение владельца 17.07): карточка красится, и
+  /// клиенту закрываются чаты школы и админов.
+  ///
+  /// Отдельный вызов, а не поле в `updateLead`/`updateStudent`: бан снимает
+  /// человеку доступ, и такое не должно уезжать вместе с патчем произвольных
+  /// полей карточки — в том числе случайно.
+  ///
+  /// [entity] — 'students' или 'leads': аккаунт клиента цепляется к любой из
+  /// половин карточки, поэтому банить нужно ту, которая есть.
+  Future<Map<String, dynamic>> setClientBlacklist({
+    required String entity,
+    required String id,
+    required bool blacklisted,
+    String? reason,
+  }) async {
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/$entity/$id/blacklist',
+      data: {
+        'blacklisted': blacklisted,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getLeadStatusHistory(String leadId) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/leads/$leadId/status-history',

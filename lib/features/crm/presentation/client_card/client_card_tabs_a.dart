@@ -1,7 +1,72 @@
 part of 'client_card.dart';
 
 extension _ClientCardTabsA on _ClientCardState {
+  /// В чёрном ли списке клиент — по любой из половин карточки. Сервер отдаёт
+  /// флаг на каждой (см. blacklist.ts); достаточно одной, чтобы это был бан.
+  bool get _isBlacklisted =>
+      _student?['blacklisted'] == true || _leadData['blacklisted'] == true;
+
+  String? get _blacklistReason {
+    final fromStudent = _student?['blacklist_reason']?.toString();
+    if (fromStudent != null && fromStudent.trim().isNotEmpty) return fromStudent;
+    final fromLead = _leadData['blacklist_reason']?.toString();
+    if (fromLead != null && fromLead.trim().isNotEmpty) return fromLead;
+    return null;
+  }
+
+  /// Красная плашка над карточкой забаненного клиента.
+  ///
+  /// ✔ Решение владельца 17.07: «карточка клиента помечается красным цветом
+  /// предупреждения». Плашкой, а не одной лишь подкраской заголовка: то, что
+  /// человеку закрыты чаты, должно быть видно раньше, чем сотрудник начнёт
+  /// гадать, почему клиент молчит.
+  Widget _buildBlacklistBanner(ColorScheme cs) {
+    final reason = _blacklistReason;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(AppSpace.xl, 0, AppSpace.xl, AppSpace.md),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppTheme.danger.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: AppTheme.danger.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.block_rounded, size: 18, color: AppTheme.danger),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Клиент в чёрном списке',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.danger,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  reason ?? 'Причина не указана',
+                  style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Писать в чаты школы и администрации он не может.',
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeader(ColorScheme cs, StatusRecord curStatus) {
+    final banned = _isBlacklisted;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpace.xl,
@@ -15,14 +80,20 @@ extension _ClientCardTabsA on _ClientCardState {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: AppColor.goldSoft,
+              color: banned
+                  ? AppTheme.danger.withValues(alpha: 0.12)
+                  : AppColor.goldSoft,
               borderRadius: BorderRadius.circular(AppRadius.icon),
-              border: Border.all(color: AppColor.goldLine),
+              border: Border.all(
+                color: banned
+                    ? AppTheme.danger.withValues(alpha: 0.55)
+                    : AppColor.goldLine,
+              ),
             ),
-            child: const Icon(
-              Icons.person_outline_rounded,
+            child: Icon(
+              banned ? Icons.block_rounded : Icons.person_outline_rounded,
               size: 22,
-              color: AppColor.gold,
+              color: banned ? AppTheme.danger : AppColor.gold,
             ),
           ),
           const SizedBox(width: AppSpace.md),
@@ -326,6 +397,9 @@ extension _ClientCardTabsA on _ClientCardState {
             // KVA-234: мультидисциплины чипами + список контактных лиц.
             _buildDisciplinesChips(cs, _isStudent ? 'students' : 'leads'),
             _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),
+            // Чёрный список — у обеих половин карточки, а не только у ученика:
+            // аккаунт клиента цепляется к любой из них.
+            _buildBlacklistToggle(cs),
           ],
 
           if (_mode.hasStudentHalf) ...[

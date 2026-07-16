@@ -13,9 +13,11 @@ import {
 import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
+import { BlacklistService } from "./blacklist.service";
 import { CrmService } from "./crm.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
+import { SetBlacklistDto } from "./dto/set-blacklist.dto";
 import {
   CreateAdjustmentDto,
   UpdateAdjustmentDto,
@@ -36,6 +38,7 @@ export class CrmStudentsController {
     private readonly crm: CrmService,
     private readonly finance: FinanceService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly blacklist: BlacklistService,
   ) {}
 
   @Get("me")
@@ -141,6 +144,18 @@ export class CrmStudentsController {
     @Body() dto: CreateTransferDto,
   ) {
     return this.finance.createAccountTransfer(actor, id, dto);
+  }
+
+  // Отдельный эндпоинт, а не поле в PATCH students/:id: бан снимает человеку
+  // доступ к чатам — такое не должно уезжать вместе с патчем произвольных
+  // полей карточки. См. blacklist.service.ts.
+  @Patch("students/:id/blacklist")
+  setStudentBlacklist(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: SetBlacklistDto,
+  ) {
+    return this.blacklist.setStudentBlacklist(actor, id, dto);
   }
 
   @Get("students/:id")

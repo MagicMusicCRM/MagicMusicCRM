@@ -198,6 +198,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // a server refresh still re-seeds initialValue.
   int _editorEpoch = 0;
 
+  /// Бан применяется своим запросом, а не «Сохранить» вместе с полями карточки
+  /// — на время запроса тумблер заперт, чтобы двойной тап не отправил бан и
+  /// разбан наперегонки.
+  bool _blacklistBusy = false;
+
   Future<void> _handleClose() async {
     if (!_edited) {
       Navigator.pop(context, _dirty ? true : null);
@@ -292,12 +297,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'discipline',
   };
 
+  // `blacklisted` здесь больше нет: ✔ решение владельца 17.07 сделало чёрный
+  // список баном — у него автор, причина и последствие (клиенту закрыты чаты),
+  // ставится он своим эндпоинтом и живёт в колонке, а не в custom_data.
   static const Set<String> _studentOnlyCustomFieldKeys = {
     'workplace',
     'position',
     'contractStatus',
     'cabinetStatus',
-    'blacklisted',
     'noEmail',
     'individualPrice',
   };
@@ -409,6 +416,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
               _isStudent
                   ? _buildStudentHeader(cs, curStatus)
                   : _buildHeader(cs, curStatus),
+              // ✔ Владелец 17.07: карточка забаненного помечается красным.
+              // Над вкладками, а не внутри одной из них: бан касается всей
+              // карточки, и он не должен зависеть от того, куда сотрудник
+              // успел переключиться.
+              if (_isBlacklisted) _buildBlacklistBanner(cs),
               Divider(
                 height: 1,
                 color: cs.outlineVariant.withValues(alpha: 0.6),
