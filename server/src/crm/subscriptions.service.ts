@@ -24,6 +24,8 @@ interface SubscriptionRow {
   updated_at: Date | string;
   package_name?: string | null;
   package_price?: number | string | null;
+  /** Приход личного счёта, которым оплачен этот абонемент. */
+  paid_amount?: number | string | null;
 }
 
 interface SubscriptionPackageRow {
@@ -79,6 +81,11 @@ export class SubscriptionsService {
       updatedAt: row.updated_at,
       packageName: row.package_name ?? null,
       packagePrice: row.package_price != null ? Number(row.package_price) : null,
+      // «Оплачено» — не отдельная сущность, а приход личного счёта: выдача
+      // абонемента кладёт его стоимость на счёт клиента (см. issueSubscription),
+      // и здесь мы читаем именно этот приход. ✔ Решение владельца 16.07:
+      // «оплату и переплату по абонементу считаем по личному счёту».
+      paidAmount: row.paid_amount != null ? Number(row.paid_amount) : null,
     };
   }
 
@@ -104,10 +111,14 @@ export class SubscriptionsService {
         select sub.id, sub.student_id, p.user_id as student_user_id,
           sub.lessons_total, sub.lessons_used, sub.starts_at, sub.expires_at,
           sub.status, sub.created_at, sub.updated_at,
-          pkg.name as package_name, pkg.price as package_price
+          pkg.name as package_name, pkg.price as package_price,
+          -- «Оплачено»: приход личного счёта, которым закрыт абонемент.
+          -- Отменённый платёж не считается оплатой.
+          pay.amount as paid_amount
         from app.subscriptions sub
         join app.students s on s.id = sub.student_id and s.deleted_at is null
         left join app.subscription_packages pkg on pkg.id = sub.package_id
+        left join app.payments pay on pay.id = sub.payment_id and pay.deleted_at is null
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where ($3::uuid is null or sub.student_id = $3)
           and (

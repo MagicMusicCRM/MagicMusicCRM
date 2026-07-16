@@ -287,11 +287,16 @@ class _InfoRow extends StatelessWidget {
   /// отличать настоящие данные от подставленных приложением.
   final String? hint;
 
+  /// Цвет приписки. Нужен там, где она несёт смысл, а не пояснение: «Долг»
+  /// красным, «Переплата» зелёным — как на эталонной карточке.
+  final Color? hintColor;
+
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
     this.hint,
+    this.hintColor,
   });
 
   @override
@@ -330,7 +335,12 @@ class _InfoRow extends StatelessWidget {
                     hint!,
                     style: TextStyle(
                       fontSize: 10,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      color:
+                          hintColor ??
+                          Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: hintColor == null
+                          ? FontWeight.normal
+                          : FontWeight.w700,
                     ),
                   ),
               ],

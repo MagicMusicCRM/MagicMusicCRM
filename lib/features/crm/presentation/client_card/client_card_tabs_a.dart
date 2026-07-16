@@ -377,7 +377,15 @@ extension _ClientCardTabsA on _ClientCardState {
                       // «Курс» — the whole subscription, next to what is left
                       // of it, as on the reference card.
                       ?_subscriptionCourse(s),
+                      // «Оплачено» — приход личного счёта за этот абонемент.
+                      ?_subscriptionPaid(s),
                     ].join('\n'),
+                    // «Переплата»/«Долг» — разница между приходом и стоимостью.
+                    // Красным, потому что это то, на что надо посмотреть.
+                    hint: _subscriptionOverpayment(s)?.label,
+                    hintColor: _subscriptionOverpayment(s)?.isDebt == true
+                        ? AppTheme.danger
+                        : AppTheme.success,
                   ),
               ]),
             ],

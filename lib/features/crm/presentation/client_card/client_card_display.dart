@@ -630,6 +630,37 @@ String? _subscriptionCourse(Subscription s) {
   return 'Курс: ${hours(total)} астр.ч.$money';
 }
 
+/// «Оплачено» — сколько денег пришло на личный счёт за этот абонемент.
+///
+/// ✔ Решение владельца 16.07: «оплату и переплату по абонементу считаем по
+/// личному счёту». Абонемент — бизнес-логика, которая кладёт свою стоимость на
+/// счёт клиента (`issueSubscription` заводит приход), поэтому «Оплачено» это и
+/// есть тот приход, а не отдельная сущность.
+///
+/// Возвращает null, если прихода нет: у старых абонементов не проставлен
+/// `payment_id`, и «Оплачено: 0 ₽» соврало бы про них.
+String? _subscriptionPaid(Subscription s) {
+  final paid = s.paidAmountRaw;
+  if (paid is! num) return null;
+  return 'Оплачено: ${paid.round()} ₽';
+}
+
+/// «Переплата»/«Долг» — разница между тем, что пришло на счёт за абонемент, и
+/// его стоимостью. Считается ровно из этих двух ledger-величин.
+///
+/// Ноль не показываем: «Переплата: 0 ₽» — это шум под каждым абонементом,
+/// оплаченным ровно в стоимость, то есть под нормой.
+({String label, bool isDebt})? _subscriptionOverpayment(Subscription s) {
+  final paid = s.paidAmountRaw;
+  final price = s.packagePriceRaw;
+  if (paid is! num || price is! num) return null;
+  final diff = paid - price;
+  if (diff == 0) return null;
+  return diff > 0
+      ? (label: 'Переплата: ${diff.round()} ₽', isDebt: false)
+      : (label: 'Долг: ${(-diff).round()} ₽', isDebt: true);
+}
+
 /// Подпись статуса операции («Статус» из эталона HolliHop). `paid` не
 /// подписываем: это норма, и метка у каждой строки была бы шумом.
 String? _ledgerStatusLabel(Object? status) {

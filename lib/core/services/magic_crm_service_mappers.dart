@@ -705,6 +705,8 @@ Map<String, dynamic> _legacySubscription(Map<String, dynamic> item) {
     'updated_at': item['updatedAt'],
     'package_name': item['packageName'],
     'package_price': item['packagePrice'],
+    // «Оплачено» — приход личного счёта, которым закрыт абонемент.
+    'paid_amount': item['paidAmount'],
   };
 }
 

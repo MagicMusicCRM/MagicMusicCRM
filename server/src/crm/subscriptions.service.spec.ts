@@ -62,6 +62,8 @@ describe("SubscriptionsService", () => {
           updatedAt: "2026-06-12T00:00:00.000Z",
           packageName: null,
           packagePrice: null,
+          // Прихода нет — «Оплачено» неизвестно. Это НЕ «оплачено 0».
+          paidAmount: null,
         },
       ],
     });
@@ -209,4 +211,51 @@ describe("SubscriptionsService", () => {
       }),
     );
   });
+
+  describe("«Оплачено» по абонементу — из личного счёта", () => {
+    it("читает приход, которым закрыт абонемент", async () => {
+      const { service, query } = createService([
+        {
+          id: "sub-a",
+          student_id: "student-a",
+          student_user_id: "client-a",
+          lessons_total: 10,
+          lessons_used: 0,
+          starts_at: null,
+          expires_at: null,
+          status: "active",
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-01T00:00:00.000Z",
+          package_name: "10 занятий",
+          package_price: "7000",
+          paid_amount: "8000",
+        },
+      ]);
+
+      const result = await service.listSubscriptions(actor, { limit: 1 });
+
+      // ✔ Решение владельца: оплату по абонементу считаем по личному счёту.
+      // Выдача абонемента кладёт его стоимость на счёт (issueSubscription), и
+      // «Оплачено» — это тот самый приход, а не отдельная сущность.
+      expect(result.items[0]).toEqual(
+        expect.objectContaining({ packagePrice: 7000, paidAmount: 8000 }),
+      );
+      // Переплата = 8000 − 7000 считается из этих двух чисел.
+    });
+
+    it("берёт приход из личного счёта, а не из отдельной таблицы", async () => {
+      const { service, query } = createService([]);
+
+      await service.listSubscriptions(actor, { limit: 1 });
+
+      const sql = String(query.mock.calls[0][0]);
+      // Строки в этих тестах замоканы, SQL не исполняется — поэтому сам запрос
+      // проверяем текстом: и join, и то, что сумма берётся именно из прихода.
+      expect(sql).toContain("left join app.payments pay on pay.id = sub.payment_id");
+      expect(sql).toContain("pay.amount as paid_amount");
+      // Отменённый платёж — не оплата.
+      expect(sql).toContain("pay.deleted_at is null");
+    });
+  });
+
 });
