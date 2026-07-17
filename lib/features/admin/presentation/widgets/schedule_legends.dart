@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
-/// Colour legend for the month view + a «Сегодня» shortcut. Extracted from
-/// _ScheduleWidgetState — pure display + onToday callback.
+/// Colour legend for the month view. The «Сегодня» shortcut used to live here
+/// too, but the date-navigation row already carries one (white, in every
+/// view) — two identical buttons on the month screen was the reported dupe, so
+/// this keeps only the colour legend.
 class ScheduleMonthLegend extends StatelessWidget {
-  final VoidCallback onToday;
-  const ScheduleMonthLegend({super.key, required this.onToday});
+  const ScheduleMonthLegend({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -42,40 +43,16 @@ class ScheduleMonthLegend extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  chip(AppColor.actionBlue, 'Обычные'),
-                  chip(AppColor.success, 'Пробные'),
-                  chip(AppColor.warning, 'Пиковая'),
-                  chip(AppColor.danger, 'Конфликт'),
-                ],
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: onToday,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColor.goldLine),
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-              child: const Text(
-                'Сегодня',
-                style: TextStyle(
-                  color: AppColor.gold,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            chip(AppColor.actionBlue, 'Обычные'),
+            chip(AppColor.success, 'Пробные'),
+            chip(AppColor.warning, 'Пиковая'),
+            chip(AppColor.danger, 'Конфликт'),
+          ],
+        ),
       ),
     );
   }
@@ -125,9 +102,9 @@ class ScheduleDayLegend extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            chip(AppColor.transferCyan, 'Тянуть вниз — выбрать часы'),
+            chip(AppColor.transferCyan, 'Зажать и тянуть вниз — выбрать часы'),
             chip(AppColor.actionBlue, 'Перетащить — время / комната'),
-            chip(AppColor.gold, 'Край (наведи) — растянуть'),
+            chip(AppColor.gold, 'Край — растянуть'),
             chip(AppColor.danger, 'Конфликт'),
           ],
         ),

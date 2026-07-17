@@ -8,6 +8,7 @@ import {
   ActorContext,
   canAssignRole,
   isAdminRole,
+  UserRole,
 } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { CreateStaffDto } from "./dto/create-staff.dto";
@@ -251,6 +252,29 @@ export class StaffService {
       throw new ForbiddenException(
         "Только администратор может редактировать сотрудников.",
       );
+    }
+    // The display role on the staff card (staff_members.role) is separate from
+    // the auth role (app.users.role) — the latter changes only through
+    // profile.updateRole, which is properly gated. But an ungated write here
+    // could still MISLABEL a staff member as one rank above the editor, which
+    // reads as an escalation on the card even though no privilege moves. Hold
+    // the display role to the same rule the auth role obeys: you may set a role
+    // only strictly below your own, and only on a subject already below you.
+    if (dto.role !== undefined) {
+      const current = await this.database.query<{ role: string | null }>(
+        `select role from app.staff_members
+         where id = $1 and deleted_at is null limit 1`,
+        [staffId],
+      );
+      const currentRole = current.rows[0]?.role as UserRole | null | undefined;
+      const blocked =
+        !canAssignRole(actor.role, dto.role as UserRole) ||
+        (currentRole != null && !canAssignRole(actor.role, currentRole));
+      if (blocked) {
+        throw new ForbiddenException(
+          "Недостаточно прав для назначения этой роли сотруднику.",
+        );
+      }
     }
     const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
 

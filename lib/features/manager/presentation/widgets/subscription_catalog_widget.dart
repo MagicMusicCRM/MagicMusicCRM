@@ -5,19 +5,24 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 // The package create/edit sheet and the packages provider already exist in the
 // (otherwise un-mounted) admin entity manager. Reuse them so the manager's
 // catalog stays in sync with the same backend и form, без дублирования.
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart'
     show entitiesProvider, showPackageSheet;
 
-/// Каталог абонементов для Управляющего: создать/изменить/удалить пакеты
-/// абонементов. Сами абонементы выдаются ученику из карточки → «Выдать
-/// абонемент», который атомарно создаёт платёж + подписку; клиент видит её в
-/// разделе «Абонемент». Бэкенд (createSubscriptionPackage / issueSubscription)
-/// уже разрешён роли manager — не хватало только этого UI.
+/// Каталог абонементов. Управляющий его ВИДИТ (и выдаёт абонементы ученикам из
+/// карточки → «Выдать абонемент», атомарно создающий платёж + подписку), но сам
+/// каталог (создание/изменение/удаление пакетов с ценами) — это ценовая
+/// конфигурация уровня Директора (общешкольные финансы, KVA-239). Поэтому
+/// кнопки управления показываются только Директору/Администратору системы;
+/// бэкенд гейтит их через assertCanManageSubscriptionPackages.
 class SubscriptionCatalogWidget extends ConsumerWidget {
-  const SubscriptionCatalogWidget({super.key});
+  final String role;
+  const SubscriptionCatalogWidget({super.key, required this.role});
+
+  bool get _canManage => crmHasSchoolFinanceAccess(role);
 
   static const _provider = 'subscription_packages';
 
@@ -45,15 +50,16 @@ class SubscriptionCatalogWidget extends ConsumerWidget {
                   ),
                 ),
               ),
-              FilledButton.icon(
-                onPressed: () => _create(context, ref),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.primaryGold,
-                  foregroundColor: Colors.white,
+              if (_canManage)
+                FilledButton.icon(
+                  onPressed: () => _create(context, ref),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.primaryGold,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Создать'),
                 ),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Создать'),
-              ),
             ],
           ),
         ),
@@ -85,7 +91,9 @@ class SubscriptionCatalogWidget extends ConsumerWidget {
             ),
             data: (items) {
               if (items.isEmpty) {
-                return _EmptyCatalog(onCreate: () => _create(context, ref));
+                return _EmptyCatalog(
+                  onCreate: _canManage ? () => _create(context, ref) : null,
+                );
               }
               return RefreshIndicator(
                 color: AppTheme.primaryGold,
@@ -94,7 +102,8 @@ class SubscriptionCatalogWidget extends ConsumerWidget {
                 child: ListView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
                   itemCount: items.length,
-                  itemBuilder: (ctx, i) => _PackageRow(item: items[i]),
+                  itemBuilder: (ctx, i) =>
+                      _PackageRow(item: items[i], canManage: _canManage),
                 ),
               );
             },
@@ -107,7 +116,8 @@ class SubscriptionCatalogWidget extends ConsumerWidget {
 
 class _PackageRow extends ConsumerWidget {
   final Map<String, dynamic> item;
-  const _PackageRow({required this.item});
+  final bool canManage;
+  const _PackageRow({required this.item, required this.canManage});
 
   num _asNum(Object? v) =>
       v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
@@ -177,12 +187,20 @@ class _PackageRow extends ConsumerWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        onTap: () async {
-          final saved = await showPackageSheet(context, ref, existing: item);
-          if (saved == true) {
-            ref.invalidate(entitiesProvider('subscription_packages'));
-          }
-        },
+        // View-only for a manager: tapping to edit is disabled and the delete
+        // control is hidden. Only director/system_admin manage the catalog.
+        onTap: canManage
+            ? () async {
+                final saved = await showPackageSheet(
+                  context,
+                  ref,
+                  existing: item,
+                );
+                if (saved == true) {
+                  ref.invalidate(entitiesProvider('subscription_packages'));
+                }
+              }
+            : null,
         leading: CircleAvatar(
           backgroundColor: AppTheme.primaryGold.withAlpha(40),
           child: const Icon(
@@ -214,14 +232,16 @@ class _PackageRow extends ConsumerWidget {
             ],
           ),
         ),
-        trailing: IconButton(
-          icon: const Icon(
-            Icons.delete_outline_rounded,
-            color: AppTheme.danger,
-          ),
-          tooltip: 'Удалить',
-          onPressed: () => _delete(context, ref),
-        ),
+        trailing: canManage
+            ? IconButton(
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppTheme.danger,
+                ),
+                tooltip: 'Удалить',
+                onPressed: () => _delete(context, ref),
+              )
+            : null,
       ),
     );
   }
@@ -255,7 +275,8 @@ class _Chip extends StatelessWidget {
 }
 
 class _EmptyCatalog extends StatelessWidget {
-  final VoidCallback onCreate;
+  // Null → view-only (manager): no «Создать» button, just the empty message.
+  final VoidCallback? onCreate;
   const _EmptyCatalog({required this.onCreate});
 
   @override
@@ -285,16 +306,18 @@ class _EmptyCatalog extends StatelessWidget {
               style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
             ),
           ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: onCreate,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.primaryGold,
-              foregroundColor: Colors.white,
+          if (onCreate != null) ...[
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onCreate,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.primaryGold,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Создать абонемент'),
             ),
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Создать абонемент'),
-          ),
+          ],
         ],
       ),
     );

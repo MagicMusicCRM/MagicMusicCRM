@@ -1237,6 +1237,70 @@ describe("MessengerService", () => {
       expect(resurface![1]).toEqual([adminChatId]);
     });
 
+    it("does NOT resurface when a STAFF member replies (archive must stick)", async () => {
+      const adminChatId = "chat-admin-staff-reply";
+      type MockClient = { query: jest.Mock };
+      const client = {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id: "msg-s1",
+                chat_id: adminChatId,
+                sender_id: "manager-a",
+                content: "Отвечаю",
+                message_type: "text",
+                attachment_file_id: null,
+                reply_to_id: null,
+                forwarded_from_id: null,
+                pinned_by: null,
+                pinned_at: null,
+                created_at: new Date("2026-06-25T10:05:00Z"),
+                updated_at: new Date("2026-06-25T10:05:00Z"),
+                deleted_at: null,
+                sender_email: null,
+                sender_first_name: null,
+                sender_last_name: null,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({ rows: [] }),
+      };
+      const dbQuery = jest.fn().mockResolvedValue({ rows: [] });
+      const { service } = createService({
+        database: {
+          transaction: jest.fn(
+            async (work: (c: MockClient) => Promise<unknown>) => work(client),
+          ) as never,
+          query: dbQuery,
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue({
+            id: adminChatId,
+            type: "administration",
+            memberUserId: "manager-a",
+            memberRole: "manager",
+          }),
+          assertCanWriteChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
+        },
+      });
+
+      await service.sendMessage(
+        { userId: "manager-a", role: "manager" },
+        adminChatId,
+        { content: "Отвечаю" } as never,
+      );
+
+      const calls = dbQuery.mock.calls as Array<[string, unknown[]]>;
+      const resurface = calls.find(
+        ([sql]) =>
+          sql.includes("chat_inbox_state") && sql.includes("archived_at = null"),
+      );
+      expect(resurface).toBeUndefined();
+    });
+
     it("does NOT issue the resurface update for a non-administration chat", async () => {
       const directChatId = "chat-direct-resurface";
       type MockClient = { query: jest.Mock };

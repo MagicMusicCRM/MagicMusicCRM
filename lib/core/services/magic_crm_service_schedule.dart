@@ -277,6 +277,47 @@ extension MagicCrmSchedule on MagicCrmService {
     return _items(response).map(_legacyTask).toList();
   }
 
+  /// Per-day task counts for the calendar grids, keyed by Moscow date
+  /// ('yyyy-MM-dd' → count). Applies the same filters as [listTasks] so a
+  /// day-cell count matches the list you get by opening that day.
+  Future<Map<String, int>> taskCalendar({
+    required String from,
+    required String to,
+    String? q,
+    String? entityType,
+    String? assignedTo,
+    String? branchId,
+    String? status,
+    String? priority,
+  }) async {
+    final queryParameters = <String, dynamic>{'from': from, 'to': to};
+    void addString(String key, String? value) {
+      final trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        queryParameters[key] = trimmed;
+      }
+    }
+
+    addString('q', q);
+    addString('entityType', entityType);
+    addString('assignedTo', assignedTo);
+    addString('branchId', branchId);
+    addString('status', status);
+    addString('priority', priority);
+
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/tasks/calendar',
+      queryParameters: queryParameters,
+    );
+    final result = <String, int>{};
+    for (final row in _items(response)) {
+      final day = row['day']?.toString();
+      final count = row['count'];
+      if (day != null && count is int) result[day] = count;
+    }
+    return result;
+  }
+
   Future<List<Map<String, dynamic>>> listTimeline({
     required String entityType,
     required String entityId,
@@ -349,6 +390,8 @@ extension MagicCrmSchedule on MagicCrmService {
     String status = 'open',
     String? dueAt,
     String? assignedTo,
+    String? priority,
+    bool? dueAllDay,
   }) async {
     final data = <String, dynamic>{
       'entityType': entityType,
@@ -361,6 +404,8 @@ extension MagicCrmSchedule on MagicCrmService {
     }
     if (dueAt != null) data['dueAt'] = dueAt;
     if (assignedTo != null) data['assignedTo'] = assignedTo;
+    if (priority != null) data['priority'] = priority;
+    if (dueAllDay != null) data['dueAllDay'] = dueAllDay;
 
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/tasks',
@@ -378,6 +423,8 @@ extension MagicCrmSchedule on MagicCrmService {
     String? description,
     String? status,
     String? dueAt,
+    String? priority,
+    bool? dueAllDay,
   }) async {
     final data = <String, dynamic>{};
     void addString(String key, String? value) {
@@ -394,12 +441,18 @@ extension MagicCrmSchedule on MagicCrmService {
     addString('description', description);
     addString('status', status);
     addString('dueAt', dueAt);
+    addString('priority', priority);
+    if (dueAllDay != null) data['dueAllDay'] = dueAllDay;
 
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/tasks/$id',
       data: data,
     );
     return _legacyTask(response);
+  }
+
+  Future<void> deleteTask(String id) async {
+    await _api.delete<Map<String, dynamic>>('/crm/tasks/$id');
   }
 
   Future<List<Map<String, dynamic>>> listComments({

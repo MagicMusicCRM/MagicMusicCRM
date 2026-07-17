@@ -317,16 +317,55 @@ extension _UserRolesActions on _UserRolesWidgetState {
     );
   }
 
-  List<String> _rolesForCurrentActor(String currentUserRole) {
-    // A1: Управляющий и Администратор системы получают полный набор ролей и
-    // могут сменить роль в любой момент. Администратор (`admin`) — НЕ может
-    // менять роли (бизнес-иерархия: Управляющий > Администратор).
-    if (widget.currentRole == 'manager' ||
-        widget.currentRole == 'director' ||
-        widget.currentRole == 'system_admin') {
+  /// Roles the dropdown may offer for a row whose subject currently holds
+  /// [targetCurrentRole]. Mirrors the server's `canAssignRole`
+  /// (profile.policy.ts) exactly, so the picker never offers a role the server
+  /// would reject: a manager offering «Директор» to a user got an optimistic
+  /// change, then a rollback and a red error — which read as «управляющий
+  /// повысил права». The server always blocked it; the dropdown just shouldn't
+  /// have suggested it.
+  List<String> _rolesForCurrentActor(String targetCurrentRole) {
+    final actor = widget.currentRole;
+    if (actor == 'system_admin') {
       return _UserRolesWidgetState._availableRoles;
     }
-    return [currentUserRole];
+    // A manager or director may only touch a subject whose CURRENT role is
+    // strictly below their own, and may only assign roles strictly below their
+    // own. Anyone else (admin, teacher, client) manages no roles.
+    if (actor == 'manager' || actor == 'director') {
+      if (!_canAssign(actor, targetCurrentRole)) {
+        // Can't modify this subject at all — show only their role, unchangeable.
+        return [targetCurrentRole];
+      }
+      final assignable = [
+        for (final r in _UserRolesWidgetState._availableRoles)
+          if (_canAssign(actor, r)) r,
+      ];
+      // Keep the current role present so the dropdown can render its value.
+      if (!assignable.contains(targetCurrentRole)) {
+        assignable.add(targetCurrentRole);
+      }
+      return assignable;
+    }
+    return [targetCurrentRole];
+  }
+
+  static const _roleLevel = {
+    'client': 0,
+    'teacher': 1,
+    'admin': 2,
+    'manager': 3,
+    'director': 4,
+    'system_admin': 5,
+  };
+
+  /// Strictly-below-me rule, matching `canAssignRole` on the server.
+  static bool _canAssign(String actorRole, String targetRole) {
+    if (actorRole == 'system_admin') return true;
+    final a = _roleLevel[actorRole];
+    final t = _roleLevel[targetRole];
+    if (a == null || t == null) return false;
+    return t < a;
   }
 
   void _confirmRoleChange(

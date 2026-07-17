@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -102,6 +104,15 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   String? _selectedBranchId;
   ScheduleView _currentView = ScheduleView.month;
   DayViewMode _dayViewMode = DayViewMode.byRoom;
+  // Extra schedule filters (applied client-side over already-loaded lessons —
+  // is_trial / conflict_types / teacher_id all ride along in the matrix).
+  bool _onlyTrial = false;
+  bool _onlyConflicts = false;
+  String? _filterTeacherId;
+  // The user's own branch (staff assignment), resolved once, used as the
+  // default instead of «the first branch in the system».
+  String? _homeBranchId;
+  bool _homeBranchResolved = false;
   DateTime _selectedDate = DateTime.now();
   DateTime _displayedMonth = DateTime(
     DateTime.now().year,
@@ -130,6 +141,17 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   @override
   void initState() {
     super.initState();
+    // A filter deep-linked from the overview («Пробные занятия» / «Конфликты
+    // расписания») — consumed once before the first fetch so the grid opens
+    // filtered. Day view is what actually renders these filters, so switch to it.
+    final focus = ref
+        .read(crmSectionFocusProvider.notifier)
+        .consume('schedule');
+    if (focus != null) {
+      if (focus.filters['trial'] == '1') _onlyTrial = true;
+      if (focus.filters['conflicts'] == '1') _onlyConflicts = true;
+      _currentView = ScheduleView.day;
+    }
     _fetchAll();
     // The client card sets the focus BEFORE this widget mounts (it sets focus,
     // closes the card and routes here). `ref.listen` in build only catches

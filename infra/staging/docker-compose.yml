@@ -22,6 +22,21 @@ services:
     networks:
       - public
 
+  # Fix the storage mount's ownership before the API boots. The API runs as
+  # uid 10001 (Dockerfile `USER magiccrm`) with `cap_drop: ALL`, so it cannot
+  # chown its own mount. The bind-mounted host directory comes up owned by root,
+  # which made every POST /files (chat photo, file, voice message) fail with
+  # EACCES → 500. This one-shot root container hands the tree to 10001 first.
+  storage-init:
+    image: alpine:3.20
+    command: sh -c "mkdir -p /storage/private && chown -R 10001:10001 /storage"
+    user: "0:0"
+    volumes:
+      - ../../storage:/storage
+    restart: "no"
+    networks:
+      - private
+
   api:
     build:
       context: ../../server
@@ -67,6 +82,8 @@ services:
       - ../../storage:/opt/magicmusiccrm/storage
     command: sh -c "node dist/db/migrate.js up && node dist/main.js"
     depends_on:
+      storage-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:

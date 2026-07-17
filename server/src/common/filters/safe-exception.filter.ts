@@ -25,14 +25,27 @@ export class SafeExceptionFilter implements ExceptionFilter {
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
     if (!(exception instanceof HttpException)) {
+      // Carry the error's class, message and stack into the log. Sentry may be
+      // unconfigured (SENTRY_DSN unset), and until this was added an unhandled
+      // 500 logged only «Unhandled exception» with no cause — a Postgres check
+      // violation or an EACCES read as an opaque «Internal server error», and
+      // diagnosis meant reproducing the fault by hand. The class name and DB
+      // message (e.g. «violates check constraint …») are not sensitive; the
+      // stack is passed to the logger's stack channel, not the message body.
+      const error = exception instanceof Error ? exception : undefined;
       this.logger.error(
         {
           message: 'Unhandled exception',
+          // Constructor name, not `.name` — a `pg` error carries the useful
+          // class («DatabaseError») on its constructor while `.name` is a bare
+          // «error».
+          error: error?.constructor?.name ?? typeof exception,
+          detail: error?.message,
           requestId,
           path: request.path,
           method: request.method
         },
-        undefined,
+        error?.stack,
         'SafeExceptionFilter'
       );
     }

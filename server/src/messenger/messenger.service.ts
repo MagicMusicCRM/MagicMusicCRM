@@ -14,6 +14,7 @@ import {
   isStaffRole,
 } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
+import { branchIdExpr } from "../crm/branch-scope";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { LEAD_INTAKE_PORT, LeadIntakePort } from "../common/lead-intake.port";
 import { CreateDirectChatDto } from "./dto/create-direct-chat.dto";
@@ -137,6 +138,17 @@ export class MessengerService implements OnModuleInit {
           ist.archived_at,
           case
             when ist.archived_at is not null then 'archive'
+            -- Direct link first: the chat owner IS a student (their profile
+            -- backs a student row). This is what makes a converted lead's chat
+            -- move to «Ученики» — conversion creates a student on the lead's
+            -- profile, and that profile is the chat owner's. The phone match
+            -- below stays as a fallback for imported students whose profile
+            -- isn't the chat owner's but whose number is the same.
+            when exists (
+              select 1 from app.students s2
+              join app.profiles sp2 on sp2.id = s2.profile_id and sp2.deleted_at is null
+              where s2.deleted_at is null and sp2.user_id = c.owner_user_id
+            ) then 'students'
             when exists (
               select 1 from app.students s
               join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
@@ -175,7 +187,9 @@ export class MessengerService implements OnModuleInit {
                 )
             ) then 'students'
             else 'leads'
-          end as folder
+          end as folder,
+          owner_branch.branch_id as branch_id,
+          owner_branch.branch_name as branch_name
         from app.chats c
         left join app.chat_members cm on cm.chat_id = c.id and cm.left_at is null
         left join app.chat_members me_state
@@ -197,16 +211,53 @@ export class MessengerService implements OnModuleInit {
         left join app.users asg on asg.id = c.assigned_to_user_id and asg.deleted_at is null
         left join app.profiles asgp on asgp.user_id = asg.id and asgp.deleted_at is null
         left join app.chat_inbox_state ist on ist.chat_id = c.id and ist.staff_user_id = $2
+        -- The client's branch, from their linked lead/student (the user_crm_links
+        -- row autoCreateLeadFromChat writes), falling back to the direct
+        -- profile→student path. Null when no branch has been assigned yet.
+        left join lateral (
+          select b.id::text as branch_id, b.name as branch_name
+          from app.branches b
+          where b.deleted_at is null
+            and b.id::text = coalesce(
+              (
+                select ${branchIdExpr("l")}
+                from app.user_crm_links ucl
+                join app.leads l on l.id = ucl.entity_id and l.deleted_at is null
+                where ucl.user_id = c.owner_user_id
+                  and ucl.entity_type = 'lead' and ucl.deleted_at is null
+                limit 1
+              ),
+              (
+                select ${branchIdExpr("s")}
+                from app.user_crm_links ucs
+                join app.students s on s.id = ucs.entity_id and s.deleted_at is null
+                where ucs.user_id = c.owner_user_id
+                  and ucs.entity_type = 'student' and ucs.deleted_at is null
+                limit 1
+              ),
+              (
+                select ${branchIdExpr("s3")}
+                from app.students s3
+                join app.profiles sp3 on sp3.id = s3.profile_id and sp3.deleted_at is null
+                where sp3.user_id = c.owner_user_id and s3.deleted_at is null
+                limit 1
+              )
+            )
+          limit 1
+        ) owner_branch on true
         where c.deleted_at is null
           and ($3::timestamptz is null or c.updated_at < $3)
           and (
             cm.user_id = $2
             or ($1::text in ('manager', 'director', 'admin', 'system_admin') and c.type = 'administration')
           )
+          -- Branch filter: match, OR the client has no branch yet (shown to all).
+          and ($5::uuid is null or owner_branch.branch_id is null
+               or owner_branch.branch_id = $5::text)
         order by c.updated_at desc, c.id desc
         limit $4
       `,
-      [actor.role, actor.userId, query.before ?? null, limit],
+      [actor.role, actor.userId, query.before ?? null, limit, query.branchId ?? null],
     );
 
     return { items: result.rows.map((row) => toChatSummaryDto(row)) };
@@ -407,8 +458,11 @@ export class MessengerService implements OnModuleInit {
       maskStaffSenderForMembers:
         chat.type === "administration" && isStaffRole(actor.role),
     });
-    if (chat.type === "administration") {
-      // Resurface: clear archived_at for ALL staff so the thread reappears in inboxes.
+    if (chat.type === "administration" && !isStaffRole(actor.role)) {
+      // Resurface ONLY on a client message: a new client note should pull the
+      // thread back into every staff inbox. A STAFF reply must not — otherwise
+      // the moment you answer a chat you just archived, it un-archives itself
+      // (and for every other staff member too), so «архивировать» never stuck.
       // Best-effort: a failure here must not break the send.
       try {
         await this.database.query(
@@ -418,8 +472,6 @@ export class MessengerService implements OnModuleInit {
       } catch (err) {
         this.logger.warn(`resurface chat_inbox_state failed: ${String(err)}`);
       }
-    }
-    if (chat.type === "administration" && !isStaffRole(actor.role)) {
       void this.leadIntake
         .autoCreateLeadFromChat(actor, actor.userId)
         .catch(() => undefined);

@@ -23,11 +23,18 @@ describe("ReferenceDataService", () => {
   };
 
   const build = (query: jest.Mock) => {
-    const database = { query };
+    const database = {
+      query,
+      // reorderLeadStatuses wraps its writes in a transaction; the callback
+      // shares the same query mock so the mockResolvedValueOnce chain still lines up.
+      transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query }),
+    };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertCanManageSystemSettings: jest.fn(),
     };
     const hollihop = {
       listDisciplines: jest
@@ -186,7 +193,7 @@ describe("ReferenceDataService", () => {
     expect(query.mock.calls[0][1]).toEqual(["branch-1", ["d2", "d1"]]);
   });
 
-  it("reorders lead statuses by array position through CRM write policy", async () => {
+  it("reorders lead statuses, each column's position becoming its sort_order", async () => {
     const { service, query, audit, policy } = createServiceWithQueryResults([
       { rows: [], rowCount: 3 } as unknown as {
         rows: Record<string, unknown>[];
@@ -196,12 +203,15 @@ describe("ReferenceDataService", () => {
       statusIds: ["status-c", "status-a", "status-b"],
     });
     expect(result).toEqual({ updated: 3 });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    // Column config → system-settings gate, not plain CRM write.
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.lead_statuses");
-    expect(query.mock.calls[0][0]).toContain("with ordinality");
-    expect(query.mock.calls[0][0]).toContain("sort_order = t.ord - 1");
+    expect(query.mock.calls[0][0]).toContain("unnest($1::uuid[], $2::int[])");
+    expect(query.mock.calls[0][0]).toContain("sort_order = t.ord");
+    // Real ids with their positions; no «unassigned» here.
     expect(query.mock.calls[0][1]).toEqual([
       ["status-c", "status-a", "status-b"],
+      [0, 1, 2],
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -212,12 +222,36 @@ describe("ReferenceDataService", () => {
     );
   });
 
+  it("stores the «Без статуса» position as a setting, keeping real ids in the update", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [], rowCount: 2 } as unknown as {
+        rows: Record<string, unknown>[];
+      },
+      { rows: [] }, // system_settings upsert
+    ]);
+    await service.reorderLeadStatuses(actor, {
+      statusIds: ["status-a", "unassigned", "status-b"],
+    });
+    // The lead_statuses UPDATE excludes «unassigned» but keeps its full-list
+    // positions (0 and 2), so it interleaves correctly with the stored one.
+    expect(query.mock.calls[0][1]).toEqual([
+      ["status-a", "status-b"],
+      [0, 2],
+    ]);
+    // The unassigned position (index 1) is written to system_settings.
+    const settingsCall = query.mock.calls.find(([sql]) =>
+      String(sql).includes("lead_board_unassigned_sort_order"),
+    );
+    expect(settingsCall).toBeDefined();
+    expect(settingsCall![1]).toEqual([1, actor.userId]);
+  });
+
   it("rejects lead status reorder when the id list is empty", async () => {
     const { service, query, policy } = createServiceWithQueryResults([]);
     await expect(
       service.reorderLeadStatuses(actor, { statusIds: [] }),
     ).rejects.toThrow("Список статусов воронки пуст.");
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(actor);
     expect(query).not.toHaveBeenCalled();
   });
 

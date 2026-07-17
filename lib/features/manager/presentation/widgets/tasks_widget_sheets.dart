@@ -817,6 +817,10 @@ class _TaskDialog extends StatefulWidget {
   )?
   onSearchEntities;
 
+  /// When set the dialog EDITS this task instead of creating one: fields are
+  /// prefilled and the button says «Сохранить».
+  final Map<String, dynamic>? task;
+
   const _TaskDialog({
     required this.employees,
     required this.students,
@@ -824,6 +828,7 @@ class _TaskDialog extends StatefulWidget {
     required this.groups,
     required this.teachers,
     this.onSearchEntities,
+    this.task,
   });
 
   @override
@@ -838,11 +843,31 @@ class _TaskDialogState extends State<_TaskDialog> {
   String? _selectedEntityLabel;
   String? _selectedEmployeeUserId;
   DateTime? _dueDate;
+  String _priority = 'medium';
+  // false → the deadline is «all-day» (a date with no meaningful time).
+  bool _dueHasTime = true;
+
+  bool get _isEdit => widget.task != null;
 
   @override
   void initState() {
     super.initState();
     _titleCtrl.addListener(_onFormChanged);
+    final task = widget.task;
+    if (task != null) {
+      _titleCtrl.text = task['title']?.toString() ?? '';
+      _descCtrl.text = task['description']?.toString() ?? '';
+      _entityType = task['entity_type']?.toString() ?? 'student';
+      _selectedEntityId = task['entity_id']?.toString();
+      _selectedEntityLabel = task['entity_name']?.toString();
+      _selectedEmployeeUserId = task['assigned_to']?.toString();
+      _priority = task['priority']?.toString() ?? 'medium';
+      _dueHasTime = task['due_all_day'] != true;
+      final due = task['due_at'];
+      if (due != null) {
+        _dueDate = DateTime.tryParse(due.toString())?.toLocal();
+      }
+    }
   }
 
   @override
@@ -857,8 +882,9 @@ class _TaskDialogState extends State<_TaskDialog> {
     if (mounted) setState(() {});
   }
 
-  /// Date THEN time: the deadline drives the -1h/-10m/overdue reminders, so a
-  /// date-only due date (i.e. midnight) would fire them in the small hours.
+  /// Date, then time only when «со временем» is on. With a time the deadline
+  /// drives the -1h/-10m/overdue reminders; «без времени» stores an all-day
+  /// deadline (kept at noon so a reminder never lands in the small hours).
   Future<void> _pickDueAt() async {
     final now = DateTime.now();
     final date = await showDatePicker(
@@ -868,6 +894,12 @@ class _TaskDialogState extends State<_TaskDialog> {
       lastDate: now.add(const Duration(days: 365)),
     );
     if (date == null || !mounted) return;
+    if (!_dueHasTime) {
+      setState(() {
+        _dueDate = DateTime(date.year, date.month, date.day, 12, 0);
+      });
+      return;
+    }
     final time = await showTimePicker(
       context: context,
       initialTime: _dueDate == null
@@ -876,8 +908,6 @@ class _TaskDialogState extends State<_TaskDialog> {
     );
     if (!mounted) return;
     setState(() {
-      // Cancelling the time step keeps whatever time was already set (noon for
-      // a fresh deadline) rather than silently snapping back to midnight.
       final fallback = _dueDate == null
           ? const TimeOfDay(hour: 12, minute: 0)
           : TimeOfDay.fromDateTime(_dueDate!);
@@ -895,12 +925,16 @@ class _TaskDialogState extends State<_TaskDialog> {
   @override
   Widget build(BuildContext context) {
     final entityItems = _entityItems();
+    // Owner rule: a task must carry a deadline, so «Создать» is disabled until
+    // one is set (title and object were already required).
     final canSubmit =
-        _titleCtrl.text.trim().isNotEmpty && _selectedEntityId != null;
+        _titleCtrl.text.trim().isNotEmpty &&
+        _selectedEntityId != null &&
+        _dueDate != null;
 
     return AlertDialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      title: const Text('Новая задача'),
+      title: Text(_isEdit ? 'Редактировать задачу' : 'Новая задача'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -975,13 +1009,55 @@ class _TaskDialogState extends State<_TaskDialog> {
                   setState(() => _selectedEmployeeUserId = item?.id),
             ),
             const SizedBox(height: 12),
+            // Priority (real, stored — was a dead filter before).
+            DropdownButtonFormField<String>(
+              initialValue: _priority,
+              dropdownColor: Theme.of(context).colorScheme.surface,
+              decoration: const InputDecoration(labelText: 'Приоритет'),
+              items: const [
+                DropdownMenuItem(value: 'high', child: Text('Высокий')),
+                DropdownMenuItem(value: 'medium', child: Text('Средний')),
+                DropdownMenuItem(value: 'low', child: Text('Низкий')),
+              ],
+              onChanged: (value) =>
+                  setState(() => _priority = value ?? 'medium'),
+            ),
+            const SizedBox(height: 4),
+            // With-time / all-day toggle for the deadline.
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Указать время'),
+              subtitle: Text(
+                _dueHasTime ? 'Срок со временем' : 'Срок без времени (весь день)',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+              value: _dueHasTime,
+              onChanged: (value) => setState(() {
+                _dueHasTime = value;
+                // Re-normalise an already-picked date to the new mode: an
+                // all-day deadline sits at noon.
+                if (!value && _dueDate != null) {
+                  _dueDate = DateTime(
+                    _dueDate!.year,
+                    _dueDate!.month,
+                    _dueDate!.day,
+                    12,
+                  );
+                }
+              }),
+            ),
             OutlinedButton.icon(
               onPressed: _pickDueAt,
               icon: const Icon(Icons.event_rounded, size: 18),
               label: Text(
                 _dueDate == null
-                    ? 'Установить срок'
-                    : DateFormat('dd.MM.yyyy HH:mm').format(_dueDate!),
+                    ? 'Установить срок *'
+                    : DateFormat(
+                        _dueHasTime ? 'dd.MM.yyyy HH:mm' : 'dd.MM.yyyy',
+                      ).format(_dueDate!),
               ),
             ),
           ],
@@ -1001,6 +1077,8 @@ class _TaskDialogState extends State<_TaskDialog> {
                     'entity_type': _entityType,
                     'entity_id': _selectedEntityId,
                     'assigned_to': _selectedEmployeeUserId,
+                    'priority': _priority,
+                    'due_all_day': !_dueHasTime,
                     // toUtc() matters: a bare local ISO string carries no
                     // offset, so the timestamptz column would read it in the
                     // server's zone and shift the deadline.
@@ -1008,7 +1086,7 @@ class _TaskDialogState extends State<_TaskDialog> {
                   });
                 }
               : null,
-          child: const Text('Создать'),
+          child: Text(_isEdit ? 'Сохранить' : 'Создать'),
         ),
       ],
     );

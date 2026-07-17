@@ -72,10 +72,17 @@ class _LessonCard extends StatelessWidget {
   final ScheduleEntry entry;
   final bool inHand;
   final bool ghost;
+
+  /// Touch-only: this card is the tapped one, so its resize handles are out and
+  /// a second tap opens it. It has to LOOK picked, or the handles appear to
+  /// belong to nothing.
+  final bool selected;
+
   const _LessonCard({
     required this.entry,
     this.inHand = false,
     this.ghost = false,
+    this.selected = false,
   });
 
   Color get _accent {
@@ -108,10 +115,10 @@ class _LessonCard extends StatelessWidget {
             : accent.withAlpha(34),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: ghost ? AppColor.gold : accent,
-          width: ghost || entry.highlighted || inHand ? 2 : 1,
+          color: ghost || selected ? AppColor.gold : accent,
+          width: ghost || selected || entry.highlighted || inHand ? 2 : 1,
         ),
-        boxShadow: inHand ? AppShadow.shLift : null,
+        boxShadow: inHand || selected ? AppShadow.shLift : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,6 +137,17 @@ class _LessonCard extends StatelessWidget {
                   ),
                 ),
               ),
+              // A frozen lesson used to look exactly like a movable one, so
+              // «drag does nothing» read as a broken grid rather than a rule.
+              if (!entry.movable && !inHand)
+                Padding(
+                  padding: const EdgeInsets.only(left: 2),
+                  child: Icon(
+                    Icons.lock_outline_rounded,
+                    color: cs.onSurfaceVariant,
+                    size: 11,
+                  ),
+                ),
               if (entry.conflicts.isNotEmpty)
                 const Icon(
                   Icons.warning_amber_rounded,

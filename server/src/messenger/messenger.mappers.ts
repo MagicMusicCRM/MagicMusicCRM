@@ -30,6 +30,8 @@ export interface ChatRow {
   assigned_last_name?: string | null;
   folder?: string | null;
   archived_at?: Date | string | null;
+  branch_id?: string | null;
+  branch_name?: string | null;
 }
 
 export interface MessageRow {
@@ -107,6 +109,8 @@ export function toChatSummaryDto(row: ChatRow) {
         : null,
       folder: row.folder ?? null,
       archived: row.archived_at != null,
+      branchId: row.branch_id ?? null,
+      branchName: row.branch_name ?? null,
       slug: row.slug ?? null,
       isSystem: row.is_system == true,
     };

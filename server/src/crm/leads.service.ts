@@ -132,6 +132,13 @@ export class LeadsService {
   async listLeadBoard(actor: ActorContext, query: LeadBoardQuery) {
     this.policy.assertCanWriteCrm(actor);
     const limit = Math.min(query.limit ?? 25, 50);
+    // Where the «Без статуса» column sits among the real ones. Stored by the
+    // reorder endpoint; null (default) keeps it last, as before.
+    const unassignedSortResult = await this.database.query<{ value: number }>(
+      `select value::int as value from app.system_settings
+        where key = 'lead_board_unassigned_sort_order'`,
+    );
+    const unassignedSort = unassignedSortResult.rows[0]?.value ?? null;
     const filter = this.buildLeadBoardFilter(query);
     const countFilter = this.buildLeadBoardFilter({
       ...query,
@@ -233,7 +240,11 @@ export class LeadsService {
           id: statusKey,
           name: row.status_name ?? "Без статуса",
           color: row.status_color ?? null,
-          sortOrder: row.status_sort_order ?? 9999,
+          // «Без статуса» takes its stored position if one was set, else last.
+          sortOrder:
+            statusKey === "unassigned"
+              ? (unassignedSort ?? 9999)
+              : (row.status_sort_order ?? 9999),
           createdAt: row.created_at,
           requiresReason: false,
           isTerminal: false,
@@ -906,6 +917,10 @@ export class LeadsService {
         filters.push(`(${processed})`);
       } else if (quick === "deferred") {
         filters.push(`(${deferred})`);
+      } else if (quick === "new") {
+        // «Новые» = no status assigned yet, or an explicit «Новый». Mirrors the
+        // overview `new_leads_count` metric so the tile and this filter agree.
+        filters.push(`(l.status_id is null or ${statusExpr} in ('new', 'новый'))`);
       } else {
         filters.push(`not (${processed}) and not (${deferred})`);
       }

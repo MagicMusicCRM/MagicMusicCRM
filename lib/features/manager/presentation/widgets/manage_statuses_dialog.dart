@@ -25,15 +25,24 @@ part 'manage_statuses_widgets.dart';
 /// / RBAC wiring is preserved exactly as before; this is a presentation reskin
 /// on top of the same calls.
 class ManageStatusesDialog extends ConsumerStatefulWidget {
-  const ManageStatusesDialog({super.key});
+  /// Seed columns from the board — they already carry «Без статуса»
+  /// (id 'unassigned') at its stored position, in the row shape the editor
+  /// uses. When null, the editor falls back to the real statuses only (no
+  /// «Без статуса» row).
+  final List<Map<String, dynamic>>? initialColumns;
 
-  static Future<void> show(BuildContext context) {
+  const ManageStatusesDialog({super.key, this.initialColumns});
+
+  static Future<void> show(
+    BuildContext context, {
+    List<Map<String, dynamic>>? initialColumns,
+  }) {
     return showMagicSheet<void>(
       context,
       title: 'Колонки воронки',
       subtitle: 'Лид-борд · добавление, порядок, удаление',
       icon: Icons.view_week_rounded,
-      builder: (_) => const ManageStatusesDialog(),
+      builder: (_) => ManageStatusesDialog(initialColumns: initialColumns),
     );
   }
 
@@ -51,8 +60,20 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
   @override
   void initState() {
     super.initState();
-    _loadStatuses();
+    final seed = widget.initialColumns;
+    if (seed != null && seed.isNotEmpty) {
+      // Board columns already include «Без статуса» at its stored position.
+      _statuses = List<Map<String, dynamic>>.from(seed);
+      _loading = false;
+    } else {
+      _loadStatuses();
+    }
   }
+
+  /// The synthetic «Без статуса» column, if present — it has no lead_status row
+  /// and can't be renamed/deleted, only reordered.
+  static bool _isUnassigned(Map<String, dynamic> s) =>
+      s['id']?.toString() == 'unassigned';
 
   Future<void> _loadStatuses() async {
     setState(() {
@@ -62,8 +83,12 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
     try {
       final res = await ref.read(leadStatusesProvider.future);
       if (!mounted) return;
+      // Preserve any «Без статуса» row across a reload (add/delete): the
+      // provider returns real statuses only. Its exact position is restored
+      // from the board next time the editor is opened.
+      final unassigned = _statuses.where(_isUnassigned).toList();
       setState(() {
-        _statuses = List<Map<String, dynamic>>.from(res);
+        _statuses = [...res, ...unassigned];
         _loading = false;
       });
     } catch (e) {
@@ -296,6 +321,7 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
           index: index,
           status: s,
           enabled: !_busy,
+          deletable: !_isUnassigned(s),
           onDelete: () => _deleteStatus(s),
         );
       },

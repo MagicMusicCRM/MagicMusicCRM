@@ -79,6 +79,33 @@ export class CrmPolicy {
     );
   }
 
+  /**
+   * Управление КАТАЛОГОМ абонементов (создание/редактирование/удаление пакетов
+   * с ценами) — это ценовая конфигурация, т.е. общешкольные финансы: только
+   * Директор и Администратор системы. ✔ Владелец: Управляющий абонементы ВИДИТ
+   * (каталог + абонементы учеников) и может ВЫДАВАТЬ их ученикам, но САМИ пакеты
+   * не создаёт и не правит.
+   */
+  assertCanManageSubscriptionPackages(actor: ActorContext): void {
+    if (this.canReadSchoolFinance(actor)) return;
+    throw new ForbiddenException(
+      "Управление каталогом абонементов доступно только директору.",
+    );
+  }
+
+  /**
+   * Системные настройки (конфигурация воронки лидов: колонки/их порядок и т.п.).
+   * ✔ Владелец: «любые настройки системы может вносить только сис-админ,
+   * директор и управляющий» — Администратор (администратор филиала) СЮДА не
+   * входит, в отличие от обычной операционной записи (assertCanWriteCrm).
+   */
+  assertCanManageSystemSettings(actor: ActorContext): void {
+    if (isManagerRole(actor.role)) return;
+    throw new ForbiddenException(
+      "Настройки системы доступны только управляющему, директору и системному администратору.",
+    );
+  }
+
   // Operational CRM work: administrators must be able to cover each other's
   // shifts. Role management stays separate in ProfilePolicy/canAssignRole.
   assertManagerOnly(actor: ActorContext): void {

@@ -75,7 +75,9 @@ describe("TasksService", () => {
           title: "Позвонить",
           description: null,
           status: "open",
+          priority: "medium",
           dueAt: "2026-06-13T00:00:00.000Z",
+          dueAllDay: false,
           createdBy: "admin-a",
           createdAt: "2026-06-12T00:00:00.000Z",
         },
@@ -161,7 +163,9 @@ describe("TasksService", () => {
           title: "Позвонить",
           description: "Приоритет высокий, WhatsApp",
           status: "open",
+          priority: "medium",
           dueAt: "2026-06-13T00:00:00.000Z",
+          dueAllDay: false,
           createdBy: "admin-a",
           createdAt: "2026-06-12T00:00:00.000Z",
           creatorName: "Ольга Админ",
@@ -307,6 +311,7 @@ describe("TasksService", () => {
       entityType: "student",
       entityId: "student-a",
       title: "Позвонить",
+      dueAt: "2026-06-13T10:00:00.000Z",
     } as never);
 
     expect(String(query.mock.calls[1][0])).toContain("'created'");
@@ -326,5 +331,115 @@ describe("TasksService", () => {
     expect(query.mock.calls[0][1][0]).toBe("due_at");
     // Cross-task oversight, not shop-floor operational data.
     expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+  });
+
+  it("counts tasks per Moscow day for the calendar, filtered like the board", async () => {
+    const { service, query, policy } = createService([
+      { day: "2026-07-10", count: 3 },
+      { day: "2026-07-12", count: 1 },
+    ]);
+
+    await expect(
+      service.taskCalendar(actor, {
+        from: "2026-07-01T00:00:00.000Z",
+        to: "2026-08-01T00:00:00.000Z",
+        priority: "high",
+      } as never),
+    ).resolves.toEqual({
+      items: [
+        { day: "2026-07-10", count: 3 },
+        { day: "2026-07-12", count: 1 },
+      ],
+    });
+
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("at time zone 'Europe/Moscow'");
+    expect(sql).toContain("group by 1");
+    expect(sql).toContain("task.due_at is not null");
+    // Same filter params as the board list — priority at position 12, range at
+    // 15/16 — so a day's count matches the list you get by opening it.
+    expect(query.mock.calls[0][1][11]).toBe("high");
+    expect(query.mock.calls[0][1][14]).toBe("2026-07-01T00:00:00.000Z");
+    expect(query.mock.calls[0][1][15]).toBe("2026-08-01T00:00:00.000Z");
+    // Reading, not a management op.
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+  });
+
+  it("refuses to create a task with no due date (owner rule)", async () => {
+    const { service } = createService();
+    await expect(
+      service.createTask(actor, {
+        entityType: "student",
+        entityId: "student-a",
+        title: "Позвонить",
+      } as never),
+    ).rejects.toThrow("срок выполнения");
+  });
+
+  it("persists priority and the all-day flag on create", async () => {
+    const { service, query } = createService();
+    query
+      .mockResolvedValueOnce({ rows: [taskRow({ priority: "high" })] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await service.createTask(actor, {
+      entityType: "student",
+      entityId: "student-a",
+      title: "Позвонить",
+      dueAt: "2026-06-13T10:00:00.000Z",
+      priority: "high",
+      dueAllDay: true,
+    } as never);
+
+    const insert = query.mock.calls[0][1];
+    // …title, description, status, priority, dueAt, dueAllDay, createdBy
+    expect(insert).toEqual([
+      "student",
+      "student-a",
+      null,
+      "Позвонить",
+      null,
+      null,
+      "high",
+      "2026-06-13T10:00:00.000Z",
+      true,
+      "manager-a",
+    ]);
+  });
+
+  it("filters the board by real priority, not a title substring", async () => {
+    const { service, query } = createService([]);
+
+    await service.listTasks(actor, { priority: "high" } as never);
+
+    // Priority is bound at position 12; the SQL must compare the column.
+    expect(query.mock.calls[0][1][11]).toBe("high");
+    expect(String(query.mock.calls[0][0])).toContain("task.priority = $12");
+  });
+
+  it("soft-deletes a task and emits a delete event", async () => {
+    const { service, query, audit, realtime } = createService([
+      { id: "task-a" },
+    ]);
+
+    await expect(service.deleteTask(actor, "task-a")).resolves.toEqual({
+      id: "task-a",
+      deleted: true,
+    });
+
+    expect(String(query.mock.calls[0][0])).toContain("set deleted_at = now()");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "crm.task_deleted" }),
+    );
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ entity: "task", action: "deleted" }),
+    );
+  });
+
+  it("404s deleting a task that is already gone", async () => {
+    const { service } = createService([]);
+    await expect(service.deleteTask(actor, "task-x")).rejects.toThrow(
+      "не найдена",
+    );
   });
 });

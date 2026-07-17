@@ -1,4 +1,12 @@
-import { IsDateString, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class UpsertTaskDto {
   @IsOptional()
@@ -30,4 +38,13 @@ export class UpsertTaskDto {
   @IsOptional()
   @IsDateString()
   dueAt?: string;
+
+  @IsOptional()
+  @IsIn(['low', 'medium', 'high'])
+  priority?: string;
+
+  // true → the due date carries no meaningful time (an «all-day» deadline).
+  @IsOptional()
+  @IsBoolean()
+  dueAllDay?: boolean;
 }

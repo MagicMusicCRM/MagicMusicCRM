@@ -323,6 +323,44 @@ describe("ProfileService role updates", () => {
     expect(database.query).toHaveBeenCalledTimes(2);
   });
 
+  it("getMe returns the staff member's assigned branches, home = first", async () => {
+    const { service, database } = createService({
+      database: {
+        query: jest
+          .fn()
+          // findByUserId → the profile
+          .mockResolvedValueOnce({ rows: [profileRow] })
+          // branch assignments (oldest first)
+          .mockResolvedValueOnce({
+            rows: [{ branch_id: "branch-2" }, { branch_id: "branch-9" }],
+          }),
+      },
+    });
+
+    const me = await service.getMe(actor);
+
+    expect(me).toMatchObject({
+      id: "profile-a",
+      branchIds: ["branch-2", "branch-9"],
+      homeBranchId: "branch-2",
+    });
+  });
+
+  it("getMe reports a null home branch when the user has no assignment", async () => {
+    const { service } = createService({
+      database: {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({ rows: [profileRow] })
+          .mockResolvedValueOnce({ rows: [] }),
+      },
+    });
+
+    const me = await service.getMe(actor);
+
+    expect(me).toMatchObject({ branchIds: [], homeBranchId: null });
+  });
+
   it("allows demoting a system_admin when another one remains", async () => {
     const { service, database } = createService({
       database: {

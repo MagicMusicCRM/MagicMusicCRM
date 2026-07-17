@@ -14,6 +14,7 @@ describe("SubscriptionsService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertCanManageSubscriptionPackages: jest.fn(),
     };
     const realtime = { emitCrmChanged: jest.fn() };
 
@@ -150,7 +151,10 @@ describe("SubscriptionsService", () => {
       createdAt: "2026-06-22T00:00:00.000Z",
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    // Package catalog edits are a school-finance concern → director-level.
+    expect(policy.assertCanManageSubscriptionPackages).toHaveBeenCalledWith(
+      actor,
+    );
     expect(query.mock.calls[0][1]).toEqual([
       "8 уроков",
       null,

@@ -63,7 +63,27 @@ export class ProfileService {
       profile = await this.findByUserId(actor.userId);
     }
     if (!profile) throw new NotFoundException("Профиль не найден.");
-    return this.toProfileDto(profile);
+    // The staff member's assigned branches, oldest first. The client opens the
+    // schedule/clients on the FIRST of these instead of «the first branch in
+    // the system» — otherwise every admin lands on «Сокол» regardless of where
+    // they actually work.
+    const branches = await this.database.query<{ branch_id: string }>(
+      `
+        select sba.branch_id::text as branch_id
+        from app.staff_members sm
+        join app.staff_branch_assignments sba
+          on sba.staff_member_id = sm.id and sba.deleted_at is null
+        where sm.profile_id = $1 and sm.deleted_at is null
+        order by sba.created_at asc, sba.branch_id asc
+      `,
+      [profile.id],
+    );
+    const branchIds = branches.rows.map((r) => r.branch_id);
+    return {
+      ...this.toProfileDto(profile),
+      branchIds,
+      homeBranchId: branchIds[0] ?? null,
+    };
   }
 
   async updateMe(actor: ActorContext, dto: UpdateProfileDto) {

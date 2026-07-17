@@ -61,7 +61,9 @@ export interface TaskRow {
   title: string;
   description: string | null;
   status: string;
+  priority?: string;
   due_at: Date | string | null;
+  due_all_day?: boolean;
   created_by: string | null;
   created_at: Date | string;
 }
@@ -119,6 +121,14 @@ export function diffTaskRows(before: TaskRow, after: TaskRow): TaskChange[] {
       field: "status",
       oldValue: before.status,
       newValue: after.status,
+    });
+  }
+
+  if ((before.priority ?? null) !== (after.priority ?? null)) {
+    changes.push({
+      field: "priority",
+      oldValue: before.priority ?? null,
+      newValue: after.priority ?? null,
     });
   }
 
@@ -297,7 +307,11 @@ export function toTaskDto(row: TaskRow) {
     title: row.title,
     description: row.description,
     status: row.status,
+    // Default so a row from a query that doesn't select priority (the client
+    // self-view) still hands the UI a usable value.
+    priority: row.priority ?? "medium",
     dueAt: row.due_at,
+    dueAllDay: row.due_all_day ?? false,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };

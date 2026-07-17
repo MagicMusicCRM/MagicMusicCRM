@@ -175,7 +175,7 @@ export class SubscriptionsService {
     actor: ActorContext,
     dto: UpsertSubscriptionPackageDto,
   ) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSubscriptionPackages(actor);
     const result = await this.database.query<SubscriptionPackageRow>(
       `
         insert into app.subscription_packages
@@ -211,7 +211,7 @@ export class SubscriptionsService {
     packageId: string,
     dto: UpdateSubscriptionPackageDto,
   ) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSubscriptionPackages(actor);
     const result = await this.database.query<SubscriptionPackageRow>(
       `
         update app.subscription_packages
@@ -252,7 +252,7 @@ export class SubscriptionsService {
   }
 
   async deleteSubscriptionPackage(actor: ActorContext, packageId: string) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSubscriptionPackages(actor);
     const result = await this.database.query<{ id: string }>(
       `
         update app.subscription_packages

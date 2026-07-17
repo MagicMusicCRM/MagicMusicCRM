@@ -419,6 +419,31 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
     }
   }
 
+  /// Open (or create) a 1:1 chat with a group member. Admins and up only —
+  /// gated at the call site too. Closes this dialog and hands the chat to the
+  /// messenger via [onNavigateToChat].
+  Future<void> _startChatWithMember(String? memberUserId) async {
+    if (!_isManagerOrAdminRole ||
+        memberUserId == null ||
+        memberUserId.isEmpty) {
+      return;
+    }
+    try {
+      final chat = await ref
+          .read(magicMessengerServiceProvider)
+          .ensureDirectChat(memberUserId);
+      if (!mounted) return;
+      if (Navigator.canPop(context)) Navigator.pop(context);
+      widget.onNavigateToChat?.call(chat);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось открыть чат: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _addMembers() async {
     if (!_isManagerOrAdminRole) return;
 

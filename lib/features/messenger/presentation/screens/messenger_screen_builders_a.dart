@@ -504,6 +504,49 @@ extension _MessengerBuildersA on _MessengerScreenState {
             },
             onSelected: (f) => _emitState(() => _selectedFolder = f),
           ),
+        // Branch filter — staff only. «Все филиалы» + one per branch. A client
+        // with no branch assigned stays visible under every filter.
+        if (showInboxFolders(widget.role) && _chatBranches.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.apartment_rounded,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButton<String?>(
+                    value: _chatBranchFilter,
+                    isExpanded: true,
+                    isDense: true,
+                    underline: const SizedBox.shrink(),
+                    hint: const Text('Все филиалы'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Все филиалы'),
+                      ),
+                      for (final b in _chatBranches)
+                        DropdownMenuItem<String?>(
+                          value: b['id'].toString(),
+                          child: Text(
+                            b['name']?.toString() ?? 'Филиал',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) {
+                      _emitState(() => _chatBranchFilter = v);
+                      _loadChatList();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         // Chat list
         Expanded(
           child: _loadingChats

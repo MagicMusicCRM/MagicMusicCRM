@@ -579,6 +579,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       return SearchableSelectItem(
                         id: s['id'].toString(),
                         label: name,
+                        data: s,
                       );
                     }).toList();
 
@@ -586,11 +587,44 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       context: context,
                       title: 'Выберите ученика',
                       hintText: 'Поиск по ФИО...',
+                      // [_students] is only the pre-loaded first page (100 of
+                      // ~1000). Filtering it locally made every student past
+                      // that page unfindable, however exactly the name was
+                      // typed — so a real query goes to the server instead.
                       items: items,
+                      onSearch: (query) async {
+                        final response = await _crm.searchStudents(
+                          q: query,
+                          limit: 50,
+                        );
+                        final rows = response['items'];
+                        if (rows is! List) return const <SearchableSelectItem>[];
+                        return [
+                          for (final row
+                              in rows.whereType<Map<String, dynamic>>())
+                            SearchableSelectItem(
+                              id: row['id'].toString(),
+                              label: _getStudentNameFromData(row),
+                              data: row,
+                            ),
+                        ];
+                      },
                       selectedId: _selectedStudentId,
                       isNullable: false,
-                      onSelected: (item) =>
-                          setState(() => _selectedStudentId = item?.id),
+                      onSelected: (item) => setState(() {
+                        _selectedStudentId = item?.id;
+                        // A student found by the server search is not in the
+                        // pre-loaded page, and _getStudentName only reads that
+                        // page — without this the field would keep saying «Не
+                        // выбран» for the student just picked.
+                        final row = item?.data;
+                        if (row != null &&
+                            !_students.any(
+                              (s) => s['id'].toString() == item!.id,
+                            )) {
+                          _students = [..._students, row];
+                        }
+                      }),
                     );
                   },
                 ),

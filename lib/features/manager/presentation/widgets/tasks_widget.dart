@@ -5,6 +5,7 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/show_clien
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
@@ -53,12 +54,36 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     DateTime.now().day,
   );
 
+  // Calendar: год / месяц / день. Opens on «день» = today, per owner rule.
+  String _calView = 'day';
+  DateTime _calMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  int _calYear = DateTime.now().year;
+  // Moscow-date → task count, for the month/year grids.
+  Map<String, int> _calCounts = {};
+  bool _calLoading = false;
+
   @override
   void initState() {
     super.initState();
     _searchCtrl.addListener(_onSearchChanged);
+    _applyOverviewFocus();
     _loadFilterData();
     _loadTasks();
+  }
+
+  /// Apply a filter handed in from the overview (e.g. «Просроченные задачи» →
+  /// only overdue). Consumed once, before the first load, so the deep-linked
+  /// filter is what the board shows on open.
+  void _applyOverviewFocus() {
+    final focus = ref.read(crmSectionFocusProvider.notifier).consume('tasks');
+    if (focus == null) return;
+    final due = focus.filters['due'];
+    final status = focus.filters['status'];
+    if (due != null) _dueFilter = due;
+    if (status != null) _statusFilter = status;
+    // A due window other than a single day makes the day navigator irrelevant;
+    // the view switcher stays on «День» only when the filter is day-scoped.
+    if (due != null && due != 'day') _calView = 'day';
   }
 
   @override
@@ -159,6 +184,68 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     };
   }
 
+  /// Load per-day counts for the currently-shown month or year grid, using the
+  /// same filters as the list so the numbers agree. Range is widened a few days
+  /// each side so a Moscow-date bucket near a month/year boundary is never
+  /// clipped by the UTC fetch window.
+  Future<void> _loadCalendar() async {
+    if (_calView == 'day') return;
+    setState(() => _calLoading = true);
+    final DateTime periodStart;
+    final DateTime periodEnd;
+    if (_calView == 'month') {
+      periodStart = DateTime(_calMonth.year, _calMonth.month, 1);
+      periodEnd = DateTime(_calMonth.year, _calMonth.month + 1, 1);
+    } else {
+      periodStart = DateTime(_calYear, 1, 1);
+      periodEnd = DateTime(_calYear + 1, 1, 1);
+    }
+    try {
+      final counts = await ref
+          .read(magicCrmServiceProvider)
+          .taskCalendar(
+            from: periodStart
+                .subtract(const Duration(days: 2))
+                .toUtc()
+                .toIso8601String(),
+            to: periodEnd.add(const Duration(days: 2)).toUtc().toIso8601String(),
+            q: _searchCtrl.text,
+            status: _statusFilter == 'all' ? null : _statusFilter,
+            entityType: _entityTypeFilter == 'all' ? null : _entityTypeFilter,
+            assignedTo: _assigneeFilter == 'all' ? null : _assigneeFilter,
+            branchId: _branchFilter == 'all' ? null : _branchFilter,
+            priority: _priorityFilter == 'all' ? null : _priorityFilter,
+          );
+      if (!mounted) return;
+      setState(() {
+        _calCounts = counts;
+        _calLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _calLoading = false);
+    }
+  }
+
+  void _setCalView(String view) {
+    if (view == _calView) return;
+    setState(() => _calView = view);
+    if (view == 'day') {
+      _dueFilter = 'day';
+      _loadTasks();
+    } else {
+      _loadCalendar();
+    }
+  }
+
+  void _openDayFromCalendar(DateTime day) {
+    setState(() {
+      _selectedDay = DateTime(day.year, day.month, day.day);
+      _dueFilter = 'day';
+      _calView = 'day';
+    });
+    _loadTasks();
+  }
+
   Future<void> _createTask() async {
     if (_creatingTask) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -235,6 +322,8 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
         description: result['description']?.toString(),
         assignedTo: result['assigned_to']?.toString(),
         dueAt: result['due_at']?.toString(),
+        priority: result['priority']?.toString(),
+        dueAllDay: result['due_all_day'] == true,
         status: 'open',
       );
       await _loadTasks();
@@ -250,6 +339,123 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _editTask(Map<String, dynamic> task) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final crm = ref.read(magicCrmServiceProvider);
+    final profiles = ref.read(magicProfileAdminServiceProvider);
+
+    List<List<Map<String, dynamic>>> results;
+    try {
+      results = await Future.wait([
+        profiles.listProfiles(limit: 100),
+        crm.listStudents(limit: 100),
+        crm.listLeads(limit: 100),
+        crm.listGroups(limit: 100),
+        crm.listTeachers(limit: 100),
+      ]);
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось открыть задачу: $e'),
+            backgroundColor: AppColor.danger,
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => _TaskDialog(
+        employees: results[0],
+        students: results[1],
+        leads: results[2],
+        groups: results[3],
+        teachers: results[4],
+        task: task,
+        onSearchEntities: (entityType, query) async {
+          final crmService = ref.read(magicCrmServiceProvider);
+          if (entityType == 'lead') {
+            return crmService.listLeads(limit: 30, q: query);
+          }
+          final response = await crmService.searchStudents(q: query, limit: 30);
+          final items = response['items'];
+          return items is List
+              ? items.whereType<Map<String, dynamic>>().toList()
+              : <Map<String, dynamic>>[];
+        },
+      ),
+    );
+    if (result == null) return;
+
+    try {
+      await crm.updateTask(
+        task['id'].toString(),
+        entityType: result['entity_type']?.toString(),
+        entityId: result['entity_id']?.toString(),
+        title: result['title']?.toString(),
+        description: result['description']?.toString(),
+        assignedTo: result['assigned_to']?.toString(),
+        dueAt: result['due_at']?.toString(),
+        priority: result['priority']?.toString(),
+        dueAllDay: result['due_all_day'] == true,
+      );
+      await _loadTasks(showLoading: false);
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Задача обновлена')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось сохранить задачу: $e'),
+            backgroundColor: AppColor.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteTask(Map<String, dynamic> task) async {
+    final id = task['id']?.toString();
+    if (id == null || _pendingTaskIds.contains(id)) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final index = _tasks.indexWhere((t) => t['id']?.toString() == id);
+    if (index < 0) return;
+    final removed = _tasks[index];
+    // Optimistic: drop the card now, restore it if the server rejects.
+    setState(() {
+      _tasks.removeAt(index);
+      _pendingTaskIds.add(id);
+    });
+    try {
+      await ref.read(magicCrmServiceProvider).deleteTask(id);
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Задача удалена')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        final at = index.clamp(0, _tasks.length);
+        _tasks.insert(at, removed);
+      });
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось удалить задачу: $e'),
+          backgroundColor: AppColor.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _pendingTaskIds.remove(id));
     }
   }
 
@@ -562,6 +768,8 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
               onClear: _clearFilters,
             ),
           ),
+          // Год / Месяц / День — opens on «День» = today (owner rule).
+          _TaskViewSwitcher(view: _calView, onChanged: _setCalView),
           if (canControl)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
@@ -574,7 +782,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                 ),
               ),
             ),
-          if (_dueFilter == 'day')
+          if (_calView == 'day' && _dueFilter == 'day')
             _DayNavigator(
               day: _selectedDay,
               onShift: (days) => _setDropdownFilter(
@@ -588,44 +796,86 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                 );
               },
             ),
-          Expanded(
-            child: _loading
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: ListSkeleton(count: 6),
-                  )
-                : _loadError != null
-                ? _TasksError(error: _loadError, onRetry: _loadTasks)
-                : _tasks.isEmpty
-                ? Center(
-                    child: Text(
-                      'Нет задач',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  )
-                : RefreshIndicator(
-                    color: AppColor.gold,
-                    onRefresh: _loadTasks,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: _tasks.length,
-                      itemBuilder: (ctx, i) => _TaskCard(
-                        task: _tasks[i],
-                        isPending: _pendingTaskIds.contains(
-                          _tasks[i]['id']?.toString(),
-                        ),
-                        onStatusChange: _updateStatus,
-                        onTimelineTap: _showTaskTimeline,
-                        onRescheduleTap: _rescheduleTask,
-                        onReassignTap: _reassignTask,
-                        onOpenEntity: _openTaskEntity,
-                      ),
-                    ),
-                  ),
-          ),
+          Expanded(child: _buildCalendarBody()),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarBody() {
+    if (_calView == 'year') {
+      return _TaskYearGrid(
+        year: _calYear,
+        counts: _calCounts,
+        loading: _calLoading,
+        onPrev: () => setState(() {
+          _calYear--;
+          _loadCalendar();
+        }),
+        onNext: () => setState(() {
+          _calYear++;
+          _loadCalendar();
+        }),
+        onMonthTap: (month) => setState(() {
+          _calMonth = DateTime(_calYear, month);
+          _calView = 'month';
+          _loadCalendar();
+        }),
+      );
+    }
+    if (_calView == 'month') {
+      return _TaskMonthGrid(
+        month: _calMonth,
+        counts: _calCounts,
+        loading: _calLoading,
+        onPrev: () => setState(() {
+          _calMonth = DateTime(_calMonth.year, _calMonth.month - 1);
+          _loadCalendar();
+        }),
+        onNext: () => setState(() {
+          _calMonth = DateTime(_calMonth.year, _calMonth.month + 1);
+          _loadCalendar();
+        }),
+        onDayTap: _openDayFromCalendar,
+      );
+    }
+    // Day view: the existing filtered list.
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12),
+        child: ListSkeleton(count: 6),
+      );
+    }
+    if (_loadError != null) {
+      return _TasksError(error: _loadError, onRetry: _loadTasks);
+    }
+    if (_tasks.isEmpty) {
+      return Center(
+        child: Text(
+          'Нет задач',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      color: AppColor.gold,
+      onRefresh: _loadTasks,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: _tasks.length,
+        itemBuilder: (ctx, i) => _TaskCard(
+          task: _tasks[i],
+          isPending: _pendingTaskIds.contains(_tasks[i]['id']?.toString()),
+          onStatusChange: _updateStatus,
+          onTimelineTap: _showTaskTimeline,
+          onRescheduleTap: _rescheduleTask,
+          onReassignTap: _reassignTask,
+          onOpenEntity: _openTaskEntity,
+          onEditTap: _editTask,
+          onDeleteTap: _deleteTask,
+        ),
       ),
     );
   }
@@ -647,11 +897,14 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     if (_statusFilter == value) return;
     setState(() => _statusFilter = value);
     _loadTasks();
+    if (_calView != 'day') _loadCalendar();
   }
 
   void _setDropdownFilter(void Function() update) {
     setState(update);
     _loadTasks();
+    // A grid summarises the same filtered set, so keep its counts in step.
+    if (_calView != 'day') _loadCalendar();
   }
 
   void _clearFilters() {

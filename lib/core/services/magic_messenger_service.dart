@@ -11,10 +11,16 @@ class MagicMessengerService {
 
   const MagicMessengerService(this._api);
 
-  Future<List<Map<String, dynamic>>> listChats({int limit = 50}) async {
+  Future<List<Map<String, dynamic>>> listChats({
+    int limit = 50,
+    String? branchId,
+  }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/messenger/chats',
-      queryParameters: {'limit': limit},
+      queryParameters: {
+        'limit': limit,
+        if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+      },
     );
     return _items(response).map(_legacyChat).toList();
   }
@@ -399,6 +405,8 @@ class MagicMessengerService {
       'assigned_to': item['assignedTo'],
       'archived': item['archived'] == true,
       'owner_name': item['ownerName'],
+      'branch_id': item['branchId'],
+      'branch_name': item['branchName'],
     };
   }
 

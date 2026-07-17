@@ -105,8 +105,8 @@ describe("StaffService", () => {
     ).rejects.toThrow("Только администратор");
   });
 
-  it("updates staff profile and CRM fields for admins", async () => {
-    const adminActor = { userId: "admin-a", role: "admin" as const };
+  it("updates staff profile and CRM fields, changing the role as system_admin", async () => {
+    const sysActor = { userId: "sys-a", role: "system_admin" as const };
     const { service, query, audit } = createService([
       {
         id: "staff-a",
@@ -128,7 +128,7 @@ describe("StaffService", () => {
     ]);
 
     await expect(
-      service.updateStaff(adminActor, "staff-a", {
+      service.updateStaff(sysActor, "staff-a", {
         firstName: " Ольга ",
         lastName: " Смирнова ",
         phone: "+79992222222",
@@ -151,7 +151,9 @@ describe("StaffService", () => {
       branches: [{ id: "branch-a", name: "Центр" }],
     });
 
-    expect(query.mock.calls[0][1]).toEqual([
+    // A role change first reads the subject's current role (the canAssignRole
+    // guard), so the UPDATE is the SECOND query.
+    expect(query.mock.calls[1][1]).toEqual([
       "staff-a",
       "Ольга",
       "Смирнова",
@@ -169,6 +171,45 @@ describe("StaffService", () => {
         entityId: "staff-a",
       }),
     );
+  });
+
+  it("edits an admin's non-role fields without reading the current role", async () => {
+    const adminActor = { userId: "admin-a", role: "admin" as const };
+    const { service, query } = createService([
+      {
+        id: "staff-a",
+        role: "teacher",
+        position: "Педагог",
+        status: "working",
+        custom_data: {},
+        profile_id: "profile-a",
+        profile_user_id: "user-a",
+        app_role: "teacher",
+        is_app_account: true,
+        first_name: "Пётр",
+        last_name: "Ким",
+        email: "teacher@example.com",
+        phone: "+79990000000",
+        branches: [],
+        created_at: "2026-06-13T00:00:00.000Z",
+      },
+    ]);
+
+    await expect(
+      service.updateStaff(adminActor, "staff-a", { phone: "+79991112233" }),
+    ).resolves.toMatchObject({ id: "staff-a" });
+
+    // No role in the patch → no guard SELECT, straight to the UPDATE.
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks an admin from changing a staff member's role (admin manages no roles)", async () => {
+    const adminActor = { userId: "admin-a", role: "admin" as const };
+    const { service } = createService([{ role: "teacher" }]);
+
+    await expect(
+      service.updateStaff(adminActor, "staff-a", { role: "manager" }),
+    ).rejects.toThrow("Недостаточно прав");
   });
 
   it("lists staff with role status authorization and birthday filters", async () => {

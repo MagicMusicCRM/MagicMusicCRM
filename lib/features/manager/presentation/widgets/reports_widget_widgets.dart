@@ -434,6 +434,62 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
     _loadActivity();
   }
 
+  /// «Активность» used to be a dead-end list. Every row carries the entity it
+  /// touched (entity_type + entity_id — already in the payload), so a tap now
+  /// opens that client / lesson / profile. `audit_events.entity_type` is a free
+  /// string, so unknown kinds are simply non-tappable (see [_activityOpenable]).
+  Future<void> _openActivityEntity(Map<String, dynamic> item) async {
+    final entityType = item['entity_type']?.toString();
+    final entityId = item['entity_id']?.toString();
+    if (entityId == null || entityId.trim().isEmpty) return;
+    try {
+      switch (entityType) {
+        case 'student':
+          showClientCard(context, entityType: 'student', entityId: entityId);
+        case 'lead':
+          showClientCard(context, entityType: 'lead', entityId: entityId);
+        case 'lesson':
+          context.push('/lessons/$entityId');
+        case 'profile':
+        case 'staff':
+          context.push('/admin/profiles/$entityId');
+        case 'group':
+          final group = await ref
+              .read(magicCrmServiceProvider)
+              .getGroup(entityId);
+          if (!mounted) return;
+          await GroupDetailDialog.show(context, group);
+        case 'teacher':
+          final teacher = await ref
+              .read(magicCrmServiceProvider)
+              .getTeacher(entityId);
+          if (!mounted) return;
+          await TeacherDetailDialog.show(context, teacher);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Не удалось открыть: $e')));
+    }
+  }
+
+  static bool _activityOpenable(Map<String, dynamic> item) {
+    const openable = {
+      'student',
+      'lead',
+      'lesson',
+      'profile',
+      'staff',
+      'group',
+      'teacher',
+    };
+    final id = item['entity_id']?.toString();
+    return id != null &&
+        id.trim().isNotEmpty &&
+        openable.contains(item['entity_type']?.toString());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -521,8 +577,12 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     itemCount: _items.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) =>
-                        _ActivityLogTile(item: _items[index]),
+                    itemBuilder: (context, index) => _ActivityLogTile(
+                      item: _items[index],
+                      onOpen: _activityOpenable(_items[index])
+                          ? () => _openActivityEntity(_items[index])
+                          : null,
+                    ),
                   ),
                 ),
         ),
@@ -533,8 +593,10 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
 
 class _ActivityLogTile extends StatelessWidget {
   final Map<String, dynamic> item;
+  // Non-null when the row's entity can be opened; a tap then routes to it.
+  final VoidCallback? onOpen;
 
-  const _ActivityLogTile({required this.item});
+  const _ActivityLogTile({required this.item, this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -552,7 +614,10 @@ class _ActivityLogTile extends StatelessWidget {
     return Material(
       color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(AppRadius.card),
-      child: Container(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        onTap: onOpen,
+        child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.card),
@@ -634,7 +699,17 @@ class _ActivityLogTile extends StatelessWidget {
                 ],
               ),
             ),
+            if (onOpen != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 6, top: 2),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
           ],
+        ),
         ),
       ),
     );

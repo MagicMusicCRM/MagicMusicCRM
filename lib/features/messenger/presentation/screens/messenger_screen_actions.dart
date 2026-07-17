@@ -378,11 +378,30 @@ extension _MessengerActions on _MessengerScreenState {
     }
   }
 
+  Future<void> _loadChatBranches() async {
+    try {
+      final branches = await ref
+          .read(magicCrmServiceProvider)
+          .listBranches(limit: 100);
+      if (mounted) _emitState(() => _chatBranches = branches);
+    } catch (_) {
+      // Non-fatal: the filter just won't show until a later reload succeeds.
+    }
+  }
+
   Future<void> _loadChatListInternal() async {
     final isStaff = _isStaffRole;
     final messenger = ref.read(magicMessengerServiceProvider);
 
-    final rawItemsFuture = messenger.listChats(limit: 100);
+    // Branch options for the inbox filter — fetched once, staff only.
+    if (isStaff && _chatBranches.isEmpty) {
+      unawaited(_loadChatBranches());
+    }
+
+    final rawItemsFuture = messenger.listChats(
+      limit: 100,
+      branchId: isStaff ? _chatBranchFilter : null,
+    );
     final channelsFuture = messenger.listChannels();
     final adminAvatarFuture = ref
         .read(magicSettingsServiceProvider)

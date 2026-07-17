@@ -70,6 +70,16 @@ export class CrmEngagementController {
     return this.tasks.listTasks(actor, query);
   }
 
+  // Literal segment, registered before "tasks/:id" so «calendar» is never
+  // parsed as a task id. Per-day counts for the month/year calendar grids.
+  @Get("tasks/calendar")
+  taskCalendar(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: TaskBoardQuery,
+  ) {
+    return this.tasks.taskCalendar(actor, query);
+  }
+
   // Registered before "tasks/:id/history" so the literal segment wins the match
   // and "history" is never parsed as a task id.
   @Get("tasks/history")
@@ -133,6 +143,14 @@ export class CrmEngagementController {
     @Body() dto: UpsertTaskDto,
   ) {
     return this.tasks.updateTask(actor, id, dto);
+  }
+
+  @Delete("tasks/:id")
+  deleteTask(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.tasks.deleteTask(actor, id);
   }
 
   @Get("homeworks")

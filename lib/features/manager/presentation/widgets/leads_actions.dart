@@ -530,15 +530,25 @@ extension _LeadsActions on _LeadsWidgetState {
                   ),
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  await ManageStatusesDialog.show(context);
-                  await _loadStatuses();
-                  _refreshBoard();
-                },
-                icon: const Icon(Icons.settings_rounded, size: 16),
-                label: const Text('Колонки'),
-              ),
+              // Column config is a system setting → only управляющий/директор/
+              // сисадмин (NOT a branch admin) sees «Колонки». Mirrors the
+              // server's assertCanManageSystemSettings.
+              if (_canManageColumns)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final cols = (board['columns'] as List?)
+                        ?.whereType<Map<String, dynamic>>()
+                        .toList();
+                    await ManageStatusesDialog.show(
+                      context,
+                      initialColumns: cols,
+                    );
+                    await _loadStatuses();
+                    _refreshBoard();
+                  },
+                  icon: const Icon(Icons.settings_rounded, size: 16),
+                  label: const Text('Колонки'),
+                ),
             ],
           ),
           const SizedBox(height: 10),

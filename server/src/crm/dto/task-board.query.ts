@@ -46,8 +46,7 @@ export class TaskBoardQuery {
   status?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(80)
+  @IsIn(["low", "medium", "high"])
   priority?: string;
 
   @IsOptional()
