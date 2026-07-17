@@ -15,6 +15,16 @@ const double kHeaderHeight = 58;
 const double kEdgeZone = 56; // autoscroll trigger band
 const String kUnassignedColumnId = '__unassigned__';
 
+/// How far a pointer must travel before an empty-area drag counts as a
+/// booking-select. Below this it is jitter around a click, and a create dialog
+/// popping up for it reads as the app firing on its own.
+const double kSelectSlop = 12;
+
+/// A card must be at least this tall to carry resize handles. A 45-minute
+/// lesson is 48 px, a 30-minute one 32 px — the old 52 px floor silently denied
+/// both, which is why resize «worked on some lessons, not on others».
+const double kMinResizeHeight = 26;
+
 /// One day-grid column (a room, or the synthetic «Без аудитории» bucket).
 class ScheduleColumn {
   final String id;
@@ -125,9 +135,18 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
   double? _selStartY;
   double? _selEndY;
   int? _selForbidColIndex; // a different column the finger wandered into
+  // Armed only once the pointer has travelled [kSelectSlop]. Until then the
+  // gesture is still a click as far as the user is concerned: no teal block,
+  // and releasing creates nothing.
+  bool _selArmed = false;
 
   // Hover (desktop) reveals the resize handles on a lesson.
   String? _hoverId;
+
+  // Touch selection: on a phone there is no hover, so a single tap SELECTS a
+  // card (that is what reveals its resize handles) and a double tap opens it.
+  // Desktop keeps click = open, since hover already exposes the handles.
+  String? _selectedId;
 
   // Column width resolved each build from the real viewport (LayoutBuilder), so
   // columns fill the width when few and scroll horizontally when many. Gesture

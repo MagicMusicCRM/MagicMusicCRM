@@ -86,25 +86,40 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
 
   // ── Empty-cell tap / vertical select ────────────────────────────────────────
   void _onColumnTap(ScheduleColumn col, double localY) {
+    // A card is selected → the first tap on empty space dismisses it rather
+    // than booking an hour. Deselecting must never cost a create dialog.
+    if (_selectedId != null) {
+      _emitState(() => _selectedId = null);
+      return;
+    }
     final start = _timeForY(localY, snap: 60);
     widget.onCreateSlot(col.id, start, 60);
   }
 
   void _onSelectStart(ScheduleColumn col, int colIndex, double localY) {
-    _emitState(() {
-      _selColumnId = col.id;
-      _selStartColIndex = colIndex;
-      _selStartY = localY;
-      _selEndY = localY;
-      _selForbidColIndex = null;
-      // Arm edge autoscroll for the select too (the raw-pointer Listener feeds
-      // _pointerGlobal + ticks while _dragging is true) — vertical-only above.
-      _dragging = true;
-    });
+    // Anchor only. Nothing is shown and _dragging stays false until the pointer
+    // actually travels [kSelectSlop] — see _onSelectUpdate.
+    _selColumnId = col.id;
+    _selStartColIndex = colIndex;
+    _selStartY = localY;
+    _selEndY = localY;
+    _selForbidColIndex = null;
+    _selArmed = false;
   }
 
   void _onSelectUpdate(double localY, double localX) {
     if (_selColumnId == null || _selStartColIndex == null) return;
+    if (!_selArmed) {
+      if ((localY - _selStartY!).abs() < kSelectSlop) {
+        // Still inside the slop: keep tracking silently.
+        _selEndY = localY;
+        return;
+      }
+      // Now it is a deliberate drag: show the block and arm edge autoscroll
+      // (the raw-pointer Listener feeds _pointerGlobal while _dragging).
+      _selArmed = true;
+      _dragging = true;
+    }
     // Vertical only: the selection block never leaves its start column. If the
     // finger wanders horizontally we flag the column it entered as «forbidden»
     // (flow-02) but never extend the range there.
@@ -116,8 +131,23 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     });
   }
 
+  /// Drop the select without booking anything.
+  void _onSelectCancel() {
+    if (_selColumnId == null) return;
+    _emitState(() {
+      _selColumnId = null;
+      _selStartColIndex = null;
+      _selStartY = null;
+      _selEndY = null;
+      _selForbidColIndex = null;
+      _selArmed = false;
+    });
+    _endDrag();
+  }
+
   void _onSelectEnd() {
     final colId = _selColumnId;
+    final armed = _selArmed;
     final a = _selStartY;
     final b = _selEndY;
     _emitState(() {
@@ -126,9 +156,12 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
       _selStartY = null;
       _selEndY = null;
       _selForbidColIndex = null;
+      _selArmed = false;
     });
     _endDrag(); // stop autoscroll + hide edge bands
-    if (colId == null || a == null || b == null) return;
+    // Never armed → this was a click that wobbled, not a booking. The tap
+    // handler owns that case; creating here too would double-fire.
+    if (!armed || colId == null || a == null || b == null) return;
     final start = _timeForY(a < b ? a : b, snap: 15);
     final end = _timeForY(a < b ? b : a, snap: 15);
     var duration = end.difference(start).inMinutes;
@@ -253,7 +286,10 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     final cs = Theme.of(context).colorScheme;
     final entries = widget.entries.where((e) => e.columnId == col.id).toList();
     final selecting =
-        _selColumnId == col.id && _selStartY != null && _selEndY != null;
+        _selArmed &&
+        _selColumnId == col.id &&
+        _selStartY != null &&
+        _selEndY != null;
     final showForbidden = _selForbidColIndex == colIndex;
 
     return DecoratedBox(
@@ -304,6 +340,10 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
                         )
                       : null,
                   onPanEnd: desktop ? (_) => _onSelectEnd() : null,
+                  // A cancelled gesture must drop the anchor too, or the teal
+                  // block is left painted over a day nobody is dragging on.
+                  onPanCancel: desktop ? _onSelectCancel : null,
+                  onLongPressCancel: desktop ? null : _onSelectCancel,
                   onLongPressStart: desktop
                       ? null
                       : (d) =>
@@ -415,11 +455,28 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
         platform == TargetPlatform.linux ||
         platform == TargetPlatform.macOS;
 
-    final tappable = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => widget.onOpenLesson(e.lesson),
-      child: _LessonCard(entry: e),
-    );
+    final selected = _selectedId == e.id;
+
+    // Desktop: click opens — hover already reveals the handles, so there is
+    // nothing to select and no reason to make the user click twice.
+    // Touch: single tap SELECTS (revealing the handles), double tap opens. A
+    // finger has no hover, so without a selection step the only way to expose a
+    // resize handle would be to touch the card — i.e. every open would risk a
+    // resize and every resize would risk an open.
+    final tappable = desktop
+        ? GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => widget.onOpenLesson(e.lesson),
+            child: _LessonCard(entry: e),
+          )
+        : GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _emitState(
+              () => _selectedId = selected ? null : e.id,
+            ),
+            onDoubleTap: () => widget.onOpenLesson(e.lesson),
+            child: _LessonCard(entry: e, selected: selected),
+          );
 
     // Move: an immediate drag on desktop (mouse) so it doesn't need a long hold;
     // a long-press on touch so it doesn't fight finger-scroll. A plain click
@@ -449,15 +506,20 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
       movable = tappable;
     }
 
-    // Resize strips show on hover (desktop) and STAY through an active resize so
-    // the gesture is never cancelled when the (shrinking) card slips out from
-    // under the cursor. They sit at the very top/bottom as separate opaque
-    // strips, so they never steal the body's tap/drag.
+    // Resize strips show on hover (desktop) or while selected (touch), and STAY
+    // through an active resize so the gesture is never cancelled when the
+    // (shrinking) card slips out from under the cursor. They sit at the very
+    // top/bottom as separate opaque strips, so they never steal the body's
+    // tap/drag.
     final showHandles =
         e.movable &&
-        desktop &&
-        height >= 52 &&
-        (_hoverId == e.id || _resizingId == e.id);
+        height >= kMinResizeHeight &&
+        (_resizingId == e.id || (desktop ? _hoverId == e.id : selected));
+
+    // A finger needs a bigger target than a cursor, but the strips must still
+    // leave the middle of the card tappable — hence a share of the height
+    // rather than a fixed band that would swallow a short lesson whole.
+    final stripH = (height / 3).clamp(8.0, desktop ? 16.0 : 22.0);
 
     return Positioned(
       left: 3,
@@ -477,8 +539,8 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
           clipBehavior: Clip.none,
           children: [
             Positioned.fill(child: movable),
-            if (showHandles) _resizeStrip(e, top: true),
-            if (showHandles) _resizeStrip(e, top: false),
+            if (showHandles) _resizeStrip(e, top: true, height: stripH),
+            if (showHandles) _resizeStrip(e, top: false, height: stripH),
           ],
         ),
       ),
@@ -496,13 +558,17 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     );
   }
 
-  Widget _resizeStrip(ScheduleEntry e, {required bool top}) {
+  Widget _resizeStrip(
+    ScheduleEntry e, {
+    required bool top,
+    required double height,
+  }) {
     return Positioned(
       top: top ? 0 : null,
       bottom: top ? null : 0,
       left: 0,
       right: 0,
-      height: 16,
+      height: height,
       child: MouseRegion(
         cursor: SystemMouseCursors.resizeRow,
         child: GestureDetector(

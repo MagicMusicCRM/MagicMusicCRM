@@ -542,10 +542,18 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           subtitle: teacher,
           isTrial: l['is_trial'] == true,
           conflicts: conflictTypes(l['conflict_types']),
-          movable: l['id'] != null &&
-              status != 'cancelled' &&
-              status != 'completed' &&
-              status != 'done',
+          // Only a CANCELLED lesson is frozen — rescheduling one is meaningless
+          // (it never happens; a new lesson is created instead).
+          //
+          // «completed»/«done» used to freeze a card too, which is why drag and
+          // resize looked broken on some cards and fine on others: the importer
+          // stamps `completed` on every lesson dated before the import run
+          // (hollihop-import.ts — `attended || isPast`), so the ~33k historical
+          // lessons — the whole schedule up to today — were all silently
+          // immovable, while tomorrow's moved fine. That status marks «in the
+          // past», not «audited»; it must not be a write lock. Fixing a
+          // mistyped past lesson is ordinary admin work.
+          movable: l['id'] != null && status != 'cancelled',
           highlighted: _highlightLessonId != null &&
               l['id']?.toString() == _highlightLessonId,
         ),
