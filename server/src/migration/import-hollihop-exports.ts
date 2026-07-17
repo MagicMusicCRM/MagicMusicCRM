@@ -1,7 +1,7 @@
 // server/src/migration/import-hollihop-exports.ts
 //
-// Imports HolliHop manual exports (XLSX/CSV converted to JSON) into existing
-// records: tasks + their history, student notes, lead comments.
+// Imports HolliHop manual exports into existing records: tasks + their history,
+// student notes, lead comments.
 //
 // WHY FILES AND NOT THE API. Probed 2026-07-16 with the customer's key:
 // GetTasks, GetComments, GetHistory — and every other method our old docs
@@ -10,22 +10,25 @@
 // docs/import/hollihop_api_probe_2026-07-16.md
 //
 // Usage — dry run (default; reads the DB, writes nothing):
-//   HOLLIHOP_EXPORTS_DIR=/path/to/json npm run hollihop:import-exports
+//   HOLLIHOP_EXPORTS_DIR=/path/to/exports npm run hollihop:import-exports
 // Usage — apply:
-//   HOLLIHOP_EXPORTS_DIR=/path/to/json HOLLIHOP_EXPORT_IMPORT_MODE=apply \
+//   HOLLIHOP_EXPORTS_DIR=/path/to/exports HOLLIHOP_EXPORT_IMPORT_MODE=apply \
 //     npm run hollihop:import-exports
 //
-// Expected files in HOLLIHOP_EXPORTS_DIR (any that are absent are skipped):
-//   tasks.json          — Клиент, Описание, Дата выполнения, Ответственный, телефон
-//   task-history.json   — Клиент/телефон, Дата изменения, Поле, Было, Стало, Автор
-//   students.json       — Фамилия, Имя, Описание, телефон
-//   leads.json          — ФИО, Комментарий, Пользовательские поля, телефон
+// Expected files in HOLLIHOP_EXPORTS_DIR (any that are absent are skipped).
+// Each may be `.xlsx` — as HolliHop exports it — or `.json`; not both.
+// Переименуйте выгрузку в это имя, содержимое не трогайте:
+//   tasks        — Клиент, Описание, Дата выполнения, Ответственный, телефон
+//   task-history — Клиент/телефон, Дата изменения, Поле, Было, Стало, Автор
+//   students     — Фамилия, Имя, Описание, телефон
+//   leads        — ФИО, Комментарий, Пользовательские поля, телефон
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { normalizePhoneRu } from "../crm/phone.util";
 import { deterministicUuid } from "./import-id";
+import { readXlsxRows } from "./xlsx-reader";
 import {
   historyFieldName,
   leadCommentFromRow,
@@ -74,10 +77,33 @@ const CONNECTION_STRING =
 // ever be one of these. Nothing here comes from the export files.
 const ALLOWED_TABLES = ["app.tasks", "app.task_history", "app.entity_comments"];
 
-function readArrayFile(dir: string, name: string, rootKey: string): JsonRow[] {
-  const filePath = join(dir, name);
-  if (!existsSync(filePath)) return [];
-  const parsed = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
+/**
+ * Раздел выгрузки: `<base>.xlsx` либо `<base>.json`.
+ *
+ * ⚠️ `.xlsx` — это то, что реально отдаёт HolliHop; `.json` остаётся, потому что
+ * на нём стоят тесты и им же удобно скармливать правленый кусок. Раньше был
+ * только JSON, а значит между файлом заказчика и базой стоял ручной шаг
+ * конвертации — перед 12 744 строками его рано или поздно сделают неправильно и
+ * никто не заметит.
+ *
+ * Если лежат оба — падаем. «Который из них свежий» — ровно тот вопрос, на
+ * который никто не должен отвечать угадыванием.
+ */
+export function readArrayFile(dir: string, base: string, rootKey: string): JsonRow[] {
+  const xlsxPath = join(dir, `${base}.xlsx`);
+  const jsonPath = join(dir, `${base}.json`);
+  const hasXlsx = existsSync(xlsxPath);
+  const hasJson = existsSync(jsonPath);
+
+  if (hasXlsx && hasJson) {
+    throw new Error(
+      `${base}: лежат и .xlsx, и .json — непонятно, который свежий. Оставьте один.`,
+    );
+  }
+  if (hasXlsx) return readXlsxRows(xlsxPath);
+  if (!hasJson) return [];
+
+  const parsed = JSON.parse(readFileSync(jsonPath, "utf8")) as unknown;
   if (Array.isArray(parsed)) return parsed as JsonRow[];
   if (parsed && typeof parsed === "object") {
     const value = (parsed as JsonRow)[rootKey];
@@ -296,10 +322,10 @@ export async function runImport(options: {
 }): Promise<ImportRun> {
   const { client, exportsDir, mode } = options;
 
-  const taskRows = readArrayFile(exportsDir, "tasks.json", "Tasks");
-  const historyRows = readArrayFile(exportsDir, "task-history.json", "History");
-  const studentRows = readArrayFile(exportsDir, "students.json", "Students");
-  const leadRows = readArrayFile(exportsDir, "leads.json", "Leads");
+  const taskRows = readArrayFile(exportsDir, "tasks", "Tasks");
+  const historyRows = readArrayFile(exportsDir, "task-history", "History");
+  const studentRows = readArrayFile(exportsDir, "students", "Students");
+  const leadRows = readArrayFile(exportsDir, "leads", "Leads");
 
   const reports: Record<string, SectionReport> = {
     tasks: emptySection(),

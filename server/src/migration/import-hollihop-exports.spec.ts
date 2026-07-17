@@ -2,7 +2,65 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deterministicUuid } from "./import-id";
-import { formatReport, runImport } from "./import-hollihop-exports";
+import { formatReport, readArrayFile, runImport } from "./import-hollihop-exports";
+import { buildXlsx } from "./xlsx-fixture";
+
+/**
+ * Выбор файла раздела. Выгрузки приходят в `.xlsx`, и до этого импортёр умел
+ * только `.json` — то есть между файлом заказчика и базой стоял ручной шаг
+ * конвертации.
+ */
+describe("readArrayFile", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "hh-pick-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("читает .xlsx как его отдаёт HolliHop", () => {
+    writeFileSync(
+      join(dir, "tasks.xlsx"),
+      buildXlsx({
+        title: "Задачи",
+        headers: ["Дата выполнения", "Описание", "Клиент", "Ответственный"],
+        rows: [["11.08.2027", "инфо задача", "Маг Анри", "[Для всех]"]],
+      }),
+    );
+    expect(readArrayFile(dir, "tasks", "Tasks")).toEqual([
+      {
+        "Дата выполнения": "11.08.2027",
+        "Описание": "инфо задача",
+        "Клиент": "Маг Анри",
+        "Ответственный": "[Для всех]",
+      },
+    ]);
+  });
+
+  it("читает .json — на нём стоят тесты и им скармливают правленый кусок", () => {
+    writeFileSync(join(dir, "tasks.json"), JSON.stringify([{ "Клиент": "Маг Анри" }]), "utf8");
+    expect(readArrayFile(dir, "tasks", "Tasks")).toEqual([{ "Клиент": "Маг Анри" }]);
+  });
+
+  it("разворачивает объект с корневым ключом", () => {
+    writeFileSync(join(dir, "tasks.json"), JSON.stringify({ Tasks: [{ a: 1 }] }), "utf8");
+    expect(readArrayFile(dir, "tasks", "Tasks")).toEqual([{ a: 1 }]);
+  });
+
+  it("нет файла — пустой раздел, а не падение", () => {
+    expect(readArrayFile(dir, "tasks", "Tasks")).toEqual([]);
+  });
+
+  it("лежат оба — падает, а не угадывает, который свежее", () => {
+    writeFileSync(join(dir, "tasks.json"), "[]", "utf8");
+    writeFileSync(
+      join(dir, "tasks.xlsx"),
+      buildXlsx({ title: "Задачи", headers: ["Клиент", "Описание"], rows: [["Маг Анри", "x"]] }),
+    );
+    expect(() => readArrayFile(dir, "tasks", "Tasks")).toThrow(/который свежий/);
+  });
+});
 
 /**
  * Прогон импортёра целиком — на настоящих файлах выгрузки и фейковом клиенте.
