@@ -33,9 +33,29 @@ extension _ScheduleActions on _ScheduleWidgetState {
       final branches = wave1[0];
       final rooms = wave1[1];
 
+      // First open with no branch chosen yet → default to the user's OWN
+      // branch (staff assignment), resolved once. Falls back to the first
+      // branch only when the user has no assignment or it isn't in the list.
+      if (_selectedBranchId == null && !_homeBranchResolved) {
+        _homeBranchResolved = true;
+        try {
+          final me = await ref
+              .read(magicProfileAdminServiceProvider)
+              .getMyProfile();
+          final home = me['homeBranchId']?.toString();
+          if (home != null && home.isNotEmpty) _homeBranchId = home;
+        } catch (_) {
+          // Non-fatal: fall back to the first branch below.
+        }
+      }
+
       String? defaultBranch = _selectedBranchId;
       if (defaultBranch == null && branches.isNotEmpty) {
-        defaultBranch = branches.first['id'].toString();
+        final home = _homeBranchId;
+        final hasHome =
+            home != null &&
+            branches.any((b) => b['id'].toString() == home);
+        defaultBranch = hasHome ? home : branches.first['id'].toString();
       }
 
       // Per-branch UTC offset map (minutes), for rendering lesson times in the

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -107,6 +108,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   bool _onlyTrial = false;
   bool _onlyConflicts = false;
   String? _filterTeacherId;
+  // The user's own branch (staff assignment), resolved once, used as the
+  // default instead of «the first branch in the system».
+  String? _homeBranchId;
+  bool _homeBranchResolved = false;
   DateTime _selectedDate = DateTime.now();
   DateTime _displayedMonth = DateTime(
     DateTime.now().year,

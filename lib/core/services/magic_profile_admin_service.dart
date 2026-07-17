@@ -42,6 +42,13 @@ class MagicProfileAdminService {
     return _legacyProfile(response);
   }
 
+  /// The signed-in user's own profile, including `homeBranchId` / `branchIds`
+  /// (the staff member's assigned branches). Used to open the schedule on the
+  /// branch the user actually works at rather than the first in the system.
+  Future<Map<String, dynamic>> getMyProfile() async {
+    return _api.get<Map<String, dynamic>>('/profiles/me');
+  }
+
   /// Загружает привязанные к профилю CRM-сущности (ученики/лиды).
   /// Возвращает список `{entityType, entityId, name}`.
   Future<List<Map<String, dynamic>>> getProfileLinks(String profileId) async {
