@@ -119,9 +119,19 @@ export function cleanResponsible(raw: unknown): string | null {
  * Pulls the author out of the description when the «Ответственный» column does
  * not name one.
  *
- * This is the fix for the known defect: all 514 previously imported tasks have
- * assigned_to = NULL, because the column holds «[Для всех]» while the real name
- * sits inside the text as «(поставил Иванов И.И. - 12.03.2026)».
+ * Нужно потому, что колонка «Ответственный» в выгрузке бесполезна: у всех 544
+ * строк там «[Для всех]», а настоящее имя лежит в тексте — «(поставил Иванов
+ * И.И. - 12.03.2026)».
+ *
+ * ⚠️ Здесь раньше стояло: «это чинит известный дефект — у всех 514
+ * импортированных задач assigned_to = NULL». Это неправда, проверено на проде
+ * 17.07: исполнитель есть у 513 из 514, и разложены они по настоящим менеджерам
+ * (Мазалова 194, Богатырёва 151, Крошкин 111…). То есть разбор описания уже
+ * работал.
+ *
+ * Настоящий пробел рядом и другой: `created_by` пуст у ВСЕХ 514 — кто задачу
+ * поставил, не знает никто. Его достаёт `parseTaskDescription` в
+ * communications-mappers.ts, и проверяется он в DATA-CHECKLIST §5.6.
  */
 export function responsibleFromDescription(description: unknown): string | null {
   const value = str(description);

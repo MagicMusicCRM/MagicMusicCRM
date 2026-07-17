@@ -60,8 +60,12 @@ describe("taskTitle", () => {
 });
 
 describe("responsibleFromDescription", () => {
-  // The known defect: all 514 imported tasks have assigned_to = NULL because
-  // «Ответственный» says «[Для всех]» while the real name is in the text.
+  // Колонка «Ответственный» бесполезна: у всех 544 строк выгрузки там «[Для
+  // всех]», а настоящее имя лежит в тексте.
+  //
+  // ⚠️ Здесь раньше стояло «известный дефект: у всех 514 задач assigned_to =
+  // NULL». Это неправда (прод, 17.07: исполнитель есть у 513 из 514). Пробел
+  // другой — `created_by` пуст у всех 514.
   it("pulls the author out of a «(поставил …)» tail", () => {
     expect(
       responsibleFromDescription("Позвонить (поставил Иванов И.И. - 12.03.2026)"),

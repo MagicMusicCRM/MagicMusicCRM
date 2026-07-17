@@ -357,8 +357,8 @@ export async function runImport(options: {
 
       const assignedTo = await matcher.userIdByName(mapped.responsible);
       if (mapped.responsible && !assignedTo) {
-        // Surfaced in the report instead of silently landing as NULL — that
-        // silence is why all 514 previously imported tasks have no assignee.
+        // В отчёт, а не молча в NULL: имя в выгрузке есть, а пользователя под
+        // него не нашлось — это факт, который обязан увидеть человек.
         unmatchedResponsibles.add(mapped.responsible);
       }
 

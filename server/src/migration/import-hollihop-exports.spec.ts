@@ -252,8 +252,7 @@ describe("runImport", () => {
     const run = await runImport({ client, exportsDir: dir, mode: "dry_run" });
 
     // Имя нашли в описании, пользователя по нему — нет. Это ПЕЧАТАЕТСЯ, а не
-    // проглатывается: молчание и есть причина, по которой у всех 514
-    // импортированных задач assigned_to = NULL.
+    // проглатывается в NULL: такую строку обязан увидеть человек.
     expect(run.unmatchedResponsibles).toEqual(["Иванов И.И."]);
   });
 
