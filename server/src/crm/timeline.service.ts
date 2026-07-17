@@ -33,6 +33,13 @@ interface CommentRow {
   body: string;
   kind: string;
   created_at: Date | string;
+  /**
+   * Когда идёт занятие, к которому оставлен комментарий. `null` у обычных.
+   *
+   * Именно так лента и отличает «комментарий к клиенту» от «комментария к
+   * занятию 21.06» — без второго запроса на каждую строку.
+   */
+  lesson_at?: Date | string | null;
 }
 
 @Injectable()
@@ -235,22 +242,55 @@ export class TimelineService {
       allowedKinds = allowedKinds.filter((k) => k === query.kind);
     }
     if (allowedKinds.length === 0) return { items: [] };
+    // Комментарии к занятиям подмешиваются только в карточку УЧЕНИКА: у лида
+    // занятий нет, и спрашивать их бессмысленно.
+    const withLessons =
+      query.includeLessonComments === true && query.entityType === "student";
     const result = await this.database.query<CommentRow>(
       `
         select c.id, c.entity_type, c.entity_id, c.author_id, c.kind,
           p.first_name as author_first_name, p.last_name as author_last_name,
-          c.body, c.created_at
+          c.body, c.created_at,
+          l.scheduled_at as lesson_at
         from app.entity_comments c
         left join app.users u on u.id = c.author_id and u.deleted_at is null
         left join app.profiles p on p.user_id = u.id and p.deleted_at is null
+        -- Занятие подтягивается только у комментариев к занятиям; у обычных
+        -- lesson_at останется null, и лента различит их без второго запроса.
+        left join app.lessons l
+          on l.id = c.entity_id
+         and c.entity_type = 'lesson'
+         and l.deleted_at is null
         where c.deleted_at is null
-          and c.entity_type = $1::app.crm_entity_type
-          and c.entity_id = $2
           and c.kind = any($3::text[])
+          and (
+            (c.entity_type = $1::app.crm_entity_type and c.entity_id = $2)
+            or (
+              $5::boolean
+              and c.entity_type = 'lesson'
+              and exists (
+                select 1
+                from app.lessons ml
+                where ml.id = c.entity_id
+                  and ml.deleted_at is null
+                  and (
+                    -- Индивидуальное занятие: ученик прописан прямо на нём.
+                    ml.student_id = $2
+                    -- Групповое: ученик — через участие. Одна заметка админа
+                    -- к групповому занятию попадёт в ленту КАЖДОГО участника,
+                    -- и это верно: она про то занятие, на котором был каждый.
+                    or exists (
+                      select 1 from app.lesson_participation lp
+                      where lp.lesson_id = ml.id and lp.student_id = $2
+                    )
+                  )
+              )
+            )
+          )
         order by c.created_at desc, c.id desc
         limit $4
       `,
-      [query.entityType, query.entityId, allowedKinds, limit],
+      [query.entityType, query.entityId, allowedKinds, limit, withLessons],
     );
     return { items: result.rows.map((row) => this.toCommentDto(row)) };
   }
@@ -422,6 +462,9 @@ export class TimelineService {
       // Back-compat flag for clients still keying off `progress`.
       progress: row.kind === "progress",
       createdAt: row.created_at,
+      // Заполнено только у комментариев к занятиям: карточка по нему и рисует
+      // пометку «к занятию такого-то числа».
+      lessonAt: row.lesson_at ?? null,
     };
   }
 
