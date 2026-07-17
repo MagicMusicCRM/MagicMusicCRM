@@ -309,9 +309,34 @@ extension _ScheduleActions on _ScheduleWidgetState {
           l['branch_id'].toString() != _selectedBranchId) {
         return false;
       }
+      // Optional filters — applied over the already-loaded matrix, no refetch.
+      if (_onlyTrial && l['is_trial'] != true) return false;
+      if (_onlyConflicts && conflictTypes(l['conflict_types']).isEmpty) {
+        return false;
+      }
+      if (_filterTeacherId != null &&
+          l['teacher_id']?.toString() != _filterTeacherId) {
+        return false;
+      }
       return true;
     }).toList();
   }
+
+  /// Teacher options for the filter sheet, from the lessons currently loaded.
+  List<({String id, String name})> get _teacherFilterOptions {
+    final seen = <String, String>{};
+    for (final l in _lessons) {
+      final id = l['teacher_id']?.toString();
+      if (id == null || id.isEmpty) continue;
+      seen[id] = _teacherNames[id] ?? l['teacher_name']?.toString() ?? id;
+    }
+    final list = seen.entries.map((e) => (id: e.key, name: e.value)).toList();
+    list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return list;
+  }
+
+  bool get _hasExtraFilters =>
+      _onlyTrial || _onlyConflicts || _filterTeacherId != null;
 
   List<Map<String, dynamic>> _lessonsForDate(DateTime date) {
     return _filteredLessons.where((l) {
@@ -572,12 +597,21 @@ extension _ScheduleActions on _ScheduleWidgetState {
       initialMode: _dayViewMode,
       branches: _branches,
       isDayView: _currentView == ScheduleView.day,
+      initialOnlyTrial: _onlyTrial,
+      initialOnlyConflicts: _onlyConflicts,
+      initialTeacherId: _filterTeacherId,
+      teacherOptions: _teacherFilterOptions,
     );
     if (result == null) return;
+    final branchChanged = result.branchId != _selectedBranchId;
+    final modeChanged = result.mode != _dayViewMode;
     _emitState(() {
       _clearHighlight();
       _selectedBranchId = result.branchId;
       _dayViewMode = result.mode;
+      _onlyTrial = result.onlyTrial;
+      _onlyConflicts = result.onlyConflicts;
+      _filterTeacherId = result.teacherId;
       if (_selectedTeacherId != null &&
           !_filteredLessons.any(
             (lesson) => lesson['teacher_id']?.toString() == _selectedTeacherId,
@@ -585,7 +619,10 @@ extension _ScheduleActions on _ScheduleWidgetState {
         _selectedTeacherId = null;
       }
     });
-    _fetchAll();
+    // The trial/conflict/teacher filters are applied client-side over the
+    // loaded matrix, so they need only a rebuild (done by _emitState). Only a
+    // branch or layout change actually needs a refetch.
+    if (branchChanged || modeChanged) _fetchAll();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

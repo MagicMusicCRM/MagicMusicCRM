@@ -102,6 +102,11 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   String? _selectedBranchId;
   ScheduleView _currentView = ScheduleView.month;
   DayViewMode _dayViewMode = DayViewMode.byRoom;
+  // Extra schedule filters (applied client-side over already-loaded lessons —
+  // is_trial / conflict_types / teacher_id all ride along in the matrix).
+  bool _onlyTrial = false;
+  bool _onlyConflicts = false;
+  String? _filterTeacherId;
   DateTime _selectedDate = DateTime.now();
   DateTime _displayedMonth = DateTime(
     DateTime.now().year,

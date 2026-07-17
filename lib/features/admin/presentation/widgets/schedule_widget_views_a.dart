@@ -30,7 +30,6 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
         lessonsForDate: _lessonsForDate,
         parseLessonTime: _parseLessonTime,
         onDayTap: _onMonthDayTap,
-        onToday: _goToToday,
       ),
       ScheduleView.day => _buildDayView(),
     };
@@ -72,8 +71,14 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           ),
           IconButton(
             icon: Icon(
-              Icons.tune_rounded,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              // A dot on the funnel signals filters are active — otherwise a
+              // half-empty grid reads as «нет занятий», not «отфильтровано».
+              _hasExtraFilters
+                  ? Icons.filter_alt_rounded
+                  : Icons.tune_rounded,
+              color: _hasExtraFilters
+                  ? AppColor.gold
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
               size: 22,
             ),
             tooltip: 'Фильтры',

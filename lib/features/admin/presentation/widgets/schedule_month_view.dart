@@ -15,7 +15,6 @@ class ScheduleMonthView extends StatelessWidget {
   final List<Map<String, dynamic>> Function(DateTime) lessonsForDate;
   final DateTime? Function(Map<String, dynamic>) parseLessonTime;
   final void Function(DateTime) onDayTap;
-  final VoidCallback onToday;
 
   const ScheduleMonthView({
     super.key,
@@ -26,7 +25,6 @@ class ScheduleMonthView extends StatelessWidget {
     required this.lessonsForDate,
     required this.parseLessonTime,
     required this.onDayTap,
-    required this.onToday,
   });
 
   @override
@@ -127,7 +125,7 @@ class ScheduleMonthView extends StatelessWidget {
 
     return Column(
       children: [
-        ScheduleMonthLegend(onToday: onToday),
+        const ScheduleMonthLegend(),
         Expanded(
           child: LayoutBuilder(
             builder: (context, c) {
