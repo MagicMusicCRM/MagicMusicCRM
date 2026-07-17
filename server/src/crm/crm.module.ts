@@ -29,6 +29,7 @@ import { AttendanceService } from './attendance.service';
 import { StaffService } from './staff.service';
 import { TeachersService } from './teachers.service';
 import { ScheduleService } from './schedule.service';
+import { SectionViewsService } from './section-views.service';
 import { TimelineService } from './timeline.service';
 import { DashboardService } from './dashboard.service';
 import { ClientLinkingService } from './client-linking.service';
@@ -79,6 +80,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     TeachersService,
     ScheduleService,
     TimelineService,
+    SectionViewsService,
     DashboardService,
     ClientLinkingService,
     FamilyService,

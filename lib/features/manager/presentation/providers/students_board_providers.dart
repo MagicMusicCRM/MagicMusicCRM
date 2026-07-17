@@ -1,11 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
-/// Badge count for the «Клиенты» nav item — leads created from the app.
-final appLeadsCountProvider = FutureProvider<int>((ref) {
-  return ref.watch(magicCrmServiceProvider).getAppLeadsCount();
-});
-
 /// The disciplines configured for a branch (the Ученики board's columns).
 final branchDisciplinesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, branchId) {

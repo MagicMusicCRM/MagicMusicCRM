@@ -298,17 +298,18 @@ extension _MessengerBuildersA on _MessengerScreenState {
           label: 'Обзор',
         );
       case 2:
-        return const V7NavDestination(
+        return V7NavDestination(
           icon: Icons.calendar_today_outlined,
           selectedIcon: Icons.calendar_today_rounded,
           label: 'Расписание',
+          badgeCount: _unseenFor(CrmSection.schedule),
         );
       case 3:
         return V7NavDestination(
           icon: Icons.people_outline_rounded,
           selectedIcon: Icons.people_rounded,
           label: 'Клиенты',
-          badgeCount: ref.watch(appLeadsCountProvider).asData?.value ?? 0,
+          badgeCount: _unseenFor(CrmSection.clients),
         );
       case 4:
         return const V7NavDestination(
@@ -317,16 +318,18 @@ extension _MessengerBuildersA on _MessengerScreenState {
           label: 'Пользователи',
         );
       case 5:
-        return const V7NavDestination(
+        return V7NavDestination(
           icon: Icons.account_balance_wallet_outlined,
           selectedIcon: Icons.account_balance_wallet_rounded,
           label: 'Финансы',
+          badgeCount: _unseenFor(CrmSection.finance),
         );
       case 6:
-        return const V7NavDestination(
+        return V7NavDestination(
           icon: Icons.task_alt_outlined,
           selectedIcon: Icons.task_alt_rounded,
           label: 'Задачи',
+          badgeCount: _unseenFor(CrmSection.tasks),
         );
       case 7:
         return const V7NavDestination(

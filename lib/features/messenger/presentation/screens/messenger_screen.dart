@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/alert_policy.dart';
+import 'package:magic_music_crm/core/services/section_unseen_service.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
@@ -37,7 +39,6 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overvi
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/tasks_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
@@ -96,6 +97,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   bool _loadingMessages = false;
   String _searchQuery = '';
   int _selectedCrmTab = 0;
+  /// Какой раздел уже отмечен просмотренным — чтобы не слать запрос на
+  /// каждый кадр build().
+  String? _lastMarkedSection;
   int _selectedReportsTab = 0;
   bool _showProfilePanel = false;
   bool _showMyProfile = false;
@@ -134,6 +138,39 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   bool get _isManagerOrAdminRole =>
       _isAdminRole || widget.role == 'manager' || widget.role == 'director';
+
+  /// Счётчик непросмотренного для вкладки. 0 — бейдж не рисуется.
+  ///
+  /// ✔ Заказчик 17.07: «счётчик непрочитанных или непросмотренных изменений»
+  /// по разделам. Считает сервер (см. section-views.service.ts): счётчик обязан
+  /// пережить перезапуск и совпадать на телефоне и на компьютере.
+  int _unseenFor(int tab) {
+    final key = sectionKeyForTab(tab);
+    if (key == null) return 0;
+    return ref.watch(sectionUnseenProvider).asData?.value[key] ?? 0;
+  }
+
+  /// «Я открыл раздел» — обнуляет его счётчик.
+  ///
+  /// Зовётся при КАЖДОЙ отрисовке открытой вкладки, а не только по нажатию:
+  /// вкладку открывают и переходом из задачи, и глубокой ссылкой, и после
+  /// перезапуска — по нажатию отметилась бы только часть случаев. Сервер это
+  /// терпит: запрос идемпотентный (`on conflict do update`).
+  void _markSectionSeen(int tab) {
+    final key = sectionKeyForTab(tab);
+    if (key == null) return;
+    if (_lastMarkedSection == key) return;
+    _lastMarkedSection = key;
+    unawaited(
+      ref
+          .read(sectionUnseenServiceProvider)
+          .markSeen(key)
+          .then((_) => ref.invalidate(sectionUnseenProvider))
+          // Счётчик — не то, ради чего стоит показывать человеку ошибку: не
+          // обнулился, обнулится при следующем открытии.
+          .catchError((_) {}),
+    );
+  }
 
   /// Manager-tier may clear assignment markers created by others. Claiming is
   /// advisory and available to every staff role.
@@ -212,6 +249,21 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     final isDesktop =
         isDesktopPlatform || MediaQuery.of(context).size.width >= 768;
 
+    // Счётчики непросмотренного пересчитываются, когда что-то появилось.
+    //
+    // Раскладка «сущность → раздел» берётся из sectionForEntity — та же, по
+    // которой решается, звучать ли. Заведи здесь вторую, и бейдж со звуком
+    // разошлись бы: звук молчит про открытый раздел, а бейдж на нём капает.
+    //
+    // Опрос-фолбэк (isFallbackPoll) пропускаем: он приходит по таймеру, а не
+    // потому, что что-то случилось, и дёргал бы сервер вхолостую.
+    ref.listen(crmRealtimeProvider, (previous, next) {
+      final event = next.value;
+      if (event == null || !mounted || event.isFallbackPoll) return;
+      if (sectionForEntity(event.entity) == null) return;
+      ref.invalidate(sectionUnseenProvider);
+    });
+
     ref.listen<CrmNavigationRequest?>(crmNavigationRequestProvider, (
       previous,
       next,
@@ -249,6 +301,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       ref
           .read(activeViewProvider.notifier)
           .set(crmTab: selectedCrmTab, chatId: openChatId);
+      _markSectionSeen(selectedCrmTab);
     });
     final bodyContent = _buildCrmBody(
       context,
