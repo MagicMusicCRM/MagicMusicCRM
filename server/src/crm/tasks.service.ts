@@ -83,36 +83,13 @@ export class TasksService {
     return (result?.rows ?? []).map((row) => toTaskDto(row));
   }
 
-  async listTasks(actor: ActorContext, query: TaskBoardQuery) {
-    // Reading tasks is operational data (shown in client cards to admin/teacher),
-    // not a manager-only management op; row-level RBAC is enforced in the SQL below.
-    this.policy.assertCanReadOperationalData(actor);
-    const limit = Math.min(query.limit ?? 50, 100);
-    const result = await this.database.query<TaskRow>(
-      `
-        select task.id, task.entity_type, task.entity_id, task.assigned_to,
-          assigned_profile.first_name as assigned_first_name,
-          assigned_profile.last_name as assigned_last_name,
-          assigned_profile.id as assigned_profile_id,
-          creator_profile.first_name as creator_first_name,
-          creator_profile.last_name as creator_last_name,
-          creator_profile.id as creator_profile_id,
-          coalesce(student_profile.first_name, teacher_profile.first_name) as entity_first_name,
-          coalesce(student_profile.last_name, teacher_profile.last_name) as entity_last_name,
-          coalesce(
-            nullif(concat_ws(' ', lead.first_name, lead.last_name), ''),
-            grp.name
-          ) as entity_name,
-          coalesce(
-            nullif(${branchIdExpr("student")}, ''),
-            nullif(${branchIdExpr("lead")}, ''),
-            grp.branch_id::text,
-            lesson.branch_id::text
-          ) as branch_id,
-          branch.name as branch_name,
-          task.title, task.description, task.status, task.priority,
-          task.due_at, task.due_all_day,
-          task.created_by, task.created_at
+  // The FROM + row-level-RBAC + filter WHERE shared by the board list and the
+  // calendar count, so a per-day count can never diverge from the list it
+  // summarises. Params: $1 role, $2 userId, $4 studentId, $5 status, $6 q,
+  // $7 entityType, $8 entityId, $9 assignedTo, $10 createdBy, $11 branchId,
+  // $12 priority, $13 taskType, $14 communicationMethod, $15 from, $16 to.
+  // ($3 is the list's LIMIT — unreferenced here.)
+  private readonly taskScopeSql = `
         from app.tasks task
         left join app.users assigned_user on assigned_user.id = task.assigned_to and assigned_user.deleted_at is null
         left join app.profiles assigned_profile on assigned_profile.user_id = assigned_user.id and assigned_profile.deleted_at is null
@@ -184,30 +161,91 @@ export class TasksService {
             or lower(coalesce(task.title, '') || ' ' || coalesce(task.description, '')) like lower('%' || $14 || '%')
           )
           and ($15::timestamptz is null or task.due_at >= $15)
-          and ($16::timestamptz is null or task.due_at < $16)
+          and ($16::timestamptz is null or task.due_at < $16)`;
+
+  private taskScopeParams(query: TaskBoardQuery, actor: ActorContext, limit = 0) {
+    return [
+      actor.role,
+      actor.userId,
+      limit,
+      query.studentId ?? null,
+      query.status ?? null,
+      query.q ?? null,
+      query.entityType ?? null,
+      query.entityId ?? null,
+      query.assignedTo ?? null,
+      query.createdBy ?? null,
+      query.branchId ?? null,
+      query.priority ?? null,
+      query.taskType ?? null,
+      query.communicationMethod ?? null,
+      query.from ?? null,
+      query.to ?? null,
+    ];
+  }
+
+  async listTasks(actor: ActorContext, query: TaskBoardQuery) {
+    // Reading tasks is operational data (shown in client cards to admin/teacher),
+    // not a manager-only management op; row-level RBAC is enforced in the SQL below.
+    this.policy.assertCanReadOperationalData(actor);
+    const limit = Math.min(query.limit ?? 50, 100);
+    const result = await this.database.query<TaskRow>(
+      `
+        select task.id, task.entity_type, task.entity_id, task.assigned_to,
+          assigned_profile.first_name as assigned_first_name,
+          assigned_profile.last_name as assigned_last_name,
+          assigned_profile.id as assigned_profile_id,
+          creator_profile.first_name as creator_first_name,
+          creator_profile.last_name as creator_last_name,
+          creator_profile.id as creator_profile_id,
+          coalesce(student_profile.first_name, teacher_profile.first_name) as entity_first_name,
+          coalesce(student_profile.last_name, teacher_profile.last_name) as entity_last_name,
+          coalesce(
+            nullif(concat_ws(' ', lead.first_name, lead.last_name), ''),
+            grp.name
+          ) as entity_name,
+          coalesce(
+            nullif(${branchIdExpr("student")}, ''),
+            nullif(${branchIdExpr("lead")}, ''),
+            grp.branch_id::text,
+            lesson.branch_id::text
+          ) as branch_id,
+          branch.name as branch_name,
+          task.title, task.description, task.status, task.priority,
+          task.due_at, task.due_all_day,
+          task.created_by, task.created_at
+        ${this.taskScopeSql}
         order by task.due_at nulls last, task.created_at desc
         limit $3
       `,
-      [
-        actor.role,
-        actor.userId,
-        limit,
-        query.studentId ?? null,
-        query.status ?? null,
-        query.q ?? null,
-        query.entityType ?? null,
-        query.entityId ?? null,
-        query.assignedTo ?? null,
-        query.createdBy ?? null,
-        query.branchId ?? null,
-        query.priority ?? null,
-        query.taskType ?? null,
-        query.communicationMethod ?? null,
-        query.from ?? null,
-        query.to ?? null,
-      ],
+      this.taskScopeParams(query, actor, limit),
     );
     return { items: result.rows.map((row) => toTaskDto(row)) };
+  }
+
+  /**
+   * Per-day task counts for the calendar (year/month grids), bucketed by the
+   * Moscow date of the deadline — the same zone the «срок … по Москве»
+   * notification uses — and filtered identically to the board list, so the
+   * number on a day cell always matches the list you get by opening that day.
+   */
+  async taskCalendar(actor: ActorContext, query: TaskBoardQuery) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<{ day: string; count: number }>(
+      `
+        select
+          to_char((task.due_at at time zone 'Europe/Moscow')::date, 'YYYY-MM-DD') as day,
+          count(*)::int as count
+        ${this.taskScopeSql}
+          and task.due_at is not null
+        group by 1
+        order by 1
+      `,
+      this.taskScopeParams(query, actor),
+    );
+    return {
+      items: result.rows.map((row) => ({ day: row.day, count: row.count })),
+    };
   }
 
   async createTask(actor: ActorContext, dto: UpsertTaskDto) {

@@ -333,6 +333,38 @@ describe("TasksService", () => {
     expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
   });
 
+  it("counts tasks per Moscow day for the calendar, filtered like the board", async () => {
+    const { service, query, policy } = createService([
+      { day: "2026-07-10", count: 3 },
+      { day: "2026-07-12", count: 1 },
+    ]);
+
+    await expect(
+      service.taskCalendar(actor, {
+        from: "2026-07-01T00:00:00.000Z",
+        to: "2026-08-01T00:00:00.000Z",
+        priority: "high",
+      } as never),
+    ).resolves.toEqual({
+      items: [
+        { day: "2026-07-10", count: 3 },
+        { day: "2026-07-12", count: 1 },
+      ],
+    });
+
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("at time zone 'Europe/Moscow'");
+    expect(sql).toContain("group by 1");
+    expect(sql).toContain("task.due_at is not null");
+    // Same filter params as the board list — priority at position 12, range at
+    // 15/16 — so a day's count matches the list you get by opening it.
+    expect(query.mock.calls[0][1][11]).toBe("high");
+    expect(query.mock.calls[0][1][14]).toBe("2026-07-01T00:00:00.000Z");
+    expect(query.mock.calls[0][1][15]).toBe("2026-08-01T00:00:00.000Z");
+    // Reading, not a management op.
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+  });
+
   it("refuses to create a task with no due date (owner rule)", async () => {
     const { service } = createService();
     await expect(

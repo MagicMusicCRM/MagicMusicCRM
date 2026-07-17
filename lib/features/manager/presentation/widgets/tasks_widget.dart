@@ -53,6 +53,14 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     DateTime.now().day,
   );
 
+  // Calendar: год / месяц / день. Opens on «день» = today, per owner rule.
+  String _calView = 'day';
+  DateTime _calMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  int _calYear = DateTime.now().year;
+  // Moscow-date → task count, for the month/year grids.
+  Map<String, int> _calCounts = {};
+  bool _calLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -157,6 +165,68 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
       ),
       _ => null,
     };
+  }
+
+  /// Load per-day counts for the currently-shown month or year grid, using the
+  /// same filters as the list so the numbers agree. Range is widened a few days
+  /// each side so a Moscow-date bucket near a month/year boundary is never
+  /// clipped by the UTC fetch window.
+  Future<void> _loadCalendar() async {
+    if (_calView == 'day') return;
+    setState(() => _calLoading = true);
+    final DateTime periodStart;
+    final DateTime periodEnd;
+    if (_calView == 'month') {
+      periodStart = DateTime(_calMonth.year, _calMonth.month, 1);
+      periodEnd = DateTime(_calMonth.year, _calMonth.month + 1, 1);
+    } else {
+      periodStart = DateTime(_calYear, 1, 1);
+      periodEnd = DateTime(_calYear + 1, 1, 1);
+    }
+    try {
+      final counts = await ref
+          .read(magicCrmServiceProvider)
+          .taskCalendar(
+            from: periodStart
+                .subtract(const Duration(days: 2))
+                .toUtc()
+                .toIso8601String(),
+            to: periodEnd.add(const Duration(days: 2)).toUtc().toIso8601String(),
+            q: _searchCtrl.text,
+            status: _statusFilter == 'all' ? null : _statusFilter,
+            entityType: _entityTypeFilter == 'all' ? null : _entityTypeFilter,
+            assignedTo: _assigneeFilter == 'all' ? null : _assigneeFilter,
+            branchId: _branchFilter == 'all' ? null : _branchFilter,
+            priority: _priorityFilter == 'all' ? null : _priorityFilter,
+          );
+      if (!mounted) return;
+      setState(() {
+        _calCounts = counts;
+        _calLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _calLoading = false);
+    }
+  }
+
+  void _setCalView(String view) {
+    if (view == _calView) return;
+    setState(() => _calView = view);
+    if (view == 'day') {
+      _dueFilter = 'day';
+      _loadTasks();
+    } else {
+      _loadCalendar();
+    }
+  }
+
+  void _openDayFromCalendar(DateTime day) {
+    setState(() {
+      _selectedDay = DateTime(day.year, day.month, day.day);
+      _dueFilter = 'day';
+      _calView = 'day';
+    });
+    _loadTasks();
   }
 
   Future<void> _createTask() async {
@@ -681,6 +751,8 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
               onClear: _clearFilters,
             ),
           ),
+          // Год / Месяц / День — opens on «День» = today (owner rule).
+          _TaskViewSwitcher(view: _calView, onChanged: _setCalView),
           if (canControl)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
@@ -693,7 +765,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                 ),
               ),
             ),
-          if (_dueFilter == 'day')
+          if (_calView == 'day' && _dueFilter == 'day')
             _DayNavigator(
               day: _selectedDay,
               onShift: (days) => _setDropdownFilter(
@@ -707,46 +779,86 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                 );
               },
             ),
-          Expanded(
-            child: _loading
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: ListSkeleton(count: 6),
-                  )
-                : _loadError != null
-                ? _TasksError(error: _loadError, onRetry: _loadTasks)
-                : _tasks.isEmpty
-                ? Center(
-                    child: Text(
-                      'Нет задач',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  )
-                : RefreshIndicator(
-                    color: AppColor.gold,
-                    onRefresh: _loadTasks,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: _tasks.length,
-                      itemBuilder: (ctx, i) => _TaskCard(
-                        task: _tasks[i],
-                        isPending: _pendingTaskIds.contains(
-                          _tasks[i]['id']?.toString(),
-                        ),
-                        onStatusChange: _updateStatus,
-                        onTimelineTap: _showTaskTimeline,
-                        onRescheduleTap: _rescheduleTask,
-                        onReassignTap: _reassignTask,
-                        onOpenEntity: _openTaskEntity,
-                        onEditTap: _editTask,
-                        onDeleteTap: _deleteTask,
-                      ),
-                    ),
-                  ),
-          ),
+          Expanded(child: _buildCalendarBody()),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarBody() {
+    if (_calView == 'year') {
+      return _TaskYearGrid(
+        year: _calYear,
+        counts: _calCounts,
+        loading: _calLoading,
+        onPrev: () => setState(() {
+          _calYear--;
+          _loadCalendar();
+        }),
+        onNext: () => setState(() {
+          _calYear++;
+          _loadCalendar();
+        }),
+        onMonthTap: (month) => setState(() {
+          _calMonth = DateTime(_calYear, month);
+          _calView = 'month';
+          _loadCalendar();
+        }),
+      );
+    }
+    if (_calView == 'month') {
+      return _TaskMonthGrid(
+        month: _calMonth,
+        counts: _calCounts,
+        loading: _calLoading,
+        onPrev: () => setState(() {
+          _calMonth = DateTime(_calMonth.year, _calMonth.month - 1);
+          _loadCalendar();
+        }),
+        onNext: () => setState(() {
+          _calMonth = DateTime(_calMonth.year, _calMonth.month + 1);
+          _loadCalendar();
+        }),
+        onDayTap: _openDayFromCalendar,
+      );
+    }
+    // Day view: the existing filtered list.
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12),
+        child: ListSkeleton(count: 6),
+      );
+    }
+    if (_loadError != null) {
+      return _TasksError(error: _loadError, onRetry: _loadTasks);
+    }
+    if (_tasks.isEmpty) {
+      return Center(
+        child: Text(
+          'Нет задач',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      color: AppColor.gold,
+      onRefresh: _loadTasks,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: _tasks.length,
+        itemBuilder: (ctx, i) => _TaskCard(
+          task: _tasks[i],
+          isPending: _pendingTaskIds.contains(_tasks[i]['id']?.toString()),
+          onStatusChange: _updateStatus,
+          onTimelineTap: _showTaskTimeline,
+          onRescheduleTap: _rescheduleTask,
+          onReassignTap: _reassignTask,
+          onOpenEntity: _openTaskEntity,
+          onEditTap: _editTask,
+          onDeleteTap: _deleteTask,
+        ),
       ),
     );
   }
@@ -768,11 +880,14 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     if (_statusFilter == value) return;
     setState(() => _statusFilter = value);
     _loadTasks();
+    if (_calView != 'day') _loadCalendar();
   }
 
   void _setDropdownFilter(void Function() update) {
     setState(update);
     _loadTasks();
+    // A grid summarises the same filtered set, so keep its counts in step.
+    if (_calView != 'day') _loadCalendar();
   }
 
   void _clearFilters() {

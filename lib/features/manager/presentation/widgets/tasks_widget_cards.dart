@@ -768,3 +768,360 @@ class _TaskCard extends StatelessWidget {
     };
   }
 }
+
+/// Год / Месяц / День switcher for the tasks calendar.
+class _TaskViewSwitcher extends StatelessWidget {
+  final String view; // 'year' | 'month' | 'day'
+  final ValueChanged<String> onChanged;
+
+  const _TaskViewSwitcher({required this.view, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget seg(String value, String label) {
+      final active = view == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => onChanged(value),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: active ? AppColor.gold : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              border: Border.all(
+                color: active ? AppColor.gold : AppColor.goldLine,
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: active
+                    ? Colors.black
+                    : Theme.of(context).colorScheme.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(9, 0, 9, 6),
+      child: Row(
+        children: [
+          seg('year', 'Год'),
+          seg('month', 'Месяц'),
+          seg('day', 'День'),
+        ],
+      ),
+    );
+  }
+}
+
+String _taskDayKey(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-'
+    '${d.day.toString().padLeft(2, '0')}';
+
+/// Month calendar: a day-count per cell, tap a day to open its list.
+class _TaskMonthGrid extends StatelessWidget {
+  final DateTime month; // first day of the shown month
+  final Map<String, int> counts; // 'yyyy-MM-dd' -> count
+  final bool loading;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final void Function(DateTime day) onDayTap;
+
+  const _TaskMonthGrid({
+    required this.month,
+    required this.counts,
+    required this.loading,
+    required this.onPrev,
+    required this.onNext,
+    required this.onDayTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final first = DateTime(month.year, month.month, 1);
+    // Monday-first grid. weekday: Mon=1..Sun=7.
+    final leading = first.weekday - 1;
+    final gridStart = first.subtract(Duration(days: leading));
+    final today = DateTime.now();
+    final todayKey = _taskDayKey(today);
+
+    return Column(
+      children: [
+        _CalendarHeader(
+          title: DateFormat('LLLL yyyy', 'ru').format(first),
+          onPrev: onPrev,
+          onNext: onNext,
+          loading: loading,
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              for (final d in const ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'])
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      d,
+                      style: TextStyle(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            physics: const AlwaysScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisSpacing: 4,
+              crossAxisSpacing: 4,
+              childAspectRatio: 0.85,
+            ),
+            itemCount: 42,
+            itemBuilder: (ctx, i) {
+              final day = gridStart.add(Duration(days: i));
+              final inMonth = day.month == month.month;
+              final key = _taskDayKey(day);
+              final count = counts[key] ?? 0;
+              final isToday = key == todayKey;
+              return GestureDetector(
+                onTap: () => onDayTap(day),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isToday
+                        ? AppColor.gold.withValues(alpha: 0.14)
+                        : cs.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isToday ? AppColor.gold : cs.outlineVariant,
+                      width: isToday ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${day.day}',
+                        style: TextStyle(
+                          color: inMonth
+                              ? cs.onSurface
+                              : cs.onSurfaceVariant.withValues(alpha: 0.4),
+                          fontSize: 13,
+                          fontWeight: isToday
+                              ? FontWeight.w800
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      if (count > 0) ...[
+                        const SizedBox(height: 3),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColor.actionBlue,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '$count',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Year calendar: 12 months, each with a total task count.
+class _TaskYearGrid extends StatelessWidget {
+  final int year;
+  final Map<String, int> counts; // 'yyyy-MM-dd' -> count
+  final bool loading;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final void Function(int month) onMonthTap;
+
+  const _TaskYearGrid({
+    required this.year,
+    required this.counts,
+    required this.loading,
+    required this.onPrev,
+    required this.onNext,
+    required this.onMonthTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Sum each month from the day-keyed counts.
+    final monthTotals = List<int>.filled(13, 0);
+    counts.forEach((key, value) {
+      // key = 'yyyy-MM-dd'
+      if (key.length >= 7 && key.startsWith('$year-')) {
+        final mm = int.tryParse(key.substring(5, 7));
+        if (mm != null && mm >= 1 && mm <= 12) monthTotals[mm] += value;
+      }
+    });
+    final now = DateTime.now();
+
+    return Column(
+      children: [
+        _CalendarHeader(
+          title: '$year',
+          onPrev: onPrev,
+          onNext: onNext,
+          loading: loading,
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 1.3,
+            ),
+            itemCount: 12,
+            itemBuilder: (ctx, i) {
+              final month = i + 1;
+              final total = monthTotals[month];
+              final isCurrent = year == now.year && month == now.month;
+              return GestureDetector(
+                onTap: () => onMonthTap(month),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isCurrent
+                        ? AppColor.gold.withValues(alpha: 0.14)
+                        : cs.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isCurrent ? AppColor.gold : cs.outlineVariant,
+                      width: isCurrent ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        DateFormat(
+                          'LLL',
+                          'ru',
+                        ).format(DateTime(year, month)).toUpperCase(),
+                        style: TextStyle(
+                          color: cs.onSurface,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        total == 0 ? '—' : '$total',
+                        style: TextStyle(
+                          color: total == 0
+                              ? cs.onSurfaceVariant
+                              : AppColor.actionBlue,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Prev/next header shared by the month and year grids.
+class _CalendarHeader extends StatelessWidget {
+  final String title;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final bool loading;
+
+  const _CalendarHeader({
+    required this.title,
+    required this.onPrev,
+    required this.onNext,
+    required this.loading,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onPrev,
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title.isNotEmpty
+                        ? '${title[0].toUpperCase()}${title.substring(1)}'
+                        : title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (loading) ...[
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onNext,
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
