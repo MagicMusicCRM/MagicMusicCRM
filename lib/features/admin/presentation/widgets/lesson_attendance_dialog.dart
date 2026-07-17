@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
@@ -66,10 +67,25 @@ class _LessonAttendanceDialogState
   List<Map<String, dynamic>> _students = [];
   final Map<String, TextEditingController> _reasonControllers = {};
 
+  /// Комментарии админа к ЭТОМУ занятию.
+  ///
+  /// ✔ Решение заказчика: комментарий к групповому занятию относится к занятию
+  /// целиком, а не к каждому ученику, и писать его — отсюда, из диалога
+  /// занятия. В карточку клиента он попадёт сам: её лента подмешивает
+  /// комментарии к занятиям ученика (includeLessonComments).
+  ///
+  /// Это не «причина пропуска» (та своя у каждого участника и живёт в
+  /// _reasonControllers) — это заметка про сам урок: «миши не будет»,
+  /// «захотели убрать это время вообще».
+  List<Map<String, dynamic>> _lessonComments = [];
+  final TextEditingController _newComment = TextEditingController();
+  bool _commentBusy = false;
+
   @override
   void initState() {
     super.initState();
     _loadAttendance();
+    _loadComments();
   }
 
   @override
@@ -77,7 +93,49 @@ class _LessonAttendanceDialogState
     for (final c in _reasonControllers.values) {
       c.dispose();
     }
+    _newComment.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadComments() async {
+    try {
+      final rows = await ref
+          .read(magicCrmServiceProvider)
+          .listComments(
+            entityType: 'lesson',
+            entityId: (widget.lesson['id'] ?? '').toString(),
+            limit: 20,
+          );
+      if (mounted) setState(() => _lessonComments = rows);
+    } catch (_) {
+      // Комментарии — не главное в этом диалоге: посещаемость важнее, и ронять
+      // её из-за них нельзя. Молчим, список останется пустым.
+    }
+  }
+
+  Future<void> _addComment() async {
+    final body = _newComment.text.trim();
+    if (body.isEmpty || _commentBusy) return;
+    setState(() => _commentBusy = true);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .createComment(
+            entityType: 'lesson',
+            entityId: (widget.lesson['id'] ?? '').toString(),
+            body: body,
+          );
+      _newComment.clear();
+      await _loadComments();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Не удалось добавить: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _commentBusy = false);
+    }
   }
 
   Future<void> _loadAttendance() async {
@@ -138,6 +196,108 @@ class _LessonAttendanceDialogState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  /// Комментарии админа к занятию: что уже написано + поле для нового.
+  ///
+  /// Здесь, а не в карточке клиента, потому что комментарий относится к
+  /// ЗАНЯТИЮ: у групповой пары он один на всех, и писать его из карточки
+  /// одного из учеников было бы неверно. В карточку он попадёт сам.
+  Widget _commentsSection(ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.event_note_rounded, size: 15, color: cs.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(
+                'Комментарии к занятию',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          if (_lessonComments.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            // Ограничены по высоте: диалог всё-таки про посещаемость, а у
+            // занятия комментариев может быть много.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 108),
+              child: ListView(
+                shrinkWrap: true,
+                children: _lessonComments.map((c) {
+                  final dt = DateTime.tryParse(
+                    (c['created_at'] ?? '').toString(),
+                  )?.toLocal();
+                  final author = (c['author_name'] ?? '').toString().trim();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            (c['body'] ?? '').toString(),
+                            style: const TextStyle(fontSize: 12.5),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          [
+                            if (author.isNotEmpty) author,
+                            if (dt != null) DateFormat('d MMM', 'ru').format(dt),
+                          ].join(' · '),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _newComment,
+                  minLines: 1,
+                  maxLines: 3,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    hintText: 'Заметка про это занятие…',
+                  ),
+                  onSubmitted: (_) => _addComment(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Добавить комментарий',
+                onPressed: _commentBusy ? null : _addComment,
+                icon: _commentBusy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded, size: 18, color: AppColor.gold),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -264,6 +424,8 @@ class _LessonAttendanceDialogState
                           itemBuilder: (ctx, i) => _studentRow(_students[i], cs),
                         ),
                 ),
+                const Divider(height: 1),
+                if (!_loading) _commentsSection(cs),
                 const Divider(height: 1),
                 // «Уведомить об изменениях» (модалка HolliHop, image5).
                 if (!_loading)

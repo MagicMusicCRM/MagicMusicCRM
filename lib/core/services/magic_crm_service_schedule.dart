@@ -407,6 +407,8 @@ extension MagicCrmSchedule on MagicCrmService {
     required String entityId,
     bool progressOnly = false,
     String? kind,
+    /// Подмешать комментарии к занятиям этого ученика (только для 'student').
+    bool includeLessonComments = false,
     int limit = 50,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
@@ -416,6 +418,7 @@ extension MagicCrmSchedule on MagicCrmService {
         'entityId': entityId,
         'progressOnly': progressOnly,
         'kind': ?kind,
+        if (includeLessonComments) 'includeLessonComments': true,
         'limit': limit,
       },
     );

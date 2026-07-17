@@ -23,6 +23,16 @@ class Comment {
   Object? get progress => _m['progress'];
   String? get createdAt => _m['created_at']?.toString();
 
+  /// Когда шло занятие, к которому оставлен комментарий; null у обычных.
+  ///
+  /// По нему лента и отличает «комментарий к клиенту» от «комментария к
+  /// занятию 11.07»: комментарий живёт на занятии (у группового он один на
+  /// всех), но человеку нужен в ленте клиента — вперемешку с остальными.
+  String? get lessonAt => _m['lesson_at']?.toString();
+
+  /// Комментарий оставлен к конкретному занятию.
+  bool get isAboutLesson => (_m['lesson_at'] ?? '').toString().isNotEmpty;
+
   /// Synthetic origin tag ('lead' | 'student') added by the client card when it
   /// merges both halves; null for a single-side list.
   String? get origin => _m['_origin']?.toString();
