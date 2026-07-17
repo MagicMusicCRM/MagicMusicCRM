@@ -132,6 +132,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   // Folder bar state (staff / manager+admin only)
   InboxFolder _selectedFolder = InboxFolder.leads;
+  // Chat branch filter (staff only). null = «Все филиалы». A client with no
+  // branch assigned is shown under every branch (server-side rule).
+  String? _chatBranchFilter;
+  List<Map<String, dynamic>> _chatBranches = const [];
 
   bool get _isAdminRole =>
       widget.role == 'admin' || widget.role == 'system_admin';
