@@ -27,6 +27,48 @@ function pick(row: Record<string, unknown>, ...columns: string[]): string {
   return "";
 }
 
+// ── Внешние id ───────────────────────────────────────────────────────────────
+//
+// ⚠️ У HolliHop ДВА разных числовых id на человека, и путать их нельзя:
+//   `Id`       — id учебной записи (Student.Id / Lead.Id);
+//   `ClientId` — id человека-клиента, общий на всех его учебных записей.
+//
+// Наш первичный ключ выведен из ПЕРВОГО: `deterministicUuid("hollihop-student",
+// student.Id)` (так делал прежний импорт, файл достаётся из `7f2a3fd7^`).
+// Поэтому подставлять сюда ClientId нельзя ни при каких обстоятельствах.
+//
+// Это не теория. В выгрузке заказчика (`students.json`, 1055 строк) **у 113
+// строк `ИД клиента` равен `ИД` ДРУГОГО ученика**: например, у «--- Анастасия»
+// (ИД 7570) `ИД клиента` = 3871, а 3871 — это ИД Алисы Якимчук. Прими мы
+// ClientId за Id, и заметки 113 человек молча уехали бы в чужие карточки.
+//
+// Сейчас от этого спасала только опечатка: выгрузка пишет «ИД» КИРИЛЛИЦЕЙ
+// (U+0418 U+0414), а маппер искал латинское «ID» — и не находил ничего,
+// откатываясь на телефон. Один баг маскировал другой: «почини» кто-нибудь
+// кириллицу, не тронув приоритет, — и получил бы порчу данных.
+//
+// Отсюда два отдельных явных хелпера вместо одного `pick(...)` со свалкой
+// написаний.
+
+/**
+ * Id **учебной записи ученика** (Student.Id) — тот, из которого выведен наш
+ * первичный ключ. Кириллическая «ИД» — как её пишет выгрузка из интерфейса,
+ * латинские — как отдаёт API.
+ *
+ * `ИД клиента`/`ClientId` здесь намеренно НЕ читается: см. заметку выше.
+ */
+export function studentExternalId(row: Record<string, unknown>): string {
+  return pick(row, "ИД", "Id", "ID");
+}
+
+/**
+ * Id лида (Lead.Id). У лида ClientId нет вовсе (проверено по дампу API), так
+ * что путать не с чем; выгрузка пишет его латиницей — «ID».
+ */
+export function leadExternalId(row: Record<string, unknown>): string {
+  return pick(row, "ID", "Id", "ИД");
+}
+
 /**
  * Parses the Russian date format the exports use. The hour may be single-digit
  * and the separator is sometimes a newline («18.03.2026\n9:55»).
@@ -110,8 +152,13 @@ export function taskFromRow(row: Record<string, unknown>): ExportTask | null {
   const clientName = pick(row, "Клиент");
   if (!description && !clientName) return null;
   return {
-    // Column spelling varies between exports; take whichever is present.
-    externalId: pick(row, "ID клиента", "ClientId", "Id", "ID"),
+    // Выгрузка задач id не содержит вовсе (проверено на файле заказчика: 0 из
+    // 527 строк) — у неё есть только «Клиент» и телефон. Читаем `ИД`/`Id` на
+    // случай, если он появится, но НЕ `ID клиента`: подставить ClientId в
+    // ученический namespace значит попасть в чужую карточку (см. заметку
+    // выше). Пока колонки нет, задачи сопоставляются телефоном, и это не
+    // фолбэк, а единственный доступный способ.
+    externalId: studentExternalId(row),
     phoneRaw: pick(row, "Моб. телефон", "Телефон"),
     clientName,
     description,
@@ -150,11 +197,15 @@ export function studentNoteFromRow(row: Record<string, unknown>): ExportNote | n
   const note = pick(row, "Описание", "Комментарий", "Примечание");
   if (!note) return null;
   return {
-    externalId: pick(row, "ID клиента", "ClientId", "Id", "ID"),
+    externalId: studentExternalId(row),
     phoneRaw: pick(row, "Моб. телефон", "Телефон"),
     name: [pick(row, "Фамилия"), pick(row, "Имя")].filter(Boolean).join(" "),
     note,
-    createdRaw: pick(row, "Дата", "Дата создания"),
+    // «Дата обращения» здесь НЕ читается, хотя она в выгрузке единственная
+    // дата: это день, когда клиент впервые обратился, а не когда написали
+    // заметку. Поставить её датой заметки значило бы выдумать факт. Заметка
+    // на карточке ученика — поле, а не событие, и своей даты у неё нет.
+    createdRaw: pick(row, "Дата создания"),
   };
 }
 
@@ -163,11 +214,11 @@ export function leadCommentFromRow(row: Record<string, unknown>): ExportNote | n
   if (!comment) return null;
   const extra = pick(row, "Пользовательские поля");
   return {
-    externalId: pick(row, "ID клиента", "ClientId", "Id", "ID"),
+    externalId: leadExternalId(row),
     phoneRaw: pick(row, "Моб. телефон", "Телефон"),
     name: pick(row, "ФИО"),
     note: extra ? `${comment}\n${extra}` : comment,
-    createdRaw: pick(row, "Дата", "Дата создания"),
+    createdRaw: pick(row, "Дата создания"),
   };
 }
 

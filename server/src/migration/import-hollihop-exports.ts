@@ -219,22 +219,35 @@ interface Resolved {
   by: "id" | "phone";
 }
 
+/**
+ * Кого искать по внешнему id.
+ *
+ * ⚠️ Тип обязателен, и это не педантизм. Пространства id у учеников и лидов в
+ * HolliHop **пересекаются**: в выгрузке заказчика 58 чисел существуют и как
+ * `Student.Id`, и как `Lead.Id`. Прежний код пробовал один и тот же id сначала
+ * в ученическом namespace, потом в лидовом, — и для этих 58 комментарий лида
+ * уехал бы в карточку постороннего ученика, причём с видом точного совпадения
+ * «by id».
+ *
+ * Файл знает, чей это id: `students.json` → student, `leads.json` → lead.
+ * Угадывать здесь нечего, поэтому и не угадываем.
+ */
+type ExternalIdKind = "student" | "lead";
+
 async function resolveEntity(
   matcher: Matcher,
-  externalId: string,
+  external: { id: string; kind: ExternalIdKind } | null,
   phoneRaw: string,
   report: SectionReport,
 ): Promise<Resolved | null> {
-  if (externalId) {
-    const studentId = await matcher.studentByExternalId(externalId);
-    if (studentId) {
+  if (external?.id) {
+    const found =
+      external.kind === "student"
+        ? await matcher.studentByExternalId(external.id)
+        : await matcher.leadByExternalId(external.id);
+    if (found) {
       report.matchedById++;
-      return { entityType: "student", entityId: studentId, by: "id" };
-    }
-    const leadId = await matcher.leadByExternalId(externalId);
-    if (leadId) {
-      report.matchedById++;
-      return { entityType: "lead", entityId: leadId, by: "id" };
+      return { entityType: external.kind, entityId: found, by: "id" };
     }
   }
   const { canonical } = normalizePhoneRu(phoneRaw);
@@ -310,12 +323,10 @@ export async function runImport(options: {
       const report = reports.tasks;
       report.total++;
 
-      const resolved = await resolveEntity(
-        matcher,
-        mapped.externalId,
-        mapped.phoneRaw,
-        report,
-      );
+      // Задача может висеть и на ученике, и на лиде, а id в её выгрузке нет
+      // вовсе — значит, только телефон. Ставить сюда `kind` наугад нельзя:
+      // ошибка в типе увела бы задачу в чужую карточку.
+      const resolved = await resolveEntity(matcher, null, mapped.phoneRaw, report);
       if (!resolved) continue;
 
       const assignedTo = await matcher.userIdByName(mapped.responsible);
@@ -400,9 +411,12 @@ export async function runImport(options: {
       if (!mapped) continue;
       report.total++;
 
+      // Файл знает, чей это id: строка из students.json → ученик. Гадать по
+      // самому числу нельзя — 58 чисел существуют и как Student.Id, и как
+      // Lead.Id (см. ExternalIdKind).
       const resolved = await resolveEntity(
         matcher,
-        mapped.externalId,
+        { id: mapped.externalId, kind: "student" },
         mapped.phoneRaw,
         report,
       );
@@ -433,9 +447,10 @@ export async function runImport(options: {
       if (!mapped) continue;
       report.total++;
 
+      // Строка из leads.json → лид. См. комментарий выше.
       const resolved = await resolveEntity(
         matcher,
-        mapped.externalId,
+        { id: mapped.externalId, kind: "lead" },
         mapped.phoneRaw,
         report,
       );

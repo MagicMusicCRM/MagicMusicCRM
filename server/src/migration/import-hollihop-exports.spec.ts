@@ -72,12 +72,14 @@ describe("runImport", () => {
     return { client: { query } as never, query, writes };
   };
 
+  // ⚠️ Колонки id в выгрузке задач НЕТ вовсе — проверено на файле заказчика:
+  // 0 из 527 строк. Поэтому здесь её нет и в фикстуре: задачи сопоставляются
+  // телефоном, и это не фолбэк, а единственный доступный способ.
   const TASKS = {
     Tasks: [
       {
-        "ID клиента": "1001",
         Клиент: "Анна Иванова",
-        "Моб. телефон": "+7 (916) 123-45-67",
+        "Моб. телефон": "+79165550000",
         Описание: "Позвонить (поставил Иванов И.И. - 12.03.2026)",
         "Дата выполнения": "18.03.2026 9:55",
         Ответственный: "[Для всех]",
@@ -88,12 +90,6 @@ describe("runImport", () => {
         Описание: "Перезвонить",
         "Дата выполнения": "20.03.2026",
         Статус: "Выполнена",
-      },
-      {
-        // Ученик без внешнего id в выгрузке — находится по телефону.
-        Клиент: "Мария Сидорова",
-        "Моб. телефон": "+79165550000",
-        Описание: "Уточнить расписание",
       },
       {
         Клиент: "Без телефона",
@@ -115,11 +111,11 @@ describe("runImport", () => {
     const run = await runImport({ client, exportsDir: dir, mode: "dry_run" });
 
     expect(run.reports.tasks).toEqual({
-      total: 5,
-      matchedById: 1, // «Анна» — по внешнему id
-      // «Олег» → лид по телефону, «Мария» → ученик по телефону. Обе ветки
-      // фолбэка важны: с одной только лидовой мутация в ученической ветке
-      // проходила незамеченной.
+      total: 4,
+      // У задач внешнего id нет — только телефон. «Анна» → ученик,
+      // «Олег» → лид. Обе ветки важны: с одной только лидовой мутация в
+      // ученической ветке проходила незамеченной.
+      matchedById: 0,
       matchedByPhone: 2,
       unmatchedNoPhone: 1, // «не указан» не нормализуется
       unmatchedNoRecord: 1, // телефон валиден, но такого клиента нет
@@ -129,16 +125,57 @@ describe("runImport", () => {
   });
 
   it("ищет по внешнему id раньше телефона", async () => {
-    writeExport("tasks.json", TASKS);
+    // Проверяем на заметках ученика: у них id в выгрузке ЕСТЬ (колонка «ИД»),
+    // в отличие от задач.
+    writeExport("students.json", {
+      Students: [
+        {
+          ИД: "1001",
+          "ИД клиента": "9999", // ClientId — читать его нельзя, см. ниже
+          Фамилия: "Иванова",
+          Имя: "Анна",
+          "Моб. телефон": "+79165550000",
+          Описание: "Заметка",
+        },
+      ],
+    });
     const { client, query } = fakeClient();
 
     await runImport({ client, exportsDir: dir, mode: "dry_run" });
 
-    // Первый запрос по «Анне» — попадание по восстановленному id, а не по
-    // телефону: телефон терял записи, и это чинилось именно так.
+    // Попадание по восстановленному из «ИД» ключу, а не по телефону: телефон
+    // терял записи, и это чинилось именно так.
     const first = String(query.mock.calls[0][0]);
     expect(first).toContain("from app.students where id =");
     expect((query.mock.calls[0][1] as unknown[])[0]).toBe(STUDENT_ID);
+  });
+
+  it("не подставляет ClientId вместо Student.Id", async () => {
+    // ⚠️ Первичный ключ выведен из Student.Id. У 113 из 1055 учеников
+    // «ИД клиента» равен «ИД» ДРУГОГО ученика (проверено на проде: id 2512
+    // как ClientId — Вероника Кочергина, как Student.Id — Мария Кивелиди).
+    // Прими ClientId за Id — и заметка уедет в чужую карточку.
+    writeExport("students.json", {
+      Students: [
+        {
+          "ИД клиента": "1001", // только ClientId, «ИД» нет
+          Фамилия: "Чужая",
+          Имя: "Запись",
+          "Моб. телефон": "не указан",
+          Описание: "Не должна попасть к ученику 1001",
+        },
+      ],
+    });
+    const { client, query } = fakeClient();
+
+    const run = await runImport({ client, exportsDir: dir, mode: "dry_run" });
+
+    // Ключ ученика по «1001» не реконструировался — значит, и запроса не было.
+    const probed = query.mock.calls.some((c) =>
+      String(c[0]).includes("from app.students where id ="),
+    );
+    expect(probed).toBe(false);
+    expect(run.reports.studentNotes.matchedById).toBe(0);
   });
 
   it("не пишет в базу в сухом прогоне", async () => {
@@ -212,9 +249,8 @@ describe("runImport", () => {
     writeExport("task-history.json", {
       History: [
         {
-          "ID клиента": "1001",
           Клиент: "Анна Иванова",
-          "Моб. телефон": "+7 (916) 123-45-67",
+          "Моб. телефон": "+79165550000",
           Описание: "Позвонить (поставил Иванов И.И. - 12.03.2026)",
           "Дата выполнения": "18.03.2026 9:55",
           "Дата изменения": "15.03.2026 10:00",
@@ -272,7 +308,7 @@ describe("runImport", () => {
     writeExport("students.json", {
       Students: [
         {
-          "ID клиента": "1001",
+          ИД: "1001", // Student.Id — кириллицей, как его пишет выгрузка
           Фамилия: "Иванова",
           Имя: "Анна",
           "Моб. телефон": "+79161234567",
@@ -309,8 +345,9 @@ describe("runImport", () => {
     const run = await runImport({ client, exportsDir: dir, mode: "dry_run" });
     const report = formatReport(run, "dry_run");
 
-    expect(report).toContain("tasks: 5 row(s) in source");
-    expect(report).toContain("matched:   3 (by id 1, by phone 2)");
+    expect(report).toContain("tasks: 4 row(s) in source");
+    // У задач внешнего id нет — «by id 0» это не дефект, а свойство выгрузки.
+    expect(report).toContain("matched:   2 (by id 0, by phone 2)");
     expect(report).toContain(
       "unmatched: 2 (no usable phone 1, no such record 1)",
     );

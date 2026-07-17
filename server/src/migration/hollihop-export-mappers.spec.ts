@@ -2,8 +2,10 @@ import {
   cleanResponsible,
   historyFieldName,
   leadCommentFromRow,
+  leadExternalId,
   parseRuDate,
   responsibleFromDescription,
+  studentExternalId,
   studentNoteFromRow,
   taskFromRow,
   taskHistoryFromRow,
@@ -91,6 +93,9 @@ describe("cleanResponsible", () => {
 describe("taskFromRow", () => {
   it("reads a row and prefers the column over the text for the author", () => {
     const task = taskFromRow({
+      // Колонки id в выгрузке задач нет (0 из 527 строк у заказчика), а
+      // «ID клиента» здесь стоит намеренно: он НЕ должен читаться — это
+      // ClientId, и в ученическом namespace он указал бы на чужого человека.
       "ID клиента": "12345",
       "Моб. телефон": "+7 (916) 123-45-67",
       Клиент: "Анна Иванова",
@@ -100,7 +105,7 @@ describe("taskFromRow", () => {
     });
 
     expect(task).toEqual({
-      externalId: "12345",
+      externalId: "",
       phoneRaw: "+7 (916) 123-45-67",
       clientName: "Анна Иванова",
       description: "Позвонить (поставил Иванов И.И. - 12.03.2026)",
@@ -177,6 +182,53 @@ describe("studentNoteFromRow / leadCommentFromRow", () => {
 
   it("skips an empty note", () => {
     expect(studentNoteFromRow({ Фамилия: "Иванова" })).toBeNull();
+  });
+});
+
+describe("внешние id: Student.Id vs ClientId", () => {
+  // Все три случая — не гипотезы: измерены на выгрузке заказчика и сверены с
+  // боевой базой 17.07.
+
+  it("reads the Cyrillic «ИД» the export actually writes", () => {
+    // Выгрузка пишет «ИД» КИРИЛЛИЦЕЙ (U+0418 U+0414), а маппер искал латинское
+    // «ID» — и не находил ничего: 0 из 956 строк. Матчинг по внешнему id у
+    // учеников не срабатывал ни разу, всё падало на телефон.
+    expect(studentExternalId({ ИД: 1342, "ИД клиента": 1110 })).toBe("1342");
+  });
+
+  it("never takes ClientId for the student id", () => {
+    // ⚠️ Первичный ключ выведен из Student.Id. У 113 из 1055 учеников
+    // «ИД клиента» равен «ИД» ДРУГОГО ученика — на проде проверено живьём:
+    // id 2512 как ClientId это Вероника Кочергина, как Student.Id — Мария
+    // Кивелиди. Прими ClientId за Id, и заметки уедут в чужую карточку.
+    expect(studentExternalId({ "ИД клиента": 1110 })).toBe("");
+    expect(studentExternalId({ ClientId: 1110 })).toBe("");
+  });
+
+  it("reads the Latin ID the lead export writes", () => {
+    // У лида ClientId нет вовсе (проверено по дампу API), путать не с чем.
+    expect(leadExternalId({ ID: "6045" })).toBe("6045");
+  });
+
+  it("keeps the two id spaces apart", () => {
+    // 58 чисел существуют и как Student.Id, и как Lead.Id. Один и тот же
+    // «102» — разные люди, и хелперы не должны читать чужую колонку.
+    expect(studentExternalId({ ID: "102" })).toBe("102");
+    expect(leadExternalId({ ИД: "102" })).toBe("102");
+    // …но ClientId не проходит ни в один namespace.
+    expect(studentExternalId({ "ИД клиента": "102" })).toBe("");
+  });
+
+  it("does not read an id out of the tasks export, which has none", () => {
+    // В tasks.json колонки id нет вовсе (0 из 527 строк) — задачи
+    // сопоставляются телефоном, и это не фолбэк, а единственный способ.
+    const task = taskFromRow({
+      Описание: "перезвонить",
+      Клиент: "Иванова Анна",
+      "Моб. телефон": "89161234567",
+    });
+    expect(task?.externalId).toBe("");
+    expect(task?.phoneRaw).toBe("89161234567");
   });
 });
 
