@@ -88,13 +88,27 @@
 
 | # | Что | Источник | Ожидаемо | Проверка |
 |---|---|---|---|---|
-| 4.1 | Занятия | `EdUnits` + `ScheduleItems` | ~33 000 | `select count(*) from app.lessons where deleted_at is null` |
-| 4.2 | Посещаемость | `EdUnitStudents` | ~33 000 | `select count(*) from app.lesson_participation` |
+| 4.1 | Занятия | `EdUnits` + `ScheduleItems` | **33 996** | `select count(*) from app.lessons where deleted_at is null` |
+| 4.2 | Посещаемость | `EdUnitStudents` | **33 989** | `select count(*) from app.lesson_participation` |
+| 4.6 | **2023 год на месте** | — | **1 208 занятий, с 18.03.2023** | `select count(*), min(scheduled_at)::date from app.lessons where scheduled_at < '2024-01-01' and deleted_at is null` |
+| 4.7 | Заметка админа к занятию | `EdUnits[].Days[].Description` | **7 531** | `select count(*) from app.entity_comments where entity_type='lesson' and deleted_at is null` |
 | 4.3 | Платежи | `Payments.json` | **3271** | `select count(*) from app.payments where deleted_at is null` |
 | 4.4 | Личный счёт | `IncomesAndOutgoes.json` | **1011** | `select count(*) from app.account_adjustments where deleted_at is null` |
 | 4.5 | Привязка педагога к занятию | `EdUnit.Assignee` | — | `select count(*) from app.lessons where teacher_id is not null` |
 
-- [ ] 4.1 · [ ] 4.2 · [ ] 4.3 · [ ] 4.4 · [ ] 4.5
+- [ ] 4.1 · [ ] 4.2 · [ ] 4.3 · [ ] 4.4 · [ ] 4.5 · [ ] 4.6 · [ ] 4.7
+
+⚠️ **4.6 — 2023 год чуть не потеряли.** Прежние «~33 000» в этом чек-листе взяты
+с прода, а прод собран с окном `LESSON_FROM=2024-01-01` — то есть без первого
+года школы. Требование заказчика (17.07): «мне нужен 2023 год в базе вместе с его
+клиентами и всеми данными связанными с ними». Окно сдвинуто на 2023-01-01;
+занятий стало 33 996. Клиенты 2023 года приезжали и раньше (лиды/ученики/платежи
+идут без окна) — пустой была именно их история занятий.
+
+⚠️ **4.7 — заметки админа к занятиям.** Ранее числились как «данных нет, нужна
+отдельная выгрузка». Неправда: они всё время лежали в `EdUnits[].Days[].
+Description`. Пишутся на занятие (`entity_type='lesson'`) — решение заказчика:
+комментарий к групповому занятию относится к занятию целиком.
 
 ❌ **Поурочной оплаты педагогам в источнике НЕТ.** В `EdUnits` нет ни одного
 поля `Price/Pay/Rate/Cost/Salary`; `GetPayments` — платежи клиентов. Backfill

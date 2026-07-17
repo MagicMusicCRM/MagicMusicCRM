@@ -28,6 +28,7 @@ import { join } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { normalizePhoneRu } from "../crm/phone.util";
 import { deterministicUuid } from "./import-id";
+import { parseStaffName } from "./staff-name";
 import { readXlsxRows } from "./xlsx-reader";
 import {
   historyFieldName,
@@ -220,11 +221,19 @@ class Matcher {
     });
   }
 
+  /**
+   * Пользователь по имени из выгрузки.
+   *
+   * Два прохода, и второй — не украшение. Выгрузка пишет сотрудника как
+   * «Мазалова А. Ю.», а в базе он «Александра Мазалова»: по полному имени такое
+   * не совпадает НИКОГДА. Ровно поэтому у задач пуст `created_by` — люди в базе
+   * есть (12 менеджеров), а связать текст с ними было нечем.
+   */
   async userIdByName(name: string | null): Promise<string | null> {
     if (!name) return null;
     const key = name.toLowerCase().trim();
     return this.cached(this.userByName, key, async () => {
-      const r = await this.client.query<{ id: string }>(
+      const exact = await this.client.query<{ id: string }>(
         `select u.id from app.users u
          join app.profiles p on p.user_id = u.id and p.deleted_at is null
          where u.deleted_at is null
@@ -234,7 +243,26 @@ class Matcher {
          limit 1`,
         [key],
       );
-      return r.rows[0]?.id ?? null;
+      if (exact.rows[0]) return exact.rows[0].id;
+
+      const parsed = parseStaffName(name);
+      if (!parsed) return null;
+
+      // ⚠️ limit 2, а не 1, и связываем только при ЕДИНСТВЕННОМ совпадении.
+      // Фамилия + первый инициал — не ключ: две однофамилицы с одной буквой
+      // (в выгрузке есть «Назарова Н. Н.» и «Назарова(П) Н. Н.») склеились бы
+      // молча, и чужие задачи уехали бы человеку в карточку с видом точного
+      // попадания. Неоднозначное имя лучше показать в отчёте.
+      const byInitials = await this.client.query<{ id: string }>(
+        `select u.id from app.users u
+         join app.profiles p on p.user_id = u.id and p.deleted_at is null
+         where u.deleted_at is null
+           and lower(btrim(p.last_name)) = $1
+           and lower(left(btrim(p.first_name), 1)) = $2
+         limit 2`,
+        [parsed.lastName.toLowerCase(), parsed.initials[0].toLowerCase()],
+      );
+      return byInitials.rows.length === 1 ? byInitials.rows[0].id : null;
     });
   }
 }
