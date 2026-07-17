@@ -36,6 +36,7 @@ import { normalizePhoneRu } from "../crm/phone.util";
 import { deterministicUuid, sha256Hex } from "./v3-import-utils";
 import { disciplineEntries, contactEntries, primaryBranchId } from "./hollihop-mappers";
 import { appendMoscowOffset, historyEntryFromRow } from "./hollihop-history-mappers";
+import { lessonRunsForDay, type LessonRun, type ScheduleSlot } from "./hollihop-lesson-days";
 
 type JsonRow = Record<string, unknown>;
 type ImportMode = "dry_run" | "apply";
@@ -1019,29 +1020,61 @@ async function importAll(
       skip(ctx, "lessons");
       continue;
     }
-    // HolliHop's Days array carries actual occurrence attendance (Pass) and the
-    // administrator's per-lesson note (Description), keyed by date.
-    const daysByDate = new Map<string, JsonRow>();
-    for (const d of array(unit.Days)) {
-      const dt = text(d.Date)?.slice(0, 10);
-      if (dt) daysByDate.set(dt, d);
+    // Занятия строятся из `Days` — из того, что БЫЛО, а не из шаблона
+    // расписания. Шаблон — намерение: перенесли занятие, и в него оно не
+    // попадает. Измерено: 4 975 реальных дней (13%) не порождали занятия
+    // вообще, вместе с 2 615 заметками админа; и наоборот, 1 502 занятия в базе
+    // не соответствовали ни одному реальному дню — их выдумало расписание без
+    // EndDate, развёрнутое до 2028. См. hollihop-lesson-days.ts.
+    //
+    // Слоты по id: через них день получает время, аудиторию и педагога.
+    // Аудитории заводим по всем слотам — комната существует независимо от того,
+    // случилось ли занятие.
+    const slotsById = new Map<string, ScheduleSlot>();
+    const scheduleById = new Map<string, JsonRow>();
+    const roomBySchedule = new Map<string, string | null>();
+    for (const schedule of array(unit.ScheduleItems)) {
+      const scheduleId = text(schedule.Id);
+      if (!scheduleId) continue;
+      roomBySchedule.set(scheduleId, await upsertRoom(ctx, schedule, branchId, roomByKey));
+      scheduleById.set(scheduleId, schedule);
+      const beginTime = normalizeTime(text(schedule.BeginTime));
+      const endTime = normalizeTime(text(schedule.EndTime));
+      if (!beginTime) continue;
+      slotsById.set(scheduleId, { id: scheduleId, beginTime, endTime: endTime ?? "" });
     }
-    for (const schedule of mergeContiguousScheduleItems(
-      array(unit.ScheduleItems),
-    )) {
-      const roomId = await upsertRoom(ctx, schedule, branchId, roomByKey);
-      const generated = await upsertLessons(ctx, {
-        unit,
-        schedule,
-        groupId,
-        branchId,
-        roomId,
-        teacherId: resolveTeacherId(teacherById, { unit, schedule }),
-        memberStudentIds: members,
-        soloStudentId,
-        daysByDate,
-      });
-      if (generated === 0) skip(ctx, "lessons");
+
+    for (const day of array(unit.Days)) {
+      const dayKey = text(day.Date)?.slice(0, 10);
+      if (!dayKey) continue;
+      // Окно остаётся: оно и так задаёт, что мы запросили у GetEdUnits.
+      if (dayKey < LESSON_FROM || dayKey >= LESSON_TO) continue;
+
+      const ids = array(day.ScheduleItemIds).map((id) => String(id));
+      const runs = lessonRunsForDay(ids, slotsById);
+      if (runs.length === 0) {
+        skip(ctx, "lessons");
+        continue;
+      }
+      for (const [index, run] of runs.entries()) {
+        const schedule = scheduleById.get(run.scheduleId)!;
+        const generated = await upsertLessonForDay(ctx, {
+          unit,
+          schedule,
+          run,
+          day,
+          dayKey,
+          // Заметка админа одна на день — достаётся первому занятию по времени.
+          isFirstOfDay: index === 0,
+          groupId,
+          branchId,
+          roomId: roomBySchedule.get(run.scheduleId) ?? null,
+          teacherId: resolveTeacherId(teacherById, { unit, schedule }),
+          memberStudentIds: members,
+          soloStudentId,
+        });
+        if (generated === 0) skip(ctx, "lessons");
+      }
     }
   }
 
@@ -1408,49 +1441,34 @@ async function upsertRoom(
 // The importer would turn each into a separate 1-hour lesson. Merge contiguous
 // runs (one item's EndTime == the next's BeginTime, same room/weekday/date range/
 // teacher) into a single item spanning the full duration before generating.
-function mergeContiguousScheduleItems(items: JsonRow[]): JsonRow[] {
-  const groups = new Map<string, JsonRow[]>();
-  for (const it of items) {
-    const key = [
-      text(it.ClassroomId) ?? "",
-      String(it.Weekdays ?? 0),
-      text(it.BeginDate) ?? "",
-      text(it.EndDate) ?? "",
-      text(it.TeacherId) ?? "",
-    ].join("|");
-    const list = groups.get(key);
-    if (list) list.push(it);
-    else groups.set(key, [it]);
-  }
-  const out: JsonRow[] = [];
-  for (const group of groups.values()) {
-    const sorted = group
-      .slice()
-      .sort((a, b) =>
-        String(a.BeginTime ?? "").localeCompare(String(b.BeginTime ?? "")),
-      );
-    let cur: JsonRow | null = null;
-    for (const it of sorted) {
-      if (
-        cur &&
-        normalizeTime(text(cur.EndTime)) === normalizeTime(text(it.BeginTime))
-      ) {
-        cur.EndTime = it.EndTime; // extend the merged run to this item's end
-      } else {
-        if (cur) out.push(cur);
-        cur = { ...it } as JsonRow;
-      }
-    }
-    if (cur) out.push(cur);
-  }
-  return out;
-}
-
-async function upsertLessons(
+/**
+ * Одно занятие из одного реального дня.
+ *
+ * Пришло на смену `upsertLessons`, который разворачивал шаблон расписания по
+ * дням недели. Разница не косметическая: шаблон — намерение, `Days` — факт.
+ * Перенесли занятие на другой день — в шаблон оно не попадёт, и прежний код
+ * терял его целиком (4 975 дней, 13%), вместе с заметками админа (2 615).
+ * Обратная сторона та же: расписание без EndDate разворачивалось до 2028 и
+ * рождало 1 502 занятия, которых не было.
+ *
+ * `run` — непрерывная цепочка слотов дня (см. hollihop-lesson-days.ts): в один
+ * день у юнита может быть и два часа подряд (одно занятие), и два занятия в
+ * разное время.
+ */
+async function upsertLessonForDay(
   ctx: ImportContext,
   value: {
     unit: JsonRow;
     schedule: JsonRow;
+    run: LessonRun;
+    day: JsonRow;
+    dayKey: string;
+    /**
+     * Первое ли это занятие дня. Заметка админа у HolliHop одна на ДЕНЬ, а
+     * занятий в дне бывает два (842 таких дня) — вешаем её на первое по
+     * времени, иначе выдумали бы вторую.
+     */
+    isFirstOfDay: boolean;
     groupId: string;
     branchId?: string;
     roomId: string | null;
@@ -1458,18 +1476,11 @@ async function upsertLessons(
     memberStudentIds: string[];
     // The single student for an individual/trial unit; null for real groups.
     soloStudentId?: string | null;
-    // Per-date occurrence info (Pass attendance + Description note) from Days.
-    daysByDate?: Map<string, JsonRow>;
   },
-) {
+): Promise<number> {
   const unitId = text(value.unit.Id);
-  const scheduleId = text(value.schedule.Id);
-  const begin = parseDate(text(value.schedule.BeginDate));
-  const end = parseDate(text(value.schedule.EndDate)) ?? parseDate(LESSON_TO);
-  const beginTime = normalizeTime(text(value.schedule.BeginTime));
-  const endTime = normalizeTime(text(value.schedule.EndTime));
-  const weekdays = Number(value.schedule.Weekdays ?? 0);
-  if (!unitId || !scheduleId || !begin || !end || !beginTime) return 0;
+  const scheduleId = value.run.scheduleId;
+  if (!unitId || !scheduleId) return 0;
 
   await recordSource(ctx, {
     source: "scheduleItems",
@@ -1503,118 +1514,98 @@ async function upsertLessons(
     });
   }
 
-  const min = parseDate(LESSON_FROM)!;
-  const max = parseDate(LESSON_TO)!;
-  const start = begin > min ? begin : min;
-  const finish = end < max ? end : max;
-  if (finish < start) return 0;
+  const { dayKey } = value;
+  const scheduledAt = `${dayKey}T${value.run.beginTime}:00${MOSCOW_OFFSET}`;
+  // Длительность — из времён самой цепочки, а не из `Day.Minutes`: у дня с
+  // двумя разными занятиями Minutes несёт их СУММУ (120 на два часовых), и
+  // приписать её каждому значило бы удвоить оба.
+  const duration = durationMinutes(value.run.beginTime, value.run.endTime) ?? 60;
+  // id как раньше: `unit:schedule:день`, где schedule — первый слот цепочки.
+  // Поэтому у 32 494 занятий, которые находились и прежним способом, id не
+  // меняется — реимпорт их не задваивает.
+  const lessonId = deterministicUuid("hollihop-lesson", `${unitId}:${scheduleId}:${dayKey}`);
 
-  let count = 0;
-  for (const day of eachDate(start, finish)) {
-    if (
-      !matchesWeekday(day, weekdays) &&
-      !(weekdays === 0 && sameDate(day, start))
-    ) {
-      continue;
-    }
-    const dayKey = formatDate(day);
-    const scheduledAt = `${dayKey}T${beginTime}:00${MOSCOW_OFFSET}`;
-    const duration = durationMinutes(beginTime, endTime) ?? 60;
-    const lessonId = deterministicUuid(
-      "hollihop-lesson",
-      `${unitId}:${scheduleId}:${dayKey}`,
-    );
-    // Attendance from the Days occurrence: Pass=true → attended; a past date
-    // with no pass → missed; future → still scheduled.
-    const dayInfo = value.daysByDate?.get(dayKey);
-    const attended = dayInfo?.Pass === true;
-    const isPast = dayKey < TODAY_ISO;
-    const lessonStatus = attended || isPast ? "completed" : "scheduled";
-    const participationStatus = attended
-      ? "present"
-      : isPast
-        ? "absent"
-        : "scheduled";
+  // Посещаемость из самого дня: Pass=true → пришёл; прошедший день без Pass →
+  // пропуск; будущий — ещё запланирован.
+  const attended = value.day.Pass === true;
+  const isPast = dayKey < TODAY_ISO;
+  const lessonStatus = attended || isPast ? "completed" : "scheduled";
+  const participationStatus = attended ? "present" : isPast ? "absent" : "scheduled";
+
+  await planUpsert(
+    ctx,
+    "lessons",
+    "app.lessons",
+    {
+      id: lessonId,
+      // Individual/trial lesson → assign the student directly (group_id null).
+      // Real group → group_id, student_id null (members via participation).
+      group_id: value.soloStudentId ? null : value.groupId,
+      student_id: value.soloStudentId ?? null,
+      teacher_id: value.teacherId,
+      branch_id: value.branchId ?? null,
+      room_id: value.roomId,
+      scheduled_at: scheduledAt,
+      duration_minutes: duration,
+      status: lessonStatus,
+      is_trial: isTrialUnit(value.unit),
+      notes: [
+        `HolliHop: ${text(value.unit.Name) ?? ""}`.trim(),
+        text(value.unit.Type),
+        text(value.unit.Discipline),
+        text(value.unit.Level),
+      ]
+        .filter(Boolean)
+        .join(" | "),
+      updated_at: new Date().toISOString(),
+    },
+    ["id"],
+  );
+
+  for (const studentId of value.memberStudentIds) {
     await planUpsert(
       ctx,
-      "lessons",
-      "app.lessons",
+      "lessonParticipation",
+      "app.lesson_participation",
       {
-        id: lessonId,
-        // Individual/trial lesson → assign the student directly (group_id null).
-        // Real group → group_id, student_id null (members via participation).
-        group_id: value.soloStudentId ? null : value.groupId,
-        student_id: value.soloStudentId ?? null,
-        teacher_id: value.teacherId,
-        branch_id: value.branchId ?? null,
-        room_id: value.roomId,
-        scheduled_at: scheduledAt,
-        duration_minutes: duration,
-        status: lessonStatus,
-        is_trial: isTrialUnit(value.unit),
-        notes: [
-          `HolliHop: ${text(value.unit.Name) ?? ""}`.trim(),
-          text(value.unit.Type),
-          text(value.unit.Discipline),
-          text(value.unit.Level),
-        ]
-          .filter(Boolean)
-          .join(" | "),
-        updated_at: new Date().toISOString(),
+        lesson_id: lessonId,
+        student_id: studentId,
+        status: participationStatus,
+        // KVA-237: absent из HolliHop — неоплачиваемый пропуск (час сохранён).
+        attendance_kind: participationStatus === "absent" ? "unpaid_miss" : "attended",
+      },
+      ["lesson_id", "student_id"],
+    );
+  }
+
+  // Заметка администратора к КОНКРЕТНОМУ занятию — то, что заказчик и просил
+  // видеть в разделе комментариев наравне с обычными. В дампе таких 10 021.
+  //
+  // Вешается на ЗАНЯТИЕ, а не на ученика (решение заказчика: комментарий к
+  // групповому занятию — к занятию целиком). Прежний код требовал
+  // `soloStudentId`, то есть у групп заметку молча терял.
+  //
+  // ⚠️ Заметка у HolliHop одна на ДЕНЬ, а занятий в дне может быть два. Вешаем
+  // на первое по времени: приписать её обоим значило бы выдумать вторую.
+  const note = text(value.day.Description);
+  if (note && value.isFirstOfDay) {
+    await planUpsert(
+      ctx,
+      "comments",
+      "app.entity_comments",
+      {
+        id: deterministicUuid("hollihop-day-comment", `${unitId}:${scheduleId}:${dayKey}`),
+        entity_type: "lesson",
+        entity_id: lessonId,
+        author_id: null,
+        body: note,
+        kind: "admin_comment",
+        created_at: scheduledAt,
       },
       ["id"],
     );
-    for (const studentId of value.memberStudentIds) {
-      await planUpsert(
-        ctx,
-        "lessonParticipation",
-        "app.lesson_participation",
-        {
-          lesson_id: lessonId,
-          student_id: studentId,
-          status: participationStatus,
-          // KVA-237: absent из HolliHop — неоплачиваемый пропуск (час сохранён).
-          attendance_kind:
-            participationStatus === "absent" ? "unpaid_miss" : "attended",
-        },
-        ["lesson_id", "student_id"],
-      );
-    }
-    // Заметка администратора к КОНКРЕТНОМУ занятию — то, что заказчик и просил
-    // видеть в разделе комментариев наравне с обычными («в нашем црм тоже нужно
-    // чтобы были комментарии админов к определённым занятиям клиентов»).
-    // В дампе таких 10 021 из 37 469 дней.
-    //
-    // Вешается на ЗАНЯТИЕ, а не на ученика (решение заказчика: комментарий к
-    // групповому занятию — к занятию целиком). Прежний код требовал
-    // `soloStudentId`, то есть у групп заметку молча терял: 56 из 10 021. На
-    // карточку клиента они всё равно попадут — их подмешивает лента
-    // комментариев, а не дублирование записи.
-    //
-    // Время суток HolliHop не хранит — только день. Ставим начало занятия, а не
-    // полдень: у комментария к занятию нет своего времени, и время занятия —
-    // единственное, которое здесь не выдумано.
-    const note = text(dayInfo?.Description);
-    if (note) {
-      await planUpsert(
-        ctx,
-        "comments",
-        "app.entity_comments",
-        {
-          id: deterministicUuid("hollihop-day-comment", `${unitId}:${scheduleId}:${dayKey}`),
-          entity_type: "lesson",
-          entity_id: lessonId,
-          author_id: null,
-          body: note,
-          kind: "admin_comment",
-          created_at: scheduledAt,
-        },
-        ["id"],
-      );
-    }
-    count += 1;
   }
-  return count;
+  return 1;
 }
 
 async function planUpsert(
@@ -2243,26 +2234,6 @@ function parseDate(value: string | undefined): Date | null {
   return new Date(
     Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
   );
-}
-
-function* eachDate(start: Date, finish: Date) {
-  for (
-    const day = new Date(start);
-    day <= finish;
-    day.setUTCDate(day.getUTCDate() + 1)
-  ) {
-    yield new Date(day);
-  }
-}
-
-function matchesWeekday(day: Date, mask: number): boolean {
-  if (!mask) return false;
-  const mondayBased = (day.getUTCDay() + 6) % 7;
-  return (mask & (1 << mondayBased)) !== 0;
-}
-
-function sameDate(a: Date, b: Date): boolean {
-  return formatDate(a) === formatDate(b);
 }
 
 function formatDate(value: Date): string {
