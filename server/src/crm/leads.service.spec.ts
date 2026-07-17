@@ -153,11 +153,23 @@ describe("LeadsService", () => {
       { rows: [] }, // leads
     ]);
     await service.listLeadBoard(actor, { hideConverted: true } as never);
-    expect(query.mock.calls[1][0]).toContain("from app.students");
-    expect(query.mock.calls[1][0]).toContain("linked_conv.lead_id = l.id");
-    expect(query.mock.calls[1][0]).toContain(
-      "p_conv.phone_normalized = l.phone_normalized",
+    const sql = query.mock.calls[1][0] as string;
+    expect(sql).toContain("from app.students");
+    expect(sql).toContain("linked_conv.lead_id = l.id");
+    expect(sql).toContain("p_conv.phone_normalized = l.phone_normalized");
+    // Имя и фамилия — обязательная часть правила, а не украшение: по одному
+    // телефону прятались бы однофамильцы и дети на телефоне родителя. Правило
+    // общее с импортом (leadStudentMatchSql), и урони его тут одна сторона —
+    // карточки снова начнут двоиться.
+    expect(sql).toContain(
+      "lower(btrim(coalesce(p_conv.first_name, ''))) = lower(btrim(coalesce(l.first_name, '')))",
     );
+    expect(sql).toContain(
+      "lower(btrim(coalesce(p_conv.last_name, '')))  = lower(btrim(coalesce(l.last_name, '')))",
+    );
+    // Только активный ученик прячет лид: отчисленный — это история, а не повод
+    // убрать человека с доски. Активность живёт здесь, а не в общем правиле.
+    expect(sql).toContain("linked_conv.status = 'active'");
     expect(query.mock.calls[2][0]).toContain("not exists");
   });
 

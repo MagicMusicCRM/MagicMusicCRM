@@ -7,7 +7,7 @@ import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service
 import { TimelineService } from "./timeline.service";
 import { resolveAge } from "./age";
 import { resolveAppealDate } from "./appeal-date";
-import { attachStudentToLead } from "./lead-student-link";
+import { attachStudentToLead, leadStudentMatchSql } from "./lead-student-link";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
 import { sanitizeJsonObject } from "./crm-util";
@@ -867,6 +867,9 @@ export class LeadsService {
       `);
     }
     if (query.hideConverted === true) {
+      // Правило «ученик и лид — один человек» живёт в одном месте на всю
+      // систему: им же импорт проставляет students.lead_id. Разъедутся —
+      // карточки начнут двоиться. См. leadStudentMatchSql.
       filters.push(`
         not exists (
           select 1
@@ -878,12 +881,7 @@ export class LeadsService {
             and linked_conv.status = 'active'
             and (
               linked_conv.lead_id = l.id
-              or (
-                l.phone_normalized is not null
-                and p_conv.phone_normalized = l.phone_normalized
-                and lower(btrim(coalesce(p_conv.first_name, ''))) = lower(btrim(coalesce(l.first_name, '')))
-                and lower(btrim(coalesce(p_conv.last_name, '')))  = lower(btrim(coalesce(l.last_name, '')))
-              )
+              or (${leadStudentMatchSql("l", "p_conv")})
             )
         )
       `);
