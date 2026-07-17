@@ -199,9 +199,6 @@ extension _ClientCardData on _ClientCardState {
         _studentTasks = _list(card['tasks']);
         _studentComments = _list(card['comments']);
         _groups = _list(card['groups']);
-        _expectedPayments = _list(
-          card['expected_payments'],
-        ).map(ExpectedPayment.fromMap).toList();
         _studentCardTimeline = _list(card['timeline']);
         _studentTasks.sort(
           (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),

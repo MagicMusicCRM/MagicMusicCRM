@@ -175,48 +175,6 @@ extension _ClientCardStudent on _ClientCardState {
     return _studentGuard(cs, () => _paymentsView(cs, payments: _payments));
   }
 
-  // ── Student tab: Инвойсы ─────────────────────────────────────────────────
-  Widget _buildInvoicesTab(ColorScheme cs) {
-    return _studentGuard(
-      cs,
-      () => _invoicesView(cs, expectedPayments: _expectedPayments),
-    );
-  }
-
-  // ── Student tab: Документы ───────────────────────────────────────────────
-  Widget _buildDocumentsTab(ColorScheme cs) {
-    return _studentGuard(cs, () {
-      final contractUrl = _student!['contract_url'] as String?;
-      return ListView(
-        padding: const EdgeInsets.all(AppSpace.xl),
-        children: [
-          _buildInfoCard('Договоры и документы', [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(
-                Icons.description_rounded,
-                color: AppTheme.primaryGold,
-              ),
-              title: const Text('Основной договор'),
-              subtitle: Text(contractUrl ?? 'Не прикреплен'),
-              trailing: IconButton(
-                icon: Icon(
-                  contractUrl != null
-                      ? Icons.edit_rounded
-                      : Icons.add_link_rounded,
-                ),
-                onPressed: _editStudentContractUrl,
-              ),
-              onTap: contractUrl != null
-                  ? () => _openStudentContractUrl(contractUrl)
-                  : null,
-            ),
-          ]),
-        ],
-      );
-    });
-  }
-
   // ── Student tab: История ─────────────────────────────────────────────────
   // For a converted client this folds lead status history into the student
   // timeline (merged, de-duped by id, origin-badged). A plain student keeps the
@@ -239,14 +197,6 @@ extension _ClientCardStudent on _ClientCardState {
         tasks: _studentTasks,
         comments: _studentComments,
       ),
-    );
-  }
-
-  // ── Student tab: Прогресс ([PROGRESS]-prefixed comments) ──────────────────
-  Widget _buildProgressTab(ColorScheme cs) {
-    return _studentGuard(
-      cs,
-      () => _progressNotesView(cs, comments: _studentComments),
     );
   }
 
@@ -275,10 +225,6 @@ extension _ClientCardStudent on _ClientCardState {
                   _showIssueSubscriptionSheet();
                 case 'homework':
                   _showAssignHomeworkSheet();
-                case 'price':
-                  _editStudentPrice();
-                case 'contract':
-                  _editStudentContractUrl();
               }
             },
             itemBuilder: (context) => const [
@@ -301,27 +247,6 @@ extension _ClientCardStudent on _ClientCardState {
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.assignment_rounded, color: AppColor.gold),
                   title: Text('Задать ДЗ'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'price',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.payments_outlined, color: AppColor.gold),
-                  title: Text('Изменить цену'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'contract',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.description_rounded,
-                    color: AppColor.gold,
-                  ),
-                  title: Text('Редактировать договор'),
                 ),
               ),
             ],
@@ -376,89 +301,6 @@ extension _ClientCardStudent on _ClientCardState {
         ],
       ),
     );
-  }
-
-  // ── Student actions (ported from student_detail_screen) ──────────────────
-  Future<void> _editStudentPrice() async {
-    final newPrice = await showSingleFieldDialog(
-      context,
-      title: 'Цена занятия',
-      label: 'Сумма (₽)',
-      initialValue: _student?['individual_price']?.toString(),
-      keyboardType: TextInputType.number,
-    );
-
-    if (newPrice != null && double.tryParse(newPrice) != null) {
-      try {
-        final price = double.parse(newPrice);
-        await ref
-            .read(magicCrmServiceProvider)
-            .updateStudent(
-              _entityId,
-              customDataPatch: {
-                'individualPrice': price,
-                'individual_price': price,
-              },
-            );
-        _dirty = true;
-        await _fetchStudentData();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
-        }
-      }
-    }
-  }
-
-  Future<void> _openStudentContractUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null || !uri.hasScheme) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Некорректная ссылка на договор')),
-      );
-      return;
-    }
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть договор')),
-      );
-    }
-  }
-
-  Future<void> _editStudentContractUrl() async {
-    final newUrl = await showSingleFieldDialog(
-      context,
-      title: 'Ссылка на договор',
-      label: 'Ссылка на документ',
-      hint: 'https://...',
-      initialValue: _student?['contract_url']?.toString(),
-    );
-
-    if (newUrl != null) {
-      try {
-        await ref
-            .read(magicCrmServiceProvider)
-            .updateStudent(
-              _entityId,
-              customDataPatch: {
-                'legacyContractUrl': newUrl.trim(),
-                'contract_url': newUrl.trim(),
-              },
-            );
-        _dirty = true;
-        await _fetchStudentData();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
-        }
-      }
-    }
   }
 
   /// Flat gold button used inside the v7 «Задать ДЗ» sheet (ported helper).
