@@ -289,7 +289,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               if (_canSeeFinance) const FinancialDashboardWidget(),
               const _ActivityLogTab(),
               ManagementDashboardWidget(role: widget.role),
-              const SubscriptionCatalogWidget(),
+              SubscriptionCatalogWidget(role: widget.role),
               if (_canSeeTeacherRates) const TeacherStatsWidget(),
             ],
           ),

@@ -132,6 +132,24 @@ describe("CrmPolicy", () => {
   });
 
   // KVA-239: общешкольные финансы — только director/system_admin.
+  describe("assertCanManageSubscriptionPackages — каталог абонементов", () => {
+    it("allows director and system_admin (pricing = school finance)", () => {
+      for (const role of ["director", "system_admin"] as const) {
+        expect(() =>
+          policy.assertCanManageSubscriptionPackages({ userId: "u", role }),
+        ).not.toThrow();
+      }
+    });
+
+    it("forbids manager and admin — they VIEW packages, not edit them", () => {
+      for (const role of ["manager", "admin", "teacher", "client"] as const) {
+        expect(() =>
+          policy.assertCanManageSubscriptionPackages({ userId: "u", role }),
+        ).toThrow(ForbiddenException);
+      }
+    });
+  });
+
   describe("assertCanReadSchoolFinance — общешкольные финансы", () => {
     it("allows director and system_admin", () => {
       expect(() =>
