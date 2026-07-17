@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:magic_music_crm/core/services/alert_policy.dart';
 
 /// Plays the app's own alert tone for new leads and due tasks.
 ///
@@ -15,9 +16,20 @@ class AlertSoundService {
   final AudioPlayer _player = AudioPlayer();
   bool _loaded = false;
 
+  /// ✔ Заказчик 17.07: не чаще раза в 5 секунд. Само правило — в
+  /// `AlertThrottle` (alert_policy.dart): там оно проверяется тестами, а здесь
+  /// проверить его нельзя — just_audio в юнит-тесте виснет.
+  final AlertThrottle _throttle;
+
+  AlertSoundService({AlertThrottle? throttle})
+      : _throttle = throttle ?? AlertThrottle();
+
   /// Fire-and-forget: a notification must never be lost because audio failed
   /// (no output device, asset missing, platform without a just_audio impl).
-  Future<void> play() async {
+  ///
+  /// Возвращает `true`, если звук пошёл; `false` — если проглочен троттлингом.
+  Future<bool> play() async {
+    if (!_throttle.tryAcquire()) return false;
     try {
       if (!_loaded) {
         await _player.setAsset(_asset);
@@ -30,6 +42,7 @@ class AlertSoundService {
     } catch (error) {
       if (kDebugMode) debugPrint('Alert sound failed: $error');
     }
+    return true;
   }
 
   void dispose() {

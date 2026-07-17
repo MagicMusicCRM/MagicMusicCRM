@@ -13,6 +13,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/firebase_options.dart';
+import 'package:magic_music_crm/core/services/alert_policy.dart';
 import 'package:magic_music_crm/core/services/alert_sound_service.dart';
 
 void _logNotification(String message) {
@@ -244,6 +245,21 @@ class NotificationService {
       // noise, and it would sound the system tone on top of ours. Backgrounded,
       // the system shows the push with the system sound instead — see
       // firebaseMessagingBackgroundHandler.
+      //
+      // ✔ Заказчик 17.07: молчим про то, на что человек смотрит. Push несёт
+      // `entityType` (см. notifications.service.ts) — по нему и определяем
+      // раздел. Событие без entityType озвучиваем: пропустить настоящее
+      // уведомление хуже, чем звякнуть лишний раз.
+      final entityType = message.data['entityType']?.toString();
+      final chatId = message.data['chatId']?.toString();
+      if (!shouldSoundFor(
+        view: ref.read(activeViewProvider),
+        section: sectionForEntity(entityType),
+        chatId: chatId,
+      )) {
+        _logNotification('Sound suppressed: user is already on that section.');
+        return;
+      }
       await ref.read(alertSoundServiceProvider).play();
     });
   }

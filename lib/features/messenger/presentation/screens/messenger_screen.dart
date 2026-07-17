@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/services/alert_policy.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
@@ -235,6 +236,20 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     final selectedCrmTab = visibleCrmTabs.contains(_selectedCrmTab)
         ? _selectedCrmTab
         : visibleCrmTabs.first;
+
+    // Сообщаем «где сейчас пользователь» — по этому решается, звучать ли
+    // (✔ заказчик 17.07: молчим про то, на что человек смотрит). Берётся
+    // нормализованная вкладка, а не сырое поле: у роли без доступа к разделу
+    // сырое значение врёт. Чат считается открытым только на своей вкладке.
+    //
+    // После кадра, а не в build(): менять провайдер во время построения нельзя.
+    final openChatId = selectedCrmTab == CrmSection.chat ? _selectedChatId : null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(activeViewProvider.notifier)
+          .set(crmTab: selectedCrmTab, chatId: openChatId);
+    });
     final bodyContent = _buildCrmBody(
       context,
       isDesktop: isDesktop,
