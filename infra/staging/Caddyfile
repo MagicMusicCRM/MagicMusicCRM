@@ -14,5 +14,15 @@
 		-Server
 	}
 
-	reverse_proxy api:3000
+	# Windows self-update artifacts (manifest + build zips). Static files served
+	# from a read-only bind mount; the manifest must never be cached stale.
+	handle_path /downloads/* {
+		root * /srv/downloads
+		header Cache-Control "no-cache"
+		file_server
+	}
+
+	handle {
+		reverse_proxy api:3000
+	}
 }

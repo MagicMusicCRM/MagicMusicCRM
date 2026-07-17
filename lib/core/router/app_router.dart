@@ -98,6 +98,10 @@ bool _isUnauthorizedRouteError(Object? error) {
 }
 
 // ── Router ───────────────────────────────────────────────────────────────────
+/// Root navigator key — lets non-widget code (e.g. the Windows update prompt)
+/// reach a live context to show an app-level dialog.
+final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
 final routerProvider = Provider<GoRouter>((ref) {
   final routerRefreshNotifier = ValueNotifier<int>(0);
   ref.onDispose(routerRefreshNotifier.dispose);
@@ -130,6 +134,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   });
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: routerRefreshNotifier,
     redirect: (context, state) {

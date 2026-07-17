@@ -9,10 +9,11 @@ Flutter talks to the Magic Music API, not directly to Supabase.
 
 ## Status Snapshot
 
-Updated: 2026-06-26.
+Updated: 2026-07-17.
 
-- App version: `1.1.23+134`.
-- Current public v3 API: `https://api.phantom-net.ru/api`.
+- App version: `1.2.1+142`.
+- Current public v3 API: `https://api.magicmusiccrm.ru/api` (host
+  `161.104.49.153`). The older `api.phantom-net.ru` is dead — do not use it.
 - Client: Flutter/Dart, Riverpod, GoRouter, Dio, Socket.IO client, Sentry,
   Firebase Messaging and Syncfusion widgets.
 - Backend: NestJS 11, TypeScript, PostgreSQL, Redis, Socket.IO realtime,
@@ -20,7 +21,11 @@ Updated: 2026-06-26.
 - Active architecture: `.anws/v3` (Backend Independence).
 - Active product track: v7 redesign migration onto the existing app, reskin
   and reflow first, no backend rewrite.
-- Current database migration chain: `0001` through `0049`.
+- Current database migration chain: `0001` through `0068` (prod deployed at
+  `0068`).
+- Windows desktop has an in-app self-updater (no store): the app polls
+  `https://api.magicmusiccrm.ru/downloads/latest.json` on launch. Android/iOS
+  update through their stores.
 - Supabase is retained only as legacy export/import tooling. It is not a
   Flutter runtime dependency.
 - HolliHop is a backend-only import/reference source. Keys never belong in
@@ -65,6 +70,27 @@ Operational state from the latest audits:
 - The performance audit did not confirm 10-20 second latency for single REST
   endpoints; the main issues are screen waterfalls, heavy DTOs, two SQL hot
   paths and broad realtime refetch.
+
+## Recent Changes (2026-07)
+
+- Windows in-app self-update (manifest on our Caddy + version check + helper
+  that swaps files and relaunches). See "Windows self-update" below.
+- Client card cleanup: cross-half comment de-duplication for converted clients;
+  removed the legacy Invoices, Contracts and Progress tabs and the
+  "change price" / "edit contract" actions.
+- Client card now surfaces HolliHop fields backfilled into `custom_data`
+  (responsible, HolliHop status, ad source, appeal type, visit date, contacts,
+  UTM, lead type) via a self-hiding "Дополнительно" section.
+- HolliHop field backfill: gender, age, birthday, category, disciplines,
+  levels, ad source, appeal date, responsible and status filled into existing
+  lead/student cards from the exports (matched by stored `hollihopId`,
+  fill-missing merge — no duplicates, no student→lead demotion).
+- Auth: fixed re-login-after-logout on Windows (token store now keeps an
+  in-process authoritative cache so a lagging Credential Manager read can't
+  resurrect a stale/empty session). Kanban column reorder is now an explicit
+  save.
+- Migrations `0066`–`0068` (section-view counters, deleted-message payload,
+  task priority) deployed to prod.
 
 ## v7 Redesign Track
 
@@ -154,13 +180,13 @@ npm install
 Run the Flutter app against the current API:
 
 ```powershell
-flutter run --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
+flutter run --dart-define=MAGIC_API_BASE_URL=https://api.magicmusiccrm.ru/api
 ```
 
 Optional runtime/build defines:
 
 ```text
-MAGIC_API_BASE_URL          API base URL, defaults to https://api.phantom-net.ru/api
+MAGIC_API_BASE_URL          API base URL, defaults to https://api.magicmusiccrm.ru/api
 MAGIC_PROFILE               local secure-storage namespace for multi-window sessions
 SENTRY_DSN                  enables Sentry when non-empty
 SENTRY_ENVIRONMENT          defaults to production
@@ -252,8 +278,8 @@ docker compose --env-file .env ps
 Health checks:
 
 ```bash
-curl -fsS https://api.phantom-net.ru/api/health
-curl -fsS https://api.phantom-net.ru/api/health/ready
+curl -fsS https://api.magicmusiccrm.ru/api/health
+curl -fsS https://api.magicmusiccrm.ru/api/health/ready
 ```
 
 Create an encrypted backup before DB-affecting deploy/import work:
@@ -267,25 +293,53 @@ Rollback runbook: `docs/runbooks/v3-staging-rollback.md`.
 
 ## Release Builds
 
+Always pass the live API URL. For Windows also pass `APP_BUILD_NUMBER` (the
+build number from `pubspec.yaml`) so the in-app self-updater knows which build
+is running — without it the updater stays disabled.
+
 Windows:
 
 ```powershell
-flutter build windows --release --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
+flutter build windows --release `
+  --dart-define=MAGIC_API_BASE_URL=https://api.magicmusiccrm.ru/api `
+  --dart-define=APP_BUILD_NUMBER=142
 ```
 
-Android APK:
+Android APK / App Bundle (updated through the store, no build-number define
+needed):
 
 ```powershell
-flutter build apk --release --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
+flutter build apk --release --dart-define=MAGIC_API_BASE_URL=https://api.magicmusiccrm.ru/api
+flutter build appbundle --release --dart-define=MAGIC_API_BASE_URL=https://api.magicmusiccrm.ru/api
 ```
 
-Android App Bundle:
+Android release signing needs `android/key.properties` + `android/upload-keystore.jks`
+(both git-ignored). Build outputs under `build/` are intentionally ignored.
 
-```powershell
-flutter build appbundle --release --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
-```
+### Windows self-update
 
-Build outputs under `build/` are intentionally ignored.
+Windows has no store, so the app updates itself from a manifest we host on our
+own server. On launch it polls `https://api.magicmusiccrm.ru/downloads/latest.json`;
+if the published `buildNumber` is higher than the running one, it offers to
+install. A detached PowerShell helper waits for the app to exit, downloads and
+SHA-256-verifies the zip, unpacks it over the install directory and relaunches
+(on any failure it just relaunches the current build).
+
+Publishing a new Windows release:
+
+1. Build Windows with `APP_BUILD_NUMBER` set (above) and package the
+   `dist/MagicMusicCRM-<x.y.z-build>-windows-x64.zip`.
+2. Run the publish helper — it hashes the zip, writes `dist/latest.json` and
+   uploads both to the server:
+
+   ```powershell
+   ./scripts/publish-windows-update.ps1 -BuildNumber 143 -Version "1.2.1+143" -Notes "Что нового"
+   ```
+
+Caddy serves `/downloads/*` from `/opt/magicmusiccrm/downloads` (a read-only
+bind mount). Clients below the published build get the in-app prompt on their
+next launch. Code signing is not yet configured, so Windows SmartScreen still
+warns on first run.
 
 ## Documentation Index
 
