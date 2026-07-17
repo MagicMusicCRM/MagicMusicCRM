@@ -79,8 +79,8 @@ export class LeadBoardQuery {
   to?: string;
 
   @IsOptional()
-  @IsIn(["all", "active", "processed", "deferred"])
-  quick?: "all" | "active" | "processed" | "deferred";
+  @IsIn(["all", "active", "processed", "deferred", "new"])
+  quick?: "all" | "active" | "processed" | "deferred" | "new";
 
   @IsOptional()
   @Transform(({ value }) => value === true || value === "true")

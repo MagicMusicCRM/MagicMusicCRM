@@ -906,6 +906,10 @@ export class LeadsService {
         filters.push(`(${processed})`);
       } else if (quick === "deferred") {
         filters.push(`(${deferred})`);
+      } else if (quick === "new") {
+        // «Новые» = no status assigned yet, or an explicit «Новый». Mirrors the
+        // overview `new_leads_count` metric so the tile and this filter agree.
+        filters.push(`(l.status_id is null or ${statusExpr} in ('new', 'новый'))`);
       } else {
         filters.push(`not (${processed}) and not (${deferred})`);
       }

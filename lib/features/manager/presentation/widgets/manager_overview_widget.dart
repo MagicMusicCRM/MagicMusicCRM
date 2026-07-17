@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
@@ -255,6 +256,20 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
     );
   }
 
+  /// Set a one-shot filter for the target section, then navigate to it. The
+  /// section widget consumes the focus on open (clear-on-consume) — so «Новые
+  /// лиды» opens the leads board already filtered to new leads, etc.
+  void _focusAndGo(
+    String section,
+    Map<String, String> filters,
+    int tabIndex,
+  ) {
+    ref
+        .read(crmSectionFocusProvider.notifier)
+        .focus(CrmSectionFocus(section, filters));
+    widget.onTabChange?.call(tabIndex, null);
+  }
+
   List<_KpiSpec> _kpiSpecs(Map<String, dynamic> sources) {
     return [
       if (_canSeeFinance)
@@ -302,7 +317,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         accent: AppTheme.warning,
         sourceLabel: _sourceLabel(sources['newLeads'], 'Лиды'),
         format: _count,
-        onTap: () => widget.onTabChange?.call(3, null),
+        onTap: () => _focusAndGo('leads', {'status': 'new'}, 3),
       ),
       _KpiSpec(
         key: 'open_tasks',
@@ -311,7 +326,8 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         accent: AppTheme.warning,
         sourceLabel: _sourceLabel(sources['tasks'], 'Задачи'),
         format: _count,
-        onTap: () => widget.onTabChange?.call(6, null),
+        onTap: () =>
+            _focusAndGo('tasks', {'due': 'all', 'status': 'open'}, 6),
       ),
       _KpiSpec(
         key: 'overdue_tasks',
@@ -320,7 +336,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         accent: AppTheme.danger,
         sourceLabel: _sourceLabel(sources['tasks'], 'Задачи'),
         format: _count,
-        onTap: () => widget.onTabChange?.call(6, null),
+        onTap: () => _focusAndGo('tasks', {'due': 'overdue'}, 6),
       ),
       _KpiSpec(
         key: 'trial_lessons',
@@ -329,7 +345,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         accent: AppTheme.secondaryGold,
         sourceLabel: _sourceLabel(sources['schedule'], 'Расписание'),
         format: _count,
-        onTap: () => widget.onTabChange?.call(2, null),
+        onTap: () => _focusAndGo('schedule', {'trial': '1'}, 2),
       ),
       _KpiSpec(
         key: 'schedule_issues',
@@ -338,7 +354,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         accent: AppTheme.danger,
         sourceLabel: _sourceLabel(sources['schedule'], 'Расписание'),
         format: _count,
-        onTap: () => widget.onTabChange?.call(2, null),
+        onTap: () => _focusAndGo('schedule', {'conflicts': '1'}, 2),
       ),
       _KpiSpec(
         key: 'room_load_lessons',

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
@@ -140,6 +141,17 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   @override
   void initState() {
     super.initState();
+    // A filter deep-linked from the overview («Пробные занятия» / «Конфликты
+    // расписания») — consumed once before the first fetch so the grid opens
+    // filtered. Day view is what actually renders these filters, so switch to it.
+    final focus = ref
+        .read(crmSectionFocusProvider.notifier)
+        .consume('schedule');
+    if (focus != null) {
+      if (focus.filters['trial'] == '1') _onlyTrial = true;
+      if (focus.filters['conflicts'] == '1') _onlyConflicts = true;
+      _currentView = ScheduleView.day;
+    }
     _fetchAll();
     // The client card sets the focus BEFORE this widget mounts (it sets focus,
     // closes the card and routes here). `ref.listen` in build only catches

@@ -5,6 +5,7 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/show_clien
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
@@ -65,8 +66,24 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   void initState() {
     super.initState();
     _searchCtrl.addListener(_onSearchChanged);
+    _applyOverviewFocus();
     _loadFilterData();
     _loadTasks();
+  }
+
+  /// Apply a filter handed in from the overview (e.g. «Просроченные задачи» →
+  /// only overdue). Consumed once, before the first load, so the deep-linked
+  /// filter is what the board shows on open.
+  void _applyOverviewFocus() {
+    final focus = ref.read(crmSectionFocusProvider.notifier).consume('tasks');
+    if (focus == null) return;
+    final due = focus.filters['due'];
+    final status = focus.filters['status'];
+    if (due != null) _dueFilter = due;
+    if (status != null) _statusFilter = status;
+    // A due window other than a single day makes the day navigator irrelevant;
+    // the view switcher stays on «День» only when the filter is day-scoped.
+    if (due != null && due != 'day') _calView = 'day';
   }
 
   @override

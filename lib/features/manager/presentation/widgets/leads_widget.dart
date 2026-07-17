@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/convert_lead_dialog.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
@@ -98,6 +99,13 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   @override
   void initState() {
     super.initState();
+    // Deep-link from the overview «Новые лиды» tile: open the board already
+    // filtered to new (no-status) leads. Consumed once; the board's provider
+    // watches _filters, so setting it here is enough — no manual refetch.
+    final focus = ref.read(crmSectionFocusProvider.notifier).consume('leads');
+    if (focus != null && focus.filters['status'] == 'new') {
+      _filters = _filters.copyWith(quick: 'new');
+    }
     _loadStatuses();
     _loadFilterMetadata();
   }
