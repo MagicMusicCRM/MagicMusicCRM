@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:magic_music_crm/core/constants/env.dart';
 import 'package:magic_music_crm/core/router/app_router.dart';
+import 'package:magic_music_crm/core/update/update_prompt.dart';
 import 'package:magic_music_crm/core/services/lead_notification_listener.dart';
 import 'package:magic_music_crm/core/services/notification_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -78,6 +79,18 @@ Future<void> _warmApiConnection() async {
   }
 }
 
+/// `https://<api-host>/downloads/latest.json` — the Windows update manifest,
+/// served as static files by the same Caddy that fronts the API.
+String _windowsUpdateManifestUrl() {
+  final base = Uri.parse(Env.magicApiBaseUrl);
+  return Uri(
+    scheme: base.scheme.isEmpty ? 'https' : base.scheme,
+    host: base.host,
+    port: base.hasPort ? base.port : null,
+    path: '/downloads/latest.json',
+  ).toString();
+}
+
 Future<void> _initializeFirebase() async {
   try {
     // Attempt to initialize Firebase with platform-specific options.
@@ -120,6 +133,16 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
           (e) => debugPrint('Notification service init error: $e'),
         ),
       );
+      // Windows self-update: a few seconds after launch, check our manifest and
+      // offer to install a newer build (no store on Windows). No-op elsewhere.
+      Future<void>.delayed(const Duration(seconds: 4), () {
+        unawaited(
+          checkAndPromptWindowsUpdate(
+            navigatorKey: rootNavigatorKey,
+            manifestUrl: _windowsUpdateManifestUrl(),
+          ).catchError((_) {}),
+        );
+      });
     });
   }
 
