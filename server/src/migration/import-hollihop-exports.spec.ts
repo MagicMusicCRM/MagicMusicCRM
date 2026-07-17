@@ -63,25 +63,30 @@ describe("readArrayFile", () => {
 });
 
 /**
- * Прогон импортёра целиком — на настоящих файлах выгрузки и фейковом клиенте.
+ * Прогон импортёра целиком — на настоящих строках выгрузки и фейковом клиенте.
  *
- * Мапперы покрыты отдельно; здесь проверяется то, что и ломалось в прошлый раз:
- * порядок матчинга (внешний id важнее телефона), честность отчёта о полноте и
+ * Мапперы покрыты отдельно; здесь проверяется то, что и ломалось: привязка к
+ * человеку (ученик по id, лид по имени), честность отчёта о полноте и
  * идемпотентность повторного прогона.
+ *
+ * Задачи берутся ТОЛЬКО из «Коммуникаций» — файл «Задачи» не читается вовсе
+ * (см. шапку импортёра: 532 его строки из 544 дублируют «Коммуникации», и
+ * заливка обоих давала 1 281 лишнюю строку).
  */
 describe("runImport", () => {
-  // Ученик и лид, «уже импортированные» из HolliHop: их id выведены из внешнего
-  // id ровно так же, как это делал прежний API-импорт.
-  const STUDENT_ID = deterministicUuid("hollihop-student", "1001");
-  const LEAD_PHONE_ID = "lead-by-phone";
-  const STUDENT_BY_PHONE_ID = "student-by-phone";
+  // День снятия выгрузки. Якорь для дат без года у открытых задач; фиксирован,
+  // потому что «сегодня» сделало бы тесты зависящими от дня прогона.
+  const EXPORT_DATE = { day: 17, month: 7, year: 2026 };
+
+  // Ученик, «уже импортированный» из API: id выведен из внешнего id ровно так
+  // же, как это делал API-импорт.
+  const STUDENT_ID = deterministicUuid("hollihop-student", "2512");
+  const LEAD_ID = "lead-mag-anri";
 
   let dir: string;
-
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "hh-exports-"));
   });
-
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
   });
@@ -90,9 +95,8 @@ describe("runImport", () => {
     writeFileSync(join(dir, name), JSON.stringify(body), "utf8");
 
   /**
-   * Фейковая база: знает одного ученика (по внешнему id) и один лид (по
-   * телефону). Всё остальное не находится — именно это и должно попасть в
-   * «unmatched».
+   * Фейковая база: знает одного ученика (по внешнему id) и один лид (по имени).
+   * Всё остальное не находится — именно это и должно попасть в «unmatched».
    */
   const fakeClient = (options: { knowsUser?: boolean } = {}) => {
     const writes: { sql: string; values: unknown[] }[] = [];
@@ -107,17 +111,9 @@ describe("runImport", () => {
           ? { rows: [{ id: STUDENT_ID }], rowCount: 1 }
           : { rows: [], rowCount: 0 };
       }
-      if (
-        text.includes("from app.students s") &&
-        text.includes("phone_normalized")
-      ) {
-        return values?.[0] === "+79165550000"
-          ? { rows: [{ id: STUDENT_BY_PHONE_ID }], rowCount: 1 }
-          : { rows: [], rowCount: 0 };
-      }
-      if (text.includes("from app.leads") && text.includes("phone_normalized")) {
-        return values?.[0] === "+79990000000"
-          ? { rows: [{ id: LEAD_PHONE_ID }], rowCount: 1 }
+      if (text.includes("from app.leads") && text.includes("concat_ws")) {
+        return values?.[0] === "маг анри"
+          ? { rows: [{ id: LEAD_ID }], rowCount: 1 }
           : { rows: [], rowCount: 0 };
       }
       if (text.includes("from app.users")) {
@@ -130,284 +126,297 @@ describe("runImport", () => {
     return { client: { query } as never, query, writes };
   };
 
-  // ⚠️ Колонки id в выгрузке задач НЕТ вовсе — проверено на файле заказчика:
-  // 0 из 527 строк. Поэтому здесь её нет и в фикстуре: задачи сопоставляются
-  // телефоном, и это не фолбэк, а единственный доступный способ.
-  const TASKS = {
-    Tasks: [
+  /**
+   * Вставки в таблицу — разобранные в объект «колонка → значение».
+   *
+   * Именно по именам, а не по номеру в массиве: набор колонок зависит от того,
+   * что импортёр решил записать (undefined он выбрасывает), так что позиция
+   * поля — не свойство схемы, а случайность. Тест, привязанный к номеру, врёт
+   * при первой же правке и ничего не объясняет тому, кто его читает.
+   */
+  const rowsOf = (table: string, writes: { sql: string; values: unknown[] }[]) =>
+    writes
+      .filter((w) => w.sql.includes(`insert into ${table}`))
+      .map((w) => {
+        const columns = /\(([^)]*)\)\s*\n?\s*values/i
+          .exec(w.sql)![1]
+          .split(",")
+          .map((c) => c.trim());
+        return Object.fromEntries(columns.map((c, i) => [c, w.values[i]])) as Record<
+          string,
+          unknown
+        >;
+      });
+
+  const CLOSED_DESCRIPTION = [
+    "уточнить, вернётся ли",
+    "(поставил Богатырёва М. В. - 15.06)",
+    'Статус "Закрыта" (установил Мазалова А. Ю.) - 21.06 14:14',
+  ].join("\n");
+
+  // Строки — из настоящей выгрузки (17.07), включая эталон заказчика «Маг Анри».
+  const COMMUNICATIONS = {
+    Communications: [
       {
-        Клиент: "Анна Иванова",
-        "Моб. телефон": "+79165550000",
-        Описание: "Позвонить (поставил Иванов И.И. - 12.03.2026)",
-        "Дата выполнения": "18.03.2026 9:55",
-        Ответственный: "[Для всех]",
+        // Лид: «ИД ученика» пуст — он же ещё не ученик. Ищется по имени.
+        "Дата": "11.08.2027",
+        "Ученик": "Маг Анри",
+        "Способ": "Сайт",
+        "Направление": "Исходящая",
+        "Описание":
+          "инфо задача: если будут новые педагоги по вокалу, выслать визитку\n(поставил Мазалова А. Ю. - 21.06)",
+        "ИД ученика": "",
       },
       {
-        Клиент: "Олег Петров",
-        Телефон: "89990000000",
-        Описание: "Перезвонить",
-        "Дата выполнения": "20.03.2026",
-        Статус: "Выполнена",
+        // Ученик по id + закрытая задача с историей.
+        "Дата": "21.06.2026\n14:14",
+        "Ученик": "Кивелиди Мария Владиславовна",
+        "Способ": "Сайт",
+        "Направление": "Исходящая",
+        "Описание": CLOSED_DESCRIPTION,
+        "ИД ученика": "2512",
       },
       {
-        Клиент: "Без телефона",
-        "Моб. телефон": "не указан",
-        Описание: "Задача без телефона",
+        // Не задача: ни «поставил», ни статуса. Таких 52 из 12 744.
+        "Дата": "01.07.2026",
+        "Ученик": "Маг Анри",
+        "Способ": "Звонок",
+        "Направление": "Входящая",
+        "Описание": "просто позвонил уточнить расписание",
+        "ИД ученика": "",
       },
       {
-        Клиент: "Призрак",
-        "Моб. телефон": "+79111111111",
-        Описание: "Клиента нет в системе",
+        // Ни имени в базе, ни id — обязана попасть в отчёт, а не пропасть молча.
+        "Дата": "05.07.2026",
+        "Ученик": "Призрак Неизвестный",
+        "Описание": "задача про несуществующего\n(поставил Мазалова А. Ю. - 01.07)",
+        "ИД ученика": "",
       },
     ],
   };
 
   it("отчитывается честно: кто нашёлся, кто нет и почему", async () => {
-    writeExport("tasks.json", TASKS);
+    writeExport("communications.json", COMMUNICATIONS);
     const { client } = fakeClient();
 
-    const run = await runImport({ client, exportsDir: dir, mode: "dry_run" });
+    const run = await runImport({
+      client,
+      exportsDir: dir,
+      mode: "dry_run",
+      exportDate: EXPORT_DATE,
+    });
 
-    expect(run.reports.tasks).toEqual({
+    expect(run.reports.communications).toMatchObject({
       total: 4,
-      // У задач внешнего id нет — только телефон. «Анна» → ученик,
-      // «Олег» → лид. Обе ветки важны: с одной только лидовой мутация в
-      // ученической ветке проходила незамеченной.
-      matchedById: 0,
-      matchedByPhone: 2,
-      unmatchedNoPhone: 1, // «не указан» не нормализуется
-      unmatchedNoRecord: 1, // телефон валиден, но такого клиента нет
-      written: 0, // сухой прогон
-      skippedDuplicate: 0,
+      matchedById: 3, // 2 лида по имени + 1 ученик по id
+      unmatchedNoRecord: 1, // «Призрак» — ни имени, ни id
     });
+    expect(run.unmatchedCommunications).toEqual([
+      {
+        name: "Призрак Неизвестный",
+        reason: "имя не найдено среди лидов либо даёт несколько",
+      },
+    ]);
   });
 
-  it("ищет по внешнему id раньше телефона", async () => {
-    // Проверяем на заметках ученика: у них id в выгрузке ЕСТЬ (колонка «ИД»),
-    // в отличие от задач.
-    writeExport("students.json", {
-      Students: [
-        {
-          ИД: "1001",
-          "ИД клиента": "9999", // ClientId — читать его нельзя, см. ниже
-          Фамилия: "Иванова",
-          Имя: "Анна",
-          "Моб. телефон": "+79165550000",
-          Описание: "Заметка",
-        },
-      ],
-    });
-    const { client, query } = fakeClient();
+  it("ученик ищется по внешнему id, лид — по имени", async () => {
+    writeExport("communications.json", COMMUNICATIONS);
+    const { client, writes } = fakeClient({ knowsUser: true });
 
-    await runImport({ client, exportsDir: dir, mode: "dry_run" });
+    await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
 
-    // Попадание по восстановленному из «ИД» ключу, а не по телефону: телефон
-    // терял записи, и это чинилось именно так.
-    const first = String(query.mock.calls[0][0]);
-    expect(first).toContain("from app.students where id =");
-    expect((query.mock.calls[0][1] as unknown[])[0]).toBe(STUDENT_ID);
-  });
-
-  it("не подставляет ClientId вместо Student.Id", async () => {
-    // ⚠️ Первичный ключ выведен из Student.Id. У 113 из 1055 учеников
-    // «ИД клиента» равен «ИД» ДРУГОГО ученика (проверено на проде: id 2512
-    // как ClientId — Вероника Кочергина, как Student.Id — Мария Кивелиди).
-    // Прими ClientId за Id — и заметка уедет в чужую карточку.
-    writeExport("students.json", {
-      Students: [
-        {
-          "ИД клиента": "1001", // только ClientId, «ИД» нет
-          Фамилия: "Чужая",
-          Имя: "Запись",
-          "Моб. телефон": "не указан",
-          Описание: "Не должна попасть к ученику 1001",
-        },
-      ],
-    });
-    const { client, query } = fakeClient();
-
-    const run = await runImport({ client, exportsDir: dir, mode: "dry_run" });
-
-    // Ключ ученика по «1001» не реконструировался — значит, и запроса не было.
-    const probed = query.mock.calls.some((c) =>
-      String(c[0]).includes("from app.students where id ="),
+    const tasks = rowsOf("app.tasks", writes);
+    expect(tasks.map((t) => [t.entity_type, t.entity_id])).toEqual(
+      expect.arrayContaining([
+        ["lead", LEAD_ID],
+        ["student", STUDENT_ID],
+      ]),
     );
-    expect(probed).toBe(false);
-    expect(run.reports.studentNotes.matchedById).toBe(0);
   });
 
-  it("не пишет в базу в сухом прогоне", async () => {
-    writeExport("tasks.json", TASKS);
-    const { client, writes } = fakeClient();
+  /**
+   * Автор задачи — то самое поле, ради которого всё затевалось: на проде
+   * created_by пуст у всех 514 задач.
+   */
+  it("проставляет автора задачи из текста «(поставил …)»", async () => {
+    writeExport("communications.json", COMMUNICATIONS);
+    const { client, writes } = fakeClient({ knowsUser: true });
 
-    await runImport({ client, exportsDir: dir, mode: "dry_run" });
+    await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
 
-    expect(writes).toHaveLength(0);
+    const tasks = rowsOf("app.tasks", writes);
+    expect(tasks.length).toBeGreaterThan(0);
+    for (const task of tasks) expect(task.created_by).toBe("user-1");
   });
 
-  it("достаёт автора из текста, когда колонка — «[Для всех]»", async () => {
-    writeExport("tasks.json", TASKS);
+  it("имя автора не нашлось — это ПЕЧАТАЕТСЯ, а не проглатывается в NULL", async () => {
+    writeExport("communications.json", COMMUNICATIONS);
     const { client } = fakeClient({ knowsUser: false });
 
-    const run = await runImport({ client, exportsDir: dir, mode: "dry_run" });
+    const run = await runImport({
+      client,
+      exportsDir: dir,
+      mode: "dry_run",
+      exportDate: EXPORT_DATE,
+    });
 
-    // Имя нашли в описании, пользователя по нему — нет. Это ПЕЧАТАЕТСЯ, а не
-    // проглатывается в NULL: такую строку обязан увидеть человек.
-    expect(run.unmatchedResponsibles).toEqual(["Иванов И.И."]);
+    expect(run.unmatchedResponsibles).toEqual(
+      expect.arrayContaining(["Богатырёва М. В.", "Мазалова А. Ю."]),
+    );
   });
 
-  it("проставляет исполнителя, когда такой сотрудник есть", async () => {
-    writeExport("tasks.json", TASKS);
+  it("закрытая задача получает статус done, а не жёсткий open", async () => {
+    writeExport("communications.json", COMMUNICATIONS);
     const { client, writes } = fakeClient({ knowsUser: true });
 
-    const run = await runImport({ client, exportsDir: dir, mode: "apply" });
+    await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
 
-    expect(run.unmatchedResponsibles).toEqual([]);
-    const task = writes.find((w) => w.sql.includes("app.tasks"));
-    expect(task?.values).toContain("user-1");
+    const statuses = rowsOf("app.tasks", writes).map((t) => t.status);
+    expect(statuses).toContain("done");
+    expect(statuses).toContain("open");
   });
 
+  /**
+   * История — вторая половина того, что искали: в API её нет, а в тексте есть.
+   */
+  it("кладёт историю закрытия с ИСХОДНОЙ датой и меткой источника", async () => {
+    writeExport("communications.json", COMMUNICATIONS);
+    const { client, writes } = fakeClient({ knowsUser: true });
+
+    await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
+
+    const history = rowsOf("app.task_history", writes);
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      field: "status",
+      new_value: "done",
+      changed_at: "2026-06-21T14:14:00.000Z",
+      changed_by: "user-1",
+      source: "hollihop",
+    });
+  });
+
+  it("у закрытой задачи due_at пуст: дата строки — момент закрытия, а не срок", async () => {
+    writeExport("communications.json", COMMUNICATIONS);
+    const { client, writes } = fakeClient({ knowsUser: true });
+
+    await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
+
+    const tasks = rowsOf("app.tasks", writes);
+    expect(tasks.find((t) => t.status === "done")?.due_at).toBeNull();
+    expect(tasks.find((t) => t.status === "open")?.due_at).toBe("2027-08-11T00:00:00.000Z");
+  });
+
+  it("не задача — ложится комментарием, а не задачей", async () => {
+    writeExport("communications.json", COMMUNICATIONS);
+    const { client, writes } = fakeClient({ knowsUser: true });
+
+    await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
+
+    const bodies = rowsOf("app.entity_comments", writes).map((c) => c.body);
+    expect(bodies).toContain("просто позвонил уточнить расписание");
+  });
+
+  /**
+   * ⚠️ Ключ задачи не включает статус: сегодня открыта, завтра закрыта — и
+   * следующая выгрузка породила бы ВТОРУЮ задачу вместо обновления первой.
+   */
   it("повторный прогон не задваивает: id выводится из содержимого", async () => {
-    writeExport("tasks.json", TASKS);
+    writeExport("communications.json", COMMUNICATIONS);
 
     const first = fakeClient({ knowsUser: true });
-    await runImport({ client: first.client, exportsDir: dir, mode: "apply" });
+    await runImport({
+      client: first.client,
+      exportsDir: dir,
+      mode: "apply",
+      exportDate: EXPORT_DATE,
+    });
     const second = fakeClient({ knowsUser: true });
-    await runImport({ client: second.client, exportsDir: dir, mode: "apply" });
-
-    const idOf = (w: { sql: string; values: unknown[] }) => w.values[0];
-    const firstIds = first.writes
-      .filter((w) => w.sql.includes("app.tasks"))
-      .map(idOf);
-    const secondIds = second.writes
-      .filter((w) => w.sql.includes("app.tasks"))
-      .map(idOf);
-
-    expect(firstIds).toEqual(secondIds);
-    // Вставка идёт с on conflict do nothing, поэтому одинаковые id и означают
-    // «прогнать дважды = прогнать один раз».
-    expect(first.writes[0].sql).toContain("on conflict (id) do nothing");
-  });
-
-  it("пишет статус «Выполнена» вместо жёсткого open", async () => {
-    writeExport("tasks.json", TASKS);
-    const { client, writes } = fakeClient();
-
-    await runImport({ client, exportsDir: dir, mode: "apply" });
-
-    const oleg = writes.find(
-      (w) => w.sql.includes("app.tasks") && w.values.includes("Перезвонить"),
-    );
-    expect(oleg?.values).toContain("done");
-  });
-
-  it("кладёт историю задачи с ИСХОДНОЙ датой и меткой источника", async () => {
-    writeExport("tasks.json", TASKS);
-    writeExport("task-history.json", {
-      History: [
-        {
-          Клиент: "Анна Иванова",
-          "Моб. телефон": "+79165550000",
-          Описание: "Позвонить (поставил Иванов И.И. - 12.03.2026)",
-          "Дата выполнения": "18.03.2026 9:55",
-          "Дата изменения": "15.03.2026 10:00",
-          Поле: "Срок",
-          Было: "12.03.2026",
-          Стало: "18.03.2026",
-          Автор: "Иванов И.И.",
-        },
-      ],
+    await runImport({
+      client: second.client,
+      exportsDir: dir,
+      mode: "apply",
+      exportDate: EXPORT_DATE,
     });
-    const { client, writes } = fakeClient({ knowsUser: true });
 
-    const run = await runImport({ client, exportsDir: dir, mode: "apply" });
-
-    expect(run.reports.taskHistory.written).toBe(1);
-    const history = writes.find((w) => w.sql.includes("app.task_history"));
-    // Дата изменения — из выгрузки, а не «сейчас» (§2.2: «по датам и времени
-    // выполнения»), поле переведено в наше имя, источник помечен.
-    expect(history?.values).toContain("2026-03-15T10:00:00.000Z");
-    expect(history?.values).toContain("due_at");
-    expect(history?.values).toContain("hollihop");
-  });
-
-  it("не привязывает историю к задаче, которой нет в выгрузке", async () => {
-    writeExport("task-history.json", {
-      History: [
-        {
-          Клиент: "Кто-то",
-          "Моб. телефон": "+79990000000",
-          Описание: "Задача, которой нет в tasks.json",
-          "Дата изменения": "15.03.2026 10:00",
-          Поле: "Срок",
-        },
-      ],
-    });
-    const { client, writes } = fakeClient();
-
-    const run = await runImport({ client, exportsDir: dir, mode: "apply" });
-
-    expect(run.reports.taskHistory.unmatchedNoRecord).toBe(1);
-    expect(writes).toHaveLength(0);
+    const ids = (w: { sql: string; values: unknown[] }[]) =>
+      rowsOf("app.tasks", w).map((t) => t.id);
+    expect(ids(second.writes)).toEqual(ids(first.writes));
   });
 
   it("пропускает файлы, которых нет, а не падает", async () => {
-    // Выгрузки возят по частям — отсутствие файла это норма.
     const { client } = fakeClient();
-
-    const run = await runImport({ client, exportsDir: dir, mode: "dry_run" });
-
-    expect(run.reports.tasks.total).toBe(0);
-    expect(run.reports.leadComments.total).toBe(0);
+    const run = await runImport({
+      client,
+      exportsDir: dir,
+      mode: "dry_run",
+      exportDate: EXPORT_DATE,
+    });
+    expect(run.reports.communications.total).toBe(0);
+    expect(run.reports.studentNotes.total).toBe(0);
   });
 
-  it("разносит заметки ученика и комментарии лида по своим сторонам", async () => {
+  it("заметки учеников по-прежнему ложатся", async () => {
     writeExport("students.json", {
-      Students: [
-        {
-          ИД: "1001", // Student.Id — кириллицей, как его пишет выгрузка
-          Фамилия: "Иванова",
-          Имя: "Анна",
-          "Моб. телефон": "+79161234567",
-          Описание: "Заметка про ученика",
-        },
-      ],
-    });
-    writeExport("leads.json", {
-      Leads: [
-        {
-          ФИО: "Олег Петров",
-          Телефон: "89990000000",
-          Комментарий: "Звонил, думает",
-          "Пользовательские поля": "Уровень: A1",
-        },
-      ],
+      Students: [{ "ИД": "2512", "Фамилия": "Кивелиди", "Имя": "Мария", "Описание": "Заметка" }],
     });
     const { client, writes } = fakeClient();
 
-    const run = await runImport({ client, exportsDir: dir, mode: "apply" });
+    const run = await runImport({
+      client,
+      exportsDir: dir,
+      mode: "apply",
+      exportDate: EXPORT_DATE,
+    });
 
-    expect(run.reports.studentNotes.written).toBe(1);
-    expect(run.reports.leadComments.written).toBe(1);
-    const kinds = writes
-      .filter((w) => w.sql.includes("app.entity_comments"))
-      .map((w) => w.values[1]);
-    expect(kinds).toEqual(["student", "lead"]);
+    expect(run.reports.studentNotes).toMatchObject({ total: 1, matchedById: 1, written: 1 });
+    expect(rowsOf("app.entity_comments", writes).map((c) => c.body)).toEqual(["Заметка"]);
+  });
+});
+
+describe("formatReport", () => {
+  const emptyRun = {
+    reports: {
+      communications: {
+        total: 0,
+        matchedById: 0,
+        matchedByPhone: 0,
+        unmatchedNoPhone: 0,
+        unmatchedNoRecord: 0,
+        written: 0,
+        skippedDuplicate: 0,
+      },
+    },
+    unmatchedResponsibles: [],
+    unmatchedCommunications: [],
+  };
+
+  it("сухой прогон честно говорит, что ничего не записал", () => {
+    expect(formatReport(emptyRun, "dry_run")).toContain("nothing written");
   });
 
-  it("формирует отчёт, из которого видно, ПОЧЕМУ строка не легла", async () => {
-    writeExport("tasks.json", TASKS);
-    const { client } = fakeClient();
-
-    const run = await runImport({ client, exportsDir: dir, mode: "dry_run" });
-    const report = formatReport(run, "dry_run");
-
-    expect(report).toContain("tasks: 4 row(s) in source");
-    // У задач внешнего id нет — «by id 0» это не дефект, а свойство выгрузки.
-    expect(report).toContain("matched:   2 (by id 0, by phone 2)");
-    expect(report).toContain(
-      "unmatched: 2 (no usable phone 1, no such record 1)",
+  /**
+   * 12 744 строки поимённо никто читать не станет — но «сколько и почему не
+   * легло» обязано быть видно, иначе импорт снова окажется «успешным» молча.
+   */
+  it("группирует непривязанные строки по причине", () => {
+    const report = formatReport(
+      {
+        ...emptyRun,
+        unmatchedCommunications: [
+          { name: "А", reason: "имя не найдено среди лидов либо даёт несколько" },
+          { name: "Б", reason: "имя не найдено среди лидов либо даёт несколько" },
+          { name: "В", reason: "ученика с ИД 7657 нет в базе" },
+        ],
+      },
+      "apply",
     );
-    expect(report).toContain("Dry run.");
+    expect(report).toContain("3 строк(и) «Коммуникаций» не привязаны");
+    expect(report).toContain("2 — имя не найдено среди лидов либо даёт несколько");
+    expect(report).toContain("1 — ученика с ИД 7657 нет в базе");
+  });
+
+  it("без непривязанных не пугает предупреждением", () => {
+    expect(formatReport(emptyRun, "apply")).not.toContain("не привязаны");
   });
 });

@@ -1,7 +1,20 @@
 // server/src/migration/import-hollihop-exports.ts
 //
-// Imports HolliHop manual exports into existing records: tasks + their history,
-// student notes, lead comments.
+// Заливает ручные выгрузки HolliHop на уже импортированные записи: задачи с их
+// историей, заметки учеников, комментарии лидов.
+//
+// ЗАДАЧАМИ ВЛАДЕЮТ «КОММУНИКАЦИИ», и только они. Файл «Задачи» здесь НЕ
+// читается — он избыточен и вреден:
+//   • 532 его строки из 544 уже есть в «Коммуникациях» (сверено 17.07);
+//   • оставшиеся 12 — вообще без клиента («забрать озон», «лиза уезжает»), их
+//     не к кому привязать;
+//   • зато при заливке обоих файлов висящие задачи легли ДВАЖДЫ: 685 групп
+//     дублей, 1 281 лишняя строка. Ровно эта болезнь и есть на проде (1 878
+//     дублей) — просто здесь её поймал чек-лист (§6.3) до заливки.
+// Пояснение заказчика совпало с данными: «в файле коммуникации лежат все задачи
+// за всё время, в файле задачи — актуальные висящие».
+//
+// Истории задач отдельным файлом тоже нет: она внутри «Коммуникаций», в тексте.
 //
 // WHY FILES AND NOT THE API. Probed 2026-07-16 with the customer's key:
 // GetTasks, GetComments, GetHistory — and every other method our old docs
@@ -18,28 +31,36 @@
 // Expected files in HOLLIHOP_EXPORTS_DIR (any that are absent are skipped).
 // Each may be `.xlsx` — as HolliHop exports it — or `.json`; not both.
 // Переименуйте выгрузку в это имя, содержимое не трогайте:
-//   tasks        — Клиент, Описание, Дата выполнения, Ответственный, телефон
-//   task-history — Клиент/телефон, Дата изменения, Поле, Было, Стало, Автор
-//   students     — Фамилия, Имя, Описание, телефон
-//   leads        — ФИО, Комментарий, Пользовательские поля, телефон
+//   communications — Дата, Ученик, Способ, Направление, Описание, ИД ученика
+//   students       — Фамилия, Имя, Описание, телефон
+//   leads          — ФИО, Комментарий, Пользовательские поля, телефон
+//
+// Ещё нужен HOLLIHOP_EXPORT_DATE=YYYY-MM-DD — день снятия выгрузки. Это якорь
+// для дат без года у открытых задач; «сегодня» по умолчанию сделало бы результат
+// зависящим от дня запуска.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { normalizePhoneRu } from "../crm/phone.util";
 import { deterministicUuid } from "./import-id";
+import {
+  communicationFromRow,
+  communicationTaskKey,
+  parseRowDate,
+  resolveYear,
+  taskStatusFromEvents,
+  taskTitleFromBody,
+  toInstant,
+} from "./communications-mappers";
 import { parseStaffName } from "./staff-name";
 import { readXlsxRows } from "./xlsx-reader";
 import {
-  historyFieldName,
   leadCommentFromRow,
   parseRuDate,
   studentNoteFromRow,
-  taskFromRow,
-  taskHistoryFromRow,
-  taskStatusFromRow,
-  taskTitle,
 } from "./hollihop-export-mappers";
+
 
 type ImportMode = "dry_run" | "apply";
 /** Импортёру нужен только query — это и позволяет прогнать его на фейке. */
@@ -153,6 +174,7 @@ class Matcher {
   private readonly leadByExternal = new Map<string, string | null>();
   private readonly studentByPhone = new Map<string, string | null>();
   private readonly leadByPhone = new Map<string, string | null>();
+  private readonly leadByName = new Map<string, string | null>();
   private readonly userByName = new Map<string, string | null>();
 
   constructor(private readonly client: QueryClient) {}
@@ -193,6 +215,59 @@ class Matcher {
         [candidate],
       );
       return r.rows[0]?.id ?? null;
+    });
+  }
+
+  /**
+   * Лид по ФИО из колонки «Ученик».
+   *
+   * Нужен, потому что у лидов «ИД ученика» в «Коммуникациях» пуст — они же ещё
+   * не ученики. Имя остаётся единственной зацепкой: на выгрузке так находится
+   * 2 996 строк из 12 744.
+   *
+   * ⚠️ Связываем ТОЛЬКО при единственном совпадении (limit 2 + проверка). У 160
+   * строк имя даёт несколько лидов — это дубли лида в HolliHop. Возьми мы
+   * первого попавшегося, задача уехала бы в карточку постороннего, и выглядело
+   * бы это как точное попадание. Такие строки честнее показать в отчёте.
+   */
+  async leadByFullName(name: string): Promise<string | null> {
+    const key = name.toLowerCase().trim();
+    if (!key) return null;
+    return this.cached(this.leadByName, key, async () => {
+      const exact = await this.client.query<{ id: string }>(
+        `select id from app.leads
+         where deleted_at is null
+           and lower(btrim(concat_ws(' ', last_name, first_name))) = $1
+         limit 2`,
+        [key],
+      );
+      if (exact.rows.length === 1) return exact.rows[0].id;
+      if (exact.rows.length > 1) return null; // однофамильцы — пусть решает человек
+
+      // Второй проход: имя лида — префикс имени из выгрузки.
+      //
+      // «Коммуникации» пишут человека с отчеством («Худякова Дана Сергеевна»), а
+      // лид заведён без него («Худякова Дана»). Точное сравнение такое не ловит,
+      // и это 442 строки.
+      //
+      // Правило именно про префикс, а не про «первые два слова»: порядок слов в
+      // данных не один. Встречается и «Оксана Игоревна Грушина» — имя-отчество-
+      // фамилия, причём и сам лид заведён с перепутанными полями. Префикс
+      // работает в обоих случаях, потому что опирается на то, что записано, а не
+      // на догадку о том, где здесь фамилия.
+      //
+      // Пробел в конце обязателен: без него «Иванов Иванна» совпала бы с лидом
+      // «Иванов Иван». Единственность — как и всюду здесь: несколько
+      // лидов-префиксов → не связываем.
+      const prefix = await this.client.query<{ id: string }>(
+        `select id from app.leads
+         where deleted_at is null
+           and length(btrim(concat_ws(' ', last_name, first_name))) > 0
+           and starts_with($1, lower(btrim(concat_ws(' ', last_name, first_name))) || ' ')
+         limit 2`,
+        [key],
+      );
+      return prefix.rows.length === 1 ? prefix.rows[0].id : null;
     });
   }
 
@@ -323,17 +398,168 @@ async function resolveEntity(
   return null;
 }
 
-/** Key that identifies an export task row across re-exports. */
-function taskKeyFor(externalId: string, canonical: string | null, task: { dueRaw: string; description: string }): string {
-  // Canonical phone (not raw) so a re-export with different formatting yields
-  // the same id and the re-run stays a no-op.
-  const subject = externalId || canonical || "";
-  return `export:task:${subject}:${task.dueRaw}:${task.description}`;
-}
-
 export interface ImportRun {
   reports: Record<string, SectionReport>;
   unmatchedResponsibles: string[];
+  /** Строки «Коммуникаций», которые не удалось привязать, — с причиной. */
+  unmatchedCommunications: { name: string; reason: string }[];
+}
+
+/**
+ * Раздел «Коммуникации» — все задачи школы за всё время плюс их история.
+ *
+ * Разбор строки — в communications-mappers.ts; здесь только привязка к людям и
+ * запись. Почему именно этот файл, а не «Задачи»: в «Задачах» 544 строки и ни
+ * одной закрытой, а в «Коммуникациях» — 12 692 задачи, из них 12 161 закрытая,
+ * и у каждой в тексте автор, дата постановки и события закрытия.
+ *
+ * Год восстанавливается по якорю (`resolveYear`): у закрытой задачи якорь — её
+ * закрытие, у открытой — дата выгрузки. Без этого «21.06» без года лёг бы
+ * произвольным годом.
+ */
+async function importCommunications(options: {
+  client: QueryClient;
+  mode: ImportMode;
+  rows: JsonRow[];
+  matcher: Matcher;
+  report: SectionReport;
+  /** Дата выгрузки — якорь для дат открытых задач. */
+  exportDate: { day: number; month: number; year: number };
+  unmatchedResponsibles: Set<string>;
+  unmatched: { name: string; reason: string }[];
+}): Promise<void> {
+  const { client, mode, rows, matcher, report, exportDate, unmatchedResponsibles, unmatched } =
+    options;
+
+  for (const row of rows) {
+    const comm = communicationFromRow(row);
+    if (!comm) continue;
+    report.total++;
+
+    // Ученик по id, иначе лид по имени: у лида «ИД ученика» пуст, он же ещё не
+    // ученик. Гадать по числу нельзя — id учеников и лидов пересекаются.
+    let resolved: Resolved | null = null;
+    if (comm.studentExternalId) {
+      const studentId = await matcher.studentByExternalId(comm.studentExternalId);
+      if (studentId) {
+        resolved = { entityType: "student", entityId: studentId, by: "id" };
+        report.matchedById++;
+      }
+    }
+    if (!resolved && comm.clientName) {
+      const leadId = await matcher.leadByFullName(comm.clientName);
+      if (leadId) {
+        resolved = { entityType: "lead", entityId: leadId, by: "id" };
+        report.matchedById++;
+      }
+    }
+    if (!resolved) {
+      report.unmatchedNoRecord++;
+      unmatched.push({
+        name: comm.clientName || "(без имени)",
+        reason: comm.studentExternalId
+          ? `ученика с ИД ${comm.studentExternalId} нет в базе`
+          : "имя не найдено среди лидов либо даёт несколько",
+      });
+      continue;
+    }
+
+    const { parsed } = comm;
+    const rowDate = parseRowDate(comm.rowDateRaw);
+
+    if (!comm.isTask) {
+      // Не задача — обычная коммуникация. Их 52 из 12 744.
+      const written = await upsert(mode, client, "app.entity_comments", {
+        id: deterministicUuid(
+          "hollihop-communication",
+          `${resolved.entityId}:${comm.rowDateRaw}:${parsed.body}`,
+        ),
+        entity_type: resolved.entityType,
+        entity_id: resolved.entityId,
+        author_id: null,
+        body: parsed.body,
+        kind: "admin_comment",
+        created_at: rowDate?.iso ?? undefined,
+      });
+      if (written) report.written++;
+      else if (mode === "apply") report.skippedDuplicate++;
+      continue;
+    }
+
+    const events = parsed.statusEvents;
+    const status = taskStatusFromEvents(events);
+    const last = events[events.length - 1];
+
+    // Якорь для дат без года: закрытие задачи, иначе дата выгрузки. У закрытой
+    // задачи «поставил» строго раньше закрытия — проверено на всех 6 688.
+    const anchor =
+      last && last.year !== null
+        ? { day: last.day, month: last.month, year: last.year }
+        : last && rowDate
+          ? { day: last.day, month: last.month, year: rowDate.year }
+          : exportDate;
+
+    const createdIso =
+      parsed.createdDay !== null && parsed.createdMonth !== null
+        ? toInstant(
+            parsed.createdDay,
+            parsed.createdMonth,
+            resolveYear(
+              { day: parsed.createdDay, month: parsed.createdMonth, year: parsed.createdYear },
+              anchor,
+            ),
+          )
+        : null;
+
+    const createdBy = await matcher.userIdByName(parsed.createdBy);
+    if (parsed.createdBy && !createdBy) unmatchedResponsibles.add(parsed.createdBy);
+
+    const key = communicationTaskKey(comm.studentExternalId || comm.clientName, parsed);
+    const taskId = deterministicUuid("hollihop-comm-task", key);
+
+    const written = await upsert(mode, client, "app.tasks", {
+      id: taskId,
+      entity_type: resolved.entityType,
+      entity_id: resolved.entityId,
+      title: taskTitleFromBody(parsed.body),
+      description: parsed.body || null,
+      status,
+      // Дата строки: у открытой задачи это срок, у закрытой — момент закрытия.
+      // Сроком он остаётся только у открытой; у закрытой ставить его в due_at
+      // значило бы выдать день закрытия за назначенный срок.
+      due_at: status === "done" || status === "cancelled" ? null : (rowDate?.iso ?? null),
+      assigned_to: createdBy,
+      created_by: createdBy,
+      created_at: createdIso ?? undefined,
+    });
+    if (written) report.written++;
+    else if (mode === "apply") report.skippedDuplicate++;
+
+    // История: по событию на каждую смену статуса, с ИСХОДНОЙ датой и актором.
+    for (const [index, event] of events.entries()) {
+      const year = resolveYear({ day: event.day, month: event.month, year: event.year }, anchor);
+      const changedAt = toInstant(
+        event.day,
+        event.month,
+        year,
+        event.hour ?? 0,
+        event.minute ?? 0,
+      );
+      if (!changedAt) continue;
+      const changedBy = await matcher.userIdByName(event.actor);
+      if (event.actor && !changedBy) unmatchedResponsibles.add(event.actor);
+      await upsert(mode, client, "app.task_history", {
+        id: deterministicUuid("hollihop-comm-task-history", `${key}:${index}:${event.status}`),
+        task_id: taskId,
+        field: "status",
+        old_value: null,
+        new_value: taskStatusFromEvents([event]),
+        changed_by: changedBy,
+        changed_at: changedAt,
+        source: "hollihop",
+      });
+    }
+  }
 }
 
 /**
@@ -347,116 +573,46 @@ export async function runImport(options: {
   client: QueryClient;
   exportsDir: string;
   mode: ImportMode;
+  /**
+   * День, когда сняли выгрузку. Якорь для дат без года у ОТКРЫТЫХ задач: у
+   * закрытой год берётся от её закрытия, а у открытой другого ориентира нет.
+   * Обязателен намеренно — «сегодня» по умолчанию сделало бы результат импорта
+   * зависящим от дня запуска, то есть невоспроизводимым.
+   */
+  exportDate: { day: number; month: number; year: number };
 }): Promise<ImportRun> {
   const { client, exportsDir, mode } = options;
 
-  const taskRows = readArrayFile(exportsDir, "tasks", "Tasks");
-  const historyRows = readArrayFile(exportsDir, "task-history", "History");
   const studentRows = readArrayFile(exportsDir, "students", "Students");
   const leadRows = readArrayFile(exportsDir, "leads", "Leads");
+  const communicationRows = readArrayFile(exportsDir, "communications", "Communications");
 
   const reports: Record<string, SectionReport> = {
-    tasks: emptySection(),
-    taskHistory: emptySection(),
+    communications: emptySection(),
     studentNotes: emptySection(),
     leadComments: emptySection(),
   };
   const unmatchedResponsibles = new Set<string>();
+  const unmatchedCommunications: { name: string; reason: string }[] = [];
 
   {
     const MODE = mode;
     const matcher = new Matcher(client);
     // Транзакцией и соединением владеет main(): здесь только импорт.
 
-    // ---- Tasks -------------------------------------------------------------
-    // taskId per export row, so the history pass below can attach to it.
-    const taskIdByKey = new Map<string, string>();
-    for (const row of taskRows) {
-      const mapped = taskFromRow(row);
-      if (!mapped) continue;
-      const report = reports.tasks;
-      report.total++;
-
-      // Задача может висеть и на ученике, и на лиде, а id в её выгрузке нет
-      // вовсе — значит, только телефон. Ставить сюда `kind` наугад нельзя:
-      // ошибка в типе увела бы задачу в чужую карточку.
-      const resolved = await resolveEntity(matcher, null, mapped.phoneRaw, report);
-      if (!resolved) continue;
-
-      const assignedTo = await matcher.userIdByName(mapped.responsible);
-      if (mapped.responsible && !assignedTo) {
-        // В отчёт, а не молча в NULL: имя в выгрузке есть, а пользователя под
-        // него не нашлось — это факт, который обязан увидеть человек.
-        unmatchedResponsibles.add(mapped.responsible);
-      }
-
-      const { canonical } = normalizePhoneRu(mapped.phoneRaw);
-      const key = taskKeyFor(mapped.externalId, canonical, mapped);
-      const id = deterministicUuid("hollihop-export-task", key);
-      taskIdByKey.set(key, id);
-
-      const completedAt = parseRuDate(mapped.completedRaw);
-      const written = await upsert(MODE, client, "app.tasks", {
-        id,
-        entity_type: resolved.entityType,
-        entity_id: resolved.entityId,
-        title: taskTitle(mapped.description),
-        description: mapped.description || null,
-        status: taskStatusFromRow(mapped.status, completedAt),
-        due_at: parseRuDate(mapped.dueRaw),
-        assigned_to: assignedTo,
-        created_by: null,
-      });
-      if (written) report.written++;
-      else if (MODE === "apply") report.skippedDuplicate++;
-    }
-
-    // ---- Task history ------------------------------------------------------
-    // Written with the ORIGINAL changed_at (spec §2.2 «по датам и времени
-    // выполнения»), and marked source='hollihop' so a re-import can replace its
-    // own rows without touching anything staff did in the app.
-    for (const row of historyRows) {
-      const report = reports.taskHistory;
-      const mapped = taskHistoryFromRow(row);
-      if (!mapped) continue;
-      report.total++;
-
-      const task = taskFromRow(row);
-      if (!task) {
-        report.unmatchedNoRecord++;
-        continue;
-      }
-      const { canonical } = normalizePhoneRu(task.phoneRaw);
-      const key = taskKeyFor(task.externalId, canonical, task);
-      const taskId = taskIdByKey.get(key);
-      if (!taskId) {
-        // History for a task that is not in tasks.json — without the task row
-        // there is nothing to hang it on.
-        report.unmatchedNoRecord++;
-        continue;
-      }
-      report.matchedById++;
-
-      const changedAt = parseRuDate(mapped.changedRaw);
-      const changedBy = await matcher.userIdByName(mapped.author);
-      if (mapped.author && !changedBy) unmatchedResponsibles.add(mapped.author);
-
-      const written = await upsert(MODE, client, "app.task_history", {
-        id: deterministicUuid(
-          "hollihop-export-task-history",
-          `${key}:${mapped.changedRaw}:${mapped.field}`,
-        ),
-        task_id: taskId,
-        field: historyFieldName(mapped.field),
-        old_value: mapped.oldValue,
-        new_value: mapped.newValue,
-        changed_by: changedBy,
-        changed_at: changedAt,
-        source: "hollihop",
-      });
-      if (written) report.written++;
-      else if (MODE === "apply") report.skippedDuplicate++;
-    }
+    // ---- Communications ----------------------------------------------------
+    // Идёт первым: здесь настоящие задачи школы за всё время (12 692, из них
+    // 12 161 закрытая). Файл «Задачи» ниже несёт лишь актуальные висящие.
+    await importCommunications({
+      client,
+      mode: MODE,
+      rows: communicationRows,
+      matcher,
+      report: reports.communications,
+      exportDate: options.exportDate,
+      unmatchedResponsibles,
+      unmatched: unmatchedCommunications,
+    });
 
     // ---- Student notes -----------------------------------------------------
     for (const row of studentRows) {
@@ -532,6 +688,7 @@ export async function runImport(options: {
   return {
     reports,
     unmatchedResponsibles: [...unmatchedResponsibles].sort(),
+    unmatchedCommunications,
   };
 }
 
@@ -548,6 +705,20 @@ export function formatReport(run: ImportRun, mode: ImportMode): string {
         `  written:   ${r.written}${mode === "apply" ? `, already present ${r.skippedDuplicate}` : " (dry run — nothing written)"}`,
     );
   }
+  if (run.unmatchedCommunications.length > 0) {
+    // Сгруппировано по причине: 12 744 строки поимённо никто читать не станет,
+    // а «сколько и почему не легло» — обязано быть видно.
+    const byReason = new Map<string, number>();
+    for (const item of run.unmatchedCommunications) {
+      byReason.set(item.reason, (byReason.get(item.reason) ?? 0) + 1);
+    }
+    lines.push(
+      `\n⚠️  ${run.unmatchedCommunications.length} строк(и) «Коммуникаций» не привязаны к клиенту:`,
+    );
+    for (const [reason, count] of [...byReason].sort((a, b) => b[1] - a[1])) {
+      lines.push(`     ${count} — ${reason}`);
+    }
+  }
   if (run.unmatchedResponsibles.length > 0) {
     lines.push(
       `\n⚠️  ${run.unmatchedResponsibles.length} responsible name(s) had no matching user — those tasks land with no assignee:`,
@@ -562,8 +733,29 @@ export function formatReport(run: ImportRun, mode: ImportMode): string {
   return lines.join("\n");
 }
 
+/**
+ * День снятия выгрузки — якорь для дат без года у открытых задач.
+ *
+ * Требуется явно, а не «берём сегодня»: иначе тот же файл, залитый в другой
+ * день, дал бы другие годы, и повторный прогон перестал бы быть повторным.
+ */
+function parseExportDate(raw: string | undefined): {
+  day: number;
+  month: number;
+  year: number;
+} {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((raw ?? "").trim());
+  if (!m) {
+    throw new Error(
+      "HOLLIHOP_EXPORT_DATE is required in YYYY-MM-DD (день, когда сняли выгрузку).",
+    );
+  }
+  return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
+}
+
 async function main(): Promise<void> {
   if (!EXPORTS_DIR) throw new Error("HOLLIHOP_EXPORTS_DIR is required.");
+  const EXPORT_DATE = parseExportDate(process.env.HOLLIHOP_EXPORT_DATE);
   if (!existsSync(EXPORTS_DIR)) {
     throw new Error(`HOLLIHOP_EXPORTS_DIR does not exist: ${EXPORTS_DIR}`);
   }
@@ -581,7 +773,12 @@ async function main(): Promise<void> {
   const client = await pool.connect();
   try {
     if (MODE === "apply") await client.query("begin");
-    const run = await runImport({ client, exportsDir: EXPORTS_DIR, mode: MODE });
+    const run = await runImport({
+      client,
+      exportsDir: EXPORTS_DIR,
+      mode: MODE,
+      exportDate: EXPORT_DATE,
+    });
     if (MODE === "apply") await client.query("commit");
     console.log(formatReport(run, MODE));
   } catch (error) {
