@@ -137,6 +137,17 @@ export class MessengerService implements OnModuleInit {
           ist.archived_at,
           case
             when ist.archived_at is not null then 'archive'
+            -- Direct link first: the chat owner IS a student (their profile
+            -- backs a student row). This is what makes a converted lead's chat
+            -- move to «Ученики» — conversion creates a student on the lead's
+            -- profile, and that profile is the chat owner's. The phone match
+            -- below stays as a fallback for imported students whose profile
+            -- isn't the chat owner's but whose number is the same.
+            when exists (
+              select 1 from app.students s2
+              join app.profiles sp2 on sp2.id = s2.profile_id and sp2.deleted_at is null
+              where s2.deleted_at is null and sp2.user_id = c.owner_user_id
+            ) then 'students'
             when exists (
               select 1 from app.students s
               join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
@@ -407,8 +418,11 @@ export class MessengerService implements OnModuleInit {
       maskStaffSenderForMembers:
         chat.type === "administration" && isStaffRole(actor.role),
     });
-    if (chat.type === "administration") {
-      // Resurface: clear archived_at for ALL staff so the thread reappears in inboxes.
+    if (chat.type === "administration" && !isStaffRole(actor.role)) {
+      // Resurface ONLY on a client message: a new client note should pull the
+      // thread back into every staff inbox. A STAFF reply must not — otherwise
+      // the moment you answer a chat you just archived, it un-archives itself
+      // (and for every other staff member too), so «архивировать» never stuck.
       // Best-effort: a failure here must not break the send.
       try {
         await this.database.query(
@@ -418,8 +432,6 @@ export class MessengerService implements OnModuleInit {
       } catch (err) {
         this.logger.warn(`resurface chat_inbox_state failed: ${String(err)}`);
       }
-    }
-    if (chat.type === "administration" && !isStaffRole(actor.role)) {
       void this.leadIntake
         .autoCreateLeadFromChat(actor, actor.userId)
         .catch(() => undefined);
