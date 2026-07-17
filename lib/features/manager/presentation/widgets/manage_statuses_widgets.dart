@@ -7,12 +7,15 @@ class _StatusRow extends StatelessWidget {
     required this.status,
     required this.enabled,
     required this.onDelete,
+    this.deletable = true,
   });
 
   final int index;
   final Map<String, dynamic> status;
   final bool enabled;
   final VoidCallback onDelete;
+  // «Без статуса» can be reordered but not deleted (it has no status row).
+  final bool deletable;
 
   @override
   Widget build(BuildContext context) {
@@ -91,13 +94,23 @@ class _StatusRow extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Удалить колонку',
-                onPressed: enabled ? onDelete : null,
-                icon: const Icon(Icons.delete_outline_rounded),
-                color: AppColor.danger,
-                visualDensity: VisualDensity.compact,
-              ),
+              if (deletable)
+                IconButton(
+                  tooltip: 'Удалить колонку',
+                  onPressed: enabled ? onDelete : null,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  color: AppColor.danger,
+                  visualDensity: VisualDensity.compact,
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: Icon(
+                    Icons.lock_outline_rounded,
+                    size: 18,
+                    color: AppColor.text2,
+                  ),
+                ),
             ],
           ),
         ),

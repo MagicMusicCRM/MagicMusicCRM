@@ -93,6 +93,19 @@ export class CrmPolicy {
     );
   }
 
+  /**
+   * Системные настройки (конфигурация воронки лидов: колонки/их порядок и т.п.).
+   * ✔ Владелец: «любые настройки системы может вносить только сис-админ,
+   * директор и управляющий» — Администратор (администратор филиала) СЮДА не
+   * входит, в отличие от обычной операционной записи (assertCanWriteCrm).
+   */
+  assertCanManageSystemSettings(actor: ActorContext): void {
+    if (isManagerRole(actor.role)) return;
+    throw new ForbiddenException(
+      "Настройки системы доступны только управляющему, директору и системному администратору.",
+    );
+  }
+
   // Operational CRM work: administrators must be able to cover each other's
   // shifts. Role management stays separate in ProfilePolicy/canAssignRole.
   assertManagerOnly(actor: ActorContext): void {

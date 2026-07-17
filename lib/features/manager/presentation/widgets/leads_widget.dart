@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/convert_lead_dialog.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:intl/intl.dart';
@@ -95,6 +96,13 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   static const double _autoScrollMinSpeed = 8.0;
   static const double _autoScrollMaxSpeed = 24.0;
   static const double _autoScrollEdge = 110.0;
+
+  /// Column config (add/reorder/delete, incl. «Без статуса») is a system
+  /// setting → управляющий/директор/сисадмин only, not a branch admin.
+  bool get _canManageColumns {
+    final role = ref.watch(releaseGateStatusProvider).asData?.value.role;
+    return role == 'manager' || role == 'director' || role == 'system_admin';
+  }
 
   @override
   void initState() {

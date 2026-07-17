@@ -62,6 +62,7 @@ describe("LeadsService", () => {
 
   it("returns lead board columns with counts and aggregate lead fields", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [] }, // «Без статуса» sort setting (unset → last)
       {
         rows: [
           {
@@ -140,20 +141,22 @@ describe("LeadsService", () => {
     });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    expect(query).toHaveBeenCalledTimes(3);
-    expect(query.mock.calls[2][1]).toContain("анна");
-    expect(query.mock.calls[2][1]).toContain("Вокал");
-    expect(query.mock.calls[2][1]).toContain(10);
+    // +1 for the leading «Без статуса» sort-setting read.
+    expect(query).toHaveBeenCalledTimes(4);
+    expect(query.mock.calls[3][1]).toContain("анна");
+    expect(query.mock.calls[3][1]).toContain("Вокал");
+    expect(query.mock.calls[3][1]).toContain(10);
   });
 
   it("hides converted leads from the board when hideConverted is set", async () => {
     const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // «Без статуса» sort setting
       { rows: [] }, // statuses
       { rows: [] }, // counts
       { rows: [] }, // leads
     ]);
     await service.listLeadBoard(actor, { hideConverted: true } as never);
-    const sql = query.mock.calls[1][0] as string;
+    const sql = query.mock.calls[2][0] as string;
     expect(sql).toContain("from app.students");
     expect(sql).toContain("linked_conv.lead_id = l.id");
     expect(sql).toContain("p_conv.phone_normalized = l.phone_normalized");
@@ -170,21 +173,23 @@ describe("LeadsService", () => {
     // Только активный ученик прячет лид: отчисленный — это история, а не повод
     // убрать человека с доски. Активность живёт здесь, а не в общем правиле.
     expect(sql).toContain("linked_conv.status = 'active'");
-    expect(query.mock.calls[2][0]).toContain("not exists");
+    expect(query.mock.calls[3][0]).toContain("not exists");
   });
 
   it("does not add the converted filter by default", async () => {
     const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // «Без статуса» sort setting
       { rows: [] },
       { rows: [] },
       { rows: [] },
     ]);
     await service.listLeadBoard(actor, {} as never);
-    expect(query.mock.calls[2][0]).not.toContain("linked_conv.lead_id = l.id");
+    expect(query.mock.calls[3][0]).not.toContain("linked_conv.lead_id = l.id");
   });
 
   it("lead board branch filter prefers the branch_id column", async () => {
     const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // «Без статуса» sort setting
       { rows: [] },
       { rows: [] },
       { rows: [] },
