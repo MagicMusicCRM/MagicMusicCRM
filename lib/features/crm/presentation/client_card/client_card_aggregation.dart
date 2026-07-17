@@ -58,6 +58,33 @@ List<Map<String, dynamic>> mergeByIdSorted(
   return out;
 }
 
+/// Collapses comment rows identical in visible text + `created_at` + lesson
+/// linkage, keeping the first occurrence and preserving order.
+///
+/// WHY: a converted client aggregates both its lead and student halves, and the
+/// importer copied some notes onto BOTH (different ids, identical text). Id-based
+/// [mergeByIdSorted] therefore keeps both, so the same note showed twice in the
+/// «Комментарии» ленте while single-half notes showed once — exactly the
+/// duplication staff reported. Keyed on `lesson_at` too, so two *distinct*
+/// per-lesson notes that happen to share text and date are NOT merged. Rows with
+/// empty text are always kept (they can't be confidently matched).
+List<Map<String, dynamic>> dedupeCommentsByContent(
+  List<Map<String, dynamic>> rows,
+) {
+  final seen = <String>{};
+  final out = <Map<String, dynamic>>[];
+  for (final row in rows) {
+    final text = (row['content'] ?? row['body'] ?? '').toString().trim();
+    if (text.isEmpty) {
+      out.add(row);
+      continue;
+    }
+    final key = '$text|${row['created_at'] ?? ''}|${row['lesson_at'] ?? ''}';
+    if (seen.add(key)) out.add(row);
+  }
+  return out;
+}
+
 /// Small «Лид» / «Ученик» origin chip shown on merged comment / task / history
 /// items so staff can tell which half each row came from.
 class ClientOriginChip extends StatelessWidget {

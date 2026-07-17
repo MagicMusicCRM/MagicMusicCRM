@@ -16,7 +16,22 @@ class SecureMagicTokenStore implements MagicTokenStore {
   final String _namespace;
   final FlutterSecureStorage _storage;
 
-  const SecureMagicTokenStore({
+  // In-process authoritative cache of the current session.
+  //
+  // WHY: on a logout→login cycle the store does delete() (logout) then write()
+  // (login). The Windows backend (Credential Manager) can serve a STALE or
+  // empty read immediately after that delete+write — so the first authenticated
+  // request after re-login went out with no/old token, the backend answered 401,
+  // and the router's gate-error handler signed the user straight back out. The
+  // symptom: «вошёл, вышел, теми же верными данными не пускает» — and only ever
+  // on the *second* login, because a first-ever login never precedes it with a
+  // delete. Once this process has written or cleared, `read()` trusts what we
+  // just persisted instead of re-reading the flaky backend. A cold start (cache
+  // not yet primed) still reads from the platform store.
+  MagicApiTokens? _cached;
+  bool _cachePrimed = false;
+
+  SecureMagicTokenStore({
     String namespace = '',
     FlutterSecureStorage storage = const FlutterSecureStorage(
       aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -43,6 +58,16 @@ class SecureMagicTokenStore implements MagicTokenStore {
 
   @override
   Future<MagicApiTokens?> read() async {
+    // Once we've written/cleared in this process, the in-memory value is the
+    // source of truth — never let a lagging platform read override it.
+    if (_cachePrimed) return _cached;
+    final tokens = await _readFromStorage();
+    _cached = tokens;
+    _cachePrimed = true;
+    return tokens;
+  }
+
+  Future<MagicApiTokens?> _readFromStorage() async {
     final bundle = await _storage.read(key: _tokenBundleKey);
     if (bundle != null && bundle.isNotEmpty) {
       try {
@@ -78,6 +103,10 @@ class SecureMagicTokenStore implements MagicTokenStore {
 
   @override
   Future<void> write(MagicApiTokens tokens) async {
+    // Prime the cache BEFORE the (slow, possibly-lagging) platform write so a
+    // concurrent read in the same tick already sees the fresh session.
+    _cached = tokens;
+    _cachePrimed = true;
     await _storage.write(
       key: _tokenBundleKey,
       value: jsonEncode(tokens.toJson()),
@@ -90,6 +119,10 @@ class SecureMagicTokenStore implements MagicTokenStore {
 
   @override
   Future<void> clear() async {
+    // Mark "definitely logged out" in-process immediately; a lagging backend
+    // that still returns the old keys must not resurrect the session.
+    _cached = null;
+    _cachePrimed = true;
     await _storage.delete(key: _tokenBundleKey);
     await _storage.delete(key: _accessTokenKey);
     await _storage.delete(key: _refreshTokenKey);

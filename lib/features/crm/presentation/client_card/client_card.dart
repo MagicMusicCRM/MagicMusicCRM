@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -20,7 +19,6 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/models/comment.dart';
-import 'package:magic_music_crm/core/models/expected_payment.dart';
 import 'package:magic_music_crm/core/models/family_member.dart';
 import 'package:magic_music_crm/core/models/student_balance.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
@@ -108,10 +106,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
   String? _duplicateDecisionId;
 
   // Adaptive segmented tab bar. Leads keep the original 5 tabs; students get the
-  // ported student tab set (Инфо / Задачи / Комментарии / Семья / Занятия /
-  // Оплаты / Инвойсы / Документы / История / Прогресс). A converted client
-  // (lead → student) reuses the student tab set — its body folds in the lead
-  // Инфо/source section and the merged comments / tasks / history.
+  // student tab set (Инфо / Задачи / Комментарии / Семья / Занятия / Оплаты /
+  // История). A converted client (lead → student) reuses the student tab set —
+  // its body folds in the lead Инфо/source section and the merged comments /
+  // tasks / history.
   int _tabIndex = 0;
 
   // ── Aggregation (Phase 4) ─────────────────────────────────────────────────
@@ -157,10 +155,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     (Icons.people_alt_outlined, 'Семья'),
     (Icons.event_note_rounded, 'Занятия'),
     (Icons.account_balance_wallet_rounded, 'Оплаты'),
-    (Icons.receipt_long_rounded, 'Инвойсы'),
-    (Icons.description_rounded, 'Документы'),
     (Icons.history_rounded, 'История'),
-    (Icons.auto_graph_rounded, 'Прогресс'),
   ];
 
   List<(IconData, String)> get _tabs => _isStudent ? _studentTabs : _leadTabs;
@@ -184,11 +179,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
   List<Payment> _payments = [];
   List<Lesson> _lessons = [];
   List<Map<String, dynamic>> _studentTasks = [];
-  // Unified comment stream for the Прогресс tab ([PROGRESS]-prefixed notes) and
-  // the «История» merge — the «Комментарии» tab reads live via [_CommentsList].
+  // Unified comment stream folded into the «История» merge — the «Комментарии»
+  // tab reads live via [_CommentsList].
   List<Map<String, dynamic>> _studentComments = [];
   List<Map<String, dynamic>> _groups = [];
-  List<ExpectedPayment> _expectedPayments = [];
   bool _loadingStudent = true;
   String? _studentError;
   bool _realtimeRefreshQueued = false;
@@ -441,10 +435,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                           _buildFamilyTab(cs),
                           _buildLessonsTab(cs),
                           _buildPaymentsTab(cs),
-                          _buildInvoicesTab(cs),
-                          _buildDocumentsTab(cs),
                           _buildStudentHistoryTab(cs),
-                          _buildProgressTab(cs),
                         ]
                       : [
                           _buildClientInfoTab(cs, curStatus),

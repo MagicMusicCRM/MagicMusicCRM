@@ -56,6 +56,11 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
   bool _loading = true;
   bool _busy = false;
   Object? _error;
+  // Draft reorder: dragging rearranges the list locally and marks it dirty; the
+  // new order is persisted only when the user taps «Сохранить порядок». Заказчик:
+  // «нет кнопки сохранения порядка колонок» — раньше каждый драг сохранялся молча
+  // без подтверждения.
+  bool _orderDirty = false;
 
   @override
   void initState() {
@@ -120,6 +125,12 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
     if (result == null || !mounted) return;
 
     setState(() => _busy = true);
+    // Flush a pending reorder first — the reload below pulls the server order,
+    // which would otherwise discard an unsaved draft.
+    if (_orderDirty && !await _persistOrder()) {
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
     try {
       await ref
           .read(magicCrmServiceProvider)
@@ -153,35 +164,59 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
     }
   }
 
-  // ── Reorder ─────────────────────────────────────────────────────────────────
-  // Optimistic reorder with rollback — behaviour preserved from the original.
-  Future<void> _onReorder(int oldIndex, int newIndex) async {
+  // ── Reorder (draft) ─────────────────────────────────────────────────────────
+  // Dragging only rearranges the local list and marks it dirty; nothing is sent
+  // until «Сохранить порядок». The board is left untouched until then.
+  void _onReorder(int oldIndex, int newIndex) {
     // ReorderableListView passes newIndex assuming the item is still present,
     // so adjust when moving an item further down the list.
     if (newIndex > oldIndex) newIndex -= 1;
     if (oldIndex == newIndex) return;
 
-    final previous = List<Map<String, dynamic>>.from(_statuses);
     final reordered = List<Map<String, dynamic>>.from(_statuses);
     final moved = reordered.removeAt(oldIndex);
     reordered.insert(newIndex, moved);
 
-    // Optimistic update: reflect the new order immediately.
-    setState(() => _statuses = reordered);
+    setState(() {
+      _statuses = reordered;
+      _orderDirty = true;
+    });
+  }
 
-    final idsInOrder = reordered.map((s) => s['id'].toString()).toList();
+  List<String> get _orderedIds =>
+      _statuses.map((s) => s['id'].toString()).toList();
+
+  /// Persists the current column order. Returns true on success; surfaces a
+  /// toast (and keeps the draft) on failure so the user can retry.
+  Future<bool> _persistOrder() async {
     try {
-      await ref.read(magicCrmServiceProvider).reorderLeadStatuses(idsInOrder);
+      await ref.read(magicCrmServiceProvider).reorderLeadStatuses(_orderedIds);
       ref.invalidate(leadStatusesProvider);
+      if (mounted) setState(() => _orderDirty = false);
+      return true;
     } catch (e) {
-      // Revert to the previous order on failure.
       if (mounted) {
-        setState(() => _statuses = previous);
         MagicToast.show(
           context,
-          'Не удалось изменить порядок колонок',
+          'Не удалось сохранить порядок колонок',
           detail: '$e',
           type: MagicToastType.danger,
+        );
+      }
+      return false;
+    }
+  }
+
+  Future<void> _saveOrder() async {
+    setState(() => _busy = true);
+    final ok = await _persistOrder();
+    if (mounted) {
+      setState(() => _busy = false);
+      if (ok) {
+        MagicToast.show(
+          context,
+          'Порядок колонок сохранён',
+          type: MagicToastType.success,
         );
       }
     }
@@ -220,6 +255,11 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _busy = true);
+    // Persist a pending reorder before the delete's reload drops the draft.
+    if (_orderDirty && !await _persistOrder()) {
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
     try {
       await ref.read(magicCrmServiceProvider).deleteLeadStatus(id);
       ref.invalidate(leadStatusesProvider);
@@ -258,6 +298,16 @@ class _ManageStatusesDialogState extends ConsumerState<ManageStatusesDialog> {
         children: [
           Flexible(child: _buildContent()),
           const SizedBox(height: AppSpace.md),
+          // Explicit save for the drag-reordered columns (заказчик: нужна кнопка
+          // сохранения порядка). Appears only when there is an unsaved reorder.
+          if (_orderDirty) ...[
+            _GoldButton(
+              label: 'Сохранить порядок',
+              icon: Icons.save_rounded,
+              onPressed: _busy ? null : _saveOrder,
+            ),
+            const SizedBox(height: AppSpace.sm),
+          ],
           _GoldButton(
             label: 'Добавить колонку',
             icon: Icons.add_rounded,

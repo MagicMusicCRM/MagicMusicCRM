@@ -134,10 +134,14 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
         }
       }),
     );
-    return mergeByIdSorted(
-      results,
-      dateKey: 'created_at',
-    ).map(Comment.fromMap).toList();
+    var merged = mergeByIdSorted(results, dateKey: 'created_at');
+    // Only a converted client aggregates more than one half, and that is the
+    // only place the importer's lead+student copies can collide — so collapse
+    // content-identical notes there. Single-side lists are left untouched.
+    if (widget.refs.length > 1) {
+      merged = dedupeCommentsByContent(merged);
+    }
+    return merged.map(Comment.fromMap).toList();
   }
 
   bool get _isStaff {
