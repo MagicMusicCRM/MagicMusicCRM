@@ -315,46 +315,31 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
         },
         onAcceptWithDetails: (d) => _onDropOnColumn(col, d.data, d.offset),
         builder: (context, candidate, rejected) {
-          final platform = Theme.of(context).platform;
-          final desktop =
-              platform == TargetPlatform.windows ||
-              platform == TargetPlatform.linux ||
-              platform == TargetPlatform.macOS;
           return Stack(
             children: [
-              // Empty-area gesture layer (bottom): tap = 1h create, desktop pan
-              // / touch long-press-drag = multi-hour select. On desktop the
-              // long-press handlers are dropped so a mouse click-drag isn't
-              // ambiguous with a ~500ms long-press.
+              // Empty-area gesture layer (bottom): tap = 1h create,
+              // press-and-hold then drag = multi-hour select.
+              //
+              // The hold is what makes the select deliberate. Desktop used to
+              // select on a bare pan, which meant any drag across empty grid
+              // drew a booking — including the ones a touchpad produces when
+              // the user is only trying to scroll the day. A gesture that must
+              // first sit still for ~500 ms cannot be triggered by scrolling at
+              // all: a trackpad pan-zoom carries no button-press to hold, and a
+              // stray flick moves too soon. Deliberate range-picking survives
+              // unchanged, one beat slower.
               Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTapUp: (d) => _onColumnTap(col, d.localPosition.dy),
-                  onPanStart: desktop
-                      ? (d) => _onSelectStart(col, colIndex, d.localPosition.dy)
-                      : null,
-                  onPanUpdate: desktop
-                      ? (d) => _onSelectUpdate(
-                          d.localPosition.dy,
-                          d.localPosition.dx,
-                        )
-                      : null,
-                  onPanEnd: desktop ? (_) => _onSelectEnd() : null,
+                  onLongPressStart: (d) =>
+                      _onSelectStart(col, colIndex, d.localPosition.dy),
+                  onLongPressMoveUpdate: (d) =>
+                      _onSelectUpdate(d.localPosition.dy, d.localPosition.dx),
+                  onLongPressEnd: (_) => _onSelectEnd(),
                   // A cancelled gesture must drop the anchor too, or the teal
                   // block is left painted over a day nobody is dragging on.
-                  onPanCancel: desktop ? _onSelectCancel : null,
-                  onLongPressCancel: desktop ? null : _onSelectCancel,
-                  onLongPressStart: desktop
-                      ? null
-                      : (d) =>
-                            _onSelectStart(col, colIndex, d.localPosition.dy),
-                  onLongPressMoveUpdate: desktop
-                      ? null
-                      : (d) => _onSelectUpdate(
-                          d.localPosition.dy,
-                          d.localPosition.dx,
-                        ),
-                  onLongPressEnd: desktop ? null : (_) => _onSelectEnd(),
+                  onLongPressCancel: _onSelectCancel,
                   child: const SizedBox.expand(),
                 ),
               ),

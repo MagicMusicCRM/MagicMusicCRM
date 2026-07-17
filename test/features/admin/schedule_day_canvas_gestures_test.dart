@@ -146,7 +146,32 @@ void main() {
     expect(rec.opened, ['l1']);
   });
 
-  testWidgets('SANITY: a mouse click-drag still draws a booking', (
+  testWidgets('a bare drag across empty grid books nothing', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final rec = _Recorder();
+    await tester.pumpWidget(
+      _host(platform: TargetPlatform.windows, rec: rec),
+    );
+    await tester.pumpAndSettle();
+
+    final centre = tester.getCenter(find.byType(ScheduleDayCanvas));
+    final g = await tester.startGesture(centre, kind: PointerDeviceKind.mouse);
+    // Moving straight away — no hold. Whatever produced this (a flick, a
+    // touchpad), it is not someone asking for a booking.
+    for (var i = 1; i <= 10; i++) {
+      await g.moveBy(const Offset(0, 12));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await tester.pumpAndSettle();
+
+    expect(rec.created, isEmpty);
+  });
+
+  testWidgets('holding first, then dragging, books the picked range', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 800);
@@ -161,6 +186,8 @@ void main() {
 
     final centre = tester.getCenter(find.byType(ScheduleDayCanvas));
     final g = await tester.startGesture(centre, kind: PointerDeviceKind.mouse);
+    // Sit still past the long-press threshold — the deliberate part.
+    await tester.pump(const Duration(milliseconds: 600));
     for (var i = 1; i <= 10; i++) {
       await g.moveBy(const Offset(0, 12));
       await tester.pump(const Duration(milliseconds: 16));
@@ -171,8 +198,7 @@ void main() {
     expect(
       rec.created,
       isNotEmpty,
-      reason: 'a real drag must still book — this is what proves the trackpad '
-          'test above is exercising a live select path and not a dead one',
+      reason: 'picking a range on purpose must still work, just one beat later',
     );
   });
 

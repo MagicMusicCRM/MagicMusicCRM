@@ -125,9 +125,9 @@ class ScheduleDayLegend extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            chip(AppColor.transferCyan, 'Тянуть вниз — выбрать часы'),
+            chip(AppColor.transferCyan, 'Зажать и тянуть вниз — выбрать часы'),
             chip(AppColor.actionBlue, 'Перетащить — время / комната'),
-            chip(AppColor.gold, 'Край (наведи) — растянуть'),
+            chip(AppColor.gold, 'Край — растянуть'),
             chip(AppColor.danger, 'Конфликт'),
           ],
         ),
