@@ -1,5 +1,85 @@
 part of 'tasks_widget.dart';
 
+/// Day pager for the to-do view: ‹ day › plus a jump back to today.
+class _DayNavigator extends StatelessWidget {
+  final DateTime day;
+  final void Function(int days) onShift;
+  final VoidCallback onPick;
+  final VoidCallback onToday;
+
+  const _DayNavigator({
+    required this.day,
+    required this.onShift,
+    required this.onPick,
+    required this.onToday,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = day.difference(today).inDays;
+    // Relative names read faster than a date when you are working the list.
+    final label = switch (diff) {
+      0 => 'Сегодня',
+      1 => 'Завтра',
+      -1 => 'Вчера',
+      _ => DateFormat('EEEE, d MMMM', 'ru').format(day),
+    };
+    final sub = diff.abs() <= 1
+        ? DateFormat('EEEE, d MMMM', 'ru').format(day)
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Предыдущий день',
+            onPressed: () => onShift(-1),
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: onPick,
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Column(
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    if (sub != null)
+                      Text(
+                        sub,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Следующий день',
+            onPressed: () => onShift(1),
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+          if (diff != 0)
+            TextButton(onPressed: onToday, child: const Text('Сегодня')),
+        ],
+      ),
+    );
+  }
+}
+
 class _TasksError extends StatelessWidget {
   final Object? error;
   final VoidCallback onRetry;
@@ -130,6 +210,9 @@ class _TaskFilters extends StatelessWidget {
               value: due,
               icon: Icons.event_rounded,
               options: const [
+                // 'day' is the day-by-day to-do (with the pager below);
+                // 'today' is the same range but pinned, without paging.
+                ('day', 'По дням'),
                 ('all', 'Любой срок'),
                 ('overdue', 'Просрочено'),
                 ('today', 'Сегодня'),
@@ -336,6 +419,8 @@ class _TaskCard extends StatelessWidget {
   final Future<void> Function(String, String) onStatusChange;
   final Future<void> Function(Map<String, dynamic>) onTimelineTap;
   final Future<void> Function(Map<String, dynamic>) onReassignTap;
+  final Future<void> Function(Map<String, dynamic>) onRescheduleTap;
+  final Future<void> Function(Map<String, dynamic>) onOpenEntity;
 
   const _TaskCard({
     required this.task,
@@ -343,20 +428,9 @@ class _TaskCard extends StatelessWidget {
     required this.onStatusChange,
     required this.onTimelineTap,
     required this.onReassignTap,
+    required this.onRescheduleTap,
+    required this.onOpenEntity,
   });
-
-  String _statusLabel(String? status) {
-    switch (status) {
-      case 'in_progress':
-        return 'В работе';
-      case 'done':
-        return 'Завершена';
-      case 'cancelled':
-        return 'Отменена';
-      default:
-        return 'К выполнению';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -366,7 +440,9 @@ class _TaskCard extends StatelessWidget {
     final status = task['status']?.toString();
     final dueDate = task['due_date'] != null
         ? DateFormat(
-            'd MMM yyyy',
+            // Deadlines carry a time of day now, and it drives the -1h/-10m
+            // reminders — showing the date alone hides why one just fired.
+            'd MMM, HH:mm',
             'ru',
           ).format(DateTime.parse(task['due_date'].toString()).toLocal())
         : null;
@@ -385,21 +461,27 @@ class _TaskCard extends StatelessWidget {
     final branchText = task['branch_name']?.toString();
     final entityText = _taskEntityLabel(task);
     final onEntityTap = _entityTap(context, task);
-    final hasEntity =
-        task['entity_type']?.toString().trim().isNotEmpty == true &&
-        task['entity_id']?.toString().trim().isNotEmpty == true;
 
     return Opacity(
       opacity: isPending ? 0.65 : 1,
       child: Card(
         margin: const EdgeInsets.only(bottom: 10),
         elevation: 0,
-        color: Theme.of(context).colorScheme.surface,
+        // An overdue task has to be findable at a glance in a long list, so
+        // the whole card burns red rather than just the due-date tag.
+        color: isOverdue
+            ? Color.alphaBlend(
+                AppColor.danger.withValues(alpha: 0.06),
+                Theme.of(context).colorScheme.surface,
+              )
+            : Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.card),
           side: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant,
-            width: 1,
+            color: isOverdue
+                ? AppColor.danger
+                : Theme.of(context).colorScheme.outlineVariant,
+            width: isOverdue ? 1.5 : 1,
           ),
         ),
         child: Padding(
@@ -418,11 +500,22 @@ class _TaskCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // One tap straight to the object, without hunting for the
+                  // small entity tag at the bottom of the card.
                   IconButton(
-                    tooltip: 'История объекта',
-                    onPressed: hasEntity && !isPending
-                        ? () => onTimelineTap(task)
-                        : null,
+                    tooltip: entityText == null
+                        ? 'Перейти к объекту'
+                        : 'Перейти: $entityText',
+                    onPressed: (onEntityTap == null || isPending)
+                        ? null
+                        : onEntityTap,
+                    icon: const Icon(Icons.open_in_new_rounded),
+                  ),
+                  IconButton(
+                    tooltip: 'История задачи',
+                    // No longer gated on hasEntity: the task's own change log
+                    // exists even when the related object does not.
+                    onPressed: isPending ? null : () => onTimelineTap(task),
                     icon: const Icon(Icons.history_rounded),
                   ),
                   PopupMenuButton<String>(
@@ -443,6 +536,10 @@ class _TaskCard extends StatelessWidget {
                     onSelected: (value) async {
                       if (value == 'reassign') {
                         onReassignTap(task);
+                        return;
+                      }
+                      if (value == 'reschedule') {
+                        onRescheduleTap(task);
                         return;
                       }
                       // Cancelling drops the task out of the active workflow —
@@ -479,6 +576,10 @@ class _TaskCard extends StatelessWidget {
                       const PopupMenuItem(
                         value: 'reassign',
                         child: Text('Назначить ответственного'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'reschedule',
+                        child: Text('Перенести срок'),
                       ),
                       const PopupMenuDivider(),
                       if (status != 'in_progress')
@@ -526,7 +627,7 @@ class _TaskCard extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  _Tag(label: _statusLabel(status), color: AppColor.gold),
+                  _Tag(label: _taskStatusLabel(status), color: AppColor.gold),
                   if (dueDate != null)
                     _Tag(
                       label: 'До: $dueDate',
@@ -575,20 +676,24 @@ class _TaskCard extends StatelessWidget {
     );
   }
 
+  // Every entity type a task can point at is now reachable; the parent does
+  // the opening (groups/teachers need a fetch by id). Previously group,
+  // teacher and profile fell through to null and the tap was simply dead.
+  static const _openableEntityTypes = {
+    'student',
+    'lead',
+    'lesson',
+    'profile',
+    'group',
+    'teacher',
+  };
+
   VoidCallback? _entityTap(BuildContext context, Map<String, dynamic> task) {
-    final entityId = task['entity_id'];
-    if (entityId == null) return null;
-    switch (task['entity_type']) {
-      case 'student':
-        return () =>
-            showClientCard(context, entityType: 'student', entityId: entityId);
-      case 'lead':
-        return () =>
-            showClientCard(context, entityType: 'lead', entityId: entityId);
-      case 'lesson':
-        return () => context.push('/lessons/$entityId');
-      default:
-        return null;
+    final entityId = task['entity_id']?.toString();
+    if (entityId == null || entityId.trim().isEmpty) return null;
+    if (!_openableEntityTypes.contains(task['entity_type']?.toString())) {
+      return null;
     }
+    return () => onOpenEntity(task);
   }
 }

@@ -264,6 +264,13 @@ extension MagicCrmCore on MagicCrmService {
     return _items(response).map(_legacyTeacher).toList();
   }
 
+  /// One teacher by id. Callers holding only an id (a task pointing at a
+  /// teacher) can't use listTeachers: it is capped, so the row may be absent.
+  Future<Map<String, dynamic>> getTeacher(String id) async {
+    final response = await _api.get<Map<String, dynamic>>('/crm/teachers/$id');
+    return _legacyTeacher(response);
+  }
+
   Future<Map<String, dynamic>> createTeacher({
     required String firstName,
     String? lastName,
@@ -369,13 +376,68 @@ extension MagicCrmCore on MagicCrmService {
   }
 
   /// KVA-238: отчёт «Статистика преподавателей» — учебные единицы, дни, часы,
-  /// ставка, начислено/оплачено. unitType: individual | group | trial.
+  /// ставка, начислено/оплачено.
+  /// unitType: individual | group | trial | individual_trial | group_trial.
   Future<Map<String, dynamic>> getTeacherStatsReport({
     String? from,
     String? to,
     String? branchId,
     String? teacherId,
     String? unitType,
+    String? status,
+    String? discipline,
+    String? category,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/crm/reports/teacher-stats',
+      queryParameters: _teacherStatsQuery(
+        from: from,
+        to: to,
+        branchId: branchId,
+        teacherId: teacherId,
+        unitType: unitType,
+        status: status,
+        discipline: discipline,
+        category: category,
+      ),
+    );
+  }
+
+  /// The same report as CSV (see «Экспорт»); the caller saves the bytes.
+  Future<String> exportTeacherStatsReport({
+    String? from,
+    String? to,
+    String? branchId,
+    String? teacherId,
+    String? unitType,
+    String? status,
+    String? discipline,
+    String? category,
+  }) {
+    return _api.get<String>(
+      '/crm/reports/teacher-stats/export',
+      queryParameters: _teacherStatsQuery(
+        from: from,
+        to: to,
+        branchId: branchId,
+        teacherId: teacherId,
+        unitType: unitType,
+        status: status,
+        discipline: discipline,
+        category: category,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _teacherStatsQuery({
+    String? from,
+    String? to,
+    String? branchId,
+    String? teacherId,
+    String? unitType,
+    String? status,
+    String? discipline,
+    String? category,
   }) {
     final queryParameters = <String, dynamic>{};
     if (from != null) queryParameters['from'] = from;
@@ -383,10 +445,10 @@ extension MagicCrmCore on MagicCrmService {
     if (branchId != null) queryParameters['branchId'] = branchId;
     if (teacherId != null) queryParameters['teacherId'] = teacherId;
     if (unitType != null) queryParameters['unitType'] = unitType;
-    return _api.get<Map<String, dynamic>>(
-      '/crm/reports/teacher-stats',
-      queryParameters: queryParameters,
-    );
+    if (status != null) queryParameters['status'] = status;
+    if (discipline != null) queryParameters['discipline'] = discipline;
+    if (category != null) queryParameters['category'] = category;
+    return queryParameters;
   }
 
   Future<Map<String, dynamic>> createStaff({

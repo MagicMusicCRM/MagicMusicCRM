@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -166,6 +167,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
             amount: result['amount'] as num,
             paymentDate: DateTime.now().toIso8601String(),
             method: result['type']?.toString(),
+            lessonId: result['lesson_id']?.toString(),
           );
       messenger.showSnackBar(
         const SnackBar(

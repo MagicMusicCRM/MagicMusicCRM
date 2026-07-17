@@ -1,7 +1,72 @@
 part of 'client_card.dart';
 
 extension _ClientCardTabsA on _ClientCardState {
+  /// В чёрном ли списке клиент — по любой из половин карточки. Сервер отдаёт
+  /// флаг на каждой (см. blacklist.ts); достаточно одной, чтобы это был бан.
+  bool get _isBlacklisted =>
+      _student?['blacklisted'] == true || _leadData['blacklisted'] == true;
+
+  String? get _blacklistReason {
+    final fromStudent = _student?['blacklist_reason']?.toString();
+    if (fromStudent != null && fromStudent.trim().isNotEmpty) return fromStudent;
+    final fromLead = _leadData['blacklist_reason']?.toString();
+    if (fromLead != null && fromLead.trim().isNotEmpty) return fromLead;
+    return null;
+  }
+
+  /// Красная плашка над карточкой забаненного клиента.
+  ///
+  /// ✔ Решение владельца 17.07: «карточка клиента помечается красным цветом
+  /// предупреждения». Плашкой, а не одной лишь подкраской заголовка: то, что
+  /// человеку закрыты чаты, должно быть видно раньше, чем сотрудник начнёт
+  /// гадать, почему клиент молчит.
+  Widget _buildBlacklistBanner(ColorScheme cs) {
+    final reason = _blacklistReason;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(AppSpace.xl, 0, AppSpace.xl, AppSpace.md),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppTheme.danger.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: AppTheme.danger.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.block_rounded, size: 18, color: AppTheme.danger),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Клиент в чёрном списке',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.danger,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  reason ?? 'Причина не указана',
+                  style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Писать в чаты школы и администрации он не может.',
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeader(ColorScheme cs, StatusRecord curStatus) {
+    final banned = _isBlacklisted;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpace.xl,
@@ -15,14 +80,20 @@ extension _ClientCardTabsA on _ClientCardState {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: AppColor.goldSoft,
+              color: banned
+                  ? AppTheme.danger.withValues(alpha: 0.12)
+                  : AppColor.goldSoft,
               borderRadius: BorderRadius.circular(AppRadius.icon),
-              border: Border.all(color: AppColor.goldLine),
+              border: Border.all(
+                color: banned
+                    ? AppTheme.danger.withValues(alpha: 0.55)
+                    : AppColor.goldLine,
+              ),
             ),
-            child: const Icon(
-              Icons.person_outline_rounded,
+            child: Icon(
+              banned ? Icons.block_rounded : Icons.person_outline_rounded,
               size: 22,
-              color: AppColor.gold,
+              color: banned ? AppTheme.danger : AppColor.gold,
             ),
           ),
           const SizedBox(width: AppSpace.md),
@@ -191,6 +262,23 @@ extension _ClientCardTabsA on _ClientCardState {
                     : const Icon(Icons.person_add_alt_1_rounded, size: 18),
                 label: const Text('Создать ученика'),
               ),
+            // «Прикрепить к ученику» (§1 спеки). Рядом с «Создать ученика»,
+            // потому что это тот же выбор: клиент уже заведён или ещё нет.
+            // Раньше связать можно было только пару, которую нашёл автоподбор
+            // дублей — если он молчал, привязать было нельзя вовсе.
+            if (!_isConverted && !_hasLinkedStudent)
+              OutlinedButton.icon(
+                onPressed: _saving || _converting ? null : _linkExistingStudent,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: cs.onSurface,
+                  side: BorderSide(color: cs.outlineVariant),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                  ),
+                ),
+                icon: const Icon(Icons.link_rounded, size: 18),
+                label: const Text('Прикрепить к ученику'),
+              ),
             TextButton(
               onPressed: _saving || _converting ? null : _handleClose,
               style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
@@ -303,9 +391,15 @@ extension _ClientCardTabsA on _ClientCardState {
               includeKeys: _ClientCardState._commonClientCustomFieldKeys,
               excludedKeys: _ClientCardState._customKeysWithDedicatedEditor,
             ),
+            // Возраст: поле ввода, пока нет даты рождения, иначе — посчитанное
+            // сервером значение только на просмотр.
+            _buildAgeCustomField(cs, _isStudent ? 'students' : 'leads'),
             // KVA-234: мультидисциплины чипами + список контактных лиц.
             _buildDisciplinesChips(cs, _isStudent ? 'students' : 'leads'),
             _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),
+            // Чёрный список — у обеих половин карточки, а не только у ученика:
+            // аккаунт клиента цепляется к любой из них.
+            _buildBlacklistToggle(cs),
           ],
 
           if (_mode.hasStudentHalf) ...[
@@ -355,7 +449,20 @@ extension _ClientCardTabsA on _ClientCardState {
                     label: (s.packageName?.trim().isNotEmpty ?? false)
                         ? s.packageName!
                         : 'Абонемент',
-                    value: _subscriptionRemainder(s),
+                    value: [
+                      _subscriptionRemainder(s),
+                      // «Курс» — the whole subscription, next to what is left
+                      // of it, as on the reference card.
+                      ?_subscriptionCourse(s),
+                      // «Оплачено» — приход личного счёта за этот абонемент.
+                      ?_subscriptionPaid(s),
+                    ].join('\n'),
+                    // «Переплата»/«Долг» — разница между приходом и стоимостью.
+                    // Красным, потому что это то, на что надо посмотреть.
+                    hint: _subscriptionOverpayment(s)?.label,
+                    hintColor: _subscriptionOverpayment(s)?.isDebt == true
+                        ? AppTheme.danger
+                        : AppTheme.success,
                   ),
               ]),
             ],
@@ -375,6 +482,23 @@ extension _ClientCardTabsA on _ClientCardState {
             _studentGroupsInfoCard(groups: _groups),
           ],
 
+          // Дата обращения ученика (✔ решение владельца 16.07: поле живёт на
+          // стороне students). У импортированных 3105 учеников она уже лежала
+          // в custom_data.addressDate — просто её никто не показывал.
+          if (_mode.hasStudentHalf && !_mode.hasLeadHalf && _student != null) ...[
+            if (_appealAtLabel(_student!) != null) ...[
+              const SizedBox(height: AppSpace.lg),
+              _buildInfoCard('Обращение', [
+                _InfoRow(
+                  icon: Icons.event_outlined,
+                  label: 'Дата обращения',
+                  value: _appealAtLabel(_student!)!,
+                  hint: _appealAtSourceLabel(_student!),
+                ),
+              ]),
+            ],
+          ],
+
           if (_mode.hasLeadHalf) ...[
             if (_leadCreatedAtLabel() != null) ...[
               const SizedBox(height: AppSpace.lg),
@@ -383,6 +507,7 @@ extension _ClientCardTabsA on _ClientCardState {
                   icon: Icons.event_outlined,
                   label: 'Дата обращения',
                   value: _leadCreatedAtLabel()!,
+                  hint: _appealAtSourceLabel(_leadData),
                 ),
               ]),
             ],

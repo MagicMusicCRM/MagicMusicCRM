@@ -8,8 +8,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
+import { Response } from "express";
 import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
@@ -49,6 +51,14 @@ export class CrmPeopleController {
     @Body() dto: CreateTeacherDto,
   ) {
     return this.teachers.createTeacher(actor, dto);
+  }
+
+  @Get("teachers/:id")
+  getTeacher(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.teachers.getTeacher(actor, id);
   }
 
   @Patch("teachers/:id")
@@ -92,6 +102,20 @@ export class CrmPeopleController {
     @Query() query: TeacherStatsQuery,
   ) {
     return this.payroll.getTeacherStatsReport(actor, query);
+  }
+
+  @Get("reports/teacher-stats/export")
+  async exportTeacherStats(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: TeacherStatsQuery,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.payroll.exportTeacherStatsReport(actor, query);
+    res.set({
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": 'attachment; filename="teacher-stats.csv"',
+    });
+    return csv;
   }
 
   @Get("staff")

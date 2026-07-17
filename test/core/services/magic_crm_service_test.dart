@@ -1587,6 +1587,7 @@ void main() {
         discipline: 'Вокал',
         quick: 'active',
         openTasks: true,
+        hideConverted: true,
       );
       final card = await service.getLeadCard('lead-a');
       final nextPage = await service.listLeadBoard(cursor: 'cursor-a');
@@ -1613,6 +1614,10 @@ void main() {
       expect(board['next_cursor'], 'cursor-a');
       expect(adapter.requests[0].queryParameters['q'], 'анна');
       expect(adapter.requests[0].queryParameters['openTasks'], true);
+      // ⚠️ Фильтр hideConverted живёт на бэке с июня, но фронт его НИ РАЗУ не
+      // передавал — мёртвый код. Тест на то и стоит, чтобы он не умер снова:
+      // без параметра в запросе тумблер на доске ничего не делает.
+      expect(adapter.requests[0].queryParameters['hideConverted'], true);
       expect(adapter.requests[2].queryParameters['cursor'], 'cursor-a');
     });
 

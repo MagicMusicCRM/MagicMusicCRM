@@ -29,15 +29,57 @@ extension MagicCrmFinance on MagicCrmService {
     String? direction,
     String? description,
     String? method,
+    String? invoiceNumber,
+    String? status,
   }) async {
     final data = <String, dynamic>{'kind': kind, 'amount': amount};
     if (direction != null) data['direction'] = direction;
     final trimmed = description?.trim();
     if (trimmed != null && trimmed.isNotEmpty) data['description'] = trimmed;
     if (method != null) data['method'] = method;
+    final invoice = invoiceNumber?.trim();
+    if (invoice != null && invoice.isNotEmpty) data['invoiceNumber'] = invoice;
+    if (status != null) data['status'] = status;
     return _api.post<Map<String, dynamic>>(
       '/crm/students/$studentId/adjustments',
       data: data,
+    );
+  }
+
+  /// Правка записи личного счёта. Передаются только изменённые поля —
+  /// остальные сервер оставляет как есть.
+  Future<Map<String, dynamic>> updateAdjustment({
+    required String studentId,
+    required String adjustmentId,
+    num? amount,
+    String? direction,
+    String? description,
+    String? method,
+    String? invoiceNumber,
+    String? status,
+  }) async {
+    final data = <String, dynamic>{};
+    if (amount != null) data['amount'] = amount;
+    if (direction != null) data['direction'] = direction;
+    if (description != null) data['description'] = description.trim();
+    if (method != null) data['method'] = method;
+    if (invoiceNumber != null) data['invoiceNumber'] = invoiceNumber.trim();
+    if (status != null) data['status'] = status;
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/students/$studentId/adjustments/$adjustmentId',
+      data: data,
+    );
+  }
+
+  /// Отмена (сторно) записи личного счёта. Строка не исчезает: она остаётся в
+  /// ленте зачёркнутой, но выпадает из баланса — иначе не осталось бы следа,
+  /// кто и что убрал с клиентского счёта.
+  Future<Map<String, dynamic>> voidAdjustment({
+    required String studentId,
+    required String adjustmentId,
+  }) async {
+    return _api.delete<Map<String, dynamic>>(
+      '/crm/students/$studentId/adjustments/$adjustmentId',
     );
   }
 
@@ -131,6 +173,9 @@ extension MagicCrmFinance on MagicCrmService {
     String? method,
     String? externalId,
     String? notes,
+    /// Занятие, за которое пришёл платёж (✔ владелец 17.07). Необязательно:
+    /// пополнение счёта авансом ни к какому занятию не относится.
+    String? lessonId,
   }) async {
     final data = <String, dynamic>{
       'studentId': studentId,
@@ -138,6 +183,9 @@ extension MagicCrmFinance on MagicCrmService {
       'paymentDate': paymentDate,
       'currency': currency,
     };
+    if (lessonId != null && lessonId.trim().isNotEmpty) {
+      data['lessonId'] = lessonId.trim();
+    }
     if (method != null && method.trim().isNotEmpty) {
       data['method'] = method.trim();
     }

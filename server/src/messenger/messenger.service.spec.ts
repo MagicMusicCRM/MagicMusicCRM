@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { LeadIntakePort } from "../common/lead-intake.port";
 import { DatabaseService } from "../db/database.service";
@@ -42,6 +46,7 @@ describe("MessengerService", () => {
       }),
       assertCanReadChat: jest.fn(),
       assertCanWriteChat: jest.fn(),
+      assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
       assertCanCreateGroup: jest.fn(),
       assertCanManageGroup: jest.fn(),
       ...overrides?.policy,
@@ -84,6 +89,45 @@ describe("MessengerService", () => {
       realtimeBus,
     };
   }
+
+  describe("чёрный список = бан на отправку", () => {
+    // ✔ Решение владельца 17.07: «этот клиент не может писать далее в чатах
+    // школы и админам». Проверка живёт в MessengerPolicy, здесь — что её
+    // вообще спрашивают: без этого теста удаление вызова из sendMessage
+    // прошло бы мимо всей сюиты.
+    it("refuses to send when the client is blacklisted", async () => {
+      const { service, database } = createService({
+        policy: {
+          assertNotBlacklisted: jest
+            .fn()
+            .mockRejectedValue(new ForbiddenException("Вы в чёрном списке школы.")),
+        },
+      });
+
+      await expect(
+        service.sendMessage({ userId: "client-a", role: "client" }, "chat-a", {
+          content: "привет",
+        }),
+      ).rejects.toThrow(ForbiddenException);
+
+      // И, главное, сообщения нет: отказ должен случиться ДО вставки, а не
+      // после неё с красивой ошибкой поверх уже отправленного.
+      expect(database.transaction).not.toHaveBeenCalled();
+    });
+
+    it("asks about the ban on every send, not once per session", async () => {
+      const { service, policy } = createService();
+      await service
+        .sendMessage({ userId: "client-a", role: "client" }, "chat-a", {
+          content: "привет",
+        })
+        .catch(() => undefined);
+      expect(policy.assertNotBlacklisted).toHaveBeenCalledWith({
+        userId: "client-a",
+        role: "client",
+      });
+    });
+  });
 
   it("publishes message.created only after the transaction completes", async () => {
     const order: string[] = [];
@@ -134,6 +178,7 @@ describe("MessengerService", () => {
         memberRole: "member",
       }),
       assertCanWriteChat: jest.fn(),
+      assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
     } as unknown as MessengerPolicy;
     const realtime = {
       publishChatEvent: jest.fn(() => order.push("publish")),
@@ -420,6 +465,7 @@ describe("MessengerService", () => {
           memberRole: "member",
         }),
         assertCanWriteChat: jest.fn(),
+        assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
       },
     });
 
@@ -473,6 +519,7 @@ describe("MessengerService", () => {
           memberRole: "member",
         }),
         assertCanWriteChat: jest.fn(),
+        assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
       },
     });
 
@@ -526,6 +573,7 @@ describe("MessengerService", () => {
           memberRole: "member",
         }),
         assertCanWriteChat: jest.fn(),
+        assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
       },
     });
 
@@ -638,6 +686,7 @@ describe("MessengerService", () => {
           memberRole: "member",
         }),
         assertCanWriteChat: jest.fn(),
+        assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
       },
     });
 
@@ -707,6 +756,7 @@ describe("MessengerService", () => {
           memberRole: null,
         }),
         assertCanWriteChat: jest.fn(),
+        assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
       },
     });
 
@@ -1020,6 +1070,7 @@ describe("MessengerService", () => {
             memberRole: null,
           }),
           assertCanWriteChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
         },
       });
 
@@ -1092,6 +1143,7 @@ describe("MessengerService", () => {
             memberRole: "member",
           }),
           assertCanWriteChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
         },
       });
 
@@ -1163,6 +1215,7 @@ describe("MessengerService", () => {
             memberRole: "member",
           }),
           assertCanWriteChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
         },
       });
 
@@ -1230,6 +1283,7 @@ describe("MessengerService", () => {
             memberRole: "member",
           }),
           assertCanWriteChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
         },
       });
 

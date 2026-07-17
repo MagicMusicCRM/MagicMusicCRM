@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { NotFoundException, BadRequestException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
@@ -133,6 +133,8 @@ describe("FinanceService", () => {
       null,
       null,
       "manager-a",
+      null, // invoice_number («№ Счёта»)
+      null, // status → coalesce в 'paid'
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -156,6 +158,104 @@ describe("FinanceService", () => {
       }),
     ).resolves.toEqual({ id: "adj-plus", amount: 300, kind: "adjustment" });
     expect(query.mock.calls[1][1]).toContain(300);
+  });
+
+  describe("editing and voiding a ledger entry", () => {
+    it("keeps a refund negative no matter how it is edited", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "adj-a", kind: "refund", status: "paid" }] },
+        { rows: [{ id: "adj-a", amount: "-500" }] },
+      ]);
+
+      await expect(
+        service.updateAccountAdjustment(actor, "student-a", "adj-a", {
+          amount: 500,
+        }),
+      ).resolves.toEqual({ id: "adj-a", amount: -500 });
+
+      // Знак пересобирается от kind записи, а не берётся из DTO: возврат,
+      // ставший приходом, нарисовал бы клиенту деньги из воздуха.
+      expect((query.mock.calls[1][1] as unknown[])[2]).toBe(-500);
+    });
+
+    it("leaves untouched fields alone", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "adj-a", kind: "adjustment", status: "paid" }] },
+        { rows: [{ id: "adj-a", amount: "300" }] },
+      ]);
+
+      await service.updateAccountAdjustment(actor, "student-a", "adj-a", {
+        invoiceNumber: "СЧ-42",
+      });
+
+      const params = query.mock.calls[1][1] as unknown[];
+      expect(params[2]).toBeNull(); // amount не трогали → coalesce оставит своё
+      expect(params[6]).toBe("СЧ-42");
+    });
+
+    it("refuses to edit an entry that was already voided", async () => {
+      const { service } = createServiceWithQueryResults([
+        { rows: [{ id: "adj-a", kind: "refund", status: "void" }] },
+      ]);
+
+      await expect(
+        service.updateAccountAdjustment(actor, "student-a", "adj-a", {
+          amount: 100,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("voids rather than deletes, recording who did it", async () => {
+      const { service, query, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "adj-a" }] },
+      ]);
+
+      await expect(
+        service.voidAccountAdjustment(actor, "student-a", "adj-a"),
+      ).resolves.toEqual({ id: "adj-a", status: "void" });
+
+      const sql = String(query.mock.calls[0][0]);
+      // Строку личного счёта уже показывали клиенту: удаление не оставило бы
+      // следа, кто и что убрал.
+      expect(sql).toContain("set status = 'void'");
+      expect(sql).toContain("voided_by = $3");
+      expect(sql).not.toContain("delete from");
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "crm.account_adjustment_voided" }),
+      );
+    });
+
+    it("does not void the same entry twice", async () => {
+      const { service } = createServiceWithQueryResults([{ rows: [] }]);
+
+      await expect(
+        service.voidAccountAdjustment(actor, "student-a", "adj-a"),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("refuses to touch an entry belonging to another student", async () => {
+      const { service, query } = createServiceWithQueryResults([{ rows: [] }]);
+
+      await expect(
+        service.updateAccountAdjustment(actor, "student-b", "adj-a", {
+          amount: 1,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      // student_id стоит в WHERE, а не только в пути запроса — иначе чужую
+      // операцию можно было бы править, зная её id.
+      expect(String(query.mock.calls[0][0])).toContain("student_id = $2");
+    });
+  });
+
+  it("keeps a voided entry out of the balance", async () => {
+    const { service, query } = createService([]);
+
+    await service.listStudentBalances(actor, { limit: 10 });
+
+    // Без этого фильтра сторнирование не меняло бы баланс — то есть отмена
+    // ничего бы не отменяла.
+    expect(String(query.mock.calls[0][0])).toContain("adj.status <> 'void'");
   });
 
   it("lists payments with date filters and student summary", async () => {
@@ -465,6 +565,89 @@ describe("FinanceService", () => {
     expect(String(query.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
   });
 
+  describe("привязка платежа к занятию (✔ владелец 17.07)", () => {
+    const paymentRow = {
+      id: "pay-a",
+      student_id: "student-a",
+      student_user_id: null,
+      amount: "1500.00",
+      student_first_name: null,
+      student_last_name: null,
+      currency: "RUB",
+      payment_date: "2026-06-23",
+      method: "cash",
+      external_id: null,
+      notes: null,
+      created_by: "manager-a",
+      created_at: "2026-06-23T00:00:00.000Z",
+      lesson_id: "lesson-a",
+    };
+
+    it("ties the payment to the lesson", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [] }, // advisory lock
+        { rows: [{ id: "lesson-a" }] }, // занятие принадлежит ученику
+        { rows: [] }, // dup-check
+        { rows: [paymentRow] }, // insert
+        { rows: [] }, // realtime audience
+      ]);
+
+      const result = await service.createPayment(actor, {
+        studentId: "student-a",
+        amount: 1500,
+        paymentDate: "2026-06-23",
+        method: "cash",
+        lessonId: "lesson-a",
+      } as never);
+
+      expect(result.lessonId).toBe("lesson-a");
+      const insertParams = query.mock.calls[3][1] as unknown[];
+      expect(insertParams[insertParams.length - 1]).toBe("lesson-a");
+    });
+
+    it("refuses a lesson that is not this student's, instead of silently unlinking", async () => {
+      // Молча обнулить чужую ссылку было бы хуже отказа: платёж записался бы
+      // «не разнесённым», а тот, кто его привязывал, ушёл бы уверенный, что
+      // привязал. И «оплачено» загорелось бы у чужого дня.
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [] }, // advisory lock
+        { rows: [] }, // занятия у этого ученика нет
+      ]);
+
+      await expect(
+        service.createPayment(actor, {
+          studentId: "student-a",
+          amount: 1500,
+          paymentDate: "2026-06-23",
+          lessonId: "lesson-of-someone-else",
+        } as never),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      // Главное: вставки не было.
+      expect(query).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not ask about a lesson when the payment is not tied to one", async () => {
+      // Пополнение счёта авансом ни к какому занятию не относится — это норма,
+      // а не пропуск, и лишний запрос ради этого не нужен.
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [] }, // advisory lock
+        { rows: [] }, // dup-check
+        { rows: [{ ...paymentRow, lesson_id: null }] }, // insert
+        { rows: [] }, // realtime audience
+      ]);
+
+      const result = await service.createPayment(actor, {
+        studentId: "student-a",
+        amount: 1500,
+        paymentDate: "2026-06-23",
+      } as never);
+
+      expect(result.lessonId).toBeNull();
+      expect(String(query.mock.calls[1][0])).toContain("from app.payments");
+    });
+  });
+
   it("lists expenses with branch/category filters and a total (P5-5)", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       {
@@ -523,4 +706,79 @@ describe("FinanceService", () => {
       missing.service.deleteExpense(actor, "exp-x"),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  describe("createAccountTransfer", () => {
+    it("writes both legs with opposite signs and links the counterparties", async () => {
+      const { service, query, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "student-a", profile_user_id: "client-a" }] }, // from
+        { rows: [{ id: "student-b", profile_user_id: "client-b" }] }, // to
+        { rows: [{ id: "adj-out" }] },
+        { rows: [{ id: "adj-in" }] },
+      ]);
+
+      await expect(
+        service.createAccountTransfer(actor, "student-a", {
+          toStudentId: "student-b",
+          amount: 1500,
+          description: "Перенос на друга",
+        }),
+      ).resolves.toEqual({
+        fromAdjustmentId: "adj-out",
+        toAdjustmentId: "adj-in",
+        amount: 1500,
+      });
+
+      // Payer leg: negative, pointing at the receiver.
+      expect(query.mock.calls[2][1]).toEqual([
+        "student-a",
+        "transfer_out",
+        -1500,
+        "Перенос на друга",
+        "student-b",
+        null,
+        "manager-a",
+      ]);
+      // Receiver leg: positive, pointing back. Money is conserved.
+      expect(query.mock.calls[3][1]).toEqual([
+        "student-b",
+        "transfer_in",
+        1500,
+        "Перенос на друга",
+        "student-a",
+        null,
+        "manager-a",
+      ]);
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "crm.account_transfer_created" }),
+      );
+    });
+
+    it("rejects a transfer to self", async () => {
+      const { service } = createService([]);
+
+      await expect(
+        service.createAccountTransfer(actor, "student-a", {
+          toStudentId: "student-a",
+          amount: 100,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("does not write a leg when the receiver does not exist", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "student-a", profile_user_id: "client-a" }] },
+        { rows: [] }, // receiver missing
+      ]);
+
+      await expect(
+        service.createAccountTransfer(actor, "student-a", {
+          toStudentId: "ghost",
+          amount: 100,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      // Nothing inserted: a half-landed transfer would invent or destroy money.
+      expect(query).toHaveBeenCalledTimes(2);
+    });
+  });
+
 });

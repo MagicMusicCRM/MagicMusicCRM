@@ -40,6 +40,7 @@ class _LeadCard extends ConsumerWidget {
     final assignedName = lead.assignedName;
     final linkedStudentId = lead.linkedStudentId;
     final openTasks = lead.openTasksCount;
+    final forgotten = hasNoOpenTasks(openTasks);
     final comments = lead.commentsCount;
     final trials = lead.trialLessonsCount;
     final currentStatus = lead.status;
@@ -150,15 +151,24 @@ class _LeadCard extends ConsumerWidget {
             onTap: onTap,
             child: Card(
               margin: const EdgeInsets.only(bottom: 10),
-              color: Theme.of(context).colorScheme.surface,
+              // Жёлтым — лид, по которому не висит ни одной задачи: про него
+              // забыли, следующего шага никто не запланировал (требование
+              // заказчика 17.07). Правило и цвет — в no_open_tasks_highlight.
+              color: forgotten
+                  ? noOpenTasksSurface(context)
+                  : Theme.of(context).colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppRadius.control),
-                side: BorderSide(
-                  color: beingTransferred
-                      ? AppColor.transferCyan
-                      : Theme.of(context).colorScheme.outlineVariant,
-                  width: beingTransferred ? 1.4 : 1,
-                ),
+                // Перенос важнее «забыт»: он про то, что происходит ПРЯМО
+                // СЕЙЧАС, и перебивать его подсказкой нельзя.
+                side: beingTransferred
+                    ? const BorderSide(color: AppColor.transferCyan, width: 1.4)
+                    : forgotten
+                        ? noOpenTasksBorder()
+                        : BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                            width: 1,
+                          ),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(12),

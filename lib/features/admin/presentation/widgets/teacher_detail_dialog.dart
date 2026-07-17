@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
@@ -33,8 +34,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   late TextEditingController _nameController;
   late TextEditingController _emailController;
   late TextEditingController _specializationController;
-  late TextEditingController _levelController;
-  late TextEditingController _categoryController;
   late TextEditingController _salaryController;
   late String _canonicalPhone;
   bool _saving = false;
@@ -48,6 +47,13 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   // KVA-238: дисциплины и филиалы (мультивыбор).
   List<Map<String, dynamic>> _allDisciplines = const [];
   List<Map<String, dynamic>> _allBranches = const [];
+  // Levels/categories used to be free text, so no two teachers spelled them
+  // alike and filtering by them could not work. Options come from the CRM
+  // custom-field schema — the same list students and leads pick from.
+  List<Map<String, dynamic>> _allLevels = const [];
+  List<Map<String, dynamic>> _allCategories = const [];
+  final Set<String> _levels = {};
+  final Set<String> _categories = {};
   final Set<String> _disciplineIds = {};
   final Set<String> _branchIds = {};
 
@@ -95,12 +101,8 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     _workStartDate = _parseDate(custom['workStartDate']);
     _isPartTime = custom['isPartTime'] == true;
     _isBlacklisted = custom['isBlacklisted'] == true;
-    _levelController = TextEditingController(
-      text: custom['level']?.toString() ?? '',
-    );
-    _categoryController = TextEditingController(
-      text: custom['category']?.toString() ?? '',
-    );
+    _levels.addAll(_readMulti(custom, 'levels', 'level'));
+    _categories.addAll(_readMulti(custom, 'categories', 'category'));
     _salaryController = TextEditingController(
       text: _localData['salary']?.toString() ?? '',
     );
@@ -125,10 +127,31 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     _nameController.dispose();
     _emailController.dispose();
     _specializationController.dispose();
-    _levelController.dispose();
-    _categoryController.dispose();
     _salaryController.dispose();
     super.dispose();
+  }
+
+  /// Existing rows are a mess: the plural key may hold a list, the legacy
+  /// singular key a free-text string ("Начальный, Средний" from the HolliHop
+  /// import). Read both so nothing already entered disappears from the card.
+  static Set<String> _readMulti(
+    Map<String, dynamic> custom,
+    String pluralKey,
+    String legacyKey,
+  ) {
+    final raw = custom[pluralKey] ?? custom[legacyKey];
+    if (raw is List) {
+      return {
+        for (final value in raw)
+          if (value?.toString().trim().isNotEmpty == true) value.toString().trim(),
+      };
+    }
+    final text = raw?.toString().trim() ?? '';
+    if (text.isEmpty) return {};
+    return {
+      for (final part in text.split(RegExp(r'[,;]')))
+        if (part.trim().isNotEmpty) part.trim(),
+    };
   }
 
   Future<void> _loadReferences() async {
@@ -145,6 +168,34 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       });
     } catch (_) {
       // Справочники не критичны — оставляем чипы пустыми.
+    }
+    await _loadFieldOptions();
+  }
+
+  /// Level/category options live in the CRM custom-field schema, so an admin
+  /// can extend them without a release.
+  Future<void> _loadFieldOptions() async {
+    try {
+      final fields = await ref
+          .read(magicSettingsServiceProvider)
+          .getCrmCustomFields();
+      List<Map<String, dynamic>> optionsFor(String key) {
+        final field = fields
+            .where((f) => f.entity == 'teachers' && f.key == key)
+            .firstOrNull;
+        return [
+          for (final option in field?.options ?? const <String>[])
+            {'id': option, 'name': option},
+        ];
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _allLevels = optionsFor('levels');
+        _allCategories = optionsFor('categories');
+      });
+    } catch (_) {
+      // Same rationale as above: no options → no chips, the rest still saves.
     }
   }
 
@@ -190,8 +241,12 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
           'workStartDate': _workStartDate == null
               ? ''
               : DateFormat('yyyy-MM-dd').format(_workStartDate!),
-          'level': _levelController.text.trim(),
-          'category': _categoryController.text.trim(),
+          'levels': _levels.toList(),
+          'categories': _categories.toList(),
+          // The teacher list filter still greps the legacy singular keys, so
+          // keep them in sync rather than stranding rows out of the filter.
+          'level': _levels.join(', '),
+          'category': _categories.join(', '),
           'isPartTime': _isPartTime,
           'isBlacklisted': _isBlacklisted,
         },
@@ -345,25 +400,12 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
                 ),
               ],
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _levelController,
-                      decoration: const InputDecoration(labelText: 'Уровень'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _categoryController,
-                      decoration: const InputDecoration(
-                        labelText: 'Категория',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              if (_allLevels.isNotEmpty) ...[
+                _buildChipsSection('Уровни обучения', _allLevels, _levels),
+                const SizedBox(height: 12),
+              ],
+              if (_allCategories.isNotEmpty)
+                _buildChipsSection('Категории', _allCategories, _categories),
               if (_allBranches.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _buildChipsSection('Филиалы', _allBranches, _branchIds),

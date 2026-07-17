@@ -59,6 +59,15 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
   String _type = 'extra_lesson';
   List<Map<String, dynamic>> _students = [];
   String? _selectedStudentId;
+  String? _selectedStudentName;
+
+  /// ✔ Владелец 17.07: платёж можно привязать к занятию — тогда день в
+  /// расписании карточки покажет, что он оплачен. Необязательно: пополнение
+  /// счёта авансом ни к какому занятию не относится, и это норма.
+  List<Map<String, dynamic>> _lessons = [];
+  String? _selectedLessonId;
+  String? _selectedLessonLabel;
+  bool _loadingLessons = false;
 
   @override
   void initState() {
@@ -85,6 +94,107 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
     super.dispose();
   }
 
+  static String _studentName(Map<String, dynamic> student) {
+    final name = '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
+        .trim();
+    return name.isEmpty ? 'Без имени' : name;
+  }
+
+  Future<void> _pickStudent() async {
+    SearchableSelect.show(
+      context: context,
+      title: 'Ученик',
+      hintText: 'Имя, телефон, email…',
+      selectedId: _selectedStudentId,
+      isNullable: false,
+      items: [
+        for (final student in _students)
+          SearchableSelectItem(
+            id: student['id'].toString(),
+            label: _studentName(student),
+            subtitle: student['phone']?.toString(),
+          ),
+      ],
+      onSearch: (query) async {
+        final response = await ref
+            .read(magicCrmServiceProvider)
+            .searchStudents(q: query, limit: 30);
+        final items = response['items'];
+        if (items is! List) return const <SearchableSelectItem>[];
+        return [
+          for (final row in items.whereType<Map<String, dynamic>>())
+            SearchableSelectItem(
+              id: row['id'].toString(),
+              label: _studentName(row),
+              subtitle: row['phone']?.toString(),
+            ),
+        ];
+      },
+      onSelected: (item) {
+        setState(() {
+          _selectedStudentId = item?.id;
+          _selectedStudentName = item?.label;
+          // Занятие всегда принадлежит ученику: сменили ученика — прежний
+          // выбор больше не его, и сервер такую привязку отклонит.
+          _selectedLessonId = null;
+          _selectedLessonLabel = null;
+          _lessons = const [];
+        });
+        if (item?.id != null) _loadLessons(item!.id);
+      },
+    );
+  }
+
+  Future<void> _loadLessons(String studentId) async {
+    setState(() => _loadingLessons = true);
+    try {
+      final data = await ref
+          .read(magicCrmServiceProvider)
+          .listLessons(studentId: studentId, limit: 100);
+      if (mounted) setState(() => _lessons = data);
+    } catch (_) {
+      // Занятие — необязательное поле: не смогли загрузить список — платёж
+      // всё равно проводим, просто без привязки.
+      if (mounted) setState(() => _lessons = const []);
+    } finally {
+      if (mounted) setState(() => _loadingLessons = false);
+    }
+  }
+
+  static String _lessonLabel(Map<String, dynamic> lesson) {
+    final dt = DateTime.tryParse(lesson['scheduled_at']?.toString() ?? '');
+    final when = dt == null
+        ? '—'
+        : DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt.toLocal());
+    final what = [
+      lesson['group_name'] ?? lesson['teacher_name'],
+      if (lesson['is_trial'] == true) 'пробное',
+    ].where((v) => v != null && '$v'.trim().isNotEmpty).join(' · ');
+    return what.isEmpty ? when : '$when · $what';
+  }
+
+  Future<void> _pickLesson() async {
+    SearchableSelect.show(
+      context: context,
+      title: 'Занятие',
+      hintText: 'Дата, педагог, группа…',
+      selectedId: _selectedLessonId,
+      // Привязка необязательна — её должно быть можно снять.
+      isNullable: true,
+      items: [
+        for (final lesson in _lessons)
+          SearchableSelectItem(
+            id: lesson['id'].toString(),
+            label: _lessonLabel(lesson),
+          ),
+      ],
+      onSelected: (item) => setState(() {
+        _selectedLessonId = item?.id;
+        _selectedLessonLabel = item?.label;
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final amount = double.tryParse(_amountCtrl.text.trim());
@@ -97,19 +207,34 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: _selectedStudentId,
-            dropdownColor: Theme.of(context).colorScheme.surface,
-            decoration: const InputDecoration(labelText: 'Ученик'),
-            items: _students.map((s) {
-              final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
-                  .trim();
-              return DropdownMenuItem(
-                value: s['id'] as String,
-                child: Text(name.isEmpty ? 'Без имени' : name),
-              );
-            }).toList(),
-            onChanged: (v) => setState(() => _selectedStudentId = v),
+          // Searchable, not a dropdown: the pre-loaded page is capped at 100
+          // students, so a longer roster simply could not be paid for. Typing
+          // hits the server, which also matches phone and custom fields.
+          InkWell(
+            onTap: _pickStudent,
+            borderRadius: BorderRadius.circular(8),
+            child: InputDecorator(
+              decoration: const InputDecoration(labelText: 'Ученик'),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _selectedStudentName ?? 'Выберите ученика',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _selectedStudentName == null
+                          ? TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            )
+                          : null,
+                    ),
+                  ),
+                  const Icon(Icons.search_rounded, size: 18),
+                ],
+              ),
+            ),
           ),
           SizedBox(height: 10),
           TextField(
@@ -136,6 +261,46 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
             ],
             onChanged: (v) => setState(() => _type = v ?? 'extra_lesson'),
           ),
+          // ✔ Владелец 17.07: привязка платежа к занятию. Появляется только
+          // когда есть ученик — занятие всегда его, и выбирать не из чего,
+          // пока ученик не назван.
+          if (_selectedStudentId != null) ...[
+            const SizedBox(height: 10),
+            InkWell(
+              onTap: _loadingLessons || _lessons.isEmpty ? null : _pickLesson,
+              borderRadius: BorderRadius.circular(8),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Занятие (необязательно)',
+                  helperText: _lessons.isEmpty && !_loadingLessons
+                      ? 'У ученика нет занятий'
+                      : 'День в расписании покажет, что он оплачен',
+                  helperMaxLines: 2,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _loadingLessons
+                            ? 'Загрузка…'
+                            : (_selectedLessonLabel ?? 'Не привязан'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _selectedLessonLabel == null
+                            ? TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              )
+                            : null,
+                      ),
+                    ),
+                    const Icon(Icons.event_outlined, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ],
           if (!canSubmit) ...[
             const SizedBox(height: 10),
             Row(
@@ -172,6 +337,7 @@ class _PaymentDialogState extends ConsumerState<_PaymentDialog> {
                     'amount': amount,
                     'type': _type,
                     'student_id': _selectedStudentId,
+                    'lesson_id': _selectedLessonId,
                   });
                 }
               : null,

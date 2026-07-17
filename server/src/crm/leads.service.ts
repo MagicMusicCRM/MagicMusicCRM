@@ -4,9 +4,14 @@ import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
+import { TimelineService } from "./timeline.service";
+import { resolveAge } from "./age";
+import { resolveAppealDate } from "./appeal-date";
+import { attachStudentToLead, leadStudentMatchSql } from "./lead-student-link";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
 import { sanitizeJsonObject } from "./crm-util";
+import { buildTextSearch } from "./search-text";
 import { CrmPolicy } from "./crm.policy";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { LeadBoardQuery } from "./dto/lead-board.query";
@@ -15,11 +20,27 @@ import { StudentRow } from "./student-read";
 import {
   LessonRow,
   TaskRow,
+  diffEntityFields,
   presentableEmail,
   toLessonDto,
   toTaskDto,
   toTimelineDto,
 } from "./crm-mappers";
+
+/**
+ * Lead columns worth an audit entry. custom_data is diffed per key by
+ * diffEntityFields and so is deliberately absent from this list.
+ */
+const LEAD_AUDITED_FIELDS = [
+  "status_id",
+  "first_name",
+  "last_name",
+  "phone",
+  "email",
+  "source",
+  "notes",
+  "assigned_to",
+];
 
 interface LeadRow {
   id: string;
@@ -36,6 +57,9 @@ interface LeadRow {
   created_by: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  /** Чёрный список = бан на чаты. См. blacklist.ts. */
+  blacklisted?: boolean | null;
+  blacklist_reason?: string | null;
 }
 
 interface LeadBoardRow extends LeadRow {
@@ -99,6 +123,10 @@ export class LeadsService {
     private readonly notifications: NotificationsService,
     private readonly chatWork: ChatWorkTimelineService,
     private readonly realtime: RealtimeBus,
+    // Field-edit audit for the lead card. TimelineService depends only on
+    // db/policy/audit/realtime, so this adds no cycle — CrmService injects it
+    // the same way for the student card.
+    private readonly timeline: TimelineService,
   ) {}
 
   async listLeadBoard(actor: ActorContext, query: LeadBoardQuery) {
@@ -132,7 +160,7 @@ export class LeadsService {
         with filtered as (
           select l.id, l.status_id, ls.name as status_name, ls.color as status_color,
             ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
-            l.email, l.source, l.notes, l.assigned_to, l.custom_data,
+            l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
             assigned_profile.first_name as assigned_first_name,
             assigned_profile.last_name as assigned_last_name,
             ${branchIdExpr("l")} as branch_id,
@@ -242,7 +270,7 @@ export class LeadsService {
       `
         select l.id, l.status_id, ls.name as status_name, ls.color as status_color,
           ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
-          l.email, l.source, l.notes, l.assigned_to, l.custom_data,
+          l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
           assigned_profile.first_name as assigned_first_name,
           assigned_profile.last_name as assigned_last_name,
           ${branchIdExpr("l")} as branch_id,
@@ -289,14 +317,20 @@ export class LeadsService {
     const lead = leadResult.rows[0];
     if (!lead) throw new NotFoundException("Лид не найден.");
 
-    const [students, otherLeads, comments, tasks, trials, chatWork] = await Promise.all([
-      this.listStudentsLinkedToLead(leadId),
-      this.listRelatedLeads(lead),
-      this.listLeadComments(leadId),
-      this.listLeadTasks(leadId),
-      this.listLeadTrialLessons(leadId),
-      this.listChatWorkTimeline("lead", leadId),
-    ]);
+    const [students, otherLeads, comments, tasks, trials, chatWork, fieldAudit] =
+      await Promise.all([
+        this.listStudentsLinkedToLead(leadId),
+        this.listRelatedLeads(lead),
+        this.listLeadComments(leadId),
+        this.listLeadTasks(leadId),
+        this.listLeadTrialLessons(leadId),
+        this.listChatWorkTimeline("lead", leadId),
+        // Field edits («кто поменял телефон»). Empty for non-staff; caught so a
+        // missing audit list can not take the whole card down.
+        this.timeline
+          .listFieldAudit(actor, "lead", leadId, 50)
+          .catch(() => ({ items: [] as Record<string, unknown>[] })),
+      ]);
 
     const timeline = [
       ...comments.map((comment) => ({
@@ -324,6 +358,14 @@ export class LeadsService {
         occurredAt: lesson.scheduledAt,
       })),
       ...chatWork,
+      ...fieldAudit.items.map((entry) => ({
+        id: String(entry.id),
+        type: "audit",
+        title: String(entry.title),
+        body: entry.body === null ? null : String(entry.body),
+        status: null,
+        occurredAt: entry.occurredAt,
+      })),
     ].sort(
       (a, b) =>
         new Date(String(b.occurredAt)).getTime() -
@@ -350,18 +392,24 @@ export class LeadsService {
       old_owner_id: string | null;
       new_owner_id: string | null;
       changed_by: string | null;
+      changed_by_name: string | null;
       changed_at: string;
       reason_id: string | null;
       comment: string | null;
     }>(
+      // changed_by alone is a raw user id — useless to a human reading the
+      // history, so resolve the author's name here.
       `select h.id,
               os.name as old_status,
               ns.name as new_status,
               h.old_owner_id, h.new_owner_id, h.changed_by, h.changed_at,
-              h.reason_id, h.comment
+              h.reason_id, h.comment,
+              nullif(trim(coalesce(cp.first_name, '') || ' ' || coalesce(cp.last_name, '')), '') as changed_by_name
          from app.lead_status_history h
          left join app.lead_statuses os on os.id = h.old_status_id
          left join app.lead_statuses ns on ns.id = h.new_status_id
+         left join app.users cu on cu.id = h.changed_by and cu.deleted_at is null
+         left join app.profiles cp on cp.user_id = cu.id and cp.deleted_at is null
         where h.lead_id = $1
         order by h.changed_at desc`,
       [leadId],
@@ -374,6 +422,7 @@ export class LeadsService {
         oldOwnerId: row.old_owner_id,
         newOwnerId: row.new_owner_id,
         changedBy: row.changed_by,
+        changedByName: row.changed_by_name,
         changedAt: row.changed_at,
         reasonId: row.reason_id,
         comment: row.comment,
@@ -417,22 +466,43 @@ export class LeadsService {
     this.policy.assertCanWriteCrm(actor);
     const limit = Math.min(query.limit ?? 50, 100);
     const q = query.q?.trim();
+    // This is what the «Объект» picker calls, so it needs the same search the
+    // board has: by phone in any format, and across custom_data values.
+    const params: unknown[] = [];
+    const add = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+    const search = q
+      ? buildTextSearch({
+          q,
+          columns: [
+            "l.first_name",
+            "l.last_name",
+            "l.email",
+            "l.phone",
+            "l.source",
+          ],
+          phoneColumn: "l.phone",
+          customDataColumn: "l.custom_data",
+          exactColumn: "concat_ws(' ', l.first_name, l.last_name)",
+          add,
+        })
+      : null;
+    const limitParam = add(limit);
     const result = await this.database.query<LeadRow>(
       `
         select l.id, l.status_id, ls.name as status_name, l.first_name,
-          l.last_name, l.phone, l.email, l.source, l.notes, l.assigned_to, l.custom_data,
+          l.last_name, l.phone, l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
           l.created_by, l.created_at, l.updated_at
         from app.leads l
         left join app.lead_statuses ls on ls.id = l.status_id
         where l.deleted_at is null
-          and (
-            $1::text is null
-            or lower(coalesce(l.first_name, '') || ' ' || coalesce(l.last_name, '') || ' ' || coalesce(l.email, '') || ' ' || coalesce(l.phone, '')) like lower('%' || $1 || '%')
-          )
-        order by l.created_at desc, l.id desc
-        limit $2
+          ${search ? `and ${search.where}` : ""}
+        order by ${search ? `${search.rank} asc,` : ""} l.created_at desc, l.id desc
+        limit ${limitParam}
       `,
-      [q || null, limit],
+      params,
     );
     return { items: result.rows.map((row) => this.toLeadDto(row)) };
   }
@@ -442,6 +512,45 @@ export class LeadsService {
   // client user whose profile phone matches the lead's phone.
 
 
+
+  /**
+   * Ручное «Прикрепить к ученику» из карточки лида (§1 спеки, эталон
+   * HolliHop — ссылка «Прикрепить к ученику»).
+   *
+   * До этого связать лида с учеником можно было только через автоподбор
+   * дублей: если система пару не нашла, прикрепить вручную было нельзя вовсе.
+   */
+  async linkStudentToLead(
+    actor: ActorContext,
+    leadId: string,
+    studentId: string,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const lead = await this.database.query<{ id: string }>(
+      "select id from app.leads where id = $1 and deleted_at is null limit 1",
+      [leadId],
+    );
+    if (!lead.rows[0]) throw new NotFoundException("Лид не найден.");
+    const student = await this.database.query<{ id: string }>(
+      "select id from app.students where id = $1 and deleted_at is null limit 1",
+      [studentId],
+    );
+    if (!student.rows[0]) throw new NotFoundException("Ученик не найден.");
+
+    // Бросит ConflictException, если ученик уже привязан к ДРУГОМУ лиду —
+    // молча перевесить чужую связь нельзя.
+    await attachStudentToLead(this.database, studentId, leadId);
+
+    await this.audit.record({
+      actor,
+      action: "crm.lead_student_linked",
+      entityType: "lead",
+      entityId: leadId,
+      metadata: { studentId },
+    });
+    this.realtime.emitCrmChanged({ entity: "lead", action: "updated", id: leadId });
+    return { leadId, studentId };
+  }
 
   async createLead(actor: ActorContext, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
@@ -455,7 +564,8 @@ export class LeadsService {
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         returning id, status_id, null::text as status_name, first_name,
           last_name, phone, email, source, notes, assigned_to,
-          custom_data, created_by, created_at, updated_at
+          blacklisted, blacklist_reason, custom_data, created_by, created_at,
+          updated_at
       `,
       [
         dto.statusId ?? null,
@@ -498,12 +608,14 @@ export class LeadsService {
     // The update and its status-history row must land atomically: a failure in
     // between would move the lead while silently dropping the history entry.
     const { before, lead } = await this.database.transaction(async (client) => {
-      const beforeRes = await client.query<{
-        status_id: string | null;
-        assigned_to: string | null;
-        branch_id: string | null;
-      }>(
-        `select status_id, assigned_to, branch_id from app.leads where id = $1 and deleted_at is null for update`,
+      // Reads the whole editable row, not just status/owner: the audit diff
+      // below is what makes «кто поменял телефон» answerable, and it can only
+      // report fields it saw beforehand.
+      const beforeRes = await client.query<LeadRow & { branch_id: string | null }>(
+        `select id, status_id, null::text as status_name, first_name, last_name,
+           phone, email, source, notes, assigned_to, custom_data, created_by,
+           created_at, updated_at, branch_id
+         from app.leads where id = $1 and deleted_at is null for update`,
         [leadId],
       );
       const beforeRow = beforeRes.rows[0] ?? null;
@@ -525,7 +637,8 @@ export class LeadsService {
         where id = $1 and deleted_at is null
         returning id, status_id, null::text as status_name, first_name,
           last_name, phone, email, source, notes, assigned_to,
-          custom_data, created_by, created_at, updated_at
+          blacklisted, blacklist_reason, custom_data, created_by, created_at,
+          updated_at
       `,
         [
           leadId,
@@ -576,6 +689,17 @@ export class LeadsService {
       action: "crm.lead_updated",
       entityType: "lead",
       entityId: lead.id,
+      // The diff is the event. Without it the card could only say «лид
+      // обновлён», which answers none of «кто поменял телефон и на какой».
+      metadata: {
+        changes: before
+          ? diffEntityFields(
+              before as unknown as Record<string, unknown>,
+              lead as unknown as Record<string, unknown>,
+              LEAD_AUDITED_FIELDS,
+            )
+          : [],
+      },
     });
     this.realtime.emitCrmChanged({
       entity: "lead",
@@ -649,9 +773,23 @@ export class LeadsService {
     };
     const q = query.q?.trim();
     if (q) {
-      const p = add(q);
+      // Predicate only: the board is cursor-paginated on (created_at, id), so
+      // reordering it by relevance would break the cursor.
       filters.push(
-        `lower(concat_ws(' ', l.first_name, l.last_name, l.email, l.phone, l.source, l.notes, l.custom_data::text)) like lower('%' || ${p}::text || '%')`,
+        buildTextSearch({
+          q,
+          columns: [
+            "l.first_name",
+            "l.last_name",
+            "l.email",
+            "l.phone",
+            "l.source",
+            "l.notes",
+          ],
+          phoneColumn: "l.phone",
+          customDataColumn: "l.custom_data",
+          add,
+        }).where,
       );
     }
     if (query.statusId) {
@@ -729,6 +867,9 @@ export class LeadsService {
       `);
     }
     if (query.hideConverted === true) {
+      // Правило «ученик и лид — один человек» живёт в одном месте на всю
+      // систему: им же импорт проставляет students.lead_id. Разъедутся —
+      // карточки начнут двоиться. См. leadStudentMatchSql.
       filters.push(`
         not exists (
           select 1
@@ -740,12 +881,7 @@ export class LeadsService {
             and linked_conv.status = 'active'
             and (
               linked_conv.lead_id = l.id
-              or (
-                l.phone_normalized is not null
-                and p_conv.phone_normalized = l.phone_normalized
-                and lower(btrim(coalesce(p_conv.first_name, ''))) = lower(btrim(coalesce(l.first_name, '')))
-                and lower(btrim(coalesce(p_conv.last_name, '')))  = lower(btrim(coalesce(l.last_name, '')))
-              )
+              or (${leadStudentMatchSql("l", "p_conv")})
             )
         )
       `);
@@ -821,7 +957,7 @@ export class LeadsService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone,
           s.created_at, '{}'::uuid[] as teacher_user_ids
         from app.students s
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -944,6 +1080,14 @@ export class LeadsService {
   }
 
   private toLeadDto(row: LeadRow) {
+    // ✔ Решение владельца 16.07: лид, пришедший через приложение, получает
+    // датой обращения момент, когда он тут появился; у импортированного
+    // побеждает исходная дата HolliHop (custom_data.addressDate).
+    const appeal = resolveAppealDate(row.custom_data, row.created_at);
+    // ✔ Решение владельца 17.07: возраст либо вписан руками, либо считается из
+    // даты рождения и сам меняется с годами. Резолвится на чтении: хранить
+    // посчитанное число было бы обещанием пересчитывать его каждую ночь.
+    const age = resolveAge(row.custom_data);
     return {
       id: row.id,
       statusId: row.status_id,
@@ -959,6 +1103,15 @@ export class LeadsService {
       createdBy: row.created_by,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      appealAt: appeal.value,
+      appealAtSource: appeal.source,
+      age: age.years,
+      ageMonths: age.months,
+      ageSource: age.source,
+      // Чёрный список = бан (✔ владелец 17.07). Карточка красит себя по нему,
+      // мессенджер по нему же запрещает отправку — см. blacklist.ts.
+      blacklisted: row.blacklisted === true,
+      blacklistReason: row.blacklist_reason ?? null,
     };
   }
 

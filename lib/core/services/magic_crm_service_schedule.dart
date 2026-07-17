@@ -141,6 +141,24 @@ extension MagicCrmSchedule on MagicCrmService {
     return _legacyLesson(response);
   }
 
+  /// Applies one per-lesson teacher rate to many lessons at once.
+  ///
+  /// [teacherRate] `0` means «входит в оклад»; `null` clears the per-lesson
+  /// override so the group/history rate applies again. One request, one
+  /// transaction — the old per-lesson loop could fail halfway and leave the
+  /// month half-repriced.
+  Future<int> setLessonsTeacherRate({
+    required List<String> lessonIds,
+    required num? teacherRate,
+  }) async {
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/crm/lessons/teacher-rate',
+      data: {'lessonIds': lessonIds, 'teacherRate': teacherRate},
+    );
+    final updated = response['updated'];
+    return updated is num ? updated.toInt() : 0;
+  }
+
   Future<Map<String, dynamic>> updateLesson(
     String id, {
     String? studentId,
@@ -286,6 +304,43 @@ extension MagicCrmSchedule on MagicCrmService {
     return _items(response).map(_legacyTimelineItem).toList();
   }
 
+  /// AmoCRM-style change feed for a single task: who changed what, when.
+  Future<List<Map<String, dynamic>>> listTaskHistory(String taskId) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/tasks/$taskId/history',
+    );
+    return _items(response).map(_legacyTaskHistoryItem).toList();
+  }
+
+  /// Supervisor control feed: every change of one field across tasks. Defaults
+  /// server-side to due-date moves — the case the director needs to watch.
+  Future<List<Map<String, dynamic>>> listTaskHistoryFeed({
+    String? field,
+    String? changedBy,
+    String? from,
+    String? to,
+    int limit = 50,
+  }) async {
+    final queryParameters = <String, dynamic>{'limit': limit};
+    if (field != null && field.trim().isNotEmpty) {
+      queryParameters['field'] = field.trim();
+    }
+    if (changedBy != null && changedBy.trim().isNotEmpty) {
+      queryParameters['changedBy'] = changedBy.trim();
+    }
+    if (from != null && from.trim().isNotEmpty) {
+      queryParameters['from'] = from.trim();
+    }
+    if (to != null && to.trim().isNotEmpty) {
+      queryParameters['to'] = to.trim();
+    }
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/tasks/history',
+      queryParameters: queryParameters,
+    );
+    return _items(response).map(_legacyTaskHistoryItem).toList();
+  }
+
   Future<Map<String, dynamic>> createTask({
     required String entityType,
     required String entityId,
@@ -352,6 +407,8 @@ extension MagicCrmSchedule on MagicCrmService {
     required String entityId,
     bool progressOnly = false,
     String? kind,
+    /// Подмешать комментарии к занятиям этого ученика (только для 'student').
+    bool includeLessonComments = false,
     int limit = 50,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
@@ -361,6 +418,7 @@ extension MagicCrmSchedule on MagicCrmService {
         'entityId': entityId,
         'progressOnly': progressOnly,
         'kind': ?kind,
+        if (includeLessonComments) 'includeLessonComments': true,
         'limit': limit,
       },
     );

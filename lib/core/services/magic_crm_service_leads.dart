@@ -40,6 +40,7 @@ extension MagicCrmLeads on MagicCrmService {
     String? preferredSchedule,
     String quick = 'all',
     bool? openTasks,
+    bool? hideConverted,
     String? from,
     String? to,
     String? cursor,
@@ -69,6 +70,9 @@ extension MagicCrmLeads on MagicCrmService {
     addString('to', to);
     addString('cursor', cursor);
     if (openTasks != null) queryParameters['openTasks'] = openTasks;
+    // Прячет лидов, у которых уже есть ученик. Правило совпадения — общее с
+    // импортом (leadStudentMatchSql на бэке): телефон И имя И фамилия.
+    if (hideConverted != null) queryParameters['hideConverted'] = hideConverted;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/leads/board',
@@ -94,6 +98,43 @@ extension MagicCrmLeads on MagicCrmService {
       'trials': _mapList(response['trials'], _legacyLesson),
       'timeline': _mapList(response['timeline'], _legacyTimelineItem),
     };
+  }
+
+  /// Ручное «Прикрепить к ученику»: связывает лида с уже существующим учеником.
+  /// Бросит ошибку, если ученик уже привязан к другому лиду — молча перевесить
+  /// связь нельзя.
+  Future<Map<String, dynamic>> linkStudentToLead({
+    required String leadId,
+    required String studentId,
+  }) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/leads/$leadId/link-student',
+      data: {'studentId': studentId},
+    );
+  }
+
+  /// Чёрный список = бан (✔ решение владельца 17.07): карточка красится, и
+  /// клиенту закрываются чаты школы и админов.
+  ///
+  /// Отдельный вызов, а не поле в `updateLead`/`updateStudent`: бан снимает
+  /// человеку доступ, и такое не должно уезжать вместе с патчем произвольных
+  /// полей карточки — в том числе случайно.
+  ///
+  /// [entity] — 'students' или 'leads': аккаунт клиента цепляется к любой из
+  /// половин карточки, поэтому банить нужно ту, которая есть.
+  Future<Map<String, dynamic>> setClientBlacklist({
+    required String entity,
+    required String id,
+    required bool blacklisted,
+    String? reason,
+  }) async {
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/$entity/$id/blacklist',
+      data: {
+        'blacklisted': blacklisted,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> getLeadStatusHistory(String leadId) async {

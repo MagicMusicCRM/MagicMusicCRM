@@ -35,6 +35,42 @@ describe("GroupsService", () => {
     return build(query);
   };
 
+  describe("getGroup", () => {
+    it("returns a single group by id", async () => {
+      const { service, query, policy } = createService([
+        {
+          id: "group-a",
+          teacher_id: "teacher-a",
+          branch_id: "branch-a",
+          room_id: "room-a",
+          name: "Гитара",
+          price_per_lesson: "1500",
+          teacher_rate: null,
+          teacher_name: "Иван Петров",
+          branch_name: "Сокол",
+          room_name: "Room 4",
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      const group = await service.getGroup(actor, "group-a");
+
+      expect(group.id).toBe("group-a");
+      expect(group.name).toBe("Гитара");
+      expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+      expect(String(query.mock.calls[0][0])).toContain("g.id = $1");
+      expect(query.mock.calls[0][1]).toEqual(["group-a"]);
+    });
+
+    it("throws when the group does not exist", async () => {
+      const { service } = createService([]);
+
+      await expect(service.getGroup(actor, "missing")).rejects.toThrow(
+        "Группа не найдена.",
+      );
+    });
+  });
+
   it("maps groups with numeric lesson price", async () => {
     const { service } = createService([
       {

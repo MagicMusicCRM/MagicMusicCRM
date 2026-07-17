@@ -1,3 +1,8 @@
+> ⚠️ **УСТАРЕЛО — не опираться на этот документ.** Проверка живого API 16.07.2026
+> показала, что описанных здесь методов (`GetComments`, `GetTasks`, `GetHistory`,
+> `GetLessons`, `GetSchedule` и ещё 10) **не существует** — все отвечают 404.
+> Актуальная инвентаризация: [hollihop_api_probe_2026-07-16.md](hollihop_api_probe_2026-07-16.md).
+
 # HolliHop Source Inventory
 
 Date: 2026-06-14

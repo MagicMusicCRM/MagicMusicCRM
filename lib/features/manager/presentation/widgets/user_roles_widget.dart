@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/notification_preferences_dialog.dart';
 
 part 'user_roles_actions.dart';
 part 'user_roles_widgets.dart';
@@ -166,6 +167,17 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                   ),
                 ),
                 SizedBox(width: 10),
+                // Notification routing is per-role, so it belongs with the
+                // roles rather than behind a settings screen the app does not
+                // have.
+                IconButton(
+                  icon: Icon(
+                    Icons.notifications_active_outlined,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  tooltip: 'Настройки уведомлений',
+                  onPressed: () => NotificationPreferencesDialog.show(context),
+                ),
                 IconButton(
                   icon: Icon(
                     Icons.refresh,

@@ -1,10 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 final statsProvider = FutureProvider<Map<String, dynamic>>((ref) {
   return ref.watch(magicCrmServiceProvider).getOverviewStats();
+});
+
+/// Tasks due within the next 24 hours, plus anything already overdue — the
+/// dashboard's "актуальные задачи". Reuses /crm/tasks (its from/to filter due
+/// dates and it already orders by them) rather than growing another endpoint.
+final upcomingTasksProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final crm = ref.watch(magicCrmServiceProvider);
+  final now = DateTime.now();
+  final results = await Future.wait([
+    crm.listTasks(
+      status: 'open',
+      from: now.toUtc().toIso8601String(),
+      to: now.add(const Duration(hours: 24)).toUtc().toIso8601String(),
+      limit: 20,
+    ),
+    // Overdue work does not stop being current just because its deadline
+    // passed — it is the first thing an admin needs to see.
+    crm.listTasks(
+      status: 'open',
+      to: now.toUtc().toIso8601String(),
+      limit: 20,
+    ),
+  ]);
+  final overdue = results[1];
+  final upcoming = results[0];
+  return [...overdue, ...upcoming];
 });
 
 class AdminOverviewWidget extends ConsumerWidget {
@@ -76,6 +105,8 @@ class AdminOverviewWidget extends ConsumerWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 24),
+                const _UpcomingTasksSection(),
               ],
             ),
           ),
@@ -165,6 +196,127 @@ class _StatCard extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «Актуальные задачи» — overdue first, then the next 24 hours. Overdue rows
+/// burn red, matching the tasks screen.
+class _UpcomingTasksSection extends ConsumerWidget {
+  const _UpcomingTasksSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tasksAsync = ref.watch(upcomingTasksProvider);
+    final cs = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Актуальные задачи',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'на 24 часа',
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+            ),
+            const Spacer(),
+            IconButton(
+              tooltip: 'Обновить',
+              onPressed: () => ref.invalidate(upcomingTasksProvider),
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        tasksAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: LinearProgressIndicator(),
+          ),
+          error: (error, _) => Text(
+            'Не удалось загрузить задачи: $error',
+            style: TextStyle(color: cs.error, fontSize: 13),
+          ),
+          data: (tasks) => tasks.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'Задач на ближайшие сутки нет',
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
+                )
+              : Column(
+                  children: [
+                    for (final task in tasks) _UpcomingTaskTile(task: task),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UpcomingTaskTile extends StatelessWidget {
+  final Map<String, dynamic> task;
+
+  const _UpcomingTaskTile({required this.task});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dueAt = task['due_date'] != null
+        ? DateTime.tryParse(task['due_date'].toString())?.toLocal()
+        : null;
+    final isOverdue = dueAt != null && dueAt.isBefore(DateTime.now());
+    final due = dueAt == null
+        ? '—'
+        : DateFormat('d MMM, HH:mm', 'ru').format(dueAt);
+    final assignee = task['assigned_name']?.toString();
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      elevation: 0,
+      color: isOverdue
+          ? Color.alphaBlend(AppTheme.danger.withValues(alpha: 0.06), cs.surface)
+          : cs.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: isOverdue ? AppTheme.danger : cs.outlineVariant,
+          width: isOverdue ? 1.5 : 1,
+        ),
+      ),
+      child: ListTile(
+        dense: true,
+        leading: Icon(
+          isOverdue ? Icons.warning_amber_rounded : Icons.task_alt_rounded,
+          color: isOverdue ? AppTheme.danger : AppTheme.primaryGold,
+          size: 20,
+        ),
+        title: Text(
+          task['title']?.toString() ?? '',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        subtitle: Text(
+          [
+            isOverdue ? 'Просрочена: $due' : 'Срок: $due',
+            if (assignee != null && assignee.trim().isNotEmpty) assignee,
+          ].join(' • '),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12,
+            color: isOverdue ? AppTheme.danger : cs.onSurfaceVariant,
           ),
         ),
       ),

@@ -14,12 +14,29 @@ import {
   sanitizeJsonObject,
   trimOptional,
 } from "./crm-util";
+import { buildTextSearch } from "./search-text";
 import { audienceForStudent } from "./audience";
+import { resolveAge } from "./age";
+import { APPEAL_KEY, resolveAppealDate } from "./appeal-date";
 import {
+  diffEntityFields,
   isDeliverableEmail,
   presentableEmail,
   toTimelineDto,
 } from "./crm-mappers";
+
+/**
+ * Student fields worth an audit entry. Name/phone/email live on
+ * profiles/users, but they are what staff edit on the card, so they are audited
+ * as the student's fields. custom_data is diffed per key by diffEntityFields.
+ */
+const STUDENT_AUDITED_FIELDS = [
+  "status",
+  "first_name",
+  "last_name",
+  "phone",
+  "email",
+];
 import { StudentRow, findStudent } from "./student-read";
 import {
   ActorContext,
@@ -133,7 +150,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
         from app.students s
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -168,7 +185,7 @@ export class CrmService {
     const result = await this.database.query<StudentSearchRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone,
           s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids,
           ${branchIdExpr('s')} as branch_id,
@@ -229,7 +246,9 @@ export class CrmService {
          and link_user.deleted_at is null
         where ${filter.where}
         group by s.id, p.id, u.id, b.id, link_user.id
-        order by s.created_at desc, s.id desc
+        -- Relevance first when searching, so the caller's "top 5" really is
+        -- the best five and not just the five most recent rows that matched.
+        order by ${filter.searchRank ? `${filter.searchRank} asc,` : ""} s.created_at desc, s.id desc
         limit $${filter.params.length + 1}
       `,
       [...filter.params, limit],
@@ -256,11 +275,16 @@ export class CrmService {
     const branchId = extractBranchId(dto.customDataPatch);
 
     if (leadId) {
-      const lead = await this.database.query<{ id: string }>(
-        "select id from app.leads where id = $1 and deleted_at is null limit 1",
+      const lead = await this.database.query<{
+        id: string;
+        custom_data: Record<string, unknown> | null;
+        created_at: Date | string;
+      }>(
+        "select id, custom_data, created_at from app.leads where id = $1 and deleted_at is null limit 1",
         [leadId],
       );
-      if (!lead.rows[0]) throw new NotFoundException("Лид не найден.");
+      const leadRow = lead.rows[0];
+      if (!leadRow) throw new NotFoundException("Лид не найден.");
 
       const existingStudent = await this.database.query<{ id: string }>(
         "select id from app.students where lead_id = $1 and deleted_at is null limit 1",
@@ -268,6 +292,16 @@ export class CrmService {
       );
       if (existingStudent.rows[0]) {
         throw new ConflictException("Этот лид уже конвертирован в ученика.");
+      }
+
+      // ✔ Решение владельца 16.07: «дату обращения оставляем на стороне
+      // students». Конвертация — единственный момент, когда её ещё можно
+      // узнать, поэтому здесь она и фиксируется: у импортированного лида это
+      // исходная дата HolliHop, у пришедшего через приложение — момент, когда
+      // он стал тут лидом. Явное значение от клиента не трогаем.
+      if (!customDataPatch[APPEAL_KEY]) {
+        const appeal = resolveAppealDate(leadRow.custom_data, leadRow.created_at);
+        if (appeal.value) customDataPatch[APPEAL_KEY] = appeal.value;
       }
     }
 
@@ -296,7 +330,7 @@ export class CrmService {
             returning id, status, profile_id, lead_id, custom_data, created_at
           )
           select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-            s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+            s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
             '{}'::uuid[] as teacher_user_ids
           from inserted_student s
           join inserted_profile p on p.id = s.profile_id
@@ -373,6 +407,7 @@ export class CrmService {
       subscriptions,
       links,
       chatWork,
+      fieldAudit,
     ] = await Promise.all([
       this.listStudentGroups(actor, studentId, { limit: 100 }),
       this.schedule.listLessons(actor, { studentId, limit: 100 }),
@@ -396,6 +431,12 @@ export class CrmService {
         : Promise.resolve(emptyList),
       this.listUserCrmLinks("student", studentId),
       this.listChatWorkTimeline("student", studentId),
+      // Field edits («кто поменял телефон»). Returns empty for non-staff, and
+      // is caught like the other optional sections: a missing audit list must
+      // not take the whole card down.
+      this.timeline
+        .listFieldAudit(actor, "student", studentId, 50)
+        .catch(() => emptyList),
     ]);
 
     const timeline = [
@@ -432,6 +473,14 @@ export class CrmService {
         occurredAt: payment.paymentDate,
       })),
       ...chatWork,
+      ...fieldAudit.items.map((entry) => ({
+        id: String(entry.id),
+        type: "audit",
+        title: String(entry.title),
+        body: entry.body === null ? null : String(entry.body),
+        status: null,
+        occurredAt: entry.occurredAt,
+      })),
     ].sort(
       (a, b) =>
         new Date(String(b.occurredAt)).getTime() -
@@ -503,13 +552,28 @@ export class CrmService {
     // between would change the status while silently dropping the history.
     const { beforeStudent, result } = await this.database.transaction(
       async (client) => {
+        // Reads every editable field, not just status: the audit diff below is
+        // what makes «кто поменял телефон» answerable, and it can only report
+        // fields it saw beforehand. A student's name/phone/email live on
+        // profiles/users, so the join is part of the snapshot.
         const before =
           (
             await client.query<{
               status: string | null;
               branch_id: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              phone: string | null;
+              email: string | null;
+              custom_data: Record<string, unknown> | null;
             }>(
-              `select status, branch_id from app.students where id = $1 and deleted_at is null for update`,
+              `select s.status, s.branch_id, s.custom_data,
+                 p.first_name, p.last_name, p.phone, u.email
+               from app.students s
+               left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
+               left join app.users u on u.id = p.user_id and u.deleted_at is null
+               where s.id = $1 and s.deleted_at is null
+               for update of s`,
               [studentId],
             )
           ).rows[0] ?? null;
@@ -548,11 +612,12 @@ export class CrmService {
             updated_at = now()
           from target
           where s.id = target.id
-          returning s.id, s.status, s.profile_id, s.lead_id, s.custom_data, s.created_at
+          returning s.id, s.status, s.profile_id, s.lead_id, s.custom_data,
+            s.blacklisted, s.blacklist_reason, s.created_at
         )
         select us.id, us.status, us.profile_id,
           coalesce(updated_profile_dependency.user_id, p.user_id) as profile_user_id,
-          us.lead_id, us.custom_data,
+          us.lead_id, us.custom_data, us.blacklisted, us.blacklist_reason,
           coalesce(updated_profile_dependency.first_name, p.first_name) as first_name,
           coalesce(updated_profile_dependency.last_name, p.last_name) as last_name,
           coalesce(updated_user_dependency.email, u.email) as email,
@@ -568,7 +633,8 @@ export class CrmService {
         left join app.lessons l on l.student_id = s.id and l.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        group by us.id, us.status, us.profile_id, us.lead_id, us.custom_data, us.created_at, p.id, u.id,
+        group by us.id, us.status, us.profile_id, us.lead_id, us.custom_data,
+          us.blacklisted, us.blacklist_reason, us.created_at, p.id, u.id,
           updated_profile_dependency.user_id,
           updated_profile_dependency.first_name,
           updated_profile_dependency.last_name,
@@ -609,6 +675,16 @@ export class CrmService {
       action: "crm.student_updated",
       entityType: "student",
       entityId: student.id,
+      // The diff is the event — see the same note in LeadsService.updateLead.
+      metadata: {
+        changes: beforeStudent
+          ? diffEntityFields(
+              beforeStudent as unknown as Record<string, unknown>,
+              student as unknown as Record<string, unknown>,
+              STUDENT_AUDITED_FIELDS,
+            )
+          : [],
+      },
     });
     this.realtime.emitCrmChanged({
       entity: "student",
@@ -663,7 +739,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
         from app.group_students gs
         join app.groups g on g.id = gs.group_id and g.deleted_at is null
@@ -845,11 +921,18 @@ export class CrmService {
     `);
 
     const q = query.q?.trim();
+    let searchRank: string | null = null;
     if (q) {
-      const p = add(q);
-      filters.push(
-        `lower(concat_ws(' ', p.first_name, p.last_name, u.email, p.phone, s.custom_data::text)) like lower('%' || ${p}::text || '%')`,
-      );
+      const search = buildTextSearch({
+        q,
+        columns: ["p.first_name", "p.last_name", "u.email", "p.phone"],
+        phoneColumn: "p.phone",
+        customDataColumn: "s.custom_data",
+        exactColumn: "concat_ws(' ', p.first_name, p.last_name)",
+        add,
+      });
+      filters.push(search.where);
+      searchRank = search.rank;
     }
     if (query.status?.trim()) {
       filters.push(`s.status = ${add(query.status.trim())}::text`);
@@ -920,7 +1003,7 @@ export class CrmService {
         )
       `);
     }
-    return { where: filters.join("\n          and "), params };
+    return { where: filters.join("\n          and "), params, searchRank };
   }
 
   // ponytail: generic case-insensitive text-filter helper (misnamed "Lead" for
@@ -995,7 +1078,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.students s
         join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -1023,7 +1106,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.profiles acct
         join app.family_members parent_m
@@ -1055,7 +1138,7 @@ export class CrmService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.user_crm_links link
         join app.students s
@@ -1077,6 +1160,13 @@ export class CrmService {
   }
 
   private toStudentDto(row: StudentRow) {
+    // «Дата обращения»: явное значение → исходная дата HolliHop → момент
+    // появления записи здесь. Резолвится на чтении, а не хранится, потому что
+    // 3105 импортированных учеников уже несут её как custom_data.addressDate.
+    const appeal = resolveAppealDate(row.custom_data, row.created_at);
+    // Возраст: дата рождения (считается и не устаревает) → вписанный руками.
+    // См. age.ts — там же объяснено, почему приоритет обратный appeal-date.
+    const age = resolveAge(row.custom_data);
     return {
       id: row.id,
       leadId: row.lead_id,
@@ -1090,6 +1180,14 @@ export class CrmService {
       phone: row.phone,
       teacherUserIds: row.teacher_user_ids ?? [],
       createdAt: row.created_at,
+      appealAt: appeal.value,
+      appealAtSource: appeal.source,
+      age: age.years,
+      ageMonths: age.months,
+      ageSource: age.source,
+      // Чёрный список = бан (✔ владелец 17.07). См. blacklist.ts.
+      blacklisted: row.blacklisted === true,
+      blacklistReason: row.blacklist_reason ?? null,
     };
   }
 

@@ -391,15 +391,23 @@ class _CardBody extends StatelessWidget {
     final lessonsCount = _intValue(student['lessons_count']);
     final groupsCount = _intValue(student['groups_count']);
 
+    // Жёлтым — ученик, по которому не висит ни одной задачи: про него забыли
+    // (требование заказчика 17.07). Тот же приём, что на доске лидов, и то же
+    // правило — см. no_open_tasks_highlight.
+    final forgotten = hasNoOpenTasks(openTasks);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      color: Theme.of(context).colorScheme.surface,
+      color: forgotten
+          ? noOpenTasksSurface(context)
+          : Theme.of(context).colorScheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
-        side: BorderSide(
-          color: Theme.of(context).colorScheme.outlineVariant,
-          width: 1,
-        ),
+        side: forgotten
+            ? noOpenTasksBorder()
+            : BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
+                width: 1,
+              ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),

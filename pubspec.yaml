@@ -91,6 +91,9 @@ flutter:
 
   assets:
     - assets/icon.png
+    # Alert tone for new leads/tasks. Played by the app itself when it is in
+    # the foreground; a backgrounded push uses the system sound instead.
+    - assets/sounds/alarm.wav
 
   # To add assets to your application, add an assets section, like this:
   # assets:

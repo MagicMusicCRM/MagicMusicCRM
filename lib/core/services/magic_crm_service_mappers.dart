@@ -66,6 +66,19 @@ Map<String, dynamic> _legacyStudent(Map<String, dynamic> item) {
     'email': item['email'] ?? customData['email'],
     'phone': item['phone'] ?? customData['phone'],
     'created_at': item['createdAt'],
+    // Дата обращения, разрешённая сервером: явное значение → исходная дата
+    // HolliHop → момент появления записи здесь. Считать её на клиенте нельзя —
+    // правило одно для лида и ученика и живёт в appeal-date.ts.
+    'appeal_at': item['appealAt'],
+    'appeal_at_source': item['appealAtSource'],
+    // Возраст, разрешённый сервером: дата рождения → вписанный руками.
+    // Правило одно для лида и ученика и живёт в age.ts.
+    'age': item['age'],
+    'age_months': item['ageMonths'],
+    'age_source': item['ageSource'],
+    // Чёрный список = бан: карточка красится, чаты клиенту закрыты.
+    'blacklisted': item['blacklisted'] == true,
+    'blacklist_reason': item['blacklistReason'],
     'profiles': {
       'id': item['profileId'],
       'user_id': item['profileUserId'],
@@ -404,6 +417,14 @@ Map<String, dynamic> _legacyLead(Map<String, dynamic> item) {
     'created_by': item['createdBy'],
     'created_at': item['createdAt'],
     'updated_at': item['updatedAt'],
+    // См. комментарий в _legacyStudent: дату обращения и возраст разрешает сервер.
+    'appeal_at': item['appealAt'],
+    'appeal_at_source': item['appealAtSource'],
+    'age': item['age'],
+    'age_months': item['ageMonths'],
+    'age_source': item['ageSource'],
+    'blacklisted': item['blacklisted'] == true,
+    'blacklist_reason': item['blacklistReason'],
   };
 }
 
@@ -440,6 +461,12 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
     'is_trial': item['isTrial'],
     'notes': item['notes'],
     'teacher_rate': item['teacherRate'],
+    // Rate actually paid for this lesson (lesson → group → history). null when
+    // the caller may not see pay data.
+    'applied_teacher_rate': item['appliedTeacherRate'],
+    // «Оплаты по дням»: сколько пришло за этот день. null — платежа за него
+    // нет (или роль его не видит), и это НЕ «оплачено 0».
+    'paid_amount': item['paidAmount'],
     'student_name': item['studentName'],
     'teacher_name': item['teacherName'],
     'branch_name': item['branchName'],
@@ -561,6 +588,8 @@ Map<String, dynamic> _legacyComment(Map<String, dynamic> item) {
     'kind': item['kind'],
     'progress': item['progress'],
     'created_at': item['createdAt'],
+    // Заполнено только у комментариев к занятиям — см. Comment.isAboutLesson.
+    'lesson_at': item['lessonAt'],
     'profiles': {
       'first_name': _splitName(item['authorName']?.toString() ?? '').$1,
       'last_name': _splitName(item['authorName']?.toString() ?? '').$2,
@@ -576,9 +605,33 @@ Map<String, dynamic> _legacyStatusHistoryItem(Map<String, dynamic> item) {
     'old_owner_id': item['oldOwnerId'],
     'new_owner_id': item['newOwnerId'],
     'changed_by': item['changedBy'],
+    'changed_by_name': item['changedByName'],
     'changed_at': item['changedAt'],
     'reason_id': item['reasonId'],
     'comment': item['comment'],
+  };
+}
+
+Map<String, dynamic> _legacyTaskHistoryItem(Map<String, dynamic> item) {
+  return {
+    'id': item['id'],
+    'field': item['field'],
+    'old_value': item['oldValue'],
+    'new_value': item['newValue'],
+    'changed_at': item['changedAt'],
+    'source': item['source'],
+    'changed_by': item['changedBy'],
+    'author_profile_id': item['authorProfileId'],
+    'author_name': item['authorName'],
+    'old_user_id': item['oldUserId'],
+    'old_user_name': item['oldUserName'],
+    'new_user_id': item['newUserId'],
+    'new_user_name': item['newUserName'],
+    // Only present in the cross-task supervisor feed.
+    'task_id': item['taskId'],
+    'task_title': item['taskTitle'],
+    'task_entity_type': item['taskEntityType'],
+    'task_entity_id': item['taskEntityId'],
   };
 }
 
@@ -670,6 +723,8 @@ Map<String, dynamic> _legacySubscription(Map<String, dynamic> item) {
     'updated_at': item['updatedAt'],
     'package_name': item['packageName'],
     'package_price': item['packagePrice'],
+    // «Оплачено» — приход личного счёта, которым закрыт абонемент.
+    'paid_amount': item['paidAmount'],
   };
 }
 

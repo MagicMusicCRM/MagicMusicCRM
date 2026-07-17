@@ -20,6 +20,9 @@ export interface StudentRow {
   phone: string | null;
   teacher_user_ids: string[] | null;
   created_at: Date | string;
+  /** Чёрный список = бан на чаты. См. blacklist.ts. */
+  blacklisted?: boolean | null;
+  blacklist_reason?: string | null;
 }
 
 /** Load a non-deleted student with its profile identity + teacher user ids. */
@@ -30,7 +33,8 @@ export async function findStudent(
   const result = await db.query<StudentRow>(
     `
       select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-        s.lead_id, s.custom_data, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+        s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
+        p.first_name, p.last_name, u.email, p.phone, s.created_at,
         coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
       from app.students s
       left join app.profiles p on p.id = s.profile_id and p.deleted_at is null

@@ -1,3 +1,4 @@
+import { ForbiddenException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -16,6 +17,15 @@ describe("ScheduleService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertManagerOnly: jest.fn(),
+      // Per-lesson teacher rates: staff-only (admin/manager/director), not
+      // clients or teachers — the default mock says no so a leak has to be
+      // opted into explicitly by a test.
+      canReadTeacherRates: jest.fn().mockReturnValue(false),
+      canReadSchoolFinance: jest.fn().mockReturnValue(false),
+      // «Оплаты по дням»: деньги клиента — не для педагога. Мок по умолчанию
+      // говорит «нет», чтобы утечку пришлось включить тестом осознанно.
+      canReadStudentFinance: jest.fn().mockReturnValue(false),
     };
     return { audit, notifications, policy };
   };
@@ -56,6 +66,110 @@ describe("ScheduleService", () => {
     const service = construct(query, deps);
     return { service, query, ...deps };
   };
+
+  describe("«оплаты по дням» (✔ владелец 17.07)", () => {
+    it("sums the payments tied to each lesson", async () => {
+      const { service, query, policy } = createService([]);
+      policy.canReadStudentFinance.mockReturnValue(true);
+
+      await service.listLessons(actor, { limit: 10 });
+
+      const sql = String(query.mock.calls[0][0]);
+      expect(sql).toContain("from app.payments pay");
+      expect(sql).toContain("pay.lesson_id = l.id");
+      // Отменённый платёж — не оплата.
+      expect(sql).toContain("pay.deleted_at is null");
+      expect(sql).toContain("as paid_amount");
+    });
+
+    it("does not turn «нет платежа» into a confident zero", async () => {
+      // Привязывать платёж к занятию не обязательно (аванс на счёт, абонемент,
+      // импорт из HolliHop — там связи нет вовсе). coalesce(…, 0) объявил бы
+      // все такие дни неоплаченными.
+      const { service, query, policy } = createService([]);
+      policy.canReadStudentFinance.mockReturnValue(true);
+
+      await service.listLessons(actor, { limit: 10 });
+
+      const sql = String(query.mock.calls[0][0]);
+      expect(sql).not.toMatch(/coalesce\(sum\(pay\.amount\)/);
+    });
+
+    it("never lets a teacher see the client's money", async () => {
+      const { service, query, policy } = createService([]);
+      policy.canReadStudentFinance.mockReturnValue(false);
+
+      await service.listLessons(
+        { userId: "teacher-1", role: "teacher" as const },
+        { limit: 10 },
+      );
+
+      const sql = String(query.mock.calls[0][0]);
+      // Не «скрыто в UI», а не выбрано из базы вовсе.
+      expect(sql).toContain("null::numeric as paid_amount");
+      expect(sql).not.toContain("app.payments");
+    });
+
+    it("shows a client the payments for their own lesson", async () => {
+      // Клиенту его собственные платежи не тайна, а выборка и так отдаёт ему
+      // только его занятия.
+      const { service, query, policy } = createService([]);
+      policy.canReadStudentFinance.mockReturnValue(false);
+
+      await service.listLessons(
+        { userId: "client-1", role: "client" as const },
+        { limit: 10 },
+      );
+
+      expect(String(query.mock.calls[0][0])).toContain("pay.lesson_id = l.id");
+    });
+  });
+
+  describe("applied teacher rate", () => {
+    const clientActor = { userId: "client-1", role: "client" as const };
+
+    it("never selects pay rates for an actor who may not see them", async () => {
+      const { service, query, policy } = createService([]);
+      policy.canReadTeacherRates.mockReturnValue(false);
+
+      await service.listLessons(clientActor, { limit: 10 });
+
+      const sql = String(query.mock.calls[0][0]);
+      // listLessons serves clients too, so the rate must not merely be hidden
+      // in the UI — it must never leave the database.
+      expect(sql).toContain("null::numeric as applied_teacher_rate");
+      expect(sql).not.toContain("app.teacher_rates");
+    });
+
+    it("resolves lesson → group → history → 0 for finance roles", async () => {
+      const { service, query, policy } = createService([]);
+      policy.canReadTeacherRates.mockReturnValue(true);
+
+      await service.listLessons(
+        { userId: "dir-1", role: "director" as const },
+        { limit: 10 },
+      );
+
+      const sql = String(query.mock.calls[0][0]);
+      // Same precedence as computeLessonAccrual in payroll.service.ts.
+      expect(sql).toMatch(
+        /coalesce\(\s*l\.teacher_rate,\s*g\.teacher_rate,[\s\S]*app\.teacher_rates[\s\S]*0\s*\)\s*as applied_teacher_rate/,
+      );
+    });
+
+    it("asks the per-lesson gate, not the aggregate-finance one", async () => {
+      const { service, policy } = createService([]);
+      const managerActor = { userId: "mgr-1", role: "manager" as const };
+
+      await service.listLessons(managerActor, { limit: 10 });
+
+      // The owner's 16.07 decision: a per-lesson rate is not a school-wide
+      // total, so admin/manager see it. Gating this on canReadSchoolFinance
+      // would hide it from exactly the people who set it.
+      expect(policy.canReadTeacherRates).toHaveBeenCalledWith(managerActor);
+      expect(policy.canReadSchoolFinance).not.toHaveBeenCalled();
+    });
+  });
 
   it("lists trial lessons with actor-scoped query", async () => {
     const { service, query } = createService([
@@ -835,5 +949,87 @@ describe("ScheduleService", () => {
         entityId: "lesson-lead-a",
       }),
     );
+  });
+
+  describe("bulk teacher rate", () => {
+    it("reprices every lesson in one statement and reports the count", async () => {
+      const { service, query, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a" }, { id: "lesson-b" }] },
+      ]);
+
+      await expect(
+        service.setLessonsTeacherRate(actor, {
+          lessonIds: ["lesson-a", "lesson-b"],
+          teacherRate: 0,
+        }),
+      ).resolves.toEqual({
+        updated: 2,
+        lessonIds: ["lesson-a", "lesson-b"],
+      });
+
+      // One statement, not one per lesson: the client used to PATCH in a loop,
+      // so a failure halfway left some lessons repriced and some not.
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(query.mock.calls[0][1]).toEqual([["lesson-a", "lesson-b"], 0]);
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "crm.lessons_teacher_rate_bulk_set",
+          metadata: expect.objectContaining({ teacherRate: 0, updated: 2 }),
+        }),
+      );
+    });
+
+    it("keeps a rate of 0 rather than treating it as 'no rate given'", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a" }] },
+      ]);
+
+      await service.setLessonsTeacherRate(actor, {
+        lessonIds: ["lesson-a"],
+        teacherRate: 0,
+      });
+
+      // 0 is «входит в оклад» — the whole point of the bulk pass. A `|| null`
+      // anywhere in this path would silently turn it into "clear the override".
+      expect(query.mock.calls[0][1][1]).toBe(0);
+    });
+
+    it("clears the override when no rate is given", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a" }] },
+      ]);
+
+      await service.setLessonsTeacherRate(actor, { lessonIds: ["lesson-a"] });
+
+      // Sets, not coalesces: falling back to the group/history rate has to be
+      // expressible, and coalesce cannot express it.
+      expect(String(query.mock.calls[0][0])).toContain(
+        "teacher_rate = $2::numeric",
+      );
+      expect(query.mock.calls[0][1][1]).toBeNull();
+    });
+
+    it("is manager-only — it writes payroll inputs across the schedule", async () => {
+      const { service, policy } = createServiceWithQueryResults([{ rows: [] }]);
+
+      await service.setLessonsTeacherRate(actor, { lessonIds: ["lesson-a"] });
+
+      expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    });
+  });
+
+  it("stops a teacher from setting the pay rate on their own lesson", async () => {
+    const teacherActor = { userId: "teacher-user-a", role: "teacher" as const };
+    const { service, policy } = createServiceWithQueryResults([{ rows: [] }]);
+    policy.assertCanWriteCrm.mockImplementation(() => {
+      throw new ForbiddenException();
+    });
+
+    // teacher_rate is what the school PAYS: a teacher editing it on their own
+    // lesson is a self-granted raise. They may still edit status/notes there.
+    await expect(
+      service.updateLesson(teacherActor, "lesson-a", { teacherRate: 5000 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(teacherActor);
   });
 });

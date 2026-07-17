@@ -13,10 +13,16 @@ import {
 import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
+import { BlacklistService } from "./blacklist.service";
 import { CrmService } from "./crm.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
-import { CreateAdjustmentDto } from "./dto/create-adjustment.dto";
+import { SetBlacklistDto } from "./dto/set-blacklist.dto";
+import {
+  CreateAdjustmentDto,
+  UpdateAdjustmentDto,
+} from "./dto/create-adjustment.dto";
+import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { CreateStudentDto } from "./dto/create-student.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
@@ -32,6 +38,7 @@ export class CrmStudentsController {
     private readonly crm: CrmService,
     private readonly finance: FinanceService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly blacklist: BlacklistService,
   ) {}
 
   @Get("me")
@@ -107,6 +114,48 @@ export class CrmStudentsController {
     @Body() dto: CreateAdjustmentDto,
   ) {
     return this.finance.createAccountAdjustment(actor, id, dto);
+  }
+
+  @Patch("students/:id/adjustments/:adjustmentId")
+  updateAccountAdjustment(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("adjustmentId", ParseUUIDPipe) adjustmentId: string,
+    @Body() dto: UpdateAdjustmentDto,
+  ) {
+    return this.finance.updateAccountAdjustment(actor, id, adjustmentId, dto);
+  }
+
+  // DELETE отменяет (сторнирует), а не стирает: строку личного счёта уже
+  // показывали клиенту, и её исчезновение не оставило бы следа.
+  @Delete("students/:id/adjustments/:adjustmentId")
+  voidAccountAdjustment(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("adjustmentId", ParseUUIDPipe) adjustmentId: string,
+  ) {
+    return this.finance.voidAccountAdjustment(actor, id, adjustmentId);
+  }
+
+  @Post("students/:id/transfer")
+  createAccountTransfer(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: CreateTransferDto,
+  ) {
+    return this.finance.createAccountTransfer(actor, id, dto);
+  }
+
+  // Отдельный эндпоинт, а не поле в PATCH students/:id: бан снимает человеку
+  // доступ к чатам — такое не должно уезжать вместе с патчем произвольных
+  // полей карточки. См. blacklist.service.ts.
+  @Patch("students/:id/blacklist")
+  setStudentBlacklist(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: SetBlacklistDto,
+  ) {
+    return this.blacklist.setStudentBlacklist(actor, id, dto);
   }
 
   @Get("students/:id")

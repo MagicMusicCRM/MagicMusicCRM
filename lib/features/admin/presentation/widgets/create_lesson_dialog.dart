@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 import 'package:intl/intl.dart';
@@ -16,6 +17,18 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
   // new one (pre-filled fields, "Сохранить" updates via PATCH).
   final Map<String, dynamic>? lesson;
 
+  /// Пробное занятие по лиду (✔ решение владельца 17.07: «это просто готовый
+  /// пресет под создание нового занятия, поэтому можно не дублировать
+  /// функционал»). Когда задан — занятие вешается на лида, а не на ученика или
+  /// группу, и пикеры «Группа»/«Ученик» уступают место строке с именем лида.
+  final String? leadId;
+  final String? leadName;
+
+  /// Предустановка «это пробное». ✔ Владелец 17.07: индивидуальный пробный —
+  /// это обычное занятие с пометкой «пробное»; списание с личного счёта админ
+  /// или менеджер назначает сам.
+  final bool initialIsTrial;
+
   const CreateLessonDialog({
     super.key,
     this.initialDate,
@@ -23,6 +36,9 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     this.initialBranchId,
     this.initialDurationMinutes,
     this.lesson,
+    this.leadId,
+    this.leadName,
+    this.initialIsTrial = false,
   });
 
   static Future<bool?> show(
@@ -32,6 +48,9 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     String? initialBranchId,
     int? initialDurationMinutes,
     Map<String, dynamic>? lesson,
+    String? leadId,
+    String? leadName,
+    bool initialIsTrial = false,
   }) {
     return showDialog<bool>(
       context: context,
@@ -41,7 +60,31 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
         initialBranchId: initialBranchId,
         initialDurationMinutes: initialDurationMinutes,
         lesson: lesson,
+        leadId: leadId,
+        leadName: leadName,
+        initialIsTrial: initialIsTrial,
       ),
+    );
+  }
+
+  /// Пресет «Пробное занятие»: тот же диалог, что и «Новое занятие», но с
+  /// предзаполненными полями по логике пробного.
+  ///
+  /// Раньше пробное было отдельным окном (`showScheduleTrialDialog`) на четыре
+  /// поля — без филиала, а аудитории в нём не фильтровались по филиалу, потому
+  /// что фильтровать было не по чему. Здесь всё это уже есть.
+  static Future<bool?> showTrialPreset(
+    BuildContext context, {
+    required String leadId,
+    required String leadName,
+  }) {
+    return show(
+      context,
+      leadId: leadId,
+      leadName: leadName,
+      initialIsTrial: true,
+      // Завтра в 10:00 — то же умолчание, что было у прежнего окна пробного.
+      initialDate: DateTime.now().add(const Duration(days: 1)),
     );
   }
 
@@ -71,14 +114,28 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   // педагога), 0 — «входит в оклад», иначе фикс за это занятие.
   num? _teacherRate;
 
+  /// «Это пробное занятие». Влияет только на пометку `is_trial`: списание с
+  /// личного счёта за пробное админ/менеджер назначает руками (✔ владелец
+  /// 17.07), автоматики здесь нет и не задумано.
+  bool _isTrial = false;
+
   bool get _isEdit => widget.lesson != null;
+
+  /// Занятие вешается на лида (пресет пробного), а не на ученика/группу.
+  bool get _isLeadLesson => widget.leadId != null;
 
   @override
   void initState() {
     super.initState();
+    _isTrial = widget.initialIsTrial;
     if (widget.initialDate != null) {
       _selectedDate = widget.initialDate!;
-      _selectedTime = TimeOfDay.fromDateTime(widget.initialDate!);
+      // У пресета пробного дата — «завтра», но время из неё брать нельзя:
+      // получилось бы «завтра в момент, когда открыли диалог». Прежнее окно
+      // пробного предлагало 10:00 — оставляем его.
+      _selectedTime = widget.initialIsTrial
+          ? const TimeOfDay(hour: 10, minute: 0)
+          : TimeOfDay.fromDateTime(widget.initialDate!);
     }
     if (widget.initialRoomId != null) {
       _selectedRoomId = widget.initialRoomId;
@@ -108,6 +165,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _selectedTime = TimeOfDay(hour: local.hour, minute: local.minute);
       }
       if (_selectedBranchId != null) _loadRooms(_selectedBranchId!);
+      _isTrial = lesson['is_trial'] == true;
       final rawRate = lesson['teacher_rate'];
       if (rawRate is num) {
         _teacherRate = rawRate;
@@ -119,6 +177,18 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   }
 
   MagicCrmService get _crm => ref.read(magicCrmServiceProvider);
+
+  String get _dialogTitle {
+    if (_isEdit) return 'Редактировать занятие';
+    if (_isLeadLesson) return 'Пробное занятие';
+    return 'Новое занятие';
+  }
+
+  String get _savedMessage {
+    if (_isEdit) return 'Занятие обновлено';
+    if (_isLeadLesson) return 'Пробное занятие назначено';
+    return 'Занятие создано';
+  }
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
@@ -169,8 +239,11 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   }
 
   Future<void> _save() async {
+    // Занятие всегда чьё-то: группы, ученика или — у пробного — лида.
+    final hasSubject =
+        _isLeadLesson || _selectedGroupId != null || _selectedStudentId != null;
     if (_selectedTeacherId == null ||
-        (_selectedGroupId == null && _selectedStudentId == null) ||
+        !hasSubject ||
         _selectedBranchId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Заполните обязательные поля')),
@@ -217,27 +290,31 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           scheduledAt: scheduledAt,
           durationMinutes: _durationMinutes,
           teacherRate: _teacherRate,
+          isTrial: _isTrial,
         );
       } else {
         await _crm.createLesson(
           teacherId: _selectedTeacherId,
           groupId: _selectedGroupId,
           studentId: _selectedStudentId,
+          leadId: widget.leadId,
           branchId: _selectedBranchId,
           roomId: _selectedRoomId,
           scheduledAt: scheduledAt,
           durationMinutes: _durationMinutes,
           status: 'scheduled',
           teacherRate: _teacherRate,
+          isTrial: _isTrial,
+          notes: _isLeadLesson
+              ? 'Пробное занятие по лиду: ${widget.leadName ?? ''}'.trim()
+              : null,
         );
       }
 
       if (mounted) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isEdit ? 'Занятие обновлено' : 'Занятие создано'),
-          ),
+          SnackBar(content: Text(_savedMessage)),
         );
       }
     } catch (e) {
@@ -422,12 +499,25 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     }
 
     return AlertDialog(
-      title: Text(_isEdit ? 'Редактировать занятие' : 'Новое занятие'),
+      title: Text(_dialogTitle),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Пробное по лиду: «кто» уже известен и менять его здесь нечем —
+            // диалог открыт из карточки именно этого лида.
+            if (_isLeadLesson) ...[
+              InputDecorator(
+                decoration: const InputDecoration(labelText: 'Лид'),
+                child: Text(
+                  widget.leadName?.trim().isNotEmpty == true
+                      ? widget.leadName!
+                      : 'Без имени',
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             // Teacher Selection
             _buildSelectionField(
               label: 'Преподаватель *',
@@ -455,62 +545,58 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Group Selection
-            DropdownButtonFormField<String>(
-              initialValue: _selectedGroupId,
-              isExpanded: true,
-              dropdownColor: Theme.of(context).colorScheme.surface,
-              decoration: const InputDecoration(
-                labelText: 'Группа',
-                prefixIcon: Icon(Icons.group_rounded),
+            // У пробного по лиду занятие уже привязано к нему — группы и
+            // ученика у него нет.
+            if (!_isLeadLesson) ...[
+              // Group Selection
+              SearchablePickerField(
+                label: 'Группа',
+                placeholder: 'Индивидуально',
+                selectedId: _selectedGroupId,
+                items: [
+                  for (final g in _groups)
+                    SearchableSelectItem(
+                      id: g['id'].toString(),
+                      label: g['name']?.toString() ?? 'Без названия',
+                    ),
+                ],
+                onSelected: (item) => setState(() {
+                  _selectedGroupId = item?.id;
+                  // A group lesson has no single student.
+                  if (item != null) _selectedStudentId = null;
+                }),
               ),
-              items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('Индивидуально'),
-                ),
-                ..._groups.map(
-                  (g) => DropdownMenuItem(
-                    value: g['id'].toString(),
-                    child: Text(g['name']?.toString() ?? 'Без названия'),
-                  ),
+
+              if (_selectedGroupId == null) ...[
+                const SizedBox(height: 16),
+                // Student Selection
+                _buildSelectionField(
+                  label: 'Ученик *',
+                  value: _getStudentName(_selectedStudentId),
+                  onTap: () {
+                    final items = _students.map((s) {
+                      final name = _getStudentNameFromData(s);
+                      return SearchableSelectItem(
+                        id: s['id'].toString(),
+                        label: name,
+                      );
+                    }).toList();
+
+                    SearchableSelect.show(
+                      context: context,
+                      title: 'Выберите ученика',
+                      hintText: 'Поиск по ФИО...',
+                      items: items,
+                      selectedId: _selectedStudentId,
+                      isNullable: false,
+                      onSelected: (item) =>
+                          setState(() => _selectedStudentId = item?.id),
+                    );
+                  },
                 ),
               ],
-              onChanged: (val) => setState(() {
-                _selectedGroupId = val;
-                if (val != null) _selectedStudentId = null;
-              }),
-            ),
-
-            if (_selectedGroupId == null) ...[
               const SizedBox(height: 16),
-              // Student Selection
-              _buildSelectionField(
-                label: 'Ученик *',
-                value: _getStudentName(_selectedStudentId),
-                onTap: () {
-                  final items = _students.map((s) {
-                    final name = _getStudentNameFromData(s);
-                    return SearchableSelectItem(
-                      id: s['id'].toString(),
-                      label: name,
-                    );
-                  }).toList();
-
-                  SearchableSelect.show(
-                    context: context,
-                    title: 'Выберите ученика',
-                    hintText: 'Поиск по ФИО...',
-                    items: items,
-                    selectedId: _selectedStudentId,
-                    isNullable: false,
-                    onSelected: (item) =>
-                        setState(() => _selectedStudentId = item?.id),
-                  );
-                },
-              ),
             ],
-            const SizedBox(height: 16),
 
             // Branch & Room
             Row(
@@ -542,27 +628,22 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 if (_selectedBranchId != null) ...[
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedRoomId,
-                      isExpanded: true,
-                      dropdownColor: Theme.of(context).colorScheme.surface,
-                      decoration: const InputDecoration(labelText: 'Аудитория'),
-                      items: _rooms.isEmpty
-                          ? [
-                              const DropdownMenuItem(
-                                value: null,
-                                child: Text('Нет доступных'),
-                              ),
-                            ]
-                          : _rooms
-                                .map(
-                                  (r) => DropdownMenuItem(
-                                    value: r['id'].toString(),
-                                    child: Text(r['name']?.toString() ?? ''),
-                                  ),
-                                )
-                                .toList(),
-                      onChanged: (val) => setState(() => _selectedRoomId = val),
+                    child: SearchablePickerField(
+                      label: 'Аудитория',
+                      placeholder: _rooms.isEmpty
+                          ? 'Нет доступных'
+                          : 'Выберите аудиторию',
+                      enabled: _rooms.isNotEmpty,
+                      selectedId: _selectedRoomId,
+                      items: [
+                        for (final r in _rooms)
+                          SearchableSelectItem(
+                            id: r['id'].toString(),
+                            label: r['name']?.toString() ?? '—',
+                          ),
+                      ],
+                      onSelected: (item) =>
+                          setState(() => _selectedRoomId = item?.id),
                     ),
                   ),
                 ],
@@ -615,6 +696,31 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
               ],
             ),
             const SizedBox(height: 16),
+            // ✔ Решение владельца 17.07: «индивидуальный пробный» — это не
+            // отдельный тип занятия, а пометка «пробное» на обычном занятии.
+            // Списание с личного счёта за него админ/менеджер назначает сам:
+            // автоматики здесь нет, и она не задумана.
+            SwitchListTile(
+              value: _isTrial,
+              activeThumbColor: AppTheme.primaryGold,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Пробное занятие'),
+              subtitle: Text(
+                _isTrial
+                    ? 'Списание с личного счёта назначается вручную'
+                    : 'Обычное занятие',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              // У пресета пробного галочку не снимают: диалог открыт кнопкой
+              // «На пробный», и снятая пометка сделала бы её ложью.
+              onChanged: _isLeadLesson
+                  ? null
+                  : (value) => setState(() => _isTrial = value),
+            ),
+            const SizedBox(height: 8),
             // #6: поурочная ставка педагога (по умолчанию — ставка группы/
             // педагога, «Входит в оклад» = 0 для пробных).
             TeacherRateSelector(

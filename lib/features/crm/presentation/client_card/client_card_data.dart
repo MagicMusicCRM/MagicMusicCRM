@@ -107,17 +107,47 @@ extension _ClientCardData on _ClientCardState {
           };
         }).toList(),
       );
+      // Field edits («кто поменял телефон»). Only the audit rows of the lead
+      // timeline: the rest of it (comments, tasks, trials) already has its own
+      // sections on the card and would show up twice here.
+      out.add(
+        _list(_leadCard?['timeline'])
+            .where((t) => t['type']?.toString() == 'audit')
+            .map((t) {
+              return {
+                'id': t['id'],
+                '_origin': 'lead',
+                '_kind': 'event',
+                '_date': t['occurred_at'],
+                '_title': t['title']?.toString() ?? 'Событие',
+                '_subtitle': [
+                  if ((t['actor_name']?.toString().trim() ?? '').isNotEmpty)
+                    t['actor_name'].toString().trim(),
+                  if ((t['body']?.toString().trim() ?? '').isNotEmpty)
+                    t['body'].toString().trim(),
+                ].join('\n'),
+              };
+            })
+            .toList(),
+      );
     }
     if (_mode.hasStudentHalf) {
       out.add(
         _list(_studentCardTimeline).map((t) {
+          final body = t['body']?.toString().trim() ?? '';
+          final actor = t['actor_name']?.toString().trim() ?? '';
+          // For a field edit the author IS the point («кто поменял телефон»);
+          // for a comment or lesson the card already shows it elsewhere.
+          final isAudit = t['type']?.toString() == 'audit';
           return {
             'id': t['id'],
             '_origin': 'student',
             '_kind': 'event',
             '_date': t['occurred_at'],
             '_title': t['title']?.toString() ?? 'Событие',
-            '_subtitle': t['body']?.toString() ?? '',
+            '_subtitle': isAudit && actor.isNotEmpty
+                ? [actor, if (body.isNotEmpty) body].join('\n')
+                : body,
           };
         }).toList(),
       );
@@ -432,6 +462,64 @@ extension _ClientCardData on _ClientCardState {
         _emitState(() => _saving = false);
       }
     }
+  }
+
+  /// «Прикрепить к ученику»: связать лида с уже заведённым учеником.
+  ///
+  /// Поиск серверный: учеников тысячи, и подгружать их пачкой в клиент значило
+  /// бы, что нужного в списке просто не окажется.
+  Future<void> _linkExistingStudent() async {
+    final crm = ref.read(magicCrmServiceProvider);
+
+    Future<List<SearchableSelectItem>> search(String query) async {
+      final response = await crm.searchStudents(q: query, limit: 5);
+      final items = response['items'];
+      if (items is! List) return const <SearchableSelectItem>[];
+      return items.whereType<Map<String, dynamic>>().map((student) {
+        final name = [
+          student['first_name'] ?? student['firstName'],
+          student['last_name'] ?? student['lastName'],
+        ].where((v) => (v?.toString().trim() ?? '').isNotEmpty).join(' ');
+        return SearchableSelectItem(
+          id: student['id'].toString(),
+          label: name.isEmpty ? 'Без имени' : name,
+          subtitle: student['phone']?.toString(),
+        );
+      }).toList();
+    }
+
+    SearchableSelect.show(
+      context: context,
+      title: 'Прикрепить к ученику',
+      hintText: 'Имя или телефон…',
+      items: const [],
+      isNullable: false,
+      onSearch: search,
+      onSelected: (item) async {
+        if (item == null) return;
+        try {
+          await crm.linkStudentToLead(
+            leadId: _resolvedLeadId ?? _leadId,
+            studentId: item.id,
+          );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Лид прикреплён к ученику «${item.label}»')),
+          );
+          // Перечитываем карточку: у лида появился связанный ученик, и режим
+          // карточки должен это увидеть.
+          await _fetchCard();
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Не удалось прикрепить: $e'),
+              backgroundColor: AppTheme.danger,
+            ),
+          );
+        }
+      },
+    );
   }
 
   Future<void> _convertToStudent() async {

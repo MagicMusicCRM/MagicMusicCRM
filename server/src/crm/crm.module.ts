@@ -19,6 +19,7 @@ import { CrmContactsController } from './crm-contacts.controller';
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
 import { CrmPolicy } from './crm.policy';
 import { CrmService } from './crm.service';
+import { BlacklistService } from './blacklist.service';
 import { HomeworkService } from './homework.service';
 import { ReferenceDataService } from './reference-data.service';
 import { SubscriptionsService } from './subscriptions.service';
@@ -28,6 +29,7 @@ import { AttendanceService } from './attendance.service';
 import { StaffService } from './staff.service';
 import { TeachersService } from './teachers.service';
 import { ScheduleService } from './schedule.service';
+import { SectionViewsService } from './section-views.service';
 import { TimelineService } from './timeline.service';
 import { DashboardService } from './dashboard.service';
 import { ClientLinkingService } from './client-linking.service';
@@ -67,6 +69,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
   ],
   providers: [
     CrmService,
+    BlacklistService,
     HomeworkService,
     ReferenceDataService,
     SubscriptionsService,
@@ -77,6 +80,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     TeachersService,
     ScheduleService,
     TimelineService,
+    SectionViewsService,
     DashboardService,
     ClientLinkingService,
     FamilyService,

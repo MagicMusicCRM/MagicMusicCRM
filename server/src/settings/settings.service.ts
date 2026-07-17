@@ -244,13 +244,12 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     required: false,
     options: ["Не приглашён", "Приглашён", "Активен", "Заблокирован"],
   },
-  {
-    entity: "students",
-    key: "blacklisted",
-    label: "Чёрный список",
-    type: "boolean",
-    required: false,
-  },
+  // «Чёрный список» больше не кастом-поле. ✔ Решение владельца 17.07 сделало
+  // его баном: у него есть автор, причина и последствие (запрет на чаты), а
+  // ставится он отдельным эндпоинтом. Миграция 0064 перенесла галочку в
+  // колонку `students.blacklisted` и убрала ключ из custom_data — иначе
+  // осталось бы два источника правды, и тот, в который пишут, был бы не тем,
+  // который читают.
   {
     entity: "students",
     key: "noEmail",
@@ -301,6 +300,25 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Дата рождения",
     type: "date",
     required: false,
+  },
+  {
+    // ✔ Решение владельца 17.07: возраст можно вписать руками. Если стоит дата
+    // рождения, он считается из неё и сам меняется с годами — тогда это поле
+    // не читается (`resolveAge`, приоритет объяснён в age.ts).
+    entity: "leads",
+    key: "age",
+    label: "Возраст",
+    type: "number",
+    required: false,
+    hint: "Если заполнена дата рождения, возраст считается по ней автоматически",
+  },
+  {
+    entity: "students",
+    key: "age",
+    label: "Возраст",
+    type: "number",
+    required: false,
+    hint: "Если заполнена дата рождения, возраст считается по ней автоматически",
   },
   {
     entity: "leads",
@@ -373,6 +391,17 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   },
   {
     entity: "leads",
+    key: "appealAt",
+    label: "Дата обращения",
+    type: "date",
+    required: false,
+  },
+  {
+    // ✔ Решение владельца 16.07: дата обращения нужна и у ученика — иначе при
+    // конвертации лида её некуда положить и она теряется.
+    // Пустое значение не означает «неизвестно»: CrmPolicy/appeal-date.ts
+    // разрешает её как HolliHop `addressDate` → дата появления записи здесь.
+    entity: "students",
     key: "appealAt",
     label: "Дата обращения",
     type: "date",
@@ -483,16 +512,21 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   {
     entity: "teachers",
     key: "levels",
-    label: "Уровни",
-    type: "text",
+    // Free text before: every teacher spelled the same level differently, so
+    // filtering by it could not work. The option list is the same one students
+    // and leads already pick from.
+    label: "Уровни обучения",
+    type: "select",
     required: false,
+    options: HOLLIHOP_LEVEL_OPTIONS,
   },
   {
     entity: "teachers",
     key: "categories",
     label: "Категории",
-    type: "text",
+    type: "select",
     required: false,
+    options: HOLLIHOP_CATEGORY_OPTIONS,
   },
   {
     entity: "teachers",

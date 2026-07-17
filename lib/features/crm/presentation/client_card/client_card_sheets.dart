@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 import 'client_card_ui.dart';
@@ -130,121 +132,13 @@ class SubscriptionPackageTile extends StatelessWidget {
   }
 }
 
-/// Collected values from [showScheduleTrialDialog].
-typedef TrialLessonInput = ({
-  String teacherId,
-  String? roomId,
-  DateTime scheduledAt,
-});
-
-/// «Пробное занятие» dialog (teacher/room/date/time picker). [teachers] must be
-/// non-empty (the caller guards). Returns the chosen slot, or `null` on cancel.
-Future<TrialLessonInput?> showScheduleTrialDialog(
-  BuildContext context, {
-  required List<Map<String, dynamic>> teachers,
-  required List<Map<String, dynamic>> rooms,
-}) async {
-  String? selectedTeacher = teachers.first['id']?.toString();
-  String? selectedRoom = rooms.isNotEmpty ? rooms.first['id']?.toString() : null;
-  DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
-  TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
-
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setLocalState) => AlertDialog(
-        title: const Text('Пробное занятие'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: selectedTeacher,
-              decoration: const InputDecoration(labelText: 'Учитель'),
-              items: teachers
-                  .map(
-                    (t) => DropdownMenuItem(
-                      value: t['id'].toString(),
-                      child: Text('${t['first_name']} ${t['last_name']}'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setLocalState(() => selectedTeacher = v),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: selectedRoom,
-              decoration: const InputDecoration(labelText: 'Кабинет'),
-              items: rooms
-                  .map(
-                    (r) => DropdownMenuItem(
-                      value: r['id'].toString(),
-                      child: Text(r['name']),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setLocalState(() => selectedRoom = v),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              title: Text(
-                'Дата: ${DateFormat('dd.MM.yyyy').format(selectedDate)}',
-              ),
-              trailing: const Icon(Icons.calendar_today_rounded),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: ctx,
-                  initialDate: selectedDate,
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 90)),
-                );
-                if (picked != null) {
-                  setLocalState(() => selectedDate = picked);
-                }
-              },
-            ),
-            ListTile(
-              title: Text('Время: ${selectedTime.format(ctx)}'),
-              trailing: const Icon(Icons.access_time_rounded),
-              onTap: () async {
-                final picked = await showTimePicker(
-                  context: ctx,
-                  initialTime: selectedTime,
-                );
-                if (picked != null) {
-                  setLocalState(() => selectedTime = picked);
-                }
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Назначить'),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  if (confirmed != true || selectedTeacher == null) return null;
-  final scheduledAt = DateTime(
-    selectedDate.year,
-    selectedDate.month,
-    selectedDate.day,
-    selectedTime.hour,
-    selectedTime.minute,
-  );
-  return (
-    teacherId: selectedTeacher!,
-    roomId: selectedRoom,
-    scheduledAt: scheduledAt,
-  );
-}
+// `showScheduleTrialDialog` удалён (✔ владелец 17.07: «при назначении пробного
+// это просто готовый пресет под создание нового занятия — можно не дублировать
+// функционал, а переиспользовать создание нового занятия»). Это была отдельная
+// форма на четыре поля: без филиала, длительности, ставки и проверки конфликта
+// аудитории. Аудитории в ней не фильтровались по филиалу ровно потому, что
+// филиала в ней не было. Теперь пробное открывает
+// `CreateLessonDialog.showTrialPreset` — см. trial_lesson_booking.dart.
 
 /// Collected values from [showAddTaskSheet].
 typedef TaskInput = ({String title, DateTime? due, String? assignedTo});
@@ -274,7 +168,7 @@ Future<TaskInput?> showAddTaskSheet(
         builder: (context, setSheetState) {
           final dueLabel = due == null
               ? 'Без срока'
-              : DateFormat('dd.MM.yyyy', 'ru').format(due!);
+              : DateFormat('dd.MM.yyyy HH:mm', 'ru').format(due!);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -308,7 +202,29 @@ Future<TaskInput?> showAddTaskSheet(
                     firstDate: DateTime(2020),
                     lastDate: DateTime(2100),
                   );
-                  if (picked != null) setSheetState(() => due = picked);
+                  if (picked == null || !context.mounted) return;
+                  // Time as well as date: the deadline drives the -1h/-10m and
+                  // overdue reminders, and a midnight due date fires them in
+                  // the middle of the night.
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: due == null
+                        ? const TimeOfDay(hour: 12, minute: 0)
+                        : TimeOfDay.fromDateTime(due!),
+                  );
+                  final fallback = due == null
+                      ? const TimeOfDay(hour: 12, minute: 0)
+                      : TimeOfDay.fromDateTime(due!);
+                  final at = time ?? fallback;
+                  setSheetState(
+                    () => due = DateTime(
+                      picked.year,
+                      picked.month,
+                      picked.day,
+                      at.hour,
+                      at.minute,
+                    ),
+                  );
                 },
                 child: InputDecorator(
                   decoration: clientCardInputDecoration(cs, isDense: true),
@@ -342,30 +258,22 @@ Future<TaskInput?> showAddTaskSheet(
               ),
               if (staff.isNotEmpty) ...[
                 const SizedBox(height: AppSpace.md),
-                DropdownButtonFormField<String?>(
-                  initialValue: assignedTo,
-                  isExpanded: true,
-                  decoration: clientCardInputDecoration(
-                    cs,
-                    label: 'Исполнитель',
-                    isDense: true,
-                  ),
+                SearchablePickerField(
+                  label: 'Исполнитель',
+                  placeholder: 'Не назначен',
+                  selectedId: assignedTo,
                   items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Не назначен'),
-                    ),
                     for (final s in staff)
                       if (s['profile_user_id'] != null)
-                        DropdownMenuItem<String?>(
-                          value: s['profile_user_id'].toString(),
-                          child: Text(
-                            '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
-                                .trim(),
-                          ),
+                        SearchableSelectItem(
+                          id: s['profile_user_id'].toString(),
+                          label:
+                              '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                  .trim(),
                         ),
                   ],
-                  onChanged: (v) => setSheetState(() => assignedTo = v),
+                  onSelected: (item) =>
+                      setSheetState(() => assignedTo = item?.id),
                 ),
               ],
             ],

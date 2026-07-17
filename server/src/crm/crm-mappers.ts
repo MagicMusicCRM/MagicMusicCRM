@@ -26,6 +26,12 @@ export interface LessonRow {
   is_trial: boolean;
   notes: string | null;
   teacher_rate?: string | number | null;
+  applied_teacher_rate?: string | number | null;
+  /**
+   * Сумма платежей, привязанных к этому занятию. `null` — платежа за этот день
+   * нет (или роль его не видит), и это НЕ то же самое, что «оплачено 0».
+   */
+  paid_amount?: string | number | null;
   student_user_id: string | null;
   teacher_user_id: string | null;
   student_name: string | null;
@@ -60,6 +66,143 @@ export interface TaskRow {
   created_at: Date | string;
 }
 
+export interface TaskHistoryRow {
+  id: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_at: Date | string;
+  source: string;
+  changed_by: string | null;
+  author_profile_id: string | null;
+  author_first_name: string | null;
+  author_last_name: string | null;
+  old_user_id: string | null;
+  old_user_first_name: string | null;
+  old_user_last_name: string | null;
+  new_user_id: string | null;
+  new_user_first_name: string | null;
+  new_user_last_name: string | null;
+  // Present only in the cross-task supervisor feed, which joins app.tasks.
+  task_id?: string;
+  task_title?: string | null;
+  task_entity_type?: string | null;
+  task_entity_id?: string | null;
+}
+
+/** One field-level change, ready to be inserted into app.task_history. */
+export interface TaskChange {
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  oldUserId?: string | null;
+  newUserId?: string | null;
+}
+
+const toIsoOrNull = (value: Date | string | null): string | null => {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+};
+
+/**
+ * Field-level diff between a task before and after an update, in the shape the
+ * AmoCRM-style feed renders. Only actually-changed fields produce a row: the
+ * PATCH is a coalesce-update, so an unmentioned field arrives as null and must
+ * not be logged as «изменено на пусто».
+ */
+export function diffTaskRows(before: TaskRow, after: TaskRow): TaskChange[] {
+  const changes: TaskChange[] = [];
+
+  if (before.status !== after.status) {
+    changes.push({
+      field: "status",
+      oldValue: before.status,
+      newValue: after.status,
+    });
+  }
+
+  // Compared as instants, not strings: the same moment can arrive as a Date
+  // from one driver path and an ISO string from another, and a string compare
+  // would log a phantom reschedule.
+  const dueBefore = toIsoOrNull(before.due_at);
+  const dueAfter = toIsoOrNull(after.due_at);
+  if (dueBefore !== dueAfter) {
+    changes.push({ field: "due_at", oldValue: dueBefore, newValue: dueAfter });
+  }
+
+  if (before.assigned_to !== after.assigned_to) {
+    changes.push({
+      field: "assigned_to",
+      // Names are NOT frozen here — the feed joins profiles at read time, so a
+      // later rename reads correctly in old events.
+      oldValue: null,
+      newValue: null,
+      oldUserId: before.assigned_to,
+      newUserId: after.assigned_to,
+    });
+  }
+
+  if (before.title !== after.title) {
+    changes.push({
+      field: "title",
+      oldValue: before.title,
+      newValue: after.title,
+    });
+  }
+
+  if ((before.description ?? null) !== (after.description ?? null)) {
+    changes.push({
+      field: "description",
+      oldValue: before.description ?? null,
+      newValue: after.description ?? null,
+    });
+  }
+
+  if (
+    before.entity_type !== after.entity_type ||
+    before.entity_id !== after.entity_id
+  ) {
+    changes.push({
+      field: "entity",
+      oldValue: `${before.entity_type}:${before.entity_id}`,
+      newValue: `${after.entity_type}:${after.entity_id}`,
+    });
+  }
+
+  return changes;
+}
+
+export function toTaskHistoryDto(row: TaskHistoryRow) {
+  const name = (first: string | null, last: string | null) =>
+    `${first ?? ""} ${last ?? ""}`.trim() || null;
+  const entry: Record<string, unknown> = {
+    id: row.id,
+    field: row.field,
+    oldValue: row.old_value,
+    newValue: row.new_value,
+    changedAt:
+      row.changed_at instanceof Date
+        ? row.changed_at.toISOString()
+        : row.changed_at,
+    source: row.source,
+    changedBy: row.changed_by,
+    authorProfileId: row.author_profile_id,
+    authorName: name(row.author_first_name, row.author_last_name),
+    oldUserId: row.old_user_id,
+    oldUserName: name(row.old_user_first_name, row.old_user_last_name),
+    newUserId: row.new_user_id,
+    newUserName: name(row.new_user_first_name, row.new_user_last_name),
+  };
+  if (row.task_id) {
+    entry.taskId = row.task_id;
+    entry.taskTitle = row.task_title ?? null;
+    entry.taskEntityType = row.task_entity_type ?? null;
+    entry.taskEntityId = row.task_entity_id ?? null;
+  }
+  return entry;
+}
+
 export interface TimelineRow {
   id: string;
   type: string;
@@ -87,6 +230,8 @@ export interface PaymentRow {
   notes: string | null;
   created_by: string | null;
   created_at: Date | string;
+  /** Занятие, за которое пришёл платёж. NULL — платёж не разнесён по занятиям. */
+  lesson_id?: string | null;
 }
 
 export function toLessonDto(row: LessonRow) {
@@ -107,6 +252,20 @@ export function toLessonDto(row: LessonRow) {
       row.teacher_rate === null || row.teacher_rate === undefined
         ? null
         : Number(row.teacher_rate),
+    // The rate actually paid for this lesson (lesson → group → history → 0),
+    // as opposed to teacherRate above, which is only the per-lesson override.
+    // null = the caller may not see pay data; see listLessons.
+    appliedTeacherRate:
+      row.applied_teacher_rate === null ||
+      row.applied_teacher_rate === undefined
+        ? null
+        : Number(row.applied_teacher_rate),
+    // «Оплаты по дням»: сколько пришло за этот день. null — платежа за него
+    // нет, и это не «оплачено 0»: привязывать платёж к занятию не обязательно.
+    paidAmount:
+      row.paid_amount === null || row.paid_amount === undefined
+        ? null
+        : Number(row.paid_amount),
     studentName: row.student_name || null,
     teacherName: row.teacher_name || null,
     branchName: row.branch_name || null,
@@ -157,14 +316,140 @@ export function toTaskDto(row: TaskRow) {
   return task;
 }
 
+/** One edited field, as stored in audit_events.metadata.changes. */
+export interface FieldChange {
+  field: string;
+  from: string | null;
+  to: string | null;
+}
+
+/**
+ * Fields recorded as "changed" without their values.
+ *
+ * AuditService pipes metadata through redactSensitive, which masks e-mail
+ * values inside strings (152-ФЗ). Storing them anyway would render as
+ * «Почта: [EMAIL] → [EMAIL]» — noise dressed up as an audit trail. So the
+ * change is recorded as a fact and the UI says «Почта изменена».
+ *
+ * Name/phone are NOT here: redactSensitive masks by KEY, and these live under
+ * neutral keys (field/from/to), so their values survive — which is exactly what
+ * the customer asked for («правки полей — телефон, имя, дисциплина»).
+ */
+const VALUELESS_AUDIT_FIELDS = new Set(["email"]);
+
+const toAuditScalar = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") return JSON.stringify(value);
+  const text = String(value);
+  return text.length === 0 ? null : text;
+};
+
+/**
+ * Field-level diff for the client-card history: which fields an edit actually
+ * touched, old → new. Both leads and students are coalesce-updates, so an
+ * unmentioned field arrives as null and must not read as «стёрли значение».
+ *
+ * custom_data is diffed per KEY rather than as a blob: «Уровень: A1 → A2» is
+ * an audit entry, a jsonb dump is not.
+ */
+export function diffEntityFields(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  fields: string[],
+): FieldChange[] {
+  const changes: FieldChange[] = [];
+  for (const field of fields) {
+    const from = toAuditScalar(before[field]);
+    const to = toAuditScalar(after[field]);
+    if (from === to) continue;
+    changes.push(
+      VALUELESS_AUDIT_FIELDS.has(field)
+        ? { field, from: null, to: null }
+        : { field, from, to },
+    );
+  }
+
+  const beforeCustom = (before.custom_data ?? {}) as Record<string, unknown>;
+  const afterCustom = (after.custom_data ?? {}) as Record<string, unknown>;
+  const keys = new Set([
+    ...Object.keys(beforeCustom),
+    ...Object.keys(afterCustom),
+  ]);
+  for (const key of [...keys].sort()) {
+    const from = toAuditScalar(beforeCustom[key]);
+    const to = toAuditScalar(afterCustom[key]);
+    if (from === to) continue;
+    changes.push({ field: `custom_data.${key}`, from, to });
+  }
+  return changes;
+}
+
+/** Russian labels for audited fields; unknown keys fall back to the raw name. */
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  first_name: "Имя",
+  last_name: "Фамилия",
+  phone: "Телефон",
+  email: "Почта",
+  source: "Источник",
+  notes: "Заметки",
+  status_id: "Статус",
+  assigned_to: "Ответственный",
+  branch_id: "Филиал",
+  status: "Статус",
+  "custom_data.birthday": "Дата рождения",
+  "custom_data.gender": "Пол",
+  "custom_data.level": "Уровень",
+  "custom_data.category": "Категория",
+  "custom_data.disciplines": "Дисциплины",
+  "custom_data.adSource": "Рекламный источник",
+  "custom_data.middleName": "Отчество",
+};
+
+const auditFieldLabel = (field: string): string =>
+  AUDIT_FIELD_LABELS[field] ??
+  (field.startsWith("custom_data.") ? field.slice("custom_data.".length) : field);
+
+/**
+ * Turns an audit row into something a human reads. The timeline hands us
+ * metadata as raw JSON text in `body`; rendering that verbatim in the client
+ * card would put `{"changes":[{"field":"phone",...}]}` on screen.
+ */
+function describeAuditRow(row: TimelineRow): { title: string; body: string | null } {
+  const fallbackTitle = row.title;
+  let parsed: unknown = null;
+  try {
+    parsed = row.body ? JSON.parse(row.body) : null;
+  } catch {
+    // Not JSON (or truncated) — leave the row as the raw action name.
+    return { title: fallbackTitle, body: row.body };
+  }
+  const changes = (parsed as { changes?: FieldChange[] } | null)?.changes;
+  if (!Array.isArray(changes) || changes.length === 0) {
+    // An audited action with no diff (created/deleted) — keep the action name,
+    // drop the empty jsonb so it does not render as "{}".
+    return { title: fallbackTitle, body: null };
+  }
+  const lines = changes.map((change) => {
+    const label = auditFieldLabel(change.field);
+    if (change.from === null && change.to === null) return `${label}: изменено`;
+    return `${label}: ${change.from ?? "—"} → ${change.to ?? "—"}`;
+  });
+  return { title: "Правка полей", body: lines.join("\n") };
+}
+
 export function toTimelineDto(row: TimelineRow) {
   const actorName =
     `${row.actor_first_name ?? ""} ${row.actor_last_name ?? ""}`.trim();
+  const { title, body } =
+    row.type === "audit"
+      ? describeAuditRow(row)
+      : { title: row.title, body: row.body };
   return {
     id: row.id,
     type: row.type,
-    title: row.title,
-    body: row.body,
+    title,
+    body,
     status: row.status,
     amount: row.amount === null ? null : Number(row.amount),
     actorUserId: row.actor_user_id,
@@ -188,6 +473,7 @@ export function toPaymentDto(row: PaymentRow) {
     notes: row.notes,
     createdBy: row.created_by,
     createdAt: row.created_at,
+    lessonId: row.lesson_id ?? null,
   };
 }
 

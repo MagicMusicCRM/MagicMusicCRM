@@ -14,6 +14,8 @@ class CreateTeacherDialog extends ConsumerStatefulWidget {
 class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _specializationController = TextEditingController();
   String _canonicalPhone = '';
   bool _saving = false;
 
@@ -21,22 +23,34 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
+    _emailController.dispose();
+    _specializationController.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     final firstName = _firstNameController.text.trim();
-    if (firstName.isEmpty) return;
+    if (firstName.isEmpty) {
+      // Used to return silently, which read as a dead Save button.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Введите имя преподавателя')),
+      );
+      return;
+    }
 
     setState(() => _saving = true);
 
     try {
+      final email = _emailController.text.trim();
+      final specialization = _specializationController.text.trim();
       await ref
           .read(magicCrmServiceProvider)
           .createTeacher(
             firstName: firstName,
             lastName: _lastNameController.text,
             phone: _canonicalPhone,
+            email: email.isEmpty ? null : email,
+            specialization: specialization.isEmpty ? null : specialization,
           );
 
       if (mounted) Navigator.pop(context, true);
@@ -56,23 +70,37 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
     return AlertDialog(
       title: const Text('Новый преподаватель'),
       backgroundColor: Theme.of(context).colorScheme.surface,
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _firstNameController,
-            decoration: const InputDecoration(labelText: 'Имя *'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _lastNameController,
-            decoration: const InputDecoration(labelText: 'Фамилия'),
-          ),
-          const SizedBox(height: 12),
-          RuPhoneField(
-            onCanonicalChanged: (c) => _canonicalPhone = c,
-          ),
-        ],
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _firstNameController,
+              decoration: const InputDecoration(labelText: 'Имя *'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _lastNameController,
+              decoration: const InputDecoration(labelText: 'Фамилия'),
+            ),
+            const SizedBox(height: 12),
+            RuPhoneField(onCanonicalChanged: (c) => _canonicalPhone = c),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _specializationController,
+              decoration: const InputDecoration(
+                labelText: 'Специализация',
+                hintText: 'Например: Гитара, Вокал',
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(

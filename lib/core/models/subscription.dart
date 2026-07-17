@@ -36,6 +36,15 @@ class Subscription {
   /// Raw so the remainder card's `price is num` guard is preserved.
   Object? get packagePriceRaw => _m['package_price'];
 
+  /// «Оплачено» — сколько денег пришло на личный счёт за этот абонемент.
+  ///
+  /// ✔ Решение владельца 16.07: оплату и переплату по абонементу считаем по
+  /// личному счёту. Абонемент — бизнес-логика, которая кладёт свою стоимость
+  /// на счёт клиента (`issueSubscription`), поэтому «Оплачено» это и есть тот
+  /// приход, а не отдельная сущность. `null` — приход не найден (старые
+  /// абонементы без `payment_id`), это НЕ то же самое, что «оплачено 0».
+  Object? get paidAmountRaw => _m['paid_amount'];
+
   String? get createdAt => _m['created_at']?.toString();
   String? get updatedAt => _m['updated_at']?.toString();
 }

@@ -1,70 +1,80 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/convert_lead_dialog.dart';
 
-class _FakeCrm implements MagicCrmService {
-  Map<String, dynamic>? createStudentArgs;
+/// Faked at the API-client seam, NOT by implementing MagicCrmService.
+///
+/// MagicCrmService's methods live on extensions (`extension MagicCrmOrg on
+/// MagicCrmService` and friends), and an extension call resolves against the
+/// STATIC type — so an `implements MagicCrmService` fake is never consulted:
+/// the real extension body runs and reaches for the client. That is why these
+/// tests were failing while looking perfectly reasonable.
+class _FakeApiClient extends MagicApiClient {
+  _FakeApiClient()
+    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+
+  Map<String, dynamic>? createStudentBody;
 
   @override
-  Future<List<Map<String, dynamic>>> listBranches({int limit = 100}) async => [
-        {'id': 'branch-a', 'name': 'Центр'},
-        {'id': 'branch-b', 'name': 'Восток'},
-      ];
-
-  @override
-  Future<List<Map<String, dynamic>>> listBranchDisciplines(
-    String branchId,
-  ) async =>
-      branchId == 'branch-a'
-          ? [
-              {
-                'id': 'bd-a',
-                'discipline_id': 'd1',
-                'name': 'Вокал',
-                'sort_order': 0,
-              },
-            ]
-          : [
-              {
-                'id': 'bd-b',
-                'discipline_id': 'd2',
-                'name': 'Гитара',
-                'sort_order': 0,
-              },
-            ];
-
-  @override
-  Future<Map<String, dynamic>> createStudent({
-    required String firstName,
-    String? lastName,
-    String? phone,
-    String? email,
-    String status = 'active',
-    String? leadId,
-    Map<String, dynamic>? customDataPatch,
+  Future<T> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
   }) async {
-    createStudentArgs = {
-      'firstName': firstName,
-      'leadId': leadId,
-      'customDataPatch': customDataPatch,
-    };
-    return {'id': 'student-a', 'lead_id': leadId};
+    if (path == '/crm/branches') {
+      return <String, dynamic>{
+        'items': [
+          {'id': 'branch-a', 'name': 'Центр'},
+          {'id': 'branch-b', 'name': 'Восток'},
+        ],
+      } as T;
+    }
+    if (path == '/crm/branches/branch-a/disciplines') {
+      return <String, dynamic>{
+        'items': [
+          {'id': 'bd-a', 'disciplineId': 'd1', 'name': 'Вокал', 'sortOrder': 0},
+        ],
+      } as T;
+    }
+    if (path == '/crm/branches/branch-b/disciplines') {
+      return <String, dynamic>{
+        'items': [
+          {'id': 'bd-b', 'disciplineId': 'd2', 'name': 'Гитара', 'sortOrder': 0},
+        ],
+      } as T;
+    }
+    return <String, dynamic>{'items': <dynamic>[]} as T;
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError(invocation.memberName.toString());
+  Future<T> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/crm/students') {
+      createStudentBody = data as Map<String, dynamic>?;
+      return <String, dynamic>{
+        'id': 'student-a',
+        'leadId': createStudentBody?['leadId'],
+      } as T;
+    }
+    return <String, dynamic>{} as T;
+  }
 }
 
 void main() {
   testWidgets('picks branch + discipline and converts', (tester) async {
-    final fake = _FakeCrm();
+    final fake = _FakeApiClient();
     Map<String, dynamic>? result;
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [magicCrmServiceProvider.overrideWithValue(fake)],
+        overrides: [magicApiClientProvider.overrideWithValue(fake)],
         child: MaterialApp(
           home: Builder(
             builder: (context) => Scaffold(
@@ -102,21 +112,21 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Создать ученика'));
     await tester.pumpAndSettle();
 
-    expect(fake.createStudentArgs!['leadId'], 'lead-a');
+    expect(fake.createStudentBody!['leadId'], 'lead-a');
     final patch =
-        fake.createStudentArgs!['customDataPatch'] as Map<String, dynamic>;
+        fake.createStudentBody!['customDataPatch'] as Map<String, dynamic>;
     expect(patch['branchId'], 'branch-a');
     expect(patch['discipline'], 'Вокал');
     expect(result!['id'], 'student-a');
   });
 
   testWidgets('discipline reloads when branch changes', (tester) async {
-    final fake = _FakeCrm();
+    final fake = _FakeApiClient();
     int disciplineCallCount = 0;
     // Wrap fake to count discipline calls
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [magicCrmServiceProvider.overrideWithValue(fake)],
+        overrides: [magicApiClientProvider.overrideWithValue(fake)],
         child: MaterialApp(
           home: Builder(
             builder: (context) => Scaffold(

@@ -56,6 +56,41 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
     };
   }
 
+  /// «К занятию 11 июл» — метка комментария, оставленного к конкретному уроку.
+  ///
+  /// Дата занятия, а не комментария: они совпадают у импортированных (HolliHop
+  /// времени написания не хранит), но разойдутся у тех, что сотрудник напишет
+  /// в приложении, — и тогда важна именно дата занятия, про которое речь.
+  Widget _lessonBadge(String lessonAt, ColorScheme cs) {
+    final dt = DateTime.tryParse(lessonAt)?.toLocal();
+    final label = dt != null
+        ? 'К занятию ${DateFormat('d MMM', 'ru').format(dt)}'
+        : 'К занятию';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.event_note_rounded, size: 11, color: cs.onSurfaceVariant),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _kindBadge(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -87,6 +122,11 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
           final rows = await crm.listComments(
             entityType: r.entityType,
             entityId: r.entityId,
+            // Заказчик просил видеть в этой же ленте и комментарии админов к
+            // конкретным занятиям клиента. Они живут на занятии (у группового
+            // — один на всех), поэтому бэк подмешивает их сюда сам, одним
+            // запросом. У лида занятий нет — просить нечего.
+            includeLessonComments: r.entityType == 'student',
           );
           return rows.map((c) => {...c, '_origin': r.entityType}).toList();
         } catch (_) {
@@ -246,6 +286,13 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                               const SizedBox(width: 6),
                               ClientOriginChip(entityType: c.origin!),
                             ],
+                            // Комментарий к конкретному занятию — не к клиенту
+                            // вообще. Без этой пометки «миши не будет» в ленте
+                            // непонятно к чему: заказчик и просил различать.
+                            if (c.isAboutLesson) ...[
+                              const SizedBox(width: 6),
+                              _lessonBadge(c.lessonAt!, cs),
+                            ],
                           ],
                         ),
                       ),
@@ -282,10 +329,21 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+
+  /// Мелкая приписка под значением — провенанс («из HolliHop») там, где важно
+  /// отличать настоящие данные от подставленных приложением.
+  final String? hint;
+
+  /// Цвет приписки. Нужен там, где она несёт смысл, а не пояснение: «Долг»
+  /// красным, «Переплата» зелёным — как на эталонной карточке.
+  final Color? hintColor;
+
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
+    this.hint,
+    this.hintColor,
   });
 
   @override
@@ -319,6 +377,19 @@ class _InfoRow extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                if (hint != null)
+                  Text(
+                    hint!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color:
+                          hintColor ??
+                          Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: hintColor == null
+                          ? FontWeight.normal
+                          : FontWeight.w700,
+                    ),
+                  ),
               ],
             ),
           ),

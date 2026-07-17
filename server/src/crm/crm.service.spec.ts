@@ -67,6 +67,8 @@ describe("CrmService", () => {
     };
     const timeline = {
       listComments: jest.fn().mockResolvedValue({ items: [] }),
+      // Field-edit audit for the card history; empty for non-staff readers.
+      listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
     };
 
     const service = new CrmService(
@@ -141,6 +143,8 @@ describe("CrmService", () => {
     };
     const timeline = {
       listComments: jest.fn().mockResolvedValue({ items: [] }),
+      // Field-edit audit for the card history; empty for non-staff readers.
+      listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
     };
 
     const service = new CrmService(

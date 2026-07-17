@@ -335,9 +335,16 @@ extension _ClientCardTabsB on _ClientCardState {
                 final dt = DateTime.tryParse(
                   r['occurred_at']?.toString() ?? '',
                 )?.toLocal();
+                final isVoid = r['status']?.toString() == 'void';
                 final meta = [
                   if (dt != null) DateFormat('dd.MM.yy', 'ru').format(dt),
+                  // Колонки из эталона HolliHop: филиал, способ, № счёта,
+                  // статус, кто добавил.
+                  r['branch_name'],
                   r['method'],
+                  if ((r['invoice_number']?.toString() ?? '').isNotEmpty)
+                    '№ ${r['invoice_number']}',
+                  _ledgerStatusLabel(r['status']),
                   r['author_name'],
                 ].where((v) => v != null && '$v'.isNotEmpty).join(' · ');
                 return Padding(
@@ -352,7 +359,14 @@ extension _ClientCardTabsB on _ClientCardState {
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,
-                            color: amount > 0 ? AppTheme.success : cs.error,
+                            // Отменённая строка видна, но перечёркнута: она уже
+                            // не деньги, а прятать её нельзя.
+                            decoration: isVoid
+                                ? TextDecoration.lineThrough
+                                : null,
+                            color: isVoid
+                                ? cs.onSurfaceVariant
+                                : (amount > 0 ? AppTheme.success : cs.error),
                           ),
                         ),
                       ),
@@ -380,6 +394,14 @@ extension _ClientCardTabsB on _ClientCardState {
                           ],
                         ),
                       ),
+                      // Действия по строке — только у операций, которые завёл
+                      // человек. Платёж и списание за занятие правят там, где
+                      // они возникли, а не тут.
+                      if (r['editable'] == true && !isVoid)
+                        _LedgerRowActions(
+                          onEdit: () => _editAdjustment(r),
+                          onVoid: () => _voidAdjustment(r),
+                        ),
                     ],
                   ),
                 );
@@ -388,6 +410,155 @@ extension _ClientCardTabsB on _ClientCardState {
         );
       },
     );
+  }
+
+  /// Правка записи личного счёта. Сумма и знак пересобираются сервером от вида
+  /// операции, поэтому здесь только величина — «возврат» останется расходом.
+  Future<void> _editAdjustment(Map<String, dynamic> row) async {
+    // Диалог показывает величину без знака: знак — это вид операции, и
+    // пересобирает его сервер.
+    final rawAmount = num.tryParse(row['amount']?.toString() ?? '') ?? 0;
+    final amountCtrl = TextEditingController(
+      text: rawAmount.abs().round().toString(),
+    );
+    final descriptionCtrl = TextEditingController(
+      text: row['description']?.toString() ?? '',
+    );
+    final invoiceCtrl = TextEditingController(
+      text: row['invoice_number']?.toString() ?? '',
+    );
+    var status = row['status']?.toString() == 'pending' ? 'pending' : 'paid';
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Правка операции'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Сумма, ₽'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: descriptionCtrl,
+                  decoration: const InputDecoration(labelText: 'Комментарий'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: invoiceCtrl,
+                  decoration: const InputDecoration(labelText: '№ Счёта'),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: status,
+                  decoration: const InputDecoration(labelText: 'Статус'),
+                  items: const [
+                    DropdownMenuItem(value: 'paid', child: Text('Оплачен')),
+                    DropdownMenuItem(
+                      value: 'pending',
+                      child: Text('Не оплачен'),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => status = value ?? 'paid'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Сохранить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final amount = num.tryParse(amountCtrl.text.trim().replaceAll(',', '.'));
+    amountCtrl.dispose();
+    final description = descriptionCtrl.text;
+    descriptionCtrl.dispose();
+    final invoice = invoiceCtrl.text;
+    invoiceCtrl.dispose();
+    if (saved != true || !mounted) return;
+
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateAdjustment(
+            studentId: _studentId,
+            adjustmentId: row['id'].toString(),
+            amount: amount,
+            description: description,
+            invoiceNumber: invoice,
+            status: status,
+          );
+      if (!mounted) return;
+      _refreshLedger();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Не удалось сохранить: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
+  }
+
+  /// Отмена операции. Спрашиваем подтверждение: это деньги на счёте клиента.
+  Future<void> _voidAdjustment(Map<String, dynamic> row) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Отменить операцию?'),
+        content: const Text(
+          'Операция перестанет учитываться в балансе, но останется в истории '
+          'с пометкой об отмене.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Нет'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Отменить операцию'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .voidAdjustment(
+            studentId: _studentId,
+            adjustmentId: row['id'].toString(),
+          );
+      if (!mounted) return;
+      _refreshLedger();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Не удалось отменить: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
   }
 
   void _refreshLedger() {
@@ -500,51 +671,61 @@ extension _ClientCardTabsB on _ClientCardState {
     }
   }
 
-  /// Возраст «N лет» из custom-поля birthday (ISO или дд.мм.гггг).
+  /// Возраст «N лет». Считает **сервер** (`age.ts`): дата рождения, если она
+  /// есть, иначе вписанное руками число. Здесь только подпись — правило одно
+  /// для лида и ученика, и две копии разъехались бы.
   String? _ageLabel() {
-    Object? raw;
-    if (_mode.hasStudentHalf && _student != null) {
-      raw = _customDataForEntity('students')['birthday'];
+    Map<String, dynamic>? source;
+    if (_mode.hasStudentHalf && _student != null && _student!['age'] != null) {
+      source = _student;
     }
-    raw ??= _customDataForEntity('leads')['birthday'];
-    final s = raw?.toString().trim() ?? '';
-    if (s.isEmpty) return null;
-    var birth = DateTime.tryParse(s);
-    if (birth == null) {
-      final m = RegExp(r'^(\d{2})\.(\d{2})\.(\d{4})').firstMatch(s);
-      if (m == null) return null;
-      birth = DateTime(
-        int.parse(m.group(3)!),
-        int.parse(m.group(2)!),
-        int.parse(m.group(1)!),
-      );
-    }
-    final now = DateTime.now();
-    var years = now.year - birth.year;
-    if (now.month < birth.month ||
-        (now.month == birth.month && now.day < birth.day)) {
-      years--;
-    }
-    if (years < 0 || years > 120) return null;
-    final mod100 = years % 100;
-    final mod10 = years % 10;
-    final word = (mod100 >= 11 && mod100 <= 14)
-        ? 'лет'
-        : mod10 == 1
-        ? 'год'
-        : (mod10 >= 2 && mod10 <= 4)
-        ? 'года'
-        : 'лет';
-    return '$years $word';
+    source ??= _leadData['age'] != null ? _leadData : null;
+    if (source == null) return null;
+
+    final years = (source['age'] as num?)?.toInt();
+    if (years == null) return null;
+    // Младенцу «0 лет» — не ответ. Сервер отдаёт месяцы только для
+    // посчитанного из даты рождения возраста, у вписанного руками их нет.
+    final months = (source['age_months'] as num?)?.toInt();
+    if (years == 0 && months != null) return _monthsLabel(months);
+    return '$years ${_pluralRu(years, 'год', 'года', 'лет')}';
   }
 
-  String? _leadCreatedAtLabel() {
-    final dt = DateTime.tryParse(
-      _leadData['created_at']?.toString() ?? '',
-    )?.toLocal();
+  String _monthsLabel(int months) =>
+      '$months ${_pluralRu(months, 'месяц', 'месяца', 'месяцев')}';
+
+  /// Русское склонение по числу: 1 год / 2 года / 5 лет, с оговоркой на 11–14.
+  String _pluralRu(int n, String one, String few, String many) {
+    final mod100 = n % 100;
+    final mod10 = n % 10;
+    if (mod100 >= 11 && mod100 <= 14) return many;
+    if (mod10 == 1) return one;
+    if (mod10 >= 2 && mod10 <= 4) return few;
+    return many;
+  }
+
+  /// Дата обращения. Берём разрешённое сервером `appeal_at` (исходная дата из
+  /// HolliHop → иначе момент, когда запись появилась в приложении), а на
+  /// `created_at` откатываемся только ради старых ответов без этого поля.
+  String? _appealAtLabel(Map<String, dynamic> data) {
+    final raw = data['appeal_at'] ?? data['created_at'];
+    final dt = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
     if (dt == null) return null;
     return DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt);
   }
+
+  /// Пояснение к дате: важно отличать настоящую дату из HolliHop от той, что
+  /// приложение поставило само, — иначе «01.03.2023» и «сегодня» выглядят
+  /// одинаково достоверно.
+  String? _appealAtSourceLabel(Map<String, dynamic> data) {
+    return switch (data['appeal_at_source']?.toString()) {
+      'hollihop' => 'из HolliHop',
+      'app' => 'дата появления в приложении',
+      _ => null,
+    };
+  }
+
+  String? _leadCreatedAtLabel() => _appealAtLabel(_leadData);
 
   Color _studentBalanceColor(ColorScheme cs) {
     final b = _studentBalanceNum;

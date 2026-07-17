@@ -191,4 +191,39 @@ describe('MessengerPolicy', () => {
       ).toThrow(ForbiddenException);
     });
   });
+
+  describe('чёрный список = бан на отправку', () => {
+    // ✔ Решение владельца 17.07: «этот клиент не может писать далее в чатах
+    // школы и админам — по сути бан».
+    it('forbids a blacklisted client from sending', async () => {
+      query.mockResolvedValue({ rows: [{ blacklisted: true }] });
+      await expect(
+        policy.assertNotBlacklisted({ userId: 'client-a', role: 'client' })
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('lets an ordinary client send', async () => {
+      query.mockResolvedValue({ rows: [{ blacklisted: false }] });
+      await expect(
+        policy.assertNotBlacklisted({ userId: 'client-a', role: 'client' })
+      ).resolves.toBeUndefined();
+    });
+
+    it('does not ask about staff at all', async () => {
+      // Чёрный список — свойство клиента. Отметка в карточке педагога — это
+      // другое понятие и другой процесс; спрашивать про неё здесь значило бы
+      // молча их склеить.
+      await expect(
+        policy.assertNotBlacklisted({ userId: 'manager-a', role: 'manager' })
+      ).resolves.toBeUndefined();
+      expect(query).not.toHaveBeenCalled();
+    });
+
+    it('tells the banned client why, instead of failing silently', async () => {
+      query.mockResolvedValue({ rows: [{ blacklisted: true }] });
+      await expect(
+        policy.assertNotBlacklisted({ userId: 'client-a', role: 'client' })
+      ).rejects.toThrow(/чёрном списке/i);
+    });
+  });
 });

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 
@@ -211,27 +212,19 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
                         },
                       ),
                       const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('room-$_branchId-$_roomId'),
-                        initialValue: _roomId,
-                        decoration: const InputDecoration(
-                          labelText: 'Аудитория',
-                        ),
+                      SearchablePickerField(
+                        label: 'Аудитория',
+                        placeholder: 'Без аудитории',
+                        selectedId: _roomId,
                         items: [
-                          const DropdownMenuItem<String>(
-                            value: null,
-                            child: Text('Без аудитории'),
-                          ),
-                          ...visibleRooms.map(
-                            (room) => DropdownMenuItem<String>(
-                              value: room['id']?.toString(),
-                              child: Text(
-                                room['name']?.toString() ?? 'Аудитория',
-                              ),
+                          for (final room in visibleRooms)
+                            SearchableSelectItem(
+                              id: room['id'].toString(),
+                              label: room['name']?.toString() ?? 'Аудитория',
                             ),
-                          ),
                         ],
-                        onChanged: (value) => setState(() => _roomId = value),
+                        onSelected: (item) =>
+                            setState(() => _roomId = item?.id),
                       ),
                       const SizedBox(height: 12),
                       TextFormField(

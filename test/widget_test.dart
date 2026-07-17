@@ -28,7 +28,11 @@ void main() {
       final main = readProjectFile('lib/main.dart');
       final pubspec = readProjectFile('pubspec.yaml');
 
-      expect(env, contains('https://api.phantom-net.ru/api'));
+      // Domain moved 2026-07-10: phantom-net.ru was lost, magicmusiccrm.ru is
+      // the permanent one (see the note in env.dart). The guard is "the app
+      // points at OUR backend by default", so it tracks the current domain.
+      expect(env, contains('https://api.magicmusiccrm.ru/api'));
+      expect(env, isNot(contains("defaultValue: 'https://api.phantom-net.ru")));
       expect(pubspec, isNot(contains('supabase_flutter:')));
       expect(pubspec, isNot(contains('google_sign_in:')));
       expect(pubspec, isNot(contains('app_links:')));

@@ -37,6 +37,11 @@ migrate_working_dir/
 /server/dist/
 /server/coverage/
 /server/.env
+# Любые производные от .env — бэкапы, .local, .prod. Правило `/server/.env`
+# матчит только точное имя, поэтому `server/.env.bak-123` спокойно попадал в
+# `git status` со всеми секретами внутри.
+/server/.env.*
+!/server/.env.example
 /server/.migration.env
 /server/exports/
 /server/storage/

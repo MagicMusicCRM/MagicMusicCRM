@@ -120,17 +120,37 @@ export class AttendanceService {
         : "absent";
       const chargeShare =
         kind === "partially_paid" ? (item.chargeShare ?? 0.5) : 1;
+      // subscription_id pins WHICH subscription pays. reconcileSubscriptionUsage
+      // reads it back: set → charge exactly that one (this is how a client pays
+      // for someone outside their family); null → it falls back to the
+      // student's own subscription, then a family member's.
+      if (item.subscriptionId) {
+        const exists = await this.database.query<{ id: string }>(
+          `select id from app.subscriptions where id = $1 and deleted_at is null`,
+          [item.subscriptionId],
+        );
+        if (!exists.rows[0]) {
+          throw new NotFoundException("Абонемент не найден.");
+        }
+      }
       await this.database.query(
         `
           insert into app.lesson_participation (
-            lesson_id, student_id, status, pass_reason, attendance_kind, charge_share
+            lesson_id, student_id, status, pass_reason, attendance_kind,
+            charge_share, subscription_id
           )
-          values ($1, $2, $3, $4, $5, $6)
+          values ($1, $2, $3, $4, $5, $6, $7)
           on conflict (lesson_id, student_id)
           do update set status = excluded.status,
             pass_reason = excluded.pass_reason,
             attendance_kind = excluded.attendance_kind,
-            charge_share = excluded.charge_share
+            charge_share = excluded.charge_share,
+            -- Keep an existing pin when the caller does not send one: an
+            -- attendance edit must not silently move the charge to another
+            -- subscription.
+            subscription_id = coalesce(
+              excluded.subscription_id, app.lesson_participation.subscription_id
+            )
         `,
         [
           lessonId,
@@ -139,6 +159,7 @@ export class AttendanceService {
           item.passReason?.trim() || null,
           kind,
           chargeShare,
+          item.subscriptionId ?? null,
         ],
       );
     }

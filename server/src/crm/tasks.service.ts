@@ -11,13 +11,17 @@ import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { TaskBoardQuery } from "./dto/task-board.query";
+import { TaskHistoryQuery } from "./dto/task-history.query";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
 import { branchIdExpr } from "./branch-scope";
 import { CrmPolicy } from "./crm.policy";
 import {
+  TaskHistoryRow,
   TaskRow,
+  diffTaskRows,
   formatLessonTimeMoscow,
   toTaskDto,
+  toTaskHistoryDto,
 } from "./crm-mappers";
 
 /**
@@ -215,28 +219,45 @@ export class TasksService {
         "Тип, объект и название задачи обязательны.",
       );
     }
-    const result = await this.database.query<TaskRow>(
-      `
-        insert into app.tasks (
-          entity_type, entity_id, assigned_to, title, description,
-          status, due_at, created_by
-        )
-        values ($1::app.crm_entity_type, $2, $3, $4, $5, coalesce($6, 'open'), $7, $8)
-        returning id, entity_type, entity_id, assigned_to, title, description,
-          status, due_at, created_by, created_at
-      `,
-      [
-        dto.entityType,
-        dto.entityId,
-        dto.assignedTo ?? null,
-        dto.title.trim(),
-        dto.description?.trim() || null,
-        dto.status ?? null,
-        dto.dueAt ?? null,
-        actor.userId,
-      ],
-    );
-    const task = result.rows[0];
+    // Read out here: the guard above narrows dto.title, but that narrowing does
+    // not survive into the transaction callback.
+    const title = dto.title.trim();
+    const task = await this.database.transaction(async (client) => {
+      const result = await client.query<TaskRow>(
+        `
+          insert into app.tasks (
+            entity_type, entity_id, assigned_to, title, description,
+            status, due_at, created_by
+          )
+          values ($1::app.crm_entity_type, $2, $3, $4, $5, coalesce($6, 'open'), $7, $8)
+          returning id, entity_type, entity_id, assigned_to, title, description,
+            status, due_at, created_by, created_at
+        `,
+        [
+          dto.entityType,
+          dto.entityId,
+          dto.assignedTo ?? null,
+          title,
+          dto.description?.trim() || null,
+          dto.status ?? null,
+          dto.dueAt ?? null,
+          actor.userId,
+        ],
+      );
+      const created = result.rows[0];
+      // Anchors the feed: without a 'created' event the earliest entry would be
+      // the first edit, and the task would appear to have sprung from nowhere.
+      await client.query(
+        `
+          insert into app.task_history (
+            task_id, field, old_value, new_value, new_user_id, changed_by, source
+          )
+          values ($1, 'created', null, $2, $3, $4, 'app')
+        `,
+        [created.id, created.title, created.assigned_to, actor.userId],
+      );
+      return created;
+    });
     await this.audit.record({
       actor,
       action: "crm.task_created",
@@ -272,6 +293,9 @@ export class TasksService {
           userId,
           title: "У вас новая задача",
           body: `«${title}»${when}`,
+          // Without an explicit list notifyUser defaults to ['in_app'], which
+          // only lights up the bell: mobile assignees would never be told.
+          channels: ["in_app", "push"],
         })
         .catch((error: unknown) => {
           this.logger.warn(`New task notification failed: ${String(error)}`);
@@ -283,39 +307,94 @@ export class TasksService {
 
   async updateTask(actor: ActorContext, taskId: string, dto: UpsertTaskDto) {
     this.policy.assertManagerOnly(actor);
-    const result = await this.database.query<TaskRow>(
-      `
-        update app.tasks
-        set entity_type = coalesce($2::app.crm_entity_type, entity_type),
-          entity_id = coalesce($3, entity_id),
-          assigned_to = coalesce($4, assigned_to),
-          title = coalesce($5, title),
-          description = coalesce($6, description),
-          status = coalesce($7, status),
-          due_at = coalesce($8::timestamptz, due_at),
-          updated_at = now()
-        where id = $1 and deleted_at is null
-        returning id, entity_type, entity_id, assigned_to, title, description,
-          status, due_at, created_by, created_at
-      `,
-      [
-        taskId,
-        dto.entityType,
-        dto.entityId,
-        dto.assignedTo ?? null,
-        dto.title?.trim() || null,
-        dto.description?.trim() || null,
-        dto.status ?? null,
-        dto.dueAt ?? null,
-      ],
-    );
-    const task = result.rows[0];
-    if (!task) throw new NotFoundException("Задача не найдена.");
+    // The update and its history rows go in ONE transaction: a task whose due
+    // date moved but whose «кто перенёс» row was lost is exactly the state the
+    // supervisor screen exists to prevent, so a failed log must roll the edit back.
+    const { task, changes } = await this.database.transaction(async (client) => {
+      // `for update` holds the row across read-modify-log: two concurrent PATCHes
+      // would otherwise both read the same "before" and log the same old value,
+      // making the feed claim a change that never happened.
+      const before = await client.query<TaskRow>(
+        `
+          select id, entity_type, entity_id, assigned_to, title, description,
+            status, due_at, created_by, created_at
+          from app.tasks
+          where id = $1 and deleted_at is null
+          for update
+        `,
+        [taskId],
+      );
+      const previous = before.rows[0];
+      if (!previous) throw new NotFoundException("Задача не найдена.");
+
+      const after = await client.query<TaskRow>(
+        `
+          update app.tasks
+          set entity_type = coalesce($2::app.crm_entity_type, entity_type),
+            entity_id = coalesce($3, entity_id),
+            assigned_to = coalesce($4, assigned_to),
+            title = coalesce($5, title),
+            description = coalesce($6, description),
+            status = coalesce($7, status),
+            due_at = coalesce($8::timestamptz, due_at),
+            updated_at = now()
+          where id = $1 and deleted_at is null
+          returning id, entity_type, entity_id, assigned_to, title, description,
+            status, due_at, created_by, created_at
+        `,
+        [
+          taskId,
+          dto.entityType,
+          dto.entityId,
+          dto.assignedTo ?? null,
+          dto.title?.trim() || null,
+          dto.description?.trim() || null,
+          dto.status ?? null,
+          dto.dueAt ?? null,
+        ],
+      );
+      const updated = after.rows[0];
+      if (!updated) throw new NotFoundException("Задача не найдена.");
+
+      const diff = diffTaskRows(previous, updated);
+      for (const change of diff) {
+        await client.query(
+          `
+            insert into app.task_history (
+              task_id, field, old_value, new_value,
+              old_user_id, new_user_id, changed_by, source
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, 'app')
+          `,
+          [
+            taskId,
+            change.field,
+            change.oldValue,
+            change.newValue,
+            change.oldUserId ?? null,
+            change.newUserId ?? null,
+            actor.userId,
+          ],
+        );
+      }
+      return { task: updated, changes: diff };
+    });
+
     await this.audit.record({
       actor,
       action: "crm.task_updated",
       entityType: "task",
       entityId: task.id,
+      // The audit event used to say only «задача обновлена». The diff is the
+      // whole point of the event, and task_history is per-task — this keeps the
+      // cross-entity audit stream self-describing too.
+      metadata: {
+        changes: changes.map((change) => ({
+          field: change.field,
+          from: change.oldValue,
+          to: change.newValue,
+        })),
+      },
     });
     this.realtime.emitCrmChanged({
       entity: "task",
@@ -323,5 +402,96 @@ export class TasksService {
       id: task.id,
     });
     return toTaskDto(task);
+  }
+
+  /**
+   * AmoCRM-style feed for one task: every field change, newest first, with the
+   * author resolved to a name. Names are joined at read time rather than frozen
+   * into the log, so a renamed employee reads correctly in old events.
+   */
+  async listTaskHistory(actor: ActorContext, taskId: string) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<TaskHistoryRow>(
+      `
+        select history.id, history.field, history.old_value, history.new_value,
+          history.changed_at, history.source,
+          history.changed_by,
+          author_profile.id as author_profile_id,
+          author_profile.first_name as author_first_name,
+          author_profile.last_name as author_last_name,
+          history.old_user_id,
+          old_profile.first_name as old_user_first_name,
+          old_profile.last_name as old_user_last_name,
+          history.new_user_id,
+          new_profile.first_name as new_user_first_name,
+          new_profile.last_name as new_user_last_name
+        from app.task_history history
+        left join app.profiles author_profile
+          on author_profile.user_id = history.changed_by and author_profile.deleted_at is null
+        left join app.profiles old_profile
+          on old_profile.user_id = history.old_user_id and old_profile.deleted_at is null
+        left join app.profiles new_profile
+          on new_profile.user_id = history.new_user_id and new_profile.deleted_at is null
+        where history.task_id = $1
+        order by history.changed_at desc, history.id desc
+        limit 200
+      `,
+      [taskId],
+    );
+    return { items: result.rows.map((row) => toTaskHistoryDto(row)) };
+  }
+
+  /**
+   * Supervisor control feed (spec §2.2: «чтобы директор и управляющий могли
+   * видеть, кто какие задачи когда переносит»). Defaults to due-date moves,
+   * which is the case the customer asked to control, but any field can be pulled.
+   */
+  async listTaskHistoryFeed(actor: ActorContext, query: TaskHistoryQuery) {
+    // Deliberately stricter than the per-task feed: this is a cross-task
+    // oversight view of who did what, not operational data for the shop floor.
+    this.policy.assertManagerOnly(actor);
+    const limit = Math.min(query.limit ?? 50, 200);
+    const result = await this.database.query<TaskHistoryRow>(
+      `
+        select history.id, history.field, history.old_value, history.new_value,
+          history.changed_at, history.source,
+          history.changed_by,
+          author_profile.id as author_profile_id,
+          author_profile.first_name as author_first_name,
+          author_profile.last_name as author_last_name,
+          history.old_user_id,
+          old_profile.first_name as old_user_first_name,
+          old_profile.last_name as old_user_last_name,
+          history.new_user_id,
+          new_profile.first_name as new_user_first_name,
+          new_profile.last_name as new_user_last_name,
+          history.task_id,
+          task.title as task_title,
+          task.entity_type as task_entity_type,
+          task.entity_id as task_entity_id
+        from app.task_history history
+        join app.tasks task on task.id = history.task_id and task.deleted_at is null
+        left join app.profiles author_profile
+          on author_profile.user_id = history.changed_by and author_profile.deleted_at is null
+        left join app.profiles old_profile
+          on old_profile.user_id = history.old_user_id and old_profile.deleted_at is null
+        left join app.profiles new_profile
+          on new_profile.user_id = history.new_user_id and new_profile.deleted_at is null
+        where ($1::text is null or history.field = $1)
+          and ($2::uuid is null or history.changed_by = $2)
+          and ($3::timestamptz is null or history.changed_at >= $3)
+          and ($4::timestamptz is null or history.changed_at < $4)
+        order by history.changed_at desc, history.id desc
+        limit $5
+      `,
+      [
+        query.field ?? "due_at",
+        query.changedBy ?? null,
+        query.from ?? null,
+        query.to ?? null,
+        limit,
+      ],
+    );
+    return { items: result.rows.map((row) => toTaskHistoryDto(row)) };
   }
 }

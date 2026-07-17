@@ -112,6 +112,14 @@ export class CrmFacilitiesController {
     return this.groups.createGroup(actor, dto);
   }
 
+  @Get("groups/:id")
+  getGroup(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.groups.getGroup(actor, id);
+  }
+
   @Patch("groups/:id")
   updateGroup(
     @CurrentActor() actor: ActorContext,

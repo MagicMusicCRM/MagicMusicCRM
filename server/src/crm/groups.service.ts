@@ -97,6 +97,33 @@ export class GroupsService {
     return { items: result.rows.map((row) => this.toGroupDto(row)) };
   }
 
+  // Single group by id. Needed to open a group card from a context that only
+  // carries an id (e.g. a task pointing at a group): the list endpoint is
+  // capped at 100 rows, so filtering it client-side silently misses groups.
+  async getGroup(actor: ActorContext, groupId: string) {
+    this.policy.assertCanReadOperationalData(actor);
+    const result = await this.database.query<GroupRow>(
+      `
+        select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
+          g.price_per_lesson, g.teacher_rate,
+          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
+          b.name as branch_name,
+          r.name as room_name,
+          g.created_at
+        from app.groups g
+        left join app.teachers t on t.id = g.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        left join app.branches b on b.id = g.branch_id and b.deleted_at is null
+        left join app.rooms r on r.id = g.room_id and r.deleted_at is null
+        where g.deleted_at is null and g.id = $1
+      `,
+      [groupId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("Группа не найдена.");
+    return this.toGroupDto(row);
+  }
+
   async createGroup(actor: ActorContext, dto: UpsertGroupDto) {
     this.policy.assertCanWriteCrm(actor);
     const name = requiredTrim(dto.name, "Название группы обязательно.");

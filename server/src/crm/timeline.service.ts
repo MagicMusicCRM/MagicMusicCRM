@@ -33,6 +33,13 @@ interface CommentRow {
   body: string;
   kind: string;
   created_at: Date | string;
+  /**
+   * Когда идёт занятие, к которому оставлен комментарий. `null` у обычных.
+   *
+   * Именно так лента и отличает «комментарий к клиенту» от «комментария к
+   * занятию 21.06» — без второго запроса на каждую строку.
+   */
+  lesson_at?: Date | string | null;
 }
 
 @Injectable()
@@ -43,6 +50,53 @@ export class TimelineService {
     private readonly audit: AuditService,
     private readonly realtime: RealtimeBus,
   ) {}
+
+  /**
+   * Field edits for one entity («кто поменял телефон и на какой»), already
+   * rendered into readable lines by toTimelineDto. Feeds the client card's
+   * history, which is assembled by hand from comments/tasks/… and so never saw
+   * audit_events at all.
+   *
+   * Manager+ only, and it returns an empty list rather than throwing: the card
+   * aggregate calls this for every reader, including the client portal, where
+   * "who edited your record" is simply not their business.
+   */
+  async listFieldAudit(
+    actor: ActorContext,
+    entityType: string,
+    entityId: string,
+    limit = 50,
+  ) {
+    if (!isManagerOrAdminRole(actor.role)) return { items: [] };
+    const result = await this.database.query<TimelineRow>(
+      `
+        select audit.id::text as id, 'audit'::text as type,
+          audit.action as title, audit.metadata::text as body,
+          audit.entity_type as status, null::numeric as amount,
+          audit.actor_user_id,
+          ap.first_name as actor_first_name,
+          ap.last_name as actor_last_name,
+          audit.created_at as occurred_at
+        from app.audit_events audit
+        left join app.users au on au.id = audit.actor_user_id and au.deleted_at is null
+        left join app.profiles ap on ap.user_id = au.id and ap.deleted_at is null
+        where audit.entity_type = $1
+          and audit.entity_id = $2::text
+          -- Only events that carry a diff. A CASE rather than a bare
+          -- jsonb_array_length: metadata->'changes' is absent on older rows and
+          -- on non-edit actions, and the function throws on a non-array.
+          and case
+            when jsonb_typeof(audit.metadata -> 'changes') = 'array'
+              then jsonb_array_length(audit.metadata -> 'changes') > 0
+            else false
+          end
+        order by audit.created_at desc, audit.id desc
+        limit $3
+      `,
+      [entityType, entityId, Math.min(limit, 200)],
+    );
+    return { items: result.rows.map((row) => toTimelineDto(row)) };
+  }
 
   async listTimeline(actor: ActorContext, query: TimelineQuery) {
     if (!query.entityType || !query.entityId) {
@@ -188,22 +242,55 @@ export class TimelineService {
       allowedKinds = allowedKinds.filter((k) => k === query.kind);
     }
     if (allowedKinds.length === 0) return { items: [] };
+    // Комментарии к занятиям подмешиваются только в карточку УЧЕНИКА: у лида
+    // занятий нет, и спрашивать их бессмысленно.
+    const withLessons =
+      query.includeLessonComments === true && query.entityType === "student";
     const result = await this.database.query<CommentRow>(
       `
         select c.id, c.entity_type, c.entity_id, c.author_id, c.kind,
           p.first_name as author_first_name, p.last_name as author_last_name,
-          c.body, c.created_at
+          c.body, c.created_at,
+          l.scheduled_at as lesson_at
         from app.entity_comments c
         left join app.users u on u.id = c.author_id and u.deleted_at is null
         left join app.profiles p on p.user_id = u.id and p.deleted_at is null
+        -- Занятие подтягивается только у комментариев к занятиям; у обычных
+        -- lesson_at останется null, и лента различит их без второго запроса.
+        left join app.lessons l
+          on l.id = c.entity_id
+         and c.entity_type = 'lesson'
+         and l.deleted_at is null
         where c.deleted_at is null
-          and c.entity_type = $1::app.crm_entity_type
-          and c.entity_id = $2
           and c.kind = any($3::text[])
+          and (
+            (c.entity_type = $1::app.crm_entity_type and c.entity_id = $2)
+            or (
+              $5::boolean
+              and c.entity_type = 'lesson'
+              and exists (
+                select 1
+                from app.lessons ml
+                where ml.id = c.entity_id
+                  and ml.deleted_at is null
+                  and (
+                    -- Индивидуальное занятие: ученик прописан прямо на нём.
+                    ml.student_id = $2
+                    -- Групповое: ученик — через участие. Одна заметка админа
+                    -- к групповому занятию попадёт в ленту КАЖДОГО участника,
+                    -- и это верно: она про то занятие, на котором был каждый.
+                    or exists (
+                      select 1 from app.lesson_participation lp
+                      where lp.lesson_id = ml.id and lp.student_id = $2
+                    )
+                  )
+              )
+            )
+          )
         order by c.created_at desc, c.id desc
         limit $4
       `,
-      [query.entityType, query.entityId, allowedKinds, limit],
+      [query.entityType, query.entityId, allowedKinds, limit, withLessons],
     );
     return { items: result.rows.map((row) => this.toCommentDto(row)) };
   }
@@ -375,6 +462,9 @@ export class TimelineService {
       // Back-compat flag for clients still keying off `progress`.
       progress: row.kind === "progress",
       createdAt: row.created_at,
+      // Заполнено только у комментариев к занятиям: карточка по нему и рисует
+      // пометку «к занятию такого-то числа».
+      lessonAt: row.lesson_at ?? null,
     };
   }
 

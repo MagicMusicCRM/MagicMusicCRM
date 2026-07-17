@@ -26,6 +26,47 @@ describe("MergeService", () => {
     return { service, query, transaction, policy };
   };
 
+  it("keeps the HolliHop data when a phone-dedup merges an import into an app lead", async () => {
+    const { service, query } = createMergeService([
+      {
+        rows: [
+          {
+            id: "l-lo",
+            // Loser came from HolliHop: real appeal date, real ad source.
+            custom_data: {
+              hollihopId: "42",
+              addressDate: "2023-03-01",
+              adSource: "Яндекс",
+            },
+          },
+          {
+            id: "l-wi",
+            // Winner was created in the app from a phone call.
+            custom_data: { adSource: "не указан" },
+          },
+        ],
+      },
+    ]);
+    // Everything after the lookup is re-pointing/logging and is not what this
+    // test is about — one blanket answer keeps it focused on the merge itself.
+    query.mockResolvedValue({ rows: [{ id: "ml1" }] });
+
+    await service.mergeLeads(actor, "l-lo", "l-wi");
+
+    // ✔ «При дедупе через телефон и тд должны оставаться данные только из
+    // HolliHop». Before this, merge only re-pointed references and threw the
+    // loser's custom_data away — the appeal date and source vanished silently.
+    const update = query.mock.calls.find((call) =>
+      String(call[0]).includes("update app.leads set custom_data"),
+    );
+    expect(update).toBeDefined();
+    expect(JSON.parse(String((update![1] as unknown[])[1]))).toEqual({
+      hollihopId: "42",
+      addressDate: "2023-03-01",
+      adSource: "Яндекс",
+    });
+  });
+
   it("lists lead merge candidates by phone + name", async () => {
     const { service, query, policy } = createMergeService([
       { rows: [{ loser_id: "l-lo", winner_id: "l-wi", phone: "+79091234567", name: "Иван Иванов" }] },
@@ -39,6 +80,7 @@ describe("MergeService", () => {
   it("mergeLeads re-points references, soft-deletes the loser, and logs", async () => {
     const { service, query, transaction, policy } = createMergeService([
       { rows: [{ id: "l-lo" }, { id: "l-wi" }] }, // validate both exist
+      { rows: [] },                                // merge custom_data into winner
       { rows: [{ id: "s1" }] },                    // students.lead_id
       { rows: [{ id: "le1" }] },                   // lessons.lead_id
       { rows: [{ id: "h1" }] },                    // lead_status_history.lead_id

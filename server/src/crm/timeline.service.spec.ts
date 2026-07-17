@@ -177,6 +177,7 @@ describe("TimelineService", () => {
           body: "Хорошая динамика",
           kind: "progress",
           progress: true,
+          lessonAt: null,
           createdAt: "2026-06-12T00:00:00.000Z",
         },
       ],
@@ -192,6 +193,7 @@ describe("TimelineService", () => {
       "student-a",
       ["progress"],
       5,
+      false,
     ]);
   });
 
@@ -234,7 +236,84 @@ describe("TimelineService", () => {
       "student-a",
       ["teacher_note", "progress"],
       5,
+      // Комментарии к занятиям не запрашивали — флаг false.
+      false,
     ]);
+  });
+
+  /**
+   * ✔ Требование заказчика: «в разделе комментариев админов показывались как
+   * обычные комментарии к клиенту, так и комментарии к определённым занятиям
+   * этого клиента».
+   *
+   * Комментарий живёт на ЗАНЯТИИ (решение заказчика: у группового занятия он
+   * один на всех), а в ленте клиента подмешивается — одним запросом, а не
+   * походом в базу на каждое занятие.
+   */
+  it("подмешивает комментарии к занятиям ученика, когда попросили", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "student-a",
+            profile_user_id: "client-a",
+            teacher_user_ids: [],
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            id: "comment-lesson",
+            entity_type: "lesson",
+            entity_id: "lesson-a",
+            author_id: null,
+            author_first_name: null,
+            author_last_name: null,
+            body: "миши не будет",
+            kind: "admin_comment",
+            created_at: "2026-07-11T10:00:00.000Z",
+            lesson_at: "2026-07-11T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.listComments(actor, {
+      entityType: "student",
+      entityId: "student-a",
+      includeLessonComments: true,
+      limit: 5,
+    });
+
+    // Флаг доехал до запроса — без него подмешивание молча не сработало бы.
+    expect(query.mock.calls[1][1]).toEqual([
+      "student",
+      "student-a",
+      ["admin_comment", "teacher_note", "progress"],
+      5,
+      true,
+    ]);
+    // Дата занятия доехала до карточки: по ней лента и рисует «к занятию 11.07».
+    expect(result.items[0]).toMatchObject({
+      entityType: "lesson",
+      entityId: "lesson-a",
+      lessonAt: "2026-07-11T10:00:00.000Z",
+    });
+  });
+
+  it("не подмешивает занятия в карточку ЛИДА: занятий у него нет", async () => {
+    const { service, query } = createServiceWithQueryResults([{ rows: [] }]);
+
+    await service.listComments(actor, {
+      entityType: "lead",
+      entityId: "lead-a",
+      includeLessonComments: true,
+      limit: 5,
+    });
+
+    // Флаг попросили, но для лида он бессмысленен — в запрос уходит false.
+    expect(query.mock.calls[0][1]?.[4]).toBe(false);
   });
 
   it("creates comments for CRM writers after checking target entity", async () => {
@@ -288,6 +367,7 @@ describe("TimelineService", () => {
       body: "Позвонить родителю",
       kind: "admin_comment",
       progress: false,
+      lessonAt: null,
       createdAt: "2026-06-12T00:00:00.000Z",
     });
 
@@ -380,5 +460,77 @@ describe("TimelineService", () => {
         entityId: "student-a",
       }),
     );
+  });
+
+  describe("listFieldAudit", () => {
+    it("returns readable field changes for staff", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        {
+          rows: [
+            {
+              id: "audit-1",
+              type: "audit",
+              title: "crm.lead_updated",
+              body: JSON.stringify({
+                changes: [
+                  { field: "phone", from: "+79161234567", to: "+79990000000" },
+                ],
+              }),
+              status: "lead",
+              amount: null,
+              actor_user_id: "manager-a",
+              actor_first_name: "Мария",
+              actor_last_name: "Менеджер",
+              occurred_at: "2026-07-16T10:00:00.000Z",
+            },
+          ],
+        },
+      ]);
+
+      const result = await service.listFieldAudit(actor, "lead", "lead-1");
+
+      expect(result.items).toEqual([
+        expect.objectContaining({
+          title: "Правка полей",
+          body: "Телефон: +79161234567 → +79990000000",
+          actorName: "Мария Менеджер",
+        }),
+      ]);
+      // Only events carrying a diff — a create/delete has no 'changes' key, and
+      // jsonb_array_length would throw on a non-array.
+      expect(String(query.mock.calls[0][0])).toContain(
+        "jsonb_typeof(audit.metadata -> 'changes') = 'array'",
+      );
+    });
+
+    it("tells a client nothing about who edited their record", async () => {
+      const { service, query } = createServiceWithQueryResults([]);
+
+      await expect(
+        service.listFieldAudit(
+          { userId: "client-a", role: "client" },
+          "student",
+          "student-a",
+        ),
+      ).resolves.toEqual({ items: [] });
+
+      // Returns empty rather than throwing: the card aggregate calls this for
+      // every reader, and a 403 would take the whole card down.
+      expect(query).not.toHaveBeenCalled();
+    });
+
+    it("does not show a teacher who changed a client's phone", async () => {
+      const { service, query } = createServiceWithQueryResults([]);
+
+      await expect(
+        service.listFieldAudit(
+          { userId: "teacher-a", role: "teacher" },
+          "student",
+          "student-a",
+        ),
+      ).resolves.toEqual({ items: [] });
+
+      expect(query).not.toHaveBeenCalled();
+    });
   });
 });

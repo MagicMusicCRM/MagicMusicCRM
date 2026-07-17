@@ -7,10 +7,35 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 /// target branch + discipline. Returns the created student map, or null if
 /// cancelled / failed. Theme-aware (in-app screen, light+dark).
 ///
-/// Contract LOCKED: the `createStudent` call + its `customDataPatch`
-/// (`branchId`/`discipline`(name)/`sourceLeadId`) and the branch→discipline
-/// cascade are unchanged — only the presentation is reskinned to v7.
+/// The `customDataPatch` carries `branchId`/`discipline`(name)/`sourceLeadId`
+/// plus [_carriedCustomFieldKeys], so the facts gathered on the lead survive
+/// the conversion instead of being retyped on the student card.
 class ConvertLeadDialog extends ConsumerStatefulWidget {
+  /// Custom-field keys defined for BOTH leads and students, and still true of
+  /// the person once they convert. Deliberately excludes `hollihopId` (an
+  /// external identity, copying it would duplicate the key) and the
+  /// leads-only fields (`adSource`, `appealAt`, `visitAt`, `address`,
+  /// `attachedToStudent`) which have no student-side counterpart.
+  static const _carriedCustomFieldKeys = <String>{
+    'birthday', // drives «Возраст» on the student card
+    'age', // возраст, вписанный руками, — когда дня рождения не знают
+    'gender',
+    'middleName',
+    'source',
+    'requestType',
+    'learningGoal',
+    'level',
+    'category',
+    'lessonType',
+    'applicationData',
+    'preferredSchedule',
+    'contactPersonName',
+    'contactPersonPhone',
+    'contactPersonEmail',
+    'contactPersonRelation',
+    'contactPersons', // the "add another contact person" list
+  };
+
   final Map<String, dynamic> lead;
   const ConvertLeadDialog({super.key, required this.lead});
 
@@ -123,6 +148,28 @@ class _ConvertLeadDialogState extends ConsumerState<ConvertLeadDialog> {
         patch['discipline'] = _discipline;
       }
       patch['sourceLeadId'] = widget.lead['id'].toString();
+
+      // Carry the lead's own data across. Without this the student is created
+      // bare and the operator retypes what the lead already knew.
+      final leadCustom = widget.lead['custom_data'];
+      if (leadCustom is Map) {
+        for (final key in ConvertLeadDialog._carriedCustomFieldKeys) {
+          final value = leadCustom[key];
+          if (value == null) continue;
+          if (value is String && value.trim().isEmpty) continue;
+          patch[key] = value;
+        }
+        // «Рекламный источник» is `adSource` on a lead but only `source`
+        // exists on a student, so fold it in rather than lose it — without
+        // overwriting an explicit source.
+        final adSource = leadCustom['adSource'];
+        if (adSource is String &&
+            adSource.trim().isNotEmpty &&
+            (patch['source'] == null ||
+                patch['source'].toString().trim().isEmpty)) {
+          patch['source'] = adSource;
+        }
+      }
 
       final student = await ref.read(magicCrmServiceProvider).createStudent(
             firstName: firstNameRaw.isEmpty ? 'Без имени' : firstNameRaw,

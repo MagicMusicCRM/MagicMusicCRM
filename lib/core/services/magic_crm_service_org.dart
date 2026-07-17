@@ -185,6 +185,13 @@ extension MagicCrmOrg on MagicCrmService {
     return _items(response).map(_legacyGroup).toList();
   }
 
+  /// One group by id. Callers holding only an id (a task pointing at a group)
+  /// can't use listGroups: it is capped, so the group may simply not be there.
+  Future<Map<String, dynamic>> getGroup(String id) async {
+    final response = await _api.get<Map<String, dynamic>>('/crm/groups/$id');
+    return _legacyGroup(response);
+  }
+
   Future<Map<String, dynamic>> createGroup({
     required String name,
     String? teacherId,

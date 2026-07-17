@@ -16,6 +16,13 @@ class LeadBoardFilters {
   final String quick;
   final bool openTasks;
 
+  /// Прятать лидов, которые уже стали учениками.
+  ///
+  /// Фильтр на бэке был написан ещё в июне, но фронт его НИ РАЗУ не передавал —
+  /// мёртвый код. Теперь он к тому же осмыслен: до 17.07 связь students.lead_id
+  /// стояла у 1 ученика из 1036, так что прятать было почти нечего.
+  final bool hideConverted;
+
   const LeadBoardFilters({
     this.q = '',
     this.branchId = '',
@@ -30,6 +37,7 @@ class LeadBoardFilters {
     this.preferredSchedule = '',
     this.quick = 'all',
     this.openTasks = false,
+    this.hideConverted = false,
   });
 
   LeadBoardFilters copyWith({
@@ -46,6 +54,7 @@ class LeadBoardFilters {
     String? preferredSchedule,
     String? quick,
     bool? openTasks,
+    bool? hideConverted,
   }) {
     return LeadBoardFilters(
       q: q ?? this.q,
@@ -61,6 +70,7 @@ class LeadBoardFilters {
       preferredSchedule: preferredSchedule ?? this.preferredSchedule,
       quick: quick ?? this.quick,
       openTasks: openTasks ?? this.openTasks,
+      hideConverted: hideConverted ?? this.hideConverted,
     );
   }
 
@@ -80,7 +90,8 @@ class LeadBoardFilters {
           gender == other.gender &&
           preferredSchedule == other.preferredSchedule &&
           quick == other.quick &&
-          openTasks == other.openTasks;
+          openTasks == other.openTasks &&
+          hideConverted == other.hideConverted;
 
   @override
   int get hashCode => Object.hash(
@@ -97,6 +108,7 @@ class LeadBoardFilters {
     preferredSchedule,
     quick,
     openTasks,
+    hideConverted,
   );
 
   Map<String, dynamic> toJson() {
@@ -114,6 +126,7 @@ class LeadBoardFilters {
       'preferredSchedule': preferredSchedule,
       'quick': quick,
       'openTasks': openTasks,
+      'hideConverted': hideConverted,
     };
   }
 
@@ -132,6 +145,7 @@ class LeadBoardFilters {
       preferredSchedule: json['preferredSchedule']?.toString() ?? '',
       quick: json['quick']?.toString() ?? 'all',
       openTasks: json['openTasks'] == true,
+      hideConverted: json['hideConverted'] == true,
     );
   }
 
@@ -154,6 +168,7 @@ class LeadBoardFilters {
       preferredSchedule: preferredSchedule,
       quick: quick,
       openTasks: openTasks ? true : null,
+      hideConverted: hideConverted ? true : null,
       cursor: cursor,
       limit: limit,
     );

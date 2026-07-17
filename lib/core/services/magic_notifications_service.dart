@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/models/notification_preference.dart';
 
 final magicNotificationsServiceProvider = Provider<MagicNotificationsService>((
   ref,
@@ -35,6 +36,38 @@ class MagicNotificationsService {
 
   Future<void> markAllRead() async {
     await _api.post<Map<String, dynamic>>('/notifications/read-all');
+  }
+
+  /// Who gets which broadcast, per role. Manager/admin/director only — the
+  /// server rejects everyone else.
+  Future<List<NotificationPreference>> listPreferences() async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/admin/notifications/preferences',
+    );
+    final items = response['items'];
+    if (items is! List) return const <NotificationPreference>[];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(NotificationPreference.fromJson)
+        .toList();
+  }
+
+  Future<NotificationPreference> updatePreference({
+    required String role,
+    required String eventType,
+    required bool enabled,
+    required List<String> channels,
+  }) async {
+    final response = await _api.put<Map<String, dynamic>>(
+      '/admin/notifications/preferences',
+      data: {
+        'role': role,
+        'eventType': eventType,
+        'enabled': enabled,
+        'channels': channels,
+      },
+    );
+    return NotificationPreference.fromJson(response);
   }
 
   Future<Map<String, dynamic>> markRead(String id) async {

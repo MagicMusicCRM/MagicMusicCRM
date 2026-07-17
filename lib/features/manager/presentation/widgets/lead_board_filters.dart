@@ -116,6 +116,14 @@ class LeadsInlineFilterPanel extends StatelessWidget {
                 selected: filters.openTasks,
                 onSelected: (v) => onApply(filters.copyWith(openTasks: v)),
               ),
+              // Лид, ставший учеником, остаётся на доске: он же и лид, и
+              // ученик — карточка показывает обе половины. Но когда работаешь
+              // с воронкой, он только мешает.
+              FilterChip(
+                label: const Text('Скрыть ставших учениками'),
+                selected: filters.hideConverted,
+                onSelected: (v) => onApply(filters.copyWith(hideConverted: v)),
+              ),
               filterDropdown(
                 width: 200,
                 label: 'Филиал',
@@ -261,6 +269,18 @@ Future<void> openLeadsFilterDrawer(
                       selected: draft.openTasks,
                       onSelected: (selected) =>
                           update(draft.copyWith(openTasks: selected)),
+                    ),
+                  ),
+                ),
+                section(
+                  'Конверсия',
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilterChip(
+                      label: const Text('Скрыть ставших учениками'),
+                      selected: draft.hideConverted,
+                      onSelected: (selected) =>
+                          update(draft.copyWith(hideConverted: selected)),
                     ),
                   ),
                 ),

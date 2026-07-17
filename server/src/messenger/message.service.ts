@@ -237,6 +237,9 @@ export class MessageService {
   ) {
     const message = await this.requireMessage(actor, messageId);
     const chat = await this.requireChat(actor, message.chat_id);
+    // Правка — тоже отправка: иначе забаненный переписал бы старое сообщение и
+    // сказал через него что угодно.
+    await this.policy.assertNotBlacklisted(actor);
     if (message.sender_id !== actor.userId) {
       throw new ForbiddenException(
         "Можно редактировать только свои сообщения.",

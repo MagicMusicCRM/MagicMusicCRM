@@ -1,3 +1,4 @@
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -5,6 +6,7 @@ import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { LeadsService } from "./leads.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
+import { TimelineService } from "./timeline.service";
 
 describe("LeadsService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
@@ -20,6 +22,9 @@ describe("LeadsService", () => {
     };
     const realtime = { emitCrmChanged: () => undefined };
     const chatWork = { listForEntity: jest.fn().mockResolvedValue([]) };
+    const timeline = {
+      listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
+    };
     const service = new LeadsService(
       db as unknown as DatabaseService,
       audit as unknown as AuditService,
@@ -27,8 +32,9 @@ describe("LeadsService", () => {
       notifications as unknown as NotificationsService,
       chatWork as unknown as ChatWorkTimelineService,
       realtime as unknown as RealtimeBus,
+      timeline as unknown as TimelineService,
     );
-    return { service, audit, policy, notifications };
+    return { service, audit, policy, notifications, timeline };
   };
 
   const createService = (rows: Record<string, unknown>[] = []) => {
@@ -147,11 +153,23 @@ describe("LeadsService", () => {
       { rows: [] }, // leads
     ]);
     await service.listLeadBoard(actor, { hideConverted: true } as never);
-    expect(query.mock.calls[1][0]).toContain("from app.students");
-    expect(query.mock.calls[1][0]).toContain("linked_conv.lead_id = l.id");
-    expect(query.mock.calls[1][0]).toContain(
-      "p_conv.phone_normalized = l.phone_normalized",
+    const sql = query.mock.calls[1][0] as string;
+    expect(sql).toContain("from app.students");
+    expect(sql).toContain("linked_conv.lead_id = l.id");
+    expect(sql).toContain("p_conv.phone_normalized = l.phone_normalized");
+    // Имя и фамилия — обязательная часть правила, а не украшение: по одному
+    // телефону прятались бы однофамильцы и дети на телефоне родителя. Правило
+    // общее с импортом (leadStudentMatchSql), и урони его тут одна сторона —
+    // карточки снова начнут двоиться.
+    expect(sql).toContain(
+      "lower(btrim(coalesce(p_conv.first_name, ''))) = lower(btrim(coalesce(l.first_name, '')))",
     );
+    expect(sql).toContain(
+      "lower(btrim(coalesce(p_conv.last_name, '')))  = lower(btrim(coalesce(l.last_name, '')))",
+    );
+    // Только активный ученик прячет лид: отчисленный — это история, а не повод
+    // убрать человека с доски. Активность живёт здесь, а не в общем правиле.
+    expect(sql).toContain("linked_conv.status = 'active'");
     expect(query.mock.calls[2][0]).toContain("not exists");
   });
 
@@ -410,6 +428,98 @@ describe("LeadsService", () => {
       statusId: "11111111-1111-1111-1111-111111111111",
     } as never);
     expect((query.mock.calls[1][1] as unknown[])[10]).toBe(false);
+  });
+
+  describe("linkStudentToLead — ручное «Прикрепить к ученику»", () => {
+    it("привязывает произвольного ученика, а не только автоподобранный дубль", async () => {
+      const { service, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "lead-1" }] }, // лид есть
+        { rows: [{ id: "student-1" }] }, // ученик есть
+        { rows: [{ id: "student-1" }] }, // update прошёл
+      ]);
+
+      await expect(
+        service.linkStudentToLead(actor, "lead-1", "student-1"),
+      ).resolves.toEqual({ leadId: "lead-1", studentId: "student-1" });
+
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "crm.lead_student_linked" }),
+      );
+    });
+
+    it("не перевешивает ученика, уже связанного с другим лидом", async () => {
+      const { service } = createServiceWithQueryResults([
+        { rows: [{ id: "lead-1" }] },
+        { rows: [{ id: "student-1" }] },
+        { rows: [] }, // update не нашёл строку → связь занята
+      ]);
+
+      // Молча перевесить связь нельзя: прежний лид потерял бы ученика без следа.
+      await expect(
+        service.linkStudentToLead(actor, "lead-1", "student-1"),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it("не выдумывает связь с несуществующим учеником", async () => {
+      const { service } = createServiceWithQueryResults([
+        { rows: [{ id: "lead-1" }] },
+        { rows: [] },
+      ]);
+
+      await expect(
+        service.linkStudentToLead(actor, "lead-1", "ghost"),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  it("audits which fields an edit changed, old → new", async () => {
+    const { service, audit } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "lead-1",
+            status_id: "s0",
+            assigned_to: "o0",
+            branch_id: "b0",
+            first_name: "Анна",
+            phone: "+79161234567",
+            source: "site",
+            custom_data: { level: "A1" },
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            id: "lead-1",
+            status_id: "s0",
+            assigned_to: "o0",
+            first_name: "Анна",
+            phone: "+79990000000",
+            source: "site",
+            custom_data: { level: "A2" },
+          },
+        ],
+      },
+    ]);
+
+    await service.updateLead(actor, "lead-1", {
+      phone: "+79990000000",
+    } as never);
+
+    // Before this the event said only «лид обновлён», which answers none of
+    // «кто поменял телефон и на какой».
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.lead_updated",
+        metadata: {
+          changes: [
+            { field: "phone", from: "+79161234567", to: "+79990000000" },
+            { field: "custom_data.level", from: "A1", to: "A2" },
+          ],
+        },
+      }),
+    );
   });
 
   it("records a lead_status_history row when status changes", async () => {

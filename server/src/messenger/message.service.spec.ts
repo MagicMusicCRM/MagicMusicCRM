@@ -36,6 +36,7 @@ describe("MessageService", () => {
         memberRole: "member",
       }),
       assertCanReadChat: jest.fn(),
+      assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
       assertCanManageGroup: jest.fn(),
       assertCanModerateMessage: jest.fn(),
       ...overrides?.policy,
@@ -225,6 +226,7 @@ describe("MessageService", () => {
             memberRole: "member",
           }),
           assertCanReadChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
           assertCanManageGroup: jest.fn(),
         },
       });
@@ -258,6 +260,7 @@ describe("MessageService", () => {
             memberRole: "owner",
           }),
           assertCanReadChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
           assertCanManageGroup: jest.fn(),
         },
       });
@@ -290,6 +293,7 @@ describe("MessageService", () => {
             memberRole: "member",
           }),
           assertCanReadChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
           assertCanManageGroup: jest.fn(),
         },
       });
@@ -328,6 +332,7 @@ describe("MessageService", () => {
             memberRole: "member",
           }),
           assertCanReadChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
           assertCanModerateMessage: jest.fn(),
         },
       });
@@ -363,6 +368,7 @@ describe("MessageService", () => {
             memberRole: "owner",
           }),
           assertCanReadChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
           assertCanModerateMessage: jest.fn(),
         },
       });
@@ -396,6 +402,7 @@ describe("MessageService", () => {
             memberRole: "member",
           }),
           assertCanReadChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
           assertCanManageGroup: jest.fn(),
         },
       });
@@ -436,6 +443,7 @@ describe("MessageService", () => {
             memberRole: "member",
           }),
           assertCanReadChat: jest.fn(),
+          assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
         },
       });
 

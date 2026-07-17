@@ -6,6 +6,7 @@ import {
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { CrmPolicy } from "./crm.policy";
+import { mergeCustomData } from "./appeal-date";
 
 /**
  * Lead merge + undo (app.merge_log). Repoints every lead reference from the
@@ -60,8 +61,11 @@ export class MergeService {
       throw new BadRequestException("Нельзя объединить лид сам с собой.");
     }
     return this.database.transaction(async (client) => {
-      const existing = await client.query<{ id: string }>(
-        `select id from app.leads where id in ($1, $2) and deleted_at is null`,
+      const existing = await client.query<{
+        id: string;
+        custom_data: Record<string, unknown> | null;
+      }>(
+        `select id, custom_data from app.leads where id in ($1, $2) and deleted_at is null`,
         [loserId, winnerId],
       );
       if (existing.rows.length !== 2) {
@@ -69,6 +73,23 @@ export class MergeService {
       }
 
       const repointed: Record<string, string[]> = {};
+
+      // ✔ Требование владельца 16.07: «при дедупе через телефон и тд должны
+      // оставаться данные только из HolliHop».
+      //
+      // Раньше слияние только перевешивало ссылки и custom_data проигравшего
+      // выбрасывало целиком — то есть склейка лида из HolliHop с лидом из
+      // приложения молча теряла исходную дату обращения, источник и уровень.
+      // Ровно те данные, ради которых импорт и нужен.
+      const loserData =
+        existing.rows.find((row) => row.id === loserId)?.custom_data ?? {};
+      const winnerData =
+        existing.rows.find((row) => row.id === winnerId)?.custom_data ?? {};
+      const mergedData = mergeCustomData(winnerData, loserData);
+      await client.query(
+        `update app.leads set custom_data = $2::jsonb, updated_at = now() where id = $1`,
+        [winnerId, JSON.stringify(mergedData)],
+      );
       const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
 
       // Real-FK lead references.

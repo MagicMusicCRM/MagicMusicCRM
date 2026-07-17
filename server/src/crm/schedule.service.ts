@@ -21,6 +21,7 @@ import {
   CreateScheduleSeriesDto,
   UpdateScheduleSeriesDto,
 } from "./dto/schedule-series.dto";
+import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
 import {
   LessonRow,
@@ -329,10 +330,58 @@ export class ScheduleService {
     // a teacher only their own lessons, a client only their student/lead/group
     // lessons. Any new role must be added to that predicate or it sees nothing.
     const limit = Math.min(query.limit ?? 100, 200);
+    // What the teacher is actually paid for this lesson. l.teacher_rate alone
+    // is only the per-lesson OVERRIDE — null there means "inherit", so showing
+    // it raw would read as "no rate" on most lessons. Precedence must stay in
+    // step with computeLessonAccrual (payroll.service.ts): lesson → group →
+    // the rate history entry in force on the lesson date → 0.
+    //
+    // Gated: this endpoint serves clients and teachers too (see the note
+    // above), so the rate is selected only for staff who may see it — everyone
+    // else gets null rather than a leak. Per the owner's 16.07 decision a
+    // per-lesson rate is NOT school-wide finance, so admin/manager see it;
+    // the aggregate revenue view stays director-only (canReadSchoolFinance).
+    const canSeeRates = this.policy.canReadTeacherRates(actor);
+    const appliedRateSql = canSeeRates
+      ? `coalesce(
+            l.teacher_rate,
+            g.teacher_rate,
+            (
+              select tr.rate
+              from app.teacher_rates tr
+              where tr.teacher_id = l.teacher_id
+                and tr.effective_from <= l.scheduled_at::date
+              order by tr.effective_from desc, tr.created_at desc
+              limit 1
+            ),
+            0
+          )`
+      : `null::numeric`;
+    // «Оплаты по дням» (✔ владелец 17.07): сколько пришло за ЭТОТ день.
+    //
+    // Намеренно без coalesce(…, 0): пустая сумма — это «за этот день платежа
+    // нет», а не «оплачено 0». Разница существенная, потому что платёж к
+    // занятию привязывать не обязательно (аванс на счёт, абонемент, импорт из
+    // HolliHop — там такой связи нет вовсе), и рисовать всем этим дням
+    // уверенный ноль значило бы называть их неоплаченными.
+    //
+    // Гейт: педагогу деньги клиента не показываем. Клиент видит свои — выборка
+    // выше и так отдаёт ему только его занятия.
+    const canSeePayments =
+      this.policy.canReadStudentFinance(actor) || actor.role === "client";
+    const paidSql = canSeePayments
+      ? `(
+            select sum(pay.amount)
+            from app.payments pay
+            where pay.lesson_id = l.id and pay.deleted_at is null
+          )`
+      : `null::numeric`;
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
           l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
+          ${appliedRateSql} as applied_teacher_rate,
+          ${paidSql} as paid_amount,
           sp.user_id as student_user_id, tp.user_id as teacher_user_id,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
@@ -1058,6 +1107,48 @@ export class ScheduleService {
     return { success: true };
   }
 
+  /**
+   * Applies one per-lesson teacher rate to many lessons in a single statement.
+   * Exists for the end-of-month «пробные в оклад» pass (spec §3), which used to
+   * be one PATCH per lesson from the client: a failure halfway left some
+   * lessons repriced and some not, with no way to tell which.
+   *
+   * Unlike updateLesson this SETS rather than coalesces — clearing the override
+   * (rate = null, fall back to the group/history rate) is a thing the caller
+   * must be able to express, and coalesce cannot express it.
+   */
+  async setLessonsTeacherRate(actor: ActorContext, dto: BulkLessonRateDto) {
+    // Manager+ only, deliberately stricter than updateLesson's per-lesson
+    // teacher path: this writes payroll inputs across the schedule.
+    this.policy.assertManagerOnly(actor);
+    const rate = dto.teacherRate ?? null;
+    const result = await this.database.query<{ id: string }>(
+      `
+        update app.lessons
+        set teacher_rate = $2::numeric,
+          updated_at = now()
+        where id = any($1::uuid[]) and deleted_at is null
+        returning id
+      `,
+      [dto.lessonIds, rate],
+    );
+    const updated = result.rows.map((row) => row.id);
+    await this.audit.record({
+      actor,
+      action: "crm.lessons_teacher_rate_bulk_set",
+      entityType: "lesson",
+      metadata: {
+        teacherRate: rate,
+        requested: dto.lessonIds.length,
+        updated: updated.length,
+      },
+    });
+    // One event for the batch: 500 per-lesson events would just make every
+    // connected client refetch 500 times.
+    this.realtime.emitCrmChanged({ entity: "lesson", action: "updated" });
+    return { updated: updated.length, lessonIds: updated };
+  }
+
   private async assertCanUpdateLesson(
     actor: ActorContext,
     lessonId: string,
@@ -1078,6 +1169,11 @@ export class ScheduleService {
       dto.roomId !== undefined ||
       dto.scheduledAt !== undefined ||
       dto.durationMinutes !== undefined ||
+      // teacher_rate is what the school PAYS the teacher. Without this a
+      // teacher could set the rate on their own lesson — a self-granted raise —
+      // even though listLessons will not even let them READ the applied rate
+      // (canReadSchoolFinance is director/system_admin only).
+      dto.teacherRate !== undefined ||
       dto.isTrial !== undefined;
     if (attemptsRestrictedEdit) {
       this.policy.assertCanWriteCrm(actor);

@@ -9,8 +9,13 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 
 part 'tasks_widget_cards.dart';
 part 'tasks_widget_sheets.dart';
@@ -39,7 +44,14 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   String _priorityFilter = 'all';
   String _branchFilter = 'all';
   String _assigneeFilter = 'all';
-  String _dueFilter = 'all';
+  // Day-by-day to-do is the default view: staff work today's list, not the
+  // whole backlog. 'all'/'overdue'/'week' stay available in the Срок filter.
+  String _dueFilter = 'day';
+  DateTime _selectedDay = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  );
 
   @override
   void initState() {
@@ -129,6 +141,12 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
 
     return switch (_dueFilter) {
       'overdue' => (null, now.toUtc().toIso8601String()),
+      // The picked day, not necessarily today — the day view pages back and
+      // forward.
+      'day' => (
+        _selectedDay.toUtc().toIso8601String(),
+        _selectedDay.add(const Duration(days: 1)).toUtc().toIso8601String(),
+      ),
       'today' => (
         todayStart.toUtc().toIso8601String(),
         tomorrow.toUtc().toIso8601String(),
@@ -346,19 +364,132 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     return _taskFilterProfileName(profile.first);
   }
 
-  Future<void> _showTaskTimeline(Map<String, dynamic> task) async {
+  /// Opens the object a task points at. Lives here rather than in _TaskCard
+  /// because groups and teachers have no route: their cards are dialogs that
+  /// want a whole record, so the row has to be fetched by id first — and that
+  /// needs `ref`, which a StatelessWidget card does not have.
+  Future<void> _openTaskEntity(Map<String, dynamic> task) async {
     final entityType = task['entity_type']?.toString();
     final entityId = task['entity_id']?.toString();
-    if (entityType == null ||
-        entityType.trim().isEmpty ||
-        entityId == null ||
-        entityId.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('У задачи нет связанного объекта.')),
-      );
-      return;
-    }
+    if (entityId == null || entityId.trim().isEmpty) return;
 
+    try {
+      switch (entityType) {
+        case 'student':
+          showClientCard(context, entityType: 'student', entityId: entityId);
+        case 'lead':
+          showClientCard(context, entityType: 'lead', entityId: entityId);
+        case 'lesson':
+          context.push('/lessons/$entityId');
+        case 'profile':
+          context.push('/admin/profiles/$entityId');
+        case 'group':
+          final group = await ref
+              .read(magicCrmServiceProvider)
+              .getGroup(entityId);
+          if (!mounted) return;
+          await GroupDetailDialog.show(context, group);
+        case 'teacher':
+          final teacher = await ref
+              .read(magicCrmServiceProvider)
+              .getTeacher(entityId);
+          if (!mounted) return;
+          await TeacherDetailDialog.show(context, teacher);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Не удалось открыть: $e')));
+    }
+  }
+
+  /// Moves a task's deadline. A plain PATCH — the server logs who moved it from
+  /// what to what into task_history, which is what makes the change auditable
+  /// for the director rather than just silently applied.
+  Future<void> _rescheduleTask(Map<String, dynamic> task) async {
+    final id = task['id']?.toString();
+    if (id == null || id.isEmpty || _pendingTaskIds.contains(id)) return;
+
+    final current = task['due_at'] != null
+        ? DateTime.tryParse(task['due_at'].toString())?.toLocal()
+        : null;
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      // Unlike task creation, a reschedule may legitimately move a deadline
+      // into the past (logging when it was actually meant to be done).
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 2),
+      helpText: 'Перенести срок',
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: current == null
+          ? const TimeOfDay(hour: 12, minute: 0)
+          : TimeOfDay.fromDateTime(current),
+      helpText: 'Время выполнения',
+    );
+    if (!mounted) return;
+    final picked =
+        time ??
+        (current == null
+            ? const TimeOfDay(hour: 12, minute: 0)
+            : TimeOfDay.fromDateTime(current));
+    final dueAt = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      picked.hour,
+      picked.minute,
+    );
+
+    setState(() => _pendingTaskIds.add(id));
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          // toUtc(): a local ISO string without an offset gets read in the
+          // server's zone and the deadline drifts.
+          .updateTask(id, dueAt: dueAt.toUtc().toIso8601String());
+      await _loadTasks(showLoading: false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Срок перенесён на ${DateFormat('dd.MM.yyyy HH:mm').format(dueAt)}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Не удалось перенести срок: $e'),
+          backgroundColor: AppColor.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _pendingTaskIds.remove(id));
+    }
+  }
+
+  /// Supervisor view: every due-date move across tasks, newest first.
+  /// Spec §2.2 — «чтобы директор и управляющий могли видеть, кто какие задачи
+  /// когда переносит и тд».
+  Future<void> _showRescheduleControl() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (ctx) => const _TaskHistoryFeedSheet(),
+    );
+  }
+
+  Future<void> _showTaskTimeline(Map<String, dynamic> task) async {
+    // Deliberately not gated on the related object: the sheet's first tab is
+    // the task's own change log, which exists even for an orphaned task.
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -382,6 +513,10 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
         _loadTasks(showLoading: false);
       });
     });
+    // Mirrors the server's assertManagerOnly on the history feed: showing the
+    // button to a teacher would just hand them a 403.
+    final role = ref.watch(releaseGateStatusProvider).asData?.value.role;
+    final canControl = role != null && crmHasManagerAccess(role);
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
@@ -427,6 +562,32 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
               onClear: _clearFilters,
             ),
           ),
+          if (canControl)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _showRescheduleControl,
+                  icon: const Icon(Icons.fact_check_outlined, size: 18),
+                  label: const Text('Контроль переносов'),
+                ),
+              ),
+            ),
+          if (_dueFilter == 'day')
+            _DayNavigator(
+              day: _selectedDay,
+              onShift: (days) => _setDropdownFilter(
+                () => _selectedDay = _selectedDay.add(Duration(days: days)),
+              ),
+              onPick: _pickDay,
+              onToday: () {
+                final now = DateTime.now();
+                _setDropdownFilter(
+                  () => _selectedDay = DateTime(now.year, now.month, now.day),
+                );
+              },
+            ),
           Expanded(
             child: _loading
                 ? const Padding(
@@ -457,13 +618,28 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                         ),
                         onStatusChange: _updateStatus,
                         onTimelineTap: _showTaskTimeline,
+                        onRescheduleTap: _rescheduleTask,
                         onReassignTap: _reassignTask,
+                        onOpenEntity: _openTaskEntity,
                       ),
                     ),
                   ),
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _pickDay() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDay,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null || !mounted) return;
+    _setDropdownFilter(
+      () => _selectedDay = DateTime(picked.year, picked.month, picked.day),
     );
   }
 
@@ -488,7 +664,10 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
       _priorityFilter = 'all';
       _branchFilter = 'all';
       _assigneeFilter = 'all';
-      _dueFilter = 'all';
+      // Back to the default view (today's list), not to the whole backlog.
+      _dueFilter = 'day';
+      final now = DateTime.now();
+      _selectedDay = DateTime(now.year, now.month, now.day);
     });
     _loadTasks();
   }

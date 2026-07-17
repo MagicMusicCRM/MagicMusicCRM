@@ -95,6 +95,12 @@ Widget _lessonRow(
           '${l.groups?['name'] ?? 'Инд.'}',
           if ((l.rooms?['name']?.toString() ?? '').isNotEmpty)
             'Ауд.: ${l.rooms!['name']}',
+          // Only director/system_admin get a non-null rate from the API, so
+          // this row simply does not appear for anyone else.
+          if (l.appliedTeacherRate != null)
+            l.appliedTeacherRate == 0
+                ? 'Ставка: входит в оклад'
+                : 'Ставка: ${l.appliedTeacherRate} ₽/ч',
         ].join(' • '),
       ),
       trailing: Container(
@@ -408,6 +414,9 @@ Widget _statusHistorySection(
         if (to != null && to.isNotEmpty) to else '—',
       ].join(' ');
       final comment = h['comment']?.toString().trim() ?? '';
+      // Who made the change: stored all along, but the card only ever showed
+      // the transition and the date.
+      final author = h['changed_by_name']?.toString().trim() ?? '';
       return Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: ListTile(
@@ -427,6 +436,7 @@ Widget _statusHistorySection(
           subtitle: Text(
             [
               _formatDate(h['changed_at']),
+              if (author.isNotEmpty) author,
               if (comment.isNotEmpty) comment,
             ].where((value) => value.isNotEmpty).join(' · '),
             maxLines: 2,
@@ -606,6 +616,85 @@ String _subscriptionRemainder(Subscription s) {
   final status = s.status;
   final suffix = status == 'active' ? '' : ' · ${_formatStatus(status)}';
   return 'Остаток: ${hours(left)} из ${hours(total)} астр.ч.$money$suffix';
+}
+
+/// «Курс» — what the whole subscription is: its hours and its price, as
+/// opposed to «Остаток», which is what is left of it.
+String? _subscriptionCourse(Subscription s) {
+  final total = s.lessonsTotal;
+  if (total <= 0) return null;
+  String hours(num v) =>
+      v == v.truncate() ? v.toInt().toString() : v.toStringAsFixed(1);
+  final price = s.packagePriceRaw;
+  final money = price is num ? ' / ${price.round()} ₽' : '';
+  return 'Курс: ${hours(total)} астр.ч.$money';
+}
+
+/// «Оплачено» — сколько денег пришло на личный счёт за этот абонемент.
+///
+/// ✔ Решение владельца 16.07: «оплату и переплату по абонементу считаем по
+/// личному счёту». Абонемент — бизнес-логика, которая кладёт свою стоимость на
+/// счёт клиента (`issueSubscription` заводит приход), поэтому «Оплачено» это и
+/// есть тот приход, а не отдельная сущность.
+///
+/// Возвращает null, если прихода нет: у старых абонементов не проставлен
+/// `payment_id`, и «Оплачено: 0 ₽» соврало бы про них.
+String? _subscriptionPaid(Subscription s) {
+  final paid = s.paidAmountRaw;
+  if (paid is! num) return null;
+  return 'Оплачено: ${paid.round()} ₽';
+}
+
+/// «Переплата»/«Долг» — разница между тем, что пришло на счёт за абонемент, и
+/// его стоимостью. Считается ровно из этих двух ledger-величин.
+///
+/// Ноль не показываем: «Переплата: 0 ₽» — это шум под каждым абонементом,
+/// оплаченным ровно в стоимость, то есть под нормой.
+({String label, bool isDebt})? _subscriptionOverpayment(Subscription s) {
+  final paid = s.paidAmountRaw;
+  final price = s.packagePriceRaw;
+  if (paid is! num || price is! num) return null;
+  final diff = paid - price;
+  if (diff == 0) return null;
+  return diff > 0
+      ? (label: 'Переплата: ${diff.round()} ₽', isDebt: false)
+      : (label: 'Долг: ${(-diff).round()} ₽', isDebt: true);
+}
+
+/// Подпись статуса операции («Статус» из эталона HolliHop). `paid` не
+/// подписываем: это норма, и метка у каждой строки была бы шумом.
+String? _ledgerStatusLabel(Object? status) {
+  return switch (status?.toString()) {
+    'void' => 'отменена',
+    'pending' => 'не оплачен',
+    _ => null,
+  };
+}
+
+/// Правка/отмена строки личного счёта.
+class _LedgerRowActions extends StatelessWidget {
+  final VoidCallback onEdit;
+  final VoidCallback onVoid;
+
+  const _LedgerRowActions({required this.onEdit, required this.onVoid});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Действия',
+      icon: Icon(
+        Icons.more_horiz_rounded,
+        size: 16,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+      padding: EdgeInsets.zero,
+      onSelected: (value) => value == 'edit' ? onEdit() : onVoid(),
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'edit', child: Text('Редактировать')),
+        PopupMenuItem(value: 'void', child: Text('Отменить')),
+      ],
+    );
+  }
 }
 
 String _ledgerKindLabel(Object? kind) {
