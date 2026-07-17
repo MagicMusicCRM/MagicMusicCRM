@@ -110,7 +110,8 @@ export class TasksService {
             lesson.branch_id::text
           ) as branch_id,
           branch.name as branch_name,
-          task.title, task.description, task.status, task.due_at,
+          task.title, task.description, task.status, task.priority,
+          task.due_at, task.due_all_day,
           task.created_by, task.created_at
         from app.tasks task
         left join app.users assigned_user on assigned_user.id = task.assigned_to and assigned_user.deleted_at is null
@@ -173,10 +174,7 @@ export class TasksService {
               lesson.branch_id::text
             ) = $11::text
           )
-          and (
-            $12::text is null
-            or lower(coalesce(task.title, '') || ' ' || coalesce(task.description, '')) like lower('%' || $12 || '%')
-          )
+          and ($12::text is null or task.priority = $12)
           and (
             $13::text is null
             or lower(coalesce(task.title, '') || ' ' || coalesce(task.description, '')) like lower('%' || $13 || '%')
@@ -219,6 +217,13 @@ export class TasksService {
         "Тип, объект и название задачи обязательны.",
       );
     }
+    // Owner rule: «для задачи нужно обязательно выбрать срок выполнения». A task
+    // without a deadline is invisible in the day view and never triggers a
+    // reminder, so the create path refuses one. The «без времени» case still
+    // carries a date — it sets due_all_day, not a null due_at.
+    if (!dto.dueAt) {
+      throw new BadRequestException("Для задачи обязателен срок выполнения.");
+    }
     // Read out here: the guard above narrows dto.title, but that narrowing does
     // not survive into the transaction callback.
     const title = dto.title.trim();
@@ -227,11 +232,12 @@ export class TasksService {
         `
           insert into app.tasks (
             entity_type, entity_id, assigned_to, title, description,
-            status, due_at, created_by
+            status, priority, due_at, due_all_day, created_by
           )
-          values ($1::app.crm_entity_type, $2, $3, $4, $5, coalesce($6, 'open'), $7, $8)
+          values ($1::app.crm_entity_type, $2, $3, $4, $5, coalesce($6, 'open'),
+            coalesce($7, 'medium'), $8, coalesce($9, false), $10)
           returning id, entity_type, entity_id, assigned_to, title, description,
-            status, due_at, created_by, created_at
+            status, priority, due_at, due_all_day, created_by, created_at
         `,
         [
           dto.entityType,
@@ -240,7 +246,9 @@ export class TasksService {
           title,
           dto.description?.trim() || null,
           dto.status ?? null,
+          dto.priority ?? null,
           dto.dueAt ?? null,
+          dto.dueAllDay ?? null,
           actor.userId,
         ],
       );
@@ -317,7 +325,7 @@ export class TasksService {
       const before = await client.query<TaskRow>(
         `
           select id, entity_type, entity_id, assigned_to, title, description,
-            status, due_at, created_by, created_at
+            status, priority, due_at, due_all_day, created_by, created_at
           from app.tasks
           where id = $1 and deleted_at is null
           for update
@@ -336,11 +344,13 @@ export class TasksService {
             title = coalesce($5, title),
             description = coalesce($6, description),
             status = coalesce($7, status),
-            due_at = coalesce($8::timestamptz, due_at),
+            priority = coalesce($8, priority),
+            due_at = coalesce($9::timestamptz, due_at),
+            due_all_day = coalesce($10, due_all_day),
             updated_at = now()
           where id = $1 and deleted_at is null
           returning id, entity_type, entity_id, assigned_to, title, description,
-            status, due_at, created_by, created_at
+            status, priority, due_at, due_all_day, created_by, created_at
         `,
         [
           taskId,
@@ -350,7 +360,9 @@ export class TasksService {
           dto.title?.trim() || null,
           dto.description?.trim() || null,
           dto.status ?? null,
+          dto.priority ?? null,
           dto.dueAt ?? null,
+          dto.dueAllDay ?? null,
         ],
       );
       const updated = after.rows[0];
@@ -402,6 +414,38 @@ export class TasksService {
       id: task.id,
     });
     return toTaskDto(task);
+  }
+
+  /**
+   * Soft-delete a task. The schema has always had `deleted_at` and every read
+   * filters on it, but no endpoint ever set it — so «Удалить» had nothing to
+   * call and the «Отменить» status was the only way to retire a task, which
+   * merely hid it behind a filter. This removes it for good (recoverably).
+   */
+  async deleteTask(actor: ActorContext, taskId: string) {
+    this.policy.assertManagerOnly(actor);
+    const result = await this.database.query<{ id: string }>(
+      `
+        update app.tasks
+        set deleted_at = now(), updated_at = now()
+        where id = $1 and deleted_at is null
+        returning id
+      `,
+      [taskId],
+    );
+    if (!result.rows[0]) throw new NotFoundException("Задача не найдена.");
+    await this.audit.record({
+      actor,
+      action: "crm.task_deleted",
+      entityType: "task",
+      entityId: taskId,
+    });
+    this.realtime.emitCrmChanged({
+      entity: "task",
+      action: "deleted",
+      id: taskId,
+    });
+    return { id: taskId, deleted: true };
   }
 
   /**

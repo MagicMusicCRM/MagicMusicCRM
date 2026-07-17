@@ -135,6 +135,14 @@ export class CrmEngagementController {
     return this.tasks.updateTask(actor, id, dto);
   }
 
+  @Delete("tasks/:id")
+  deleteTask(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.tasks.deleteTask(actor, id);
+  }
+
   @Get("homeworks")
   listHomeworks(
     @CurrentActor() actor: ActorContext,

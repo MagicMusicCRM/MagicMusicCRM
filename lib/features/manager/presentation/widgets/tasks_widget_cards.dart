@@ -421,6 +421,8 @@ class _TaskCard extends StatelessWidget {
   final Future<void> Function(Map<String, dynamic>) onReassignTap;
   final Future<void> Function(Map<String, dynamic>) onRescheduleTap;
   final Future<void> Function(Map<String, dynamic>) onOpenEntity;
+  final Future<void> Function(Map<String, dynamic>) onEditTap;
+  final Future<void> Function(Map<String, dynamic>) onDeleteTap;
 
   const _TaskCard({
     required this.task,
@@ -430,6 +432,8 @@ class _TaskCard extends StatelessWidget {
     required this.onReassignTap,
     required this.onRescheduleTap,
     required this.onOpenEntity,
+    required this.onEditTap,
+    required this.onDeleteTap,
   });
 
   @override
@@ -438,11 +442,12 @@ class _TaskCard extends StatelessWidget {
     // a TypeError during build and render the card as a red error box.
     final id = task['id']?.toString() ?? '';
     final status = task['status']?.toString();
+    final dueAllDay = task['due_all_day'] == true;
     final dueDate = task['due_date'] != null
         ? DateFormat(
-            // Deadlines carry a time of day now, and it drives the -1h/-10m
-            // reminders — showing the date alone hides why one just fired.
-            'd MMM, HH:mm',
+            // With a time it drives the -1h/-10m reminders, so the time is
+            // shown; an all-day deadline shows the date alone.
+            dueAllDay ? 'd MMM' : 'd MMM, HH:mm',
             'ru',
           ).format(DateTime.parse(task['due_date'].toString()).toLocal())
         : null;
@@ -454,6 +459,8 @@ class _TaskCard extends StatelessWidget {
         dueAt.isBefore(DateTime.now()) &&
         status != 'done' &&
         status != 'cancelled';
+    final isCancelled = status == 'cancelled';
+    final priority = task['priority']?.toString() ?? 'medium';
     final assigneeText = task['assigned_name']?.toString();
     final creatorText = task['creator_name']?.toString();
     final assignedProfileId = task['assigned_profile_id']?.toString();
@@ -463,7 +470,10 @@ class _TaskCard extends StatelessWidget {
     final onEntityTap = _entityTap(context, task);
 
     return Opacity(
-      opacity: isPending ? 0.65 : 1,
+      // A cancelled task stays in the list but reads as retired — the whole
+      // card dims, not just a hidden status. (Before, a cancelled task looked
+      // identical to an open one, so «Отменить» seemed to do nothing.)
+      opacity: isPending ? 0.65 : (isCancelled ? 0.55 : 1),
       child: Card(
         margin: const EdgeInsets.only(bottom: 10),
         elevation: 0,
@@ -491,12 +501,28 @@ class _TaskCard extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  // Priority dot: red = high, amber = medium, grey = low.
+                  Container(
+                    width: 9,
+                    height: 9,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: _priorityColor(priority),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                   Expanded(
                     child: Text(
                       task['title']?.toString() ?? '',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
+                        decoration: isCancelled
+                            ? TextDecoration.lineThrough
+                            : null,
+                        color: isCancelled
+                            ? Theme.of(context).colorScheme.onSurfaceVariant
+                            : null,
                       ),
                     ),
                   ),
@@ -542,6 +568,36 @@ class _TaskCard extends StatelessWidget {
                         onRescheduleTap(task);
                         return;
                       }
+                      if (value == 'edit') {
+                        onEditTap(task);
+                        return;
+                      }
+                      if (value == 'delete') {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Удалить задачу?'),
+                            content: const Text(
+                              'Задача будет удалена безвозвратно.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Отмена'),
+                              ),
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColor.danger,
+                                ),
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Удалить'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) onDeleteTap(task);
+                        return;
+                      }
                       // Cancelling drops the task out of the active workflow —
                       // confirm to avoid an accidental mis-click in the menu.
                       if (value == 'cancelled') {
@@ -574,6 +630,10 @@ class _TaskCard extends StatelessWidget {
                     },
                     itemBuilder: (_) => [
                       const PopupMenuItem(
+                        value: 'edit',
+                        child: Text('Редактировать'),
+                      ),
+                      const PopupMenuItem(
                         value: 'reassign',
                         child: Text('Назначить ответственного'),
                       ),
@@ -597,16 +657,19 @@ class _TaskCard extends StatelessWidget {
                           value: 'open',
                           child: Text('Открыть снова'),
                         ),
-                      if (status != 'cancelled') ...[
-                        const PopupMenuDivider(),
+                      const PopupMenuDivider(),
+                      if (status != 'cancelled')
                         const PopupMenuItem(
                           value: 'cancelled',
-                          child: Text(
-                            'Отменить',
-                            style: TextStyle(color: AppColor.danger),
-                          ),
+                          child: Text('Отменить'),
                         ),
-                      ],
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text(
+                          'Удалить',
+                          style: TextStyle(color: AppColor.danger),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -695,5 +758,13 @@ class _TaskCard extends StatelessWidget {
       return null;
     }
     return () => onOpenEntity(task);
+  }
+
+  static Color _priorityColor(String priority) {
+    return switch (priority) {
+      'high' => AppColor.danger,
+      'low' => AppColor.text2,
+      _ => AppColor.warning,
+    };
   }
 }

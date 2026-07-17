@@ -235,6 +235,8 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
         description: result['description']?.toString(),
         assignedTo: result['assigned_to']?.toString(),
         dueAt: result['due_at']?.toString(),
+        priority: result['priority']?.toString(),
+        dueAllDay: result['due_all_day'] == true,
         status: 'open',
       );
       await _loadTasks();
@@ -250,6 +252,123 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _editTask(Map<String, dynamic> task) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final crm = ref.read(magicCrmServiceProvider);
+    final profiles = ref.read(magicProfileAdminServiceProvider);
+
+    List<List<Map<String, dynamic>>> results;
+    try {
+      results = await Future.wait([
+        profiles.listProfiles(limit: 100),
+        crm.listStudents(limit: 100),
+        crm.listLeads(limit: 100),
+        crm.listGroups(limit: 100),
+        crm.listTeachers(limit: 100),
+      ]);
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось открыть задачу: $e'),
+            backgroundColor: AppColor.danger,
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => _TaskDialog(
+        employees: results[0],
+        students: results[1],
+        leads: results[2],
+        groups: results[3],
+        teachers: results[4],
+        task: task,
+        onSearchEntities: (entityType, query) async {
+          final crmService = ref.read(magicCrmServiceProvider);
+          if (entityType == 'lead') {
+            return crmService.listLeads(limit: 30, q: query);
+          }
+          final response = await crmService.searchStudents(q: query, limit: 30);
+          final items = response['items'];
+          return items is List
+              ? items.whereType<Map<String, dynamic>>().toList()
+              : <Map<String, dynamic>>[];
+        },
+      ),
+    );
+    if (result == null) return;
+
+    try {
+      await crm.updateTask(
+        task['id'].toString(),
+        entityType: result['entity_type']?.toString(),
+        entityId: result['entity_id']?.toString(),
+        title: result['title']?.toString(),
+        description: result['description']?.toString(),
+        assignedTo: result['assigned_to']?.toString(),
+        dueAt: result['due_at']?.toString(),
+        priority: result['priority']?.toString(),
+        dueAllDay: result['due_all_day'] == true,
+      );
+      await _loadTasks(showLoading: false);
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Задача обновлена')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Не удалось сохранить задачу: $e'),
+            backgroundColor: AppColor.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteTask(Map<String, dynamic> task) async {
+    final id = task['id']?.toString();
+    if (id == null || _pendingTaskIds.contains(id)) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final index = _tasks.indexWhere((t) => t['id']?.toString() == id);
+    if (index < 0) return;
+    final removed = _tasks[index];
+    // Optimistic: drop the card now, restore it if the server rejects.
+    setState(() {
+      _tasks.removeAt(index);
+      _pendingTaskIds.add(id);
+    });
+    try {
+      await ref.read(magicCrmServiceProvider).deleteTask(id);
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Задача удалена')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        final at = index.clamp(0, _tasks.length);
+        _tasks.insert(at, removed);
+      });
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось удалить задачу: $e'),
+          backgroundColor: AppColor.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _pendingTaskIds.remove(id));
     }
   }
 
@@ -621,6 +740,8 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                         onRescheduleTap: _rescheduleTask,
                         onReassignTap: _reassignTask,
                         onOpenEntity: _openTaskEntity,
+                        onEditTap: _editTask,
+                        onDeleteTap: _deleteTask,
                       ),
                     ),
                   ),

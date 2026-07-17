@@ -349,6 +349,8 @@ extension MagicCrmSchedule on MagicCrmService {
     String status = 'open',
     String? dueAt,
     String? assignedTo,
+    String? priority,
+    bool? dueAllDay,
   }) async {
     final data = <String, dynamic>{
       'entityType': entityType,
@@ -361,6 +363,8 @@ extension MagicCrmSchedule on MagicCrmService {
     }
     if (dueAt != null) data['dueAt'] = dueAt;
     if (assignedTo != null) data['assignedTo'] = assignedTo;
+    if (priority != null) data['priority'] = priority;
+    if (dueAllDay != null) data['dueAllDay'] = dueAllDay;
 
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/tasks',
@@ -378,6 +382,8 @@ extension MagicCrmSchedule on MagicCrmService {
     String? description,
     String? status,
     String? dueAt,
+    String? priority,
+    bool? dueAllDay,
   }) async {
     final data = <String, dynamic>{};
     void addString(String key, String? value) {
@@ -394,12 +400,18 @@ extension MagicCrmSchedule on MagicCrmService {
     addString('description', description);
     addString('status', status);
     addString('dueAt', dueAt);
+    addString('priority', priority);
+    if (dueAllDay != null) data['dueAllDay'] = dueAllDay;
 
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/tasks/$id',
       data: data,
     );
     return _legacyTask(response);
+  }
+
+  Future<void> deleteTask(String id) async {
+    await _api.delete<Map<String, dynamic>>('/crm/tasks/$id');
   }
 
   Future<List<Map<String, dynamic>>> listComments({
