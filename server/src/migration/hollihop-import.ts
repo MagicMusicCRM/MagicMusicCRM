@@ -48,12 +48,31 @@ const CONNECTION_STRING =
   process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
 const SOURCE_DIR = process.env.HOLLIHOP_IMPORT_SOURCE_DIR?.trim();
 const TAKE = Number(process.env.HOLLIHOP_IMPORT_TAKE ?? "500");
-// Lesson generation window. This was the real cause of "too little data": the
-// importer pulls ALL EdUnits (GetEdUnits returns every unit), but only expands
-// their ScheduleItems into lessons within this window — previously a narrow
-// 2025-2026. Widened to HolliHop's full available range (data spans ~2024 → 2027)
-// so past and future schedule (by classroom/teacher) is imported, not just ~2y.
-const LESSON_FROM = process.env.HOLLIHOP_LESSON_FROM ?? "2024-01-01";
+// Окно занятий. Работает в ДВУХ местах сразу, и это легко упустить:
+//   • `dateFrom`/`dateTo` запроса GetEdUnits — то, что вне окна, вообще не
+//     приезжает с сервера;
+//   • окно разворачивания ScheduleItems в занятия.
+// Значит, промах здесь — это не «меньше строк», а «данных нет и спросить не у
+// кого».
+//
+// ⚠️ Здесь стояло 2024-01-01 с комментарием «data spans ~2024 → 2027». Это
+// допущение неверно, и оно молча резало первый год школы. Измерено по дампу
+// 17.07 — вся история начинается в марте 2023:
+//
+//   ученики (AddressDate)  2023-03-14 → 2026-07-10   ← самая ранняя дата вообще
+//   лиды (AddressDate)     2023-03-18 → 2026-07-10
+//   платежи                2023-03-18 → 2026-07-10
+//   занятия (Days)         2023-03-18 → 2028-01-01
+//
+// Окном резало ТОЛЬКО занятия (1 415 дней за 2023) и заметки админа к ним:
+// лиды, ученики и платежи тянутся без окна (fetchPaged без дат), поэтому
+// клиенты 2023 года приезжали и раньше — но их занятия молча пропадали, а
+// значит, у самых первых учеников школы карточка была пустой.
+//
+// 2023-01-01 — с запасом до измеренного минимума. Не «пораньше на всякий
+// случай»: запас в два месяца покрывает возможную задним числом правку, а
+// дальше окно расширяется переменной среды.
+const LESSON_FROM = process.env.HOLLIHOP_LESSON_FROM ?? "2023-01-01";
 const LESSON_TO = process.env.HOLLIHOP_LESSON_TO ?? "2028-01-01";
 // Reference "today" for splitting past (attended/missed) vs future (scheduled)
 // lessons when materializing attendance from the HolliHop Days array.
