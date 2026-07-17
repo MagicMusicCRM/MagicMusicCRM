@@ -40,6 +40,7 @@ extension MagicCrmLeads on MagicCrmService {
     String? preferredSchedule,
     String quick = 'all',
     bool? openTasks,
+    bool? hideConverted,
     String? from,
     String? to,
     String? cursor,
@@ -69,6 +70,9 @@ extension MagicCrmLeads on MagicCrmService {
     addString('to', to);
     addString('cursor', cursor);
     if (openTasks != null) queryParameters['openTasks'] = openTasks;
+    // Прячет лидов, у которых уже есть ученик. Правило совпадения — общее с
+    // импортом (leadStudentMatchSql на бэке): телефон И имя И фамилия.
+    if (hideConverted != null) queryParameters['hideConverted'] = hideConverted;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/leads/board',
