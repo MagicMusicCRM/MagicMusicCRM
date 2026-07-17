@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
 /// v7 attendance sheet (P2-5 / v7p2-3 / KVA-237). Theme-aware (in-app screen):
 /// surfaces follow the app theme, accents use the v7 tokens.
@@ -63,6 +64,17 @@ class _LessonAttendanceDialogState
   bool _loading = true;
   bool _saving = false;
   bool _notifyClient = false;
+
+  /// Статус/посещаемость меняет только администратор и выше — педагог видит урок
+  /// в режиме просмотра (правила ролей заказчика; сервер тоже это гейтит). ДЗ и
+  /// комментарий педагога педагог оставляет в карточке ученика, не здесь.
+  bool get _canEditAttendance {
+    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    return role == 'admin' ||
+        role == 'manager' ||
+        role == 'director' ||
+        role == 'system_admin';
+  }
   List<Map<String, dynamic>> _participations = [];
   List<Map<String, dynamic>> _students = [];
   final Map<String, TextEditingController> _reasonControllers = {};
@@ -427,8 +439,9 @@ class _LessonAttendanceDialogState
                 const Divider(height: 1),
                 if (!_loading) _commentsSection(cs),
                 const Divider(height: 1),
-                // «Уведомить об изменениях» (модалка HolliHop, image5).
-                if (!_loading)
+                // «Уведомить об изменениях» (модалка HolliHop, image5). Only
+                // meaningful for the admin+ who edits the attendance.
+                if (!_loading && _canEditAttendance)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
                     child: CheckboxListTile(
@@ -444,8 +457,33 @@ class _LessonAttendanceDialogState
                       ),
                     ),
                   ),
-                // Footer.
-                Padding(
+                // Footer. Teachers get a read-only sheet — the status/charge is
+                // an admin+ action (server also enforces this), so they only see
+                // «Закрыть» and a hint.
+                if (!_canEditAttendance)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Только просмотр. Статус занятия и посещаемость '
+                          'ставит администратор.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Закрыть'),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
                   child: Row(
                     children: [
@@ -591,14 +629,16 @@ class _LessonAttendanceDialogState
                   ),
                 ),
             ],
-            onChanged: (v) => setState(() {
-              participation['kind'] = v;
-              participation['is_present'] = const [
-                'attended',
-                'free_lesson',
-                'partially_paid',
-              ].contains(v);
-            }),
+            onChanged: _canEditAttendance
+                ? (v) => setState(() {
+                    participation['kind'] = v;
+                    participation['is_present'] = const [
+                      'attended',
+                      'free_lesson',
+                      'partially_paid',
+                    ].contains(v);
+                  })
+                : null,
           ),
           if (kind == 'partially_paid') ...[
             const SizedBox(height: 6),
@@ -612,10 +652,12 @@ class _LessonAttendanceDialogState
                     divisions: 19,
                     activeColor: attendanceKindColor(kind),
                     label: '${(share * 100).round()}%',
-                    onChanged: (v) => setState(
-                      () => participation['charge_share'] =
-                          (v * 100).round() / 100,
-                    ),
+                    onChanged: _canEditAttendance
+                        ? (v) => setState(
+                            () => participation['charge_share'] =
+                                (v * 100).round() / 100,
+                          )
+                        : null,
                   ),
                 ),
                 SizedBox(

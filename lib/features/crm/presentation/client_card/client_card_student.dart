@@ -200,6 +200,19 @@ extension _ClientCardStudent on _ClientCardState {
     );
   }
 
+  // ── Student tab: Прогресс (домашние задания от педагога) ──────────────────
+  // Заказчик: ДЗ, назначенное педагогом, фиксируется в разделе «Прогресс»
+  // карточки клиента. Тянем список домашек ученика (app.lesson_homeworks).
+  Widget _buildProgressTab(ColorScheme cs) {
+    return _studentGuard(
+      cs,
+      () => _HomeworkProgressList(
+        studentId: _studentId,
+        refreshKey: _homeworkRefreshKey,
+      ),
+    );
+  }
+
   // ── Student action bar (overflow menu hosts the v7 student actions) ───────
   Widget _buildStudentActionBar(ColorScheme cs) {
     final busy = _loadingStudent || _student == null;
@@ -388,6 +401,8 @@ extension _ClientCardStudent on _ClientCardState {
       );
       if (!mounted) return;
       _dirty = true;
+      // Refresh the «Прогресс» tab so the just-assigned homework shows up.
+      _emitState(() => _homeworkRefreshKey++);
       MagicToast.show(
         context,
         'ДЗ создано',

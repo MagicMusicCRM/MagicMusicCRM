@@ -86,6 +86,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _converting = false;
   bool _loadingCard = true;
   int _commentsRefreshKey = 0;
+  // Bumped after a homework is assigned so the «Прогресс» tab refetches.
+  int _homeworkRefreshKey = 0;
   Map<String, dynamic>? _leadCard;
   List<Map<String, dynamic>> _duplicateCandidates = [];
   bool _loadingDuplicates = true;
@@ -156,6 +158,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     (Icons.event_note_rounded, 'Занятия'),
     (Icons.account_balance_wallet_rounded, 'Оплаты'),
     (Icons.history_rounded, 'История'),
+    (Icons.auto_graph_rounded, 'Прогресс'),
   ];
 
   List<(IconData, String)> get _tabs => _isStudent ? _studentTabs : _leadTabs;
@@ -436,6 +439,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                           _buildLessonsTab(cs),
                           _buildPaymentsTab(cs),
                           _buildStudentHistoryTab(cs),
+                          _buildProgressTab(cs),
                         ]
                       : [
                           _buildClientInfoTab(cs, curStatus),

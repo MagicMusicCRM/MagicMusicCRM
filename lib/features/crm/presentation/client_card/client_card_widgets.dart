@@ -402,3 +402,180 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
+
+/// «Прогресс» tab body: homework assigned to the student by the teacher
+/// (`app.lesson_homeworks`). Holds its own future so the aggregated card's
+/// frequent rebuilds don't refetch; recomputed when [refreshKey]/[studentId]
+/// change (a new homework bumps the key).
+class _HomeworkProgressList extends ConsumerStatefulWidget {
+  final String studentId;
+  final int refreshKey;
+  const _HomeworkProgressList({
+    required this.studentId,
+    required this.refreshKey,
+  });
+
+  @override
+  ConsumerState<_HomeworkProgressList> createState() =>
+      _HomeworkProgressListState();
+}
+
+class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
+  late Future<List<Map<String, dynamic>>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HomeworkProgressList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshKey != widget.refreshKey ||
+        oldWidget.studentId != widget.studentId) {
+      _future = _load();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _load() {
+    if (widget.studentId.isEmpty) {
+      return Future.value(const <Map<String, dynamic>>[]);
+    }
+    return ref
+        .read(magicCrmServiceProvider)
+        .listHomeworks(studentId: widget.studentId, limit: 50);
+  }
+
+  String _statusLabel(Object? s) => switch (s?.toString()) {
+        'assigned' => 'Задано',
+        'submitted' => 'Сдано',
+        'done' || 'completed' || 'checked' => 'Проверено',
+        _ => s?.toString() ?? '',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColor.gold),
+          );
+        }
+        if (snap.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpace.xl),
+              child: Text(
+                'Не удалось загрузить ДЗ: ${snap.error}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: cs.onSurfaceVariant),
+              ),
+            ),
+          );
+        }
+        final items = snap.data ?? const <Map<String, dynamic>>[];
+        if (items.isEmpty) {
+          return Center(
+            child: Text(
+              'Домашних заданий пока нет',
+              style: TextStyle(color: cs.onSurfaceVariant),
+            ),
+          );
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(AppSpace.xl),
+          itemCount: items.length,
+          itemBuilder: (ctx, i) {
+            final h = items[i];
+            final title = (h['title'] ?? 'Домашнее задание').toString();
+            final desc = (h['description'] ?? '').toString().trim();
+            final due = DateTime.tryParse((h['dueAt'] ?? '').toString());
+            final created = DateTime.tryParse((h['createdAt'] ?? '').toString());
+            final meta = [
+              if (due != null)
+                'Срок: ${DateFormat('d MMM yyyy', 'ru').format(due.toLocal())}',
+              if (created != null)
+                'Задано: ${DateFormat('d MMM', 'ru').format(created.toLocal())}',
+            ].join('  •  ');
+            final statusLabel = _statusLabel(h['status']);
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.menu_book_rounded,
+                          size: 18,
+                          color: AppColor.gold,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        if (statusLabel.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColor.goldSoft,
+                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                              border: Border.all(color: AppColor.goldLine),
+                            ),
+                            child: Text(
+                              statusLabel,
+                              style: const TextStyle(
+                                color: AppColor.gold,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        desc,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: cs.onSurface,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                    if (meta.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        meta,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
