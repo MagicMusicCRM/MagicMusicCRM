@@ -523,6 +523,12 @@ extension _ClientCardTabsA on _ClientCardState {
             ),
           ],
 
+          // Данные из HolliHop, которым нет отдельной строки/пикера, но которые
+          // залиты в custom_data (ответственный, статус HH, рекл. источник,
+          // тип/дата обращения, контакты родителей, UTM, тип лида). Секция сама
+          // прячется, если ни одно поле не заполнено.
+          _buildExtraInfoCard(cs),
+
           const SizedBox(height: AppSpace.lg),
           ClientAppUserPanel(
             entityType: _mode.hasStudentHalf ? 'student' : 'lead',
@@ -547,6 +553,97 @@ extension _ClientCardTabsA on _ClientCardState {
           ],
         ],
       ),
+    );
+  }
+
+  // ── «Дополнительно» — HolliHop-поля без своей строки/пикера ───────────────
+  // Reads from the student half first, then the lead half, so a converted
+  // client shows whichever half carries the value.
+  String? _hhField(String key) {
+    for (final data in [
+      if (_mode.hasStudentHalf) _student?['custom_data'],
+      if (_mode.hasLeadHalf) _leadData['custom_data'],
+    ]) {
+      if (data is Map) {
+        final s = _stringifyCustom(data[key]);
+        if (s != null) return s;
+      }
+    }
+    return null;
+  }
+
+  String? _stringifyCustom(Object? v) {
+    if (v == null) return null;
+    if (v is String) return v.trim().isEmpty ? null : v.trim();
+    if (v is List) {
+      final parts = v
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      return parts.isEmpty ? null : parts.join(', ');
+    }
+    final s = v.toString().trim();
+    return s.isEmpty ? null : s;
+  }
+
+  String? _responsibleLabel() {
+    final name = _hhField('responsibleName');
+    if (name != null) return name;
+    // Fallback: first assignee's FullName from either half.
+    for (final data in [
+      if (_mode.hasStudentHalf) _student?['custom_data'],
+      if (_mode.hasLeadHalf) _leadData['custom_data'],
+    ]) {
+      if (data is Map) {
+        final a = data['assignees'];
+        if (a is List && a.isNotEmpty && a.first is Map) {
+          final fn = (a.first as Map)['FullName']?.toString().trim();
+          if (fn != null && fn.isNotEmpty) return fn;
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _visitDateLabel() {
+    final raw = _hhField('visitDate') ?? _hhField('visitDateTime');
+    if (raw == null) return null;
+    final dt = DateTime.tryParse(raw);
+    return dt != null ? DateFormat('d MMM yyyy', 'ru').format(dt) : raw;
+  }
+
+  String? _utmLabel() {
+    final parts = [
+      _hhField('utmSource'),
+      _hhField('utmMedium'),
+      _hhField('utmCampaign'),
+    ].whereType<String>().toList();
+    return parts.isEmpty ? null : parts.join(' / ');
+  }
+
+  Widget _buildExtraInfoCard(ColorScheme cs) {
+    final rows = <Widget>[];
+    void add(IconData icon, String label, String? value) {
+      if (value == null || value.trim().isEmpty) return;
+      rows.add(_InfoRow(icon: icon, label: label, value: value));
+    }
+
+    add(Icons.person_pin_outlined, 'Ответственный', _responsibleLabel());
+    add(Icons.flag_outlined, 'Статус (HolliHop)', _hhField('statusName'));
+    add(Icons.campaign_outlined, 'Рекламный источник', _hhField('adSource'));
+    add(Icons.call_outlined, 'Тип обращения', _hhField('addressType'));
+    add(Icons.event_available_outlined, 'Дата визита', _visitDateLabel());
+    add(Icons.family_restroom_outlined, 'Контактные лица', _hhField('contacts'));
+    // Тип лида / UTM — только для лид-стороны (у ученика их нет).
+    if (_mode.hasLeadHalf) {
+      add(Icons.sell_outlined, 'Тип лида', _hhField('leadType'));
+      add(Icons.link_outlined, 'UTM', _utmLabel());
+    }
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.lg),
+      child: _buildInfoCard('Дополнительно', rows),
     );
   }
 
