@@ -10,6 +10,7 @@
     "db:migrate:prod": "node dist/db/migrate.js up",
     "db:rollback": "ts-node src/db/migrate.ts down",
     "hollihop:import-exports": "ts-node src/migration/import-hollihop-exports.ts",
+    "hollihop:import": "ts-node src/migration/hollihop-import.ts",
     "hollihop:link-leads": "ts-node src/migration/link-students-to-leads.ts",
     "db:rollback:prod": "node dist/db/migrate.js down",
     "security:gate": "ts-node src/security/security-gate.ts",
