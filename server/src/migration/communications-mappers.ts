@@ -290,14 +290,21 @@ export function taskTitleFromBody(body: string): string {
  *
  * Тело + дата постановки + клиент: этого достаточно, чтобы отличить две задачи
  * одного человека, и это не меняется при смене статуса.
+ *
+ * ⚠️ `createdIso` — ВОССТАНОВЛЕННЫЙ момент (после resolveYear), а не то, что
+ * написано в тексте. Первая редакция склеивала ключ из сырых `createdDay/Month/
+ * Year`, и «6.5.» без года давало ключ, отличный от «6.5.2025», — хотя год
+ * восстанавливался в тот же самый. Одна и та же задача ложилась дважды.
+ * Поймано проверкой §6.3b на собранной базе.
+ *
+ * `subject` — тоже НАЙДЕННЫЙ человек (id), а не имя из выгрузки: имя не
+ * тождество, лид находится и по префиксу, так что один человек приходит под
+ * разными написаниями.
  */
 export function communicationTaskKey(
   subject: string,
+  createdIso: string | null,
   parsed: ParsedTaskDescription,
 ): string {
-  const created =
-    parsed.createdDay !== null
-      ? `${parsed.createdDay}.${parsed.createdMonth}.${parsed.createdYear ?? ""}`
-      : "";
-  return `export:comm-task:${subject}:${created}:${parsed.body}`;
+  return `export:comm-task:${subject}:${createdIso ?? ""}:${parsed.body}`;
 }

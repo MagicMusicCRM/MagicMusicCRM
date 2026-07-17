@@ -514,7 +514,14 @@ async function importCommunications(options: {
     const createdBy = await matcher.userIdByName(parsed.createdBy);
     if (parsed.createdBy && !createdBy) unmatchedResponsibles.add(parsed.createdBy);
 
-    const key = communicationTaskKey(comm.studentExternalId || comm.clientName, parsed);
+    // Ключ строится по НАЙДЕННОМУ человеку, а не по имени из выгрузки.
+    //
+    // Имя не тождество: лид находится и по префиксу («Худякова Дана Сергеевна»
+    // → лид «Худякова Дана»), так что один человек приходит под разными
+    // написаниями. Ключ по имени давал на них РАЗНЫЕ ключи — и одна и та же
+    // задача ложилась дважды. Поймано проверкой §6.3b на собранной базе: 1 дубль
+    // («не ставить Ксюше занятия…»).
+    const key = communicationTaskKey(resolved.entityId, createdIso, parsed);
     const taskId = deterministicUuid("hollihop-comm-task", key);
 
     const written = await upsert(mode, client, "app.tasks", {

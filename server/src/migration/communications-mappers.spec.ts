@@ -302,24 +302,49 @@ describe("communicationTaskKey", () => {
     'записать на пробный\n(поставил Иванов И. - 15.06)\nСтатус "Закрыта" (установил Петров П.) - 16.06 19:42',
   );
 
+  const CREATED = "2025-06-15T00:00:00.000Z";
+
   it("ключ НЕ меняется, когда задачу закрыли", () => {
     // ⚠️ Задача живёт: сегодня открыта, завтра закрыта. Попади статус в ключ —
     // следующая выгрузка породила бы ВТОРУЮ задачу вместо обновления первой.
-    expect(communicationTaskKey("lead-1", open)).toBe(
-      communicationTaskKey("lead-1", closed),
+    expect(communicationTaskKey("lead-1", CREATED, open)).toBe(
+      communicationTaskKey("lead-1", CREATED, closed),
+    );
+  });
+
+  /**
+   * ⚠️ Дата в ключе — ВОССТАНОВЛЕННАЯ, а не та, что в тексте.
+   *
+   * Прежняя редакция склеивала ключ из сырых createdDay/Month/Year, и «6.5.»
+   * без года давало ключ, отличный от «6.5.2025», — хотя resolveYear
+   * восстанавливал обе в один и тот же момент. Одна и та же задача ложилась
+   * дважды. Поймано §6.3b на собранной базе — тестами не ловилось.
+   */
+  it("одна дата, записанная с годом и без, даёт ОДИН ключ", () => {
+    const withYear = parseTaskDescription("не ставить занятия\n(поставил Иванов И. - 6.05.25)");
+    const without = parseTaskDescription("не ставить занятия\n(поставил Иванов И. - 6.05)");
+    const created = "2025-05-06T00:00:00.000Z";
+    expect(communicationTaskKey("lead-1", created, withYear)).toBe(
+      communicationTaskKey("lead-1", created, without),
     );
   });
 
   it("различает две задачи одного клиента", () => {
     const other = parseTaskDescription("позвонить маме\n(поставил Иванов И. - 15.06)");
-    expect(communicationTaskKey("lead-1", open)).not.toBe(
-      communicationTaskKey("lead-1", other),
+    expect(communicationTaskKey("lead-1", CREATED, open)).not.toBe(
+      communicationTaskKey("lead-1", CREATED, other),
     );
   });
 
   it("различает одинаковый текст у разных клиентов", () => {
-    expect(communicationTaskKey("lead-1", open)).not.toBe(
-      communicationTaskKey("lead-2", open),
+    expect(communicationTaskKey("lead-1", CREATED, open)).not.toBe(
+      communicationTaskKey("lead-2", CREATED, open),
+    );
+  });
+
+  it("различает одинаковый текст, поставленный в разные дни", () => {
+    expect(communicationTaskKey("lead-1", CREATED, open)).not.toBe(
+      communicationTaskKey("lead-1", "2025-07-01T00:00:00.000Z", open),
     );
   });
 });
