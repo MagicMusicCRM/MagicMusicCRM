@@ -246,46 +246,67 @@ extension _ChatInfoViews on _ChatInfoDialogState {
           final role = member['role']?.toString() == 'admin'
               ? 'Администратор группы'
               : _roleLabel(member['role']?.toString() ?? 'client');
+          final memberUserId = member['user_id']?.toString();
+          // Admins and up can tap a member to open a 1:1 chat with them —
+          // teachers and clients just see the roster. (Owner rule: «переход с
+          // участника на профиль/чат только для админов и всех кто старше».)
+          final canOpen =
+              _isManagerOrAdminRole &&
+              memberUserId != null &&
+              memberUserId.isNotEmpty;
+          final row = Row(
+            children: [
+              TelegramAvatar(
+                name: name,
+                avatarUrl: null,
+                uniqueId: memberUserId ?? name,
+                radius: 16,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      role,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? TelegramColors.darkTextSecondary
+                            : TelegramColors.lightTextSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (canOpen)
+                Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  size: 18,
+                  color: TelegramColors.accent,
+                ),
+            ],
+          );
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                TelegramAvatar(
-                  name: name,
-                  avatarUrl: null,
-                  uniqueId: member['user_id']?.toString() ?? name,
-                  radius: 16,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        role,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark
-                              ? TelegramColors.darkTextSecondary
-                              : TelegramColors.lightTextSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            child: canOpen
+                ? InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => _startChatWithMember(memberUserId),
+                    child: row,
+                  )
+                : row,
           );
         }),
         if (_members.length > previewMembers.length)
