@@ -3,11 +3,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
@@ -101,9 +105,18 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   @override
   void didUpdateWidget(covariant ReportsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextTab = _positionForCanonicalTab(widget.initialTab);
-    if (nextTab != _tabController.index) {
-      _tabController.index = nextTab;
+    // Jump ONLY when the parent actually asks for a different tab (e.g. an
+    // overview tile deep-links here). Comparing against `_tabController.index`
+    // fired on EVERY parent rebuild — and this widget is rebuilt inline by
+    // MessengerScreen, which rebuilds on every realtime `crm.changed` event
+    // (it invalidates the unseen-counter provider). So any payment/lesson event
+    // anywhere yanked the user out of whatever sub-tab they were reading and
+    // back to `initialTab` (Активность for managers). Gate on the actual change.
+    if (widget.initialTab != oldWidget.initialTab) {
+      final nextTab = _positionForCanonicalTab(widget.initialTab);
+      if (nextTab != _tabController.index) {
+        _tabController.index = nextTab;
+      }
     }
   }
 
