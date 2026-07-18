@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
 /// A CRM realtime invalidation hint (carries no PII — listeners refetch via API).
 class CrmChangedEvent {
@@ -62,13 +63,25 @@ final crmRealtimeProvider = StreamProvider<CrmChangedEvent>((ref) {
     }
   }
 
+  var fallbackTick = 0;
   fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    fallbackTick++;
     // If realtime is active and has just delivered a CRM event, avoid a needless
     // duplicate refresh burst. Idle sockets still get a periodic API truth check.
     if (DateTime.now().difference(lastSocketEventAt) <
         const Duration(seconds: 25)) {
       return;
     }
+    // Клиентов сервер НЕ подключает к broadcast-комнате crm.changed
+    // (realtime.gateway.ts пускает туда только staff), поэтому для клиента окно
+    // подавления не срабатывает никогда и 30-секундный опрос всех сущностей
+    // превращался в постоянный самоDDoS (~1000 клиентов × 10 событий / 30 с).
+    // Клиентам хватает редкой сверки: раз в 5 минут (каждый 10-й тик).
+    // Роль читается лениво на каждом тике — без пересоздания сокета при её
+    // загрузке; пока роль неизвестна, консервативно считаем клиентом.
+    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    final isStaff = role != null && role.isNotEmpty && role != 'client';
+    if (!isStaff && fallbackTick % 10 != 0) return;
     for (final entity in _fallbackCrmEntities) {
       emit(CrmChangedEvent(entity: entity, action: 'poll'));
     }

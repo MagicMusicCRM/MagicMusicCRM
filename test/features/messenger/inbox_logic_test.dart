@@ -1,9 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/features/messenger/inbox_logic.dart';
 
-Map<String, dynamic> admin(String id, {String? folder, int? unused, Map? assignedTo, bool archived = false}) =>
-  {'id': id, 'type': 'administration', 'raw_type': 'administration',
-   'folder': folder, 'archived': archived, 'assigned_to': assignedTo};
+Map<String, dynamic> admin(
+  String id, {
+  String? folder,
+  int? unused,
+  Map? assignedTo,
+  bool archived = false,
+}) => {
+  'id': id,
+  'type': 'administration',
+  'raw_type': 'administration',
+  'folder': folder,
+  'archived': archived,
+  'assigned_to': assignedTo,
+};
 
 void main() {
   test('folderOf buckets administration chats; null folder → leads', () {
@@ -15,10 +26,19 @@ void main() {
 
   test('folderOf: archived flag takes priority over server folder', () {
     // Optimistically archived row should bucket to Архив regardless of server folder.
-    expect(folderOf(admin('a', folder: 'leads',    archived: true)),  InboxFolder.archive);
-    expect(folderOf(admin('a', folder: 'students', archived: true)),  InboxFolder.archive);
+    expect(
+      folderOf(admin('a', folder: 'leads', archived: true)),
+      InboxFolder.archive,
+    );
+    expect(
+      folderOf(admin('a', folder: 'students', archived: true)),
+      InboxFolder.archive,
+    );
     // archived:false should fall through to normal folder logic.
-    expect(folderOf(admin('a', folder: 'leads',    archived: false)), InboxFolder.leads);
+    expect(
+      folderOf(admin('a', folder: 'leads', archived: false)),
+      InboxFolder.leads,
+    );
   });
 
   test('folderOf returns null for non-administration chats', () {
@@ -26,7 +46,11 @@ void main() {
   });
 
   test('unreadForFolder sums only that folder', () {
-    final chats = [admin('a', folder: 'leads'), admin('b', folder: 'students'), admin('c', folder: 'leads')];
+    final chats = [
+      admin('a', folder: 'leads'),
+      admin('b', folder: 'students'),
+      admin('c', folder: 'leads'),
+    ];
     final unread = {'a': 2, 'b': 5, 'c': 1};
     expect(unreadForFolder(chats, unread, InboxFolder.leads), 3);
     expect(unreadForFolder(chats, unread, InboxFolder.students), 5);
@@ -43,7 +67,9 @@ void main() {
   });
 
   test('removeChat drops by id', () {
-    expect(removeChat([admin('a'), admin('b')], 'a').map((c) => c['id']), ['b']);
+    expect(removeChat([admin('a'), admin('b')], 'a').map((c) => c['id']), [
+      'b',
+    ]);
   });
 
   test('patchChat applies only present keys and maps camelCase', () {
@@ -51,21 +77,33 @@ void main() {
     final p1 = patchChat(chats, {'id': 'a', 'archived': true});
     expect(p1.single['archived'], true);
     expect(p1.single['folder'], 'leads'); // untouched
-    final p2 = patchChat(chats, {'id': 'a', 'assignedTo': {'id': 's', 'name': 'Анна'}});
+    final p2 = patchChat(chats, {
+      'id': 'a',
+      'assignedTo': {'id': 's', 'name': 'Анна'},
+    });
     expect((p2.single['assigned_to'] as Map)['name'], 'Анна');
     expect(patchChat(chats, {'id': 'zzz', 'archived': true}), same(chats));
   });
 
   test('assigneeName returns trimmed name or null', () {
-    expect(assigneeName(admin('a', assignedTo: {'id': 's', 'name': 'Анна'})), 'Анна');
+    expect(
+      assigneeName(admin('a', assignedTo: {'id': 's', 'name': 'Анна'})),
+      'Анна',
+    );
     expect(assigneeName(admin('a', assignedTo: null)), isNull);
-    expect(assigneeName(admin('a', assignedTo: {'id': 's', 'name': '  '})), isNull);
+    expect(
+      assigneeName(admin('a', assignedTo: {'id': 's', 'name': '  '})),
+      isNull,
+    );
   });
 
   // ── isAdministration ──────────────────────────────────────────────────────
 
   test('isAdministration: true for raw_type == administration', () {
-    expect(isAdministration({'raw_type': 'administration', 'type': 'anything'}), isTrue);
+    expect(
+      isAdministration({'raw_type': 'administration', 'type': 'anything'}),
+      isTrue,
+    );
   });
 
   test('isAdministration: true via type fallback when raw_type absent', () {
@@ -77,35 +115,87 @@ void main() {
     expect(isAdministration({'raw_type': 'direct', 'type': 'direct'}), isFalse);
   });
 
+  test('branch filter scopes administration only and preserves non-inbox', () {
+    expect(
+      chatMatchesBranch({
+        'raw_type': 'administration',
+        'branch_id': null,
+      }, 'sport'),
+      isFalse,
+    );
+    expect(
+      chatMatchesBranch({
+        'raw_type': 'administration',
+        'branch_id': 'sokol',
+      }, 'sport'),
+      isFalse,
+    );
+    expect(
+      chatMatchesBranch({
+        'raw_type': 'administration',
+        'branch_id': 'sport',
+      }, 'sport'),
+      isTrue,
+    );
+    expect(
+      chatMatchesBranch({
+        'raw_type': 'administration',
+        'branch_id': null,
+      }, null),
+      isTrue,
+    );
+    expect(
+      chatMatchesBranch({'raw_type': 'group', 'branch_id': null}, 'sport'),
+      isTrue,
+    );
+    expect(
+      chatMatchesBranch({'raw_type': 'direct', 'branch_id': null}, 'sport'),
+      isTrue,
+    );
+    expect(
+      chatMatchesBranch({'raw_type': 'channel', 'branch_id': null}, 'sport'),
+      isTrue,
+    );
+  });
+
   // ── showInboxFolders ──────────────────────────────────────────────────────
 
   test('showInboxFolders: true for manager, admin, system_admin', () {
-    expect(showInboxFolders('manager'),      isTrue);
-    expect(showInboxFolders('admin'),        isTrue);
+    expect(showInboxFolders('manager'), isTrue);
+    expect(showInboxFolders('admin'), isTrue);
     expect(showInboxFolders('system_admin'), isTrue);
   });
 
   test('showInboxFolders: false for client and teacher', () {
-    expect(showInboxFolders('client'),  isFalse);
+    expect(showInboxFolders('client'), isFalse);
     expect(showInboxFolders('teacher'), isFalse);
   });
 
   // ── canShowAssignActions ──────────────────────────────────────────────────
 
-  test('canShowAssignActions: true for manager+admin on administration chat', () {
-    final chat = admin('a', folder: 'leads');
-    expect(canShowAssignActions(true, chat), isTrue);
-  });
+  test(
+    'canShowAssignActions: true for manager+admin on administration chat',
+    () {
+      final chat = admin('a', folder: 'leads');
+      expect(canShowAssignActions(true, chat), isTrue);
+    },
+  );
 
-  test('canShowAssignActions: false for client (isManagerOrAdmin=false) even on administration chat', () {
-    final chat = admin('a', folder: 'leads');
-    expect(canShowAssignActions(false, chat), isFalse);
-  });
+  test(
+    'canShowAssignActions: false for client (isManagerOrAdmin=false) even on administration chat',
+    () {
+      final chat = admin('a', folder: 'leads');
+      expect(canShowAssignActions(false, chat), isFalse);
+    },
+  );
 
-  test('canShowAssignActions: false for manager+admin on non-administration chat', () {
-    final groupChat = {'raw_type': 'group', 'type': 'group', 'id': 'g1'};
-    expect(canShowAssignActions(true, groupChat), isFalse);
-  });
+  test(
+    'canShowAssignActions: false for manager+admin on non-administration chat',
+    () {
+      final groupChat = {'raw_type': 'group', 'type': 'group', 'id': 'g1'};
+      expect(canShowAssignActions(true, groupChat), isFalse);
+    },
+  );
 
   test('canShowAssignActions: false for client on non-administration chat', () {
     final directChat = {'raw_type': 'direct', 'type': 'direct', 'id': 'd1'};

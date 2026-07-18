@@ -5,13 +5,15 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
+import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
 /// KVA-237: the v7 attendance sheet uses the 5 HolliHop-статусов (kind) in a
 /// dropdown. This locks that a kind change drives the PATCH body
 /// (`items[{studentId, kind, status, passReason}]` + `notifyClient`).
 class _FakeAttendanceClient extends MagicApiClient {
   _FakeAttendanceClient()
-      : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   Map<String, dynamic>? lastPatchBody;
 
@@ -23,24 +25,25 @@ class _FakeAttendanceClient extends MagicApiClient {
   }) async {
     if (path.endsWith('/attendance')) {
       return <String, dynamic>{
-        'lessonId': 'lesson-1',
-        'students': [
-          {
-            'studentId': 's1',
-            'studentName': 'Анна Иванова',
-            'status': 'present',
-            'kind': 'attended',
-            'passReason': '',
-          },
-          {
-            'studentId': 's2',
-            'studentName': 'Борис Петров',
-            'status': 'present',
-            'kind': 'attended',
-            'passReason': '',
-          },
-        ],
-      } as T;
+            'lessonId': 'lesson-1',
+            'students': [
+              {
+                'studentId': 's1',
+                'studentName': 'Анна Иванова',
+                'status': 'present',
+                'kind': 'attended',
+                'passReason': '',
+              },
+              {
+                'studentId': 's2',
+                'studentName': 'Борис Петров',
+                'status': 'present',
+                'kind': 'attended',
+                'passReason': '',
+              },
+            ],
+          }
+          as T;
     }
     throw UnimplementedError('GET $path');
   }
@@ -53,17 +56,29 @@ class _FakeAttendanceClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     lastPatchBody = data as Map<String, dynamic>?;
-    return <String, dynamic>{'lessonId': 'lesson-1', 'students': <dynamic>[]} as T;
+    return <String, dynamic>{'lessonId': 'lesson-1', 'students': <dynamic>[]}
+        as T;
   }
 }
 
 void main() {
-  testWidgets('KVA-237: kind dropdown drives the attendance PATCH body',
-      (tester) async {
+  testWidgets('KVA-237: kind dropdown drives the attendance PATCH body', (
+    tester,
+  ) async {
     final fake = _FakeAttendanceClient();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [magicApiClientProvider.overrideWithValue(fake)],
+        overrides: [
+          magicApiClientProvider.overrideWithValue(fake),
+          releaseGateStatusProvider.overrideWith(
+            (ref) async => const ReleaseGateStatus(
+              role: 'admin',
+              profileComplete: true,
+              legalAccepted: true,
+              deletionPending: false,
+            ),
+          ),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: Builder(
@@ -104,8 +119,8 @@ void main() {
     await tester.tap(find.text('Сохранить'));
     await tester.pumpAndSettle();
 
-    final items =
-        (fake.lastPatchBody?['items'] as List).cast<Map<String, dynamic>>();
+    final items = (fake.lastPatchBody?['items'] as List)
+        .cast<Map<String, dynamic>>();
     final s1 = items.firstWhere((e) => e['studentId'] == 's1');
     final s2 = items.firstWhere((e) => e['studentId'] == 's2');
     expect(s1['kind'], 'unpaid_miss');
@@ -115,11 +130,23 @@ void main() {
     expect(fake.lastPatchBody?['notifyClient'], true);
   });
 
-  testWidgets('KVA-237: partially paid kind sends charge share', (tester) async {
+  testWidgets('KVA-237: partially paid kind sends charge share', (
+    tester,
+  ) async {
     final fake = _FakeAttendanceClient();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [magicApiClientProvider.overrideWithValue(fake)],
+        overrides: [
+          magicApiClientProvider.overrideWithValue(fake),
+          releaseGateStatusProvider.overrideWith(
+            (ref) async => const ReleaseGateStatus(
+              role: 'admin',
+              profileComplete: true,
+              legalAccepted: true,
+              deletionPending: false,
+            ),
+          ),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: Builder(
@@ -149,8 +176,8 @@ void main() {
     await tester.tap(find.text('Сохранить'));
     await tester.pumpAndSettle();
 
-    final items =
-        (fake.lastPatchBody?['items'] as List).cast<Map<String, dynamic>>();
+    final items = (fake.lastPatchBody?['items'] as List)
+        .cast<Map<String, dynamic>>();
     final s1 = items.firstWhere((e) => e['studentId'] == 's1');
     expect(s1['kind'], 'partially_paid');
     expect(s1['status'], 'present');

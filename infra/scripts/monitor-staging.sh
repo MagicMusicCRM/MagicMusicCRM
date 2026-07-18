@@ -4,7 +4,7 @@ set -euo pipefail
 STACK_DIR="${STACK_DIR:-/opt/magicmusiccrm/infra/staging}"
 MONITOR_ENV="${MONITOR_ENV:-${STACK_DIR}/.monitor.env}"
 ENV_FILE="${ENV_FILE:-${STACK_DIR}/.env}"
-HEALTH_URL="${HEALTH_URL:-https://api.phantom-net.ru/api/health}"
+HEALTH_URL="${HEALTH_URL:-https://api.magicmusiccrm.ru/api/health}"
 ALERT_LOG="${ALERT_LOG:-/opt/magicmusiccrm/monitoring/alerts.log}"
 DISK_PATH="${DISK_PATH:-/opt/magicmusiccrm}"
 DISK_MAX_PERCENT="${DISK_MAX_PERCENT:-85}"

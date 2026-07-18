@@ -533,9 +533,14 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       final teacher = _teacherNames[l['teacher_id']?.toString()] ?? '';
       final group = l['group_name']?.toString();
       final student = _studentNames[l['student_id']?.toString()] ?? '';
+      // Пробное по лиду: ни группы, ни ученика — блок подписывается именем
+      // лида, а не безликим «Занятие».
+      final lead = l['lead_name']?.toString().trim() ?? '';
       final title = (group != null && group.isNotEmpty)
           ? group
-          : (student.isNotEmpty ? student : 'Занятие');
+          : (student.isNotEmpty
+                ? student
+                : (lead.isNotEmpty ? lead : 'Занятие'));
       entries.add(
         ScheduleEntry(
           lesson: l,

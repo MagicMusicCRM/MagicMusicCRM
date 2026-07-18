@@ -10,6 +10,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:magic_music_crm/core/constants/env.dart';
 import 'package:magic_music_crm/core/router/app_router.dart';
 import 'package:magic_music_crm/core/update/update_prompt.dart';
+import 'package:magic_music_crm/core/update/update_provider.dart';
+import 'package:magic_music_crm/core/update/windows_update_service.dart';
+import 'package:magic_music_crm/core/widgets/auto_dismiss_scaffold_messenger.dart';
 import 'package:magic_music_crm/core/services/lead_notification_listener.dart';
 import 'package:magic_music_crm/core/services/notification_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -79,7 +82,9 @@ Future<void> _warmApiConnection() async {
   }
 }
 
-/// `https://<api-host>/downloads/latest.json` — the Windows update manifest,
+/// `https://<api-host>/downloads/latest-v2.json` — the Windows update manifest.
+/// Build 143 remains pinned to the legacy manifest because its updater cannot
+/// install safely; build 144 is the one-time manual bridge to this v2 channel.
 /// served as static files by the same Caddy that fronts the API.
 String _windowsUpdateManifestUrl() {
   final base = Uri.parse(Env.magicApiBaseUrl);
@@ -87,7 +92,7 @@ String _windowsUpdateManifestUrl() {
     scheme: base.scheme.isEmpty ? 'https' : base.scheme,
     host: base.host,
     port: base.hasPort ? base.port : null,
-    path: '/downloads/latest.json',
+    path: windowsUpdateManifestPath,
   ).toString();
 }
 
@@ -128,6 +133,11 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
           data: {'firstFrameMs': _startupStopwatch.elapsedMilliseconds},
         ),
       );
+      // The updater keeps its rollback snapshot until this exact first-frame
+      // acknowledgement arrives. Do not put network/runtime initialization in
+      // front of it: a slow Firebase or notification setup must not trigger a
+      // healthy build's 45-second rollback watchdog.
+      unawaited(publishWindowsUpdateHealthAckFromEnvironment());
       unawaited(
         _initializeRuntimeServices().catchError(
           (e) => debugPrint('Notification service init error: $e'),
@@ -135,11 +145,18 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
       );
       // Windows self-update: a few seconds after launch, check our manifest and
       // offer to install a newer build (no store on Windows). No-op elsewhere.
+      // The found manifest also lands in [availableUpdateProvider], which backs
+      // the global persistent «Обновить» overlay on every role/route — so a
+      // dismissed dialog does not bury the update until the next app start.
       Future<void>.delayed(const Duration(seconds: 4), () {
         unawaited(
           checkAndPromptWindowsUpdate(
             navigatorKey: rootNavigatorKey,
             manifestUrl: _windowsUpdateManifestUrl(),
+            onUpdateAvailable: (manifest) {
+              if (!mounted) return;
+              ref.read(availableUpdateProvider.notifier).set(manifest);
+            },
           ).catchError((_) {}),
         );
       });
@@ -182,6 +199,8 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
 
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final availableUpdate = ref.watch(availableUpdateProvider);
+    final updateFlowActive = ref.watch(windowsUpdateFlowActiveProvider);
 
     return ScrollConfiguration(
       behavior: NoGlowScrollBehavior(),
@@ -192,6 +211,24 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
         darkTheme: AppTheme.dark,
         themeMode: themeMode,
         routerConfig: router,
+        // #16: every ScaffoldMessenger.of() in the app resolves to this
+        // messenger, which strips Flutter 3.41's «action ⇒ persist forever»
+        // snackbar default so «Занятие отменено/Перенесено» и прочие тосты
+        // auto-dismiss again. See AutoDismissScaffoldMessenger.
+        builder: (context, child) => AutoDismissScaffoldMessenger(
+          child: WindowsUpdateOverlay(
+            manifest: availableUpdate,
+            flowActive: updateFlowActive,
+            onPressed: () {
+              final updateContext = rootNavigatorKey.currentContext;
+              if (updateContext == null || availableUpdate == null) return;
+              unawaited(
+                showWindowsUpdateDialog(updateContext, availableUpdate),
+              );
+            },
+            child: child ?? const SizedBox.shrink(),
+          ),
+        ),
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,

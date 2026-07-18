@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
@@ -15,6 +16,10 @@ import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service
 import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
 import { CrmService } from "./crm.service";
+import {
+  ACTIVE_RESPONSIBLE_STAFF_STATUSES,
+  RESPONSIBLE_AUTH_ROLES,
+} from "./responsible-eligibility";
 
 describe("CrmService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
@@ -288,6 +293,8 @@ describe("CrmService", () => {
     const { service, query, audit } = createServiceWithQueryResults([
       { rows: [{ id: "lead-a" }] },
       { rows: [] },
+      { rows: [] }, // advisory transaction lock
+      { rows: [] }, // guarded duplicate check after acquiring the lock
       {
         rows: [
           {
@@ -327,7 +334,7 @@ describe("CrmService", () => {
 
     expect(query.mock.calls[0][1]).toEqual(["lead-a"]);
     expect(query.mock.calls[1][1]).toEqual(["lead-a"]);
-    expect(query.mock.calls[2][1]).toEqual([
+    expect(query.mock.calls[4][1]).toEqual([
       "Анна",
       "Иванова",
       "anna@example.com",
@@ -338,6 +345,13 @@ describe("CrmService", () => {
       JSON.stringify({ discipline: "Вокал", sourceLeadId: "lead-a" }),
       null, // branch_id: no branchId UUID in customDataPatch
     ]);
+    const conversionSql = String(query.mock.calls[4][0]);
+    expect(conversionSql).toContain("inserted_student_link as");
+    expect(conversionSql).toContain("insert into app.user_crm_links");
+    expect(conversionSql).toContain("on conflict do nothing");
+    expect(String(query.mock.calls[2][0])).toContain(
+      "pg_advisory_xact_lock",
+    );
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.student_created",
@@ -359,6 +373,39 @@ describe("CrmService", () => {
         leadId: "lead-a",
       }),
     ).rejects.toThrow("Этот лид уже конвертирован в ученика.");
+  });
+
+  it("rechecks conversion under an advisory transaction lock", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [
+          {
+            id: "lead-a",
+            custom_data: {},
+            created_at: "2026-07-18T00:00:00.000Z",
+          },
+        ],
+      },
+      { rows: [] },
+      { rows: [] },
+      { rows: [{ id: "student-winner" }] },
+    ]);
+
+    await expect(
+      service.createStudent(actor, {
+        firstName: "Анна",
+        leadId: "lead-a",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(String(query.mock.calls[2][0])).toContain(
+      "pg_advisory_xact_lock",
+    );
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("insert into app.users"),
+      ),
+    ).toBe(false);
   });
 
   it("lists group students through v3 contract", async () => {
@@ -542,6 +589,7 @@ describe("CrmService", () => {
       null,
       JSON.stringify({ middleName: "Сергеевна", notes: "Важно" }),
       null, // branch_id: no branchId UUID in customDataPatch
+      false,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -550,6 +598,139 @@ describe("CrmService", () => {
         entityId: "student-a",
       }),
     );
+  });
+
+  describe("explicit student responsible writes", () => {
+    const responsibleId = "11111111-1111-4111-8111-111111111111";
+
+    it("validates and canonicalizes a nested responsibleUserId before create", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        {
+          rows: [
+            {
+              user_id: responsibleId,
+              role: "director",
+              staff_member_id: "staff-1",
+              staff_status: "working",
+              display_name: "Дарья Директор",
+            },
+          ],
+        },
+        {
+          rows: [
+            {
+              id: "student-a",
+              status: "active",
+              profile_id: "profile-a",
+              profile_user_id: "client-a",
+              lead_id: null,
+              custom_data: {
+                responsible: "Дарья Директор",
+                responsibleUserId: responsibleId,
+              },
+              first_name: "Анна",
+              last_name: null,
+              email: "student@example.com",
+              phone: null,
+              teacher_user_ids: [],
+              created_at: "2026-06-13T00:00:00.000Z",
+            },
+          ],
+        },
+      ]);
+
+      await service.createStudent(actor, {
+        firstName: "Анна",
+        customDataPatch: {
+          responsibleUserId: responsibleId,
+          responsibleName: "spoofed",
+        },
+      });
+
+      expect(String(query.mock.calls[0][0])).toContain("join app.staff_members");
+      expect(query.mock.calls[0][1]).toEqual([
+        responsibleId,
+        [...RESPONSIBLE_AUTH_ROLES],
+        [...ACTIVE_RESPONSIBLE_STAFF_STATUSES],
+      ]);
+      const insertCall = query.mock.calls.find((call) =>
+        String(call[0]).includes("insert into app.students"),
+      );
+      expect((insertCall?.[1] as unknown[])[7]).toBe(
+        JSON.stringify({
+          responsibleUserId: responsibleId,
+          responsible: "Дарья Директор",
+        }),
+      );
+    });
+
+    it("rejects an ineligible nested owner without inserting a student", async () => {
+      const { service, query } = createServiceWithQueryResults([{ rows: [] }]);
+
+      await expect(
+        service.createStudent(actor, {
+          firstName: "Анна",
+          customDataPatch: { responsibleUserId: responsibleId },
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(
+        query.mock.calls.some((call) =>
+          String(call[0]).includes("insert into app.students"),
+        ),
+      ).toBe(false);
+    });
+
+    it("clears all student compatibility owner keys only with the explicit flag", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        {
+          rows: [
+            {
+              id: "student-a",
+              status: "active",
+              branch_id: null,
+              custom_data: {
+                responsible: "Дарья Директор",
+                responsibleUserId: responsibleId,
+              },
+            },
+          ],
+        },
+        {
+          rows: [
+            {
+              id: "student-a",
+              status: "active",
+              profile_id: "profile-a",
+              profile_user_id: "client-a",
+              custom_data: {},
+              first_name: "Анна",
+              last_name: null,
+              email: "student@example.com",
+              phone: null,
+              teacher_user_ids: [],
+              created_at: "2026-06-13T00:00:00.000Z",
+            },
+          ],
+        },
+      ]);
+
+      await service.updateStudent(actor, "student-a", {
+        clearResponsible: true,
+      });
+
+      const updateCall = query.mock.calls.find((call) =>
+        String(call[0]).includes("update app.students s"),
+      );
+      const sql = String(updateCall?.[0]);
+      expect(sql).toContain("case when $9::boolean then");
+      expect(sql).toContain("- 'responsible' - 'responsibleUserId'");
+      expect((updateCall?.[1] as unknown[])[8]).toBe(true);
+      expect(
+        query.mock.calls.some((call) =>
+          String(call[0]).includes("with eligible_actor as"),
+        ),
+      ).toBe(false);
+    });
   });
 
   it("searches students with CRM filters and account-link summary", async () => {
@@ -650,6 +831,11 @@ describe("CrmService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual(["student-a"]);
     expect(String(query.mock.calls[0][0])).toContain("update app.students");
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("update app.user_crm_links"),
+      ),
+    ).toBe(true);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.student_deleted",
@@ -680,11 +866,17 @@ describe("CrmService", () => {
               last_name: "Иванова",
               email: "anna@example.com",
               phone: "+79990000000",
+              profile_user_id: "client-a",
             },
           ],
         },
         { rows: [{ id: "lead-a" }] },
-        { rows: [] },
+        { rows: [] }, // soft-delete student
+        {
+          rows: [{ user_id: "client-a", matched_phone: "+79990000000" }],
+        }, // resolve linked chat user
+        { rows: [] }, // soft-delete student link
+        { rows: [] }, // preserve/repoint the lead link
       ]);
 
     await expect(
@@ -699,6 +891,11 @@ describe("CrmService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(database.transaction).toHaveBeenCalledTimes(1);
     expect(String(query.mock.calls[2][0])).toContain("update app.students");
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("insert into app.user_crm_links"),
+      ),
+    ).toBe(true);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.student_returned_to_lead",
@@ -720,14 +917,17 @@ describe("CrmService", () => {
             custom_data: { discipline: "Вокал" },
             first_name: "Анна",
             last_name: "Иванова",
-            email: "anna@example.com",
-            phone: "+79990000000",
+              email: "anna@example.com",
+              phone: "+79990000000",
+              profile_user_id: "client-a",
           },
         ],
       },
       { rows: [{ id: "status-new" }] },
       { rows: [{ id: "lead-new" }] },
-      { rows: [] },
+      { rows: [] }, // soft-delete student
+      { rows: [] }, // resolve linked chat user
+      { rows: [] }, // soft-delete student link
     ]);
 
     await expect(

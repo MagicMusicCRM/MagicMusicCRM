@@ -9,7 +9,13 @@ import {
   ActorContext,
   isManagerRole,
   isStaffRole,
+  UserRole,
 } from "../common/security/actor-context";
+import {
+  ensureChatContactResponsible,
+  ResponsibleQueryExecutor,
+} from "../crm/responsible";
+import { assertEligibleResponsible } from "../crm/responsible-eligibility";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { MessengerPolicy } from "./messenger.policy";
@@ -91,23 +97,15 @@ export class ChatInboxService {
     }
 
     const targetUserId = userId ?? actor.userId;
-
-    // Verify the target is a staff user
-    const targetResult = await this.database.query<{ role: string }>(
-      "select role from app.users where id = $1 and deleted_at is null limit 1",
-      [targetUserId],
-    );
-    const targetRow = targetResult.rows[0];
-    if (!targetRow) {
-      throw new NotFoundException("Пользователь не найден.");
-    }
-    if (!isStaffRole(targetRow.role as never)) {
-      throw new ForbiddenException("Чат можно назначить только сотруднику.");
-    }
-
     this.policy.assertCanAssign(actor, chat);
 
     const event = await this.database.transaction(async (client) => {
+      // The picker and every authoritative assignment share this exact rule.
+      // Locking the linked identity rows prevents a concurrent dismissal or
+      // role change from racing the chat write.
+      const target = await assertEligibleResponsible(client, targetUserId, {
+        lock: true,
+      });
       // Conditional on the assignee we showed the actor: if someone claimed
       // the chat in between, 0 rows update and we report the conflict instead
       // of silently overwriting their claim (check-then-act race).
@@ -127,6 +125,11 @@ export class ChatInboxService {
          values ($1, $2, $3, $4, 'claimed')
          returning id`,
         [chatId, actor.userId, targetUserId, chat.assignedToUserId ?? null],
+      );
+      await ensureChatContactResponsible(
+        client as unknown as ResponsibleQueryExecutor,
+        { userId: targetUserId, role: target.role as UserRole },
+        chatId,
       );
       return inserted.rows[0];
     });
@@ -171,10 +174,19 @@ export class ChatInboxService {
     }
 
     const event = await this.database.transaction(async (client) => {
-      await client.query(
-        "update app.chats set assigned_to_user_id = null, assigned_at = null where id = $1",
-        [chatId],
+      const updated = await client.query(
+        `update app.chats
+         set assigned_to_user_id = null, assigned_at = null
+         where id = $1
+           and assigned_to_user_id is not null
+           and assigned_to_user_id is not distinct from $2`,
+        [chatId, current],
       );
+      if (!updated.rowCount) {
+        throw new ConflictException(
+          "Назначение чата уже изменено другим сотрудником.",
+        );
+      }
       const inserted = await client.query<{ id: string }>(
         `insert into app.chat_work_events (
            chat_id, actor_user_id, target_user_id, previous_assigned_user_id, action

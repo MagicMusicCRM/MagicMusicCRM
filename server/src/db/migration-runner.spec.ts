@@ -22,14 +22,22 @@ describe('MigrationRunner', () => {
     );
 
     const calls: string[] = [];
+    const client = {
+      query: jest.fn(async (sql: string) => {
+        calls.push(typeof sql === 'string' ? sql.trim() : '');
+        return { rows: [] };
+      }),
+      release: jest.fn()
+    };
     const pool = {
       query: jest.fn(async (sql: string) => {
         calls.push(typeof sql === 'string' ? sql.trim() : '');
         return { rows: [] };
-      })
-    } as never;
+      }),
+      connect: jest.fn(async () => client)
+    };
 
-    const runner = new MigrationRunner(pool, dir);
+    const runner = new MigrationRunner(pool as never, dir);
     const completed = await runner.up();
 
     try {
@@ -46,6 +54,40 @@ describe('MigrationRunner', () => {
       // The normal migration WAS wrapped in a transaction.
       expect(calls.some((c) => /^begin$/i.test(c))).toBe(true);
       expect(calls.some((c) => /^commit$/i.test(c))).toBe(true);
+      expect(pool.connect).toHaveBeenCalledTimes(1);
+      expect(client.release).toHaveBeenCalledTimes(1);
+      expect(client.query).toHaveBeenCalledWith('begin');
+      expect(client.query).toHaveBeenCalledWith('commit');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('runs a transactional rollback on one checked-out client', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mmcrm-mig-down-'));
+    await fs.writeFile(path.join(dir, '0001_tx.up.sql'), 'create table t (id int);');
+    await fs.writeFile(path.join(dir, '0001_tx.down.sql'), 'drop table t;');
+    const client = {
+      query: jest.fn(async (_sql: string) => ({ rows: [] })),
+      release: jest.fn()
+    };
+    const pool = {
+      query: jest.fn(async (sql: string) => ({
+        rows: /order by applied_at desc/i.test(sql) ? [{ id: '0001_tx' }] : []
+      })),
+      connect: jest.fn(async () => client)
+    };
+
+    try {
+      const runner = new MigrationRunner(pool as never, dir);
+      await expect(runner.down()).resolves.toBe('0001_tx');
+      expect(client.query.mock.calls.map((call) => call[0])).toEqual([
+        'begin',
+        'drop table t;',
+        expect.stringContaining('delete from app_schema_migrations'),
+        'commit'
+      ]);
+      expect(client.release).toHaveBeenCalledTimes(1);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

@@ -191,56 +191,92 @@ extension _LeadsActions on _LeadsWidgetState {
 
   void _resetLoadedPages() {
     _extraLeadsByStatus.clear();
-    _loadedExtraLeadIds.clear();
-    _hasLoadedMore = false;
-    _nextCursor = null;
+    _nextCursorByStatus.clear();
+    _loadingMoreStatuses.clear();
   }
 
-  Future<void> _loadMoreLeads(String? cursor) async {
+  Future<void> _loadMoreLeads(String statusId, String? cursor) async {
     final activeCursor = cursor?.trim();
-    if (activeCursor == null || activeCursor.isEmpty || _loadingMore) return;
-    _emitState(() => _loadingMore = true);
+    if (activeCursor == null ||
+        activeCursor.isEmpty ||
+        _loadingMoreStatuses.contains(statusId)) {
+      return;
+    }
+    _emitState(() => _loadingMoreStatuses.add(statusId));
     try {
       final page = await _filters.fetchBoard(
         ref.read(magicCrmServiceProvider),
         cursor: activeCursor,
+        columnId: statusId,
       );
       final columns = page['columns'] is List
           ? (page['columns'] as List).whereType<Map<String, dynamic>>()
           : const Iterable<Map<String, dynamic>>.empty();
-      var appended = 0;
+      Map<String, dynamic>? pageColumn;
       for (final column in columns) {
-        final statusId =
+        final columnId =
             column['key']?.toString() ?? column['id']?.toString() ?? '';
-        if (statusId.isEmpty) continue;
-        final items = column['items'] is List
-            ? (column['items'] as List).whereType<Map<String, dynamic>>()
-            : const Iterable<Map<String, dynamic>>.empty();
-        final target = _extraLeadsByStatus.putIfAbsent(
-          statusId,
-          () => <Map<String, dynamic>>[],
-        );
-        for (final lead in items) {
+        if (columnId == statusId) {
+          pageColumn = column;
+          break;
+        }
+      }
+      if (!mounted) return;
+
+      // Dedupe against this column only: its initial provider page plus its
+      // already appended pages. Loading A must never mutate/reset B's extras.
+      final knownIds = <String>{};
+      final currentBoard = ref.read(leadBoardProvider(_filters)).value;
+      final currentColumns = currentBoard?['columns'];
+      if (currentColumns is List) {
+        for (final rawColumn
+            in currentColumns.whereType<Map<String, dynamic>>()) {
+          final columnId =
+              rawColumn['key']?.toString() ?? rawColumn['id']?.toString() ?? '';
+          if (columnId != statusId || rawColumn['items'] is! List) continue;
+          for (final lead
+              in (rawColumn['items'] as List)
+                  .whereType<Map<String, dynamic>>()) {
+            final leadId = lead['id']?.toString() ?? '';
+            if (leadId.isNotEmpty) knownIds.add(leadId);
+          }
+        }
+      }
+      final target = _extraLeadsByStatus.putIfAbsent(
+        statusId,
+        () => <Map<String, dynamic>>[],
+      );
+      knownIds.addAll(
+        target
+            .map((lead) => lead['id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty),
+      );
+      var appended = 0;
+      final items = pageColumn?['items'];
+      if (items is List) {
+        for (final lead in items.whereType<Map<String, dynamic>>()) {
           final leadId = lead['id']?.toString() ?? '';
-          if (leadId.isEmpty || !_loadedExtraLeadIds.add(leadId)) continue;
+          if (leadId.isEmpty || !knownIds.add(leadId)) continue;
           target.add(lead);
           appended++;
         }
       }
-      if (!mounted) return;
+      final rawNextCursor = pageColumn?['next_cursor']?.toString().trim();
       _emitState(() {
-        _hasLoadedMore = true;
-        _nextCursor = page['next_cursor']?.toString();
-        _loadingMore = false;
+        _nextCursorByStatus[statusId] =
+            rawNextCursor == null || rawNextCursor.isEmpty
+            ? null
+            : rawNextCursor;
+        _loadingMoreStatuses.remove(statusId);
       });
-      if (appended == 0 && mounted) {
+      if (appended == 0 && rawNextCursor == null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Новых лидов для догрузки нет')),
         );
       }
     } catch (e) {
       if (!mounted) return;
-      _emitState(() => _loadingMore = false);
+      _emitState(() => _loadingMoreStatuses.remove(statusId));
       _showError('Не удалось загрузить ещё лидов: $e');
     }
   }
@@ -620,9 +656,6 @@ extension _LeadsActions on _LeadsWidgetState {
         ? (board['columns'] as List).whereType<Map<String, dynamic>>()
         : const Iterable<Map<String, dynamic>>.empty();
     final active = columns.map(_statusFromColumn).toList();
-    final pageCursor = _hasLoadedMore
-        ? _nextCursor
-        : board['next_cursor']?.toString();
 
     // D1: while a query is live, instantly client-side filter the already
     // loaded cards so the result updates on this frame (server confirms later).
@@ -636,7 +669,8 @@ extension _LeadsActions on _LeadsWidgetState {
 
     // D1: pre-compute the per-column leads so we can detect a wholly empty
     // result (after the client-side filter) and show «Ничего не найдено».
-    final columnData = <(StatusRecord, List<Map<String, dynamic>>, int)>[];
+    final columnData =
+        <(StatusRecord, List<Map<String, dynamic>>, int, String?)>[];
     var totalVisible = 0;
     for (final column in columns) {
       final status = _statusFromColumn(column);
@@ -660,8 +694,12 @@ extension _LeadsActions on _LeadsWidgetState {
       final totalCount = totalCountRaw is num
           ? totalCountRaw.toInt()
           : int.tryParse(totalCountRaw?.toString() ?? '') ?? leads.length;
+      final serverCursor = column['next_cursor']?.toString();
+      final nextCursor = _nextCursorByStatus.containsKey(status.$1)
+          ? _nextCursorByStatus[status.$1]
+          : serverCursor;
       totalVisible += leads.length;
-      columnData.add((status, leads, totalCount));
+      columnData.add((status, leads, totalCount, nextCursor));
     }
 
     // D1: a wholly-empty board with an active query is a "no matches" state.
@@ -695,7 +733,7 @@ extension _LeadsActions on _LeadsWidgetState {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: columnData.map((entry) {
-                          final (status, leads, totalCount) = entry;
+                          final (status, leads, totalCount, nextCursor) = entry;
                           return _KanbanColumn(
                             status: status,
                             leads: leads,
@@ -706,9 +744,12 @@ extension _LeadsActions on _LeadsWidgetState {
                             allStatuses: active,
                             onRefresh: _refreshBoard,
                             pendingLeadIds: _pendingLeadIds,
-                            nextCursor: pageCursor,
-                            loadingMore: _loadingMore,
-                            onLoadMore: _loadMoreLeads,
+                            nextCursor: nextCursor,
+                            loadingMore: _loadingMoreStatuses.contains(
+                              status.$1,
+                            ),
+                            onLoadMore: (cursor) =>
+                                _loadMoreLeads(status.$1, cursor),
                             onDragUpdate: _handleDragUpdate,
                             onDragEnd: _stopAutoScroll,
                             hasActiveQuery: query.isNotEmpty,

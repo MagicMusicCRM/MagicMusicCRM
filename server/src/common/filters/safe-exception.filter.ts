@@ -48,6 +48,24 @@ export class SafeExceptionFilter implements ExceptionFilter {
         error?.stack,
         'SafeExceptionFilter'
       );
+    } else if (status >= 400 && status < 500) {
+      // 4xx used to be INVISIBLE: only non-HttpException 500s were logged and
+      // Caddy keeps no access log, so a ValidationPipe 400 («statusId must be
+      // a UUID» broke 22% of lead cards) left zero trace anywhere. One warn
+      // line per rejected request — message and path only, никаких значений
+      // полей (privacy-safe) — turns client/DTO contract drift into a
+      // greppable signal.
+      this.logger.warn(
+        {
+          message: 'Request rejected',
+          status,
+          detail: this.safeMessage(exception),
+          requestId,
+          path: request.path,
+          method: request.method
+        },
+        'SafeExceptionFilter'
+      );
     }
 
     // Report server-side faults to Sentry (KVA-225). No-op when Sentry is not
@@ -62,12 +80,27 @@ export class SafeExceptionFilter implements ExceptionFilter {
     }
 
     response.status(status).json({
+      // Structured payloads first: a ConflictException may carry machine-read
+      // fields next to the message (e.g. the 409 {message, conflicts:[…]} of
+      // the schedule contract). Flattening it to a bare message would strip
+      // the data the client renders. The envelope fields below always win.
+      ...this.extraPayload(exception),
       statusCode: status,
       message: this.safeMessage(exception),
       requestId,
       timestamp: new Date().toISOString(),
       path: request.path
     });
+  }
+
+  /** Extra structured fields of an HttpException object response (if any). */
+  private extraPayload(exception: unknown): Record<string, unknown> {
+    if (!(exception instanceof HttpException)) return {};
+    const response = exception.getResponse();
+    if (typeof response !== 'object' || response === null) return {};
+    const { message: _message, statusCode: _statusCode, error: _error, ...rest } =
+      response as Record<string, unknown>;
+    return rest;
   }
 
   private safeMessage(exception: unknown): string {

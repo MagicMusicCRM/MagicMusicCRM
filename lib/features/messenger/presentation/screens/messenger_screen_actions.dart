@@ -129,41 +129,34 @@ extension _MessengerActions on _MessengerScreenState {
         backgroundColor: bg,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.only(bottom: 72, left: 12, right: 12),
-        duration: duration ?? const Duration(seconds: 4),
+        duration: duration ?? const Duration(seconds: 3),
         action: action,
       ),
     );
   }
 
-  Future<void> _saveContactFromChat(String as) async {
-    final partnerId = _selectedPartnerId;
-    if (partnerId == null || partnerId.isEmpty) return;
-    final label = as == 'lead' ? 'лид' : 'ученик';
+  /// Resolves the CRM card behind a direct chat. The first client message already
+  /// creates a lead, so chat UI never offers a second create/save action; this
+  /// cache only gates the existing-card shortcut.
+  Future<void> _resolveContactLink(String partnerId) async {
+    if (_chatContactLinks.containsKey(partnerId)) return;
     try {
-      final result = await ref
+      final contact = await ref
           .read(magicCrmServiceProvider)
-          .saveContactFromChat(userId: partnerId, as: as);
+          .resolveContactForUser(partnerId);
       if (!mounted) return;
-      final created = result['created'] == true;
-      final leadId = result['leadId']?.toString() ?? '';
-      // KVA-175: offer to open the lead card straight from the snackbar.
-      final leadStub = <String, dynamic>{'id': leadId};
-      _showChatSnack(
-        created
-            ? 'Контакт сохранён как $label'
-            : 'Контакт уже был сохранён как $label',
-        bg: Colors.green,
-        action: (as == 'lead' && leadId.isNotEmpty)
-            ? SnackBarAction(
-                label: 'Открыть карточку',
-                textColor: Colors.white,
-                onPressed: () => _openLeadCard(leadStub),
-              )
-            : null,
-      );
+      final leadId = contact['leadId']?.toString();
+      final studentId = contact['studentId']?.toString();
+      _emitState(() {
+        _chatContactLinks[partnerId] = {
+          'leadId': (leadId != null && leadId.isNotEmpty) ? leadId : null,
+          'studentId': (studentId != null && studentId.isNotEmpty)
+              ? studentId
+              : null,
+        };
+      });
     } catch (e) {
-      if (!mounted) return;
-      _showChatSnack('Не удалось сохранить: $e', bg: AppColor.danger);
+      _logMessenger('MessengerScreen: resolveContactForUser failed: $e');
     }
   }
 
@@ -271,7 +264,8 @@ extension _MessengerActions on _MessengerScreenState {
   // ── Archive / unarchive actions (administration chats, manager+admin only) ──
 
   Future<void> _archiveChat(String chatId) async {
-    final svc = ref.read(magicMessengerServiceProvider);
+    // Контракт №3: PATCH /api/chats/:chatId/archive {archived:true}.
+    final api = ref.read(magicApiClientProvider);
     // Optimistic: mark archived so folderOf re-buckets to Архив immediately.
     _emitState(
       () =>
@@ -281,7 +275,7 @@ extension _MessengerActions on _MessengerScreenState {
       // Resurface is server-driven — a new client message clears archive for
       // all staff and emits chat.updated (Task 5 patchChat moves it back out
       // of Архив).
-      await svc.archiveChat(chatId);
+      await api.setChatArchived(chatId, archived: true);
     } catch (e) {
       if (!mounted) return;
       // Revert optimistic update on failure.
@@ -296,14 +290,15 @@ extension _MessengerActions on _MessengerScreenState {
   }
 
   Future<void> _unarchiveChat(String chatId) async {
-    final svc = ref.read(magicMessengerServiceProvider);
+    // Контракт №3: PATCH /api/chats/:chatId/archive {archived:false}.
+    final api = ref.read(magicApiClientProvider);
     // Optimistic: clear archived flag so folderOf re-buckets out of Архив.
     _emitState(
       () =>
           _chatItems = patchChat(_chatItems, {'id': chatId, 'archived': false}),
     );
     try {
-      await svc.unarchiveChat(chatId);
+      await api.setChatArchived(chatId, archived: false);
     } catch (e) {
       if (!mounted) return;
       // Revert optimistic update on failure.
@@ -398,17 +393,24 @@ extension _MessengerActions on _MessengerScreenState {
       unawaited(_loadChatBranches());
     }
 
-    final rawItemsFuture = messenger.listChats(
-      limit: 100,
-      branchId: isStaff ? _chatBranchFilter : null,
-    );
+    final rawItemsFuture = isStaff
+        ? Future.wait([
+            messenger.listChats(limit: 100, branchId: _chatBranchFilter),
+            // The default endpoint intentionally hides archived inbox rows.
+            // Load the archive explicitly so the folder survives a refresh,
+            // restart and branch-filter change instead of existing only in the
+            // optimistic in-memory patch made by _archiveChat.
+            messenger.listChats(
+              limit: 100,
+              branchId: _chatBranchFilter,
+              archived: true,
+            ),
+          ]).then((parts) => [...parts[0], ...parts[1]])
+        : messenger.listChats(limit: 100);
     final channelsFuture = messenger.listChannels();
     final adminAvatarFuture = ref
         .read(magicSettingsServiceProvider)
         .getAdminChatAvatar();
-    final Future<Map<String, dynamic>?> adminChatFuture = isStaff
-        ? Future<Map<String, dynamic>?>.value(null)
-        : messenger.ensureAdministrationChat();
     final Future<List<Map<String, dynamic>>> adminProfilesFuture = isStaff
         ? ref
               .read(magicProfileAdminServiceProvider)
@@ -423,11 +425,33 @@ extension _MessengerActions on _MessengerScreenState {
             const <Map<String, dynamic>>[],
           );
 
-    final rawItems = await rawItemsFuture;
-    final adminChat = await adminChatFuture;
-    if (adminChat != null) {
-      if (!rawItems.any((item) => item['id'] == adminChat['id'])) {
-        rawItems.insert(0, adminChat);
+    final loadedItems = await rawItemsFuture;
+    // Defence in depth for branch isolation. The server also receives branchId,
+    // but an unresolved/null or stale branch must never leak into a selected
+    // branch if an older server build returns it.
+    // listChats deliberately returns an immutable/fixed-size page aggregate.
+    // This screen appends channels and may lazily insert the administration
+    // chat, so always take an owned growable copy first.
+    final rawItems = (isStaff && _chatBranchFilter != null
+            ? loadedItems.where(
+                (item) => chatMatchesBranch(item, _chatBranchFilter),
+              )
+            : loadedItems)
+        .toList(growable: true);
+    // Ленивое создание чата с администрацией: POST уходит только когда чата
+    // действительно нет в списке. Раньше он летел на каждый заход во вкладку
+    // «Чат» и на каждый цикл фонового опроса — запись на сервер вхолостую.
+    if (!isStaff &&
+        !rawItems.any(
+          (item) => (item['raw_type'] ?? item['type']) == 'administration',
+        )) {
+      try {
+        final adminChat = await messenger.ensureAdministrationChat();
+        if (!rawItems.any((item) => item['id'] == adminChat['id'])) {
+          rawItems.insert(0, adminChat);
+        }
+      } catch (e) {
+        _logMessenger('MessengerScreen: ensureAdministrationChat failed: $e');
       }
     }
 
@@ -463,8 +487,13 @@ extension _MessengerActions on _MessengerScreenState {
       final itemType = raw['_item_type'] ?? raw['item_type'] ?? raw['type'];
       final lastMessage = raw['_last_message'];
 
-      // Construct item for _chatItems list
+      // Construct item for _chatItems list. Spread the raw (legacy-mapped)
+      // chat FIRST: серверные ключи raw_type/folder/archived/slug/assigned_to/
+      // branch_name — то, на чём стоят вкладки «Лиды/Ученики/Архив», меню
+      // архива и read-only «Объявлений». Раньше они здесь отбрасывались, и
+      // folderOf() валил все админ-чаты в «Группы и каналы».
       final item = {
+        ...raw,
         'id': id,
         '_item_type': itemType,
         '_display_name': raw['_display_name'] ?? raw['display_name'],
@@ -493,12 +522,29 @@ extension _MessengerActions on _MessengerScreenState {
     }
 
     if (mounted) {
+      final selectedFilteredOut =
+          _chatBranchFilter != null &&
+          _selectedChatId != null &&
+          !items.any((item) => item['id'] == _selectedChatId);
+      if (selectedFilteredOut) _leaveTypingChannel(notify: false);
       _emitState(() {
         _chatItems = items;
         _unreadCounts = unreadCounts;
         _mutedChatIds = mutedIds;
         _pinnedChatIds = pinnedIds;
         _loadingChats = false;
+
+        if (selectedFilteredOut) {
+          _selectedChatId = null;
+          _selectedChatType = null;
+          _selectedChatRawType = null;
+          _selectedChatSlug = null;
+          _selectedChatName = null;
+          _selectedChatAvatarUrl = null;
+          _selectedPartnerId = null;
+          _messages = [];
+          _showProfilePanel = false;
+        }
 
         // Update selected chat info from list
         if (_selectedChatId != null) {

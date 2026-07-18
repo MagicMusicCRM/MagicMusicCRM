@@ -57,7 +57,7 @@ export class CreateScheduleSeriesDto {
   // null/не задано = «до бесконечности».
   @IsOptional()
   @IsDateString()
-  validUntil?: string;
+  validUntil?: string | null;
 
   @IsOptional()
   @IsString()
@@ -96,7 +96,7 @@ export class UpdateScheduleSeriesDto {
 
   @IsOptional()
   @IsDateString()
-  validUntil?: string;
+  validUntil?: string | null;
 
   // С какой даты действует правка; по умолчанию — завтра.
   @IsOptional()

@@ -35,6 +35,8 @@ export interface LessonRow {
   student_user_id: string | null;
   teacher_user_id: string | null;
   student_name: string | null;
+  /** Имя лида для пробного занятия без ученика (иначе рисуется «Не назначен»). */
+  lead_name?: string | null;
   teacher_name: string | null;
   branch_name: string | null;
   room_name: string | null;
@@ -277,6 +279,7 @@ export function toLessonDto(row: LessonRow) {
         ? null
         : Number(row.paid_amount),
     studentName: row.student_name || null,
+    leadName: row.lead_name || null,
     teacherName: row.teacher_name || null,
     branchName: row.branch_name || null,
     roomName: row.room_name || null,

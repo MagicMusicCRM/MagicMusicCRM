@@ -20,6 +20,7 @@ import { CreateDisciplineDto } from "./dto/create-discipline.dto";
 import { CreateLossReasonDto } from "./dto/create-loss-reason.dto";
 import { UpsertBranchDisciplineDto } from "./dto/upsert-branch-discipline.dto";
 import { ReorderBranchDisciplinesDto } from "./dto/reorder-branch-disciplines.dto";
+import { ReorderLeadStatusesDto } from "./dto/reorder-lead-statuses.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -124,7 +125,7 @@ export class CrmReferenceDataController {
   @Patch("lead-statuses/order")
   reorderLeadStatuses(
     @CurrentActor() actor: ActorContext,
-    @Body() dto: { statusIds: string[] },
+    @Body() dto: ReorderLeadStatusesDto,
   ) {
     return this.referenceData.reorderLeadStatuses(actor, dto);
   }

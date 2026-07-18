@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -97,6 +98,15 @@ export class AttendanceService {
     lessonId: string,
     dto: UpsertAttendanceDto,
   ) {
+    // Статус занятия и посещаемость двигают списание с абонемента и расчёт ЗП —
+    // это работа администратора и старше, не педагога (заказчик, правила ролей).
+    // Педагог по-прежнему видит урок и может оставить комментарий/ДЗ (другие
+    // эндпоинты), но статус «был/не пришёл» и тип занятия ставит только админ+.
+    if (!isManagerOrAdminRole(actor.role)) {
+      throw new ForbiddenException(
+        "Статус занятия и посещаемость может изменять только администратор и выше.",
+      );
+    }
     const lesson = await this.findLessonForAttendance(actor, lessonId);
     const students = await this.listAttendanceStudents(lesson);
     const allowedStudentIds = new Set(students.map((row) => row.student_id));

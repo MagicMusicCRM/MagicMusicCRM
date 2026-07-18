@@ -132,18 +132,22 @@ extension _MessengerRealtime on _MessengerScreenState {
 
   void _startRealtimeFallbackPolling() {
     if (_realtimeFallbackTimer != null) return;
-    _realtimeFallbackTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+    // Страховочный опрос — редкий: тихий чат при живом сокете не даёт событий,
+    // и прежние 12/18/36 секунд означали постоянный опрос (плюс POST
+    // ensureAdministrationChat на каждом цикле — теперь он ленивый). Сокет
+    // при (ре)коннекте отмечается как «свежий» в _onRealtimeReconnected.
+    _realtimeFallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       final realtimeIsFresh =
           DateTime.now().difference(_lastRealtimeEventAt) <
-          const Duration(seconds: 18);
+          const Duration(seconds: 60);
       if (realtimeIsFresh) return;
 
       unawaited(_refreshSelectedMessagesSilently());
 
       final shouldRefreshList =
           DateTime.now().difference(_lastFallbackChatListAt) >
-          const Duration(seconds: 36);
+          const Duration(minutes: 2);
       if (shouldRefreshList) {
         _lastFallbackChatListAt = DateTime.now();
         unawaited(_loadChatList());
@@ -174,6 +178,9 @@ extension _MessengerRealtime on _MessengerScreenState {
 
   /// Re-join all rooms after a (re)connect. Idempotent — safe on first connect.
   void _onRealtimeReconnected() {
+    // Свежий коннект = свежий realtime: не даём фолбэк-опросу сработать сразу
+    // после подключения.
+    _markRealtimeEvent();
     final connection = _realtimeConnection;
     if (connection == null) return;
     if (_userId.isNotEmpty) connection.joinUserRoom(_userId);
@@ -367,6 +374,28 @@ extension _MessengerRealtime on _MessengerScreenState {
     // Enriched fan-out: a message landed in a chat we are not actively viewing.
     // Patch the list item (last message + unread) in place when we already know
     // the chat; only a brand-new conversation triggers a (debounced) reload.
+    // Assignment/archive/folder can be combined with lastMessageId. Apply this
+    // patch FIRST: returning from the message fan-out must not leave an
+    // auto-resurfaced chat stuck in Archive merely because the message id is
+    // the same one the list already knows.
+    final hasListStatePatch =
+        payload.containsKey('assignedTo') ||
+        payload.containsKey('archived') ||
+        payload.containsKey('folder');
+    var listStateHandled = false;
+    if (chatId != null && hasListStatePatch) {
+      final known = _chatItems.any((c) => c['id']?.toString() == chatId);
+      if (known) {
+        final normalizedPayload = payload.containsKey('id')
+            ? payload
+            : <String, dynamic>{...payload, 'id': chatId};
+        _emitState(() => _chatItems = patchChat(_chatItems, normalizedPayload));
+      } else {
+        _scheduleChatListReload();
+      }
+      listStateHandled = true;
+    }
+
     final lastMessageId = payload['lastMessageId']?.toString();
     if (chatId != null && lastMessageId != null) {
       final known = _chatItems.any((c) => c['id']?.toString() == chatId);
@@ -391,13 +420,8 @@ extension _MessengerRealtime on _MessengerScreenState {
 
     // Assignment / archive / folder update — patch in place so folder badges
     // and the assignee chip update live without a full reload.
-    // Backend never combines lastMessageId with assignedTo/archived/folder in one chat.updated; if it ever does, this branch must also run inside the fan-out branch above (it currently early-returns).
-    if (payload.containsKey('assignedTo') ||
-        payload.containsKey('archived') ||
-        payload.containsKey('folder')) {
-      _emitState(() => _chatItems = patchChat(_chatItems, payload));
-      return;
-    }
+    // A state-only update was already patched above.
+    if (listStateHandled) return;
 
     // Bare chat.updated (e.g. a group change). Coalesce bursts into one reload.
     _scheduleChatListReload();
@@ -607,18 +631,23 @@ extension _MessengerRealtime on _MessengerScreenState {
     _realtimeConnection?.updatePresence();
   }
 
-  void _leaveTypingChannel() {
+  /// [notify]: false при вызове из dispose() — setState на демонтируемом
+  /// элементе роняет assert '_lifecycleState != _ElementLifecycle.defunct'.
+  void _leaveTypingChannel({bool notify = true}) {
     _typingStopTimer?.cancel();
     _typingStopTimer = null;
     if (_joinedRealtimeChatId != null) {
       _realtimeConnection?.leaveRoom(_joinedRealtimeChatId!);
       _joinedRealtimeChatId = null;
     }
-    if (mounted) {
+    if (notify && mounted) {
       _emitState(() {
         _typingText = '';
         _onlineUsers.clear();
       });
+    } else {
+      _typingText = '';
+      _onlineUsers.clear();
     }
   }
 

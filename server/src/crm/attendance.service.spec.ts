@@ -29,6 +29,19 @@ describe("AttendanceService", () => {
     return { service, query, audit, notifications };
   };
 
+  it("forbids a teacher from setting attendance/status (admin+ only)", async () => {
+    const { service, query } = createServiceWithQueryResults([]);
+    await expect(
+      service.upsertLessonAttendance(
+        { userId: "teacher-user-a", role: "teacher" as const },
+        "lesson-a",
+        { items: [{ studentId: "student-a", kind: "attended" }] },
+      ),
+    ).rejects.toThrow("только администратор и выше");
+    // Rejected before any DB work — the guard runs first.
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("returns lesson attendance for allowed staff", async () => {
     const { service, query } = createServiceWithQueryResults([
       {

@@ -12,7 +12,13 @@ import {
   WebSocketServer
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { ActorContext, UserRole, isStaffRole } from '../common/security/actor-context';
+import {
+  ActorContext,
+  JWT_AUDIENCE,
+  JWT_ISSUER,
+  UserRole,
+  isStaffRole
+} from '../common/security/actor-context';
 import { RealtimeBus } from '../realtime/realtime-bus';
 import { MessengerPolicy } from './messenger.policy';
 import { JoinRoomPayload, PresencePayload, TypingPayload } from './dto/realtime-events.dto';
@@ -21,6 +27,15 @@ interface AccessTokenPayload {
   sub?: string;
   role?: UserRole;
 }
+
+const VALID_ROLES = new Set<UserRole>([
+  'client',
+  'teacher',
+  'manager',
+  'admin',
+  'director',
+  'system_admin'
+]);
 
 /**
  * Вычисляет allowlist origin'ов для WebSocket-CORS из строки env
@@ -97,15 +112,22 @@ export class RealtimeGateway
   async handleConnection(socket: RealtimeSocket): Promise<void> {
     const token = this.extractToken(socket);
     if (!token) {
+      // Rejected handshakes must be visible: a client stuck in a reconnect
+      // loop with a missing/expired token previously left ZERO log lines.
+      this.logger.warn('Realtime handshake rejected: no token');
       socket.disconnect(true);
       return;
     }
 
     try {
       const payload = await this.jwt.verifyAsync<AccessTokenPayload>(token, {
-        secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET')
+        secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+        algorithms: ['HS256']
       });
-      if (!payload.sub || !payload.role) {
+      if (!payload.sub || !payload.role || !VALID_ROLES.has(payload.role)) {
+        this.logger.warn('Realtime handshake rejected: malformed payload');
         socket.disconnect(true);
         return;
       }
@@ -124,7 +146,15 @@ export class RealtimeGateway
         await socket.join(RealtimeGateway.adminInboxRoom);
       }
       this.logger.log(`Realtime connected user=${payload.sub}`);
-    } catch {
+    } catch (error) {
+      // Expired-token reconnect loops (access TTL 900s vs a socket auth token
+      // captured once at connect) are the #1 silent realtime killer — make
+      // them greppable. The token itself is never logged.
+      const reason =
+        error instanceof Error && error.name === 'TokenExpiredError'
+          ? 'token_expired'
+          : 'token_invalid';
+      this.logger.warn(`Realtime handshake rejected: reason=${reason}`);
       socket.disconnect(true);
     }
   }

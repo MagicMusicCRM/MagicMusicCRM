@@ -18,6 +18,29 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     _fetchDayLessons(day);
     _armHighlightClear();
     ref.read(scheduleNavigationProvider.notifier).clear();
+    if (focus.leadId != null && focus.leadId!.isNotEmpty) {
+      // The navigation request is consumed only after the Schedule screen owns
+      // the flow. Opening the dialog here keeps lesson creation exclusive to
+      // the Schedule tab while retaining the lead/date preset from the card.
+      unawaited(_openLeadCreateFromSchedule(focus, day));
+    }
+  }
+
+  Future<void> _openLeadCreateFromSchedule(
+    ScheduleFocusState focus,
+    DateTime day,
+  ) async {
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    final created = await CreateLessonDialog.show(
+      context,
+      initialDate: day,
+      initialBranchId: _selectedBranchId,
+      leadId: focus.leadId,
+      leadName: focus.leadName,
+      initialIsTrial: true,
+    );
+    if (created == true && mounted) await _fetchDayLessons(day);
   }
 
   void _armHighlightClear() {
@@ -46,8 +69,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     DateTime startLocal,
     int durationMinutes,
   ) async {
-    final roomId =
-        (columnId == kUnassignedColumnId || columnId.isEmpty) ? null : columnId;
+    final roomId = (columnId == kUnassignedColumnId || columnId.isEmpty)
+        ? null
+        : columnId;
     final created = await CreateLessonDialog.show(
       context,
       initialDate: startLocal,
@@ -118,7 +142,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     });
 
     try {
-      await ref.read(magicCrmServiceProvider).updateLesson(
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateLesson(
             lessonId,
             scheduledAt: newScheduledAtIso,
             roomId: roomChanged ? targetRoomId : null,
@@ -150,13 +176,54 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           type: MagicToastType.success,
         );
       }
+    } on MagicApiException catch (e) {
+      if (!mounted) return;
+      // Сначала откат блока — force-повтор при подтверждении заново применит
+      // состояние через _fetchDayLessons.
+      _emitState(() {
+        lesson['scheduled_at'] = prevScheduledAt;
+        lesson['room_id'] = prevRoomId;
+        lesson['room_name'] = prevRoomId == null
+            ? null
+            : _roomNames[prevRoomId.toString()];
+        lesson['conflict_types'] = prevConflicts;
+      });
+      // Контракт 2: 409 = педагог/аудитория заняты в целевом слоте. Показываем
+      // кто/когда/где; admin+ может «Перенести всё равно» (force: true).
+      final conflicts = scheduleConflictsFrom409(e);
+      if (conflicts == null) {
+        MagicToast.show(
+          context,
+          'Не удалось перенести занятие',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      } else {
+        final retry = await _confirmScheduleBusy(
+          conflicts,
+          confirmLabel: 'Перенести всё равно',
+        );
+        if (retry == true && mounted) {
+          await _forcePatchLesson(
+            lessonId,
+            {
+              'scheduledAt': newScheduledAtIso,
+              // roomChanged уже гарантирует непустой targetRoomId.
+              if (roomChanged) 'roomId': targetRoomId,
+            },
+            successMessage: 'Занятие перенесено',
+            failureMessage: 'Не удалось перенести занятие',
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         _emitState(() {
           lesson['scheduled_at'] = prevScheduledAt;
           lesson['room_id'] = prevRoomId;
-          lesson['room_name'] =
-              prevRoomId == null ? null : _roomNames[prevRoomId.toString()];
+          lesson['room_name'] = prevRoomId == null
+              ? null
+              : _roomNames[prevRoomId.toString()];
           lesson['conflict_types'] = prevConflicts;
         });
         MagicToast.show(
@@ -168,6 +235,86 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       }
     } finally {
       if (mounted) _emitState(() => _movingLesson = false);
+    }
+  }
+
+  // ── 409 «слот занят» при переносе/растяжении (контракт 2) ──────────────────
+  // Компактный диалог для сетки: список конфликтов (кто · когда · где) и
+  // force-подтверждение только для admin+ (сервер гейтит то же самое).
+  Future<bool?> _confirmScheduleBusy(
+    List<ScheduleConflictInfo> conflicts, {
+    required String confirmLabel,
+  }) {
+    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    final canForce = kScheduleForceRoles.contains(role);
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: AppColor.danger),
+        title: const Text('Время занято'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('В этот слот уже есть занятия:'),
+            const SizedBox(height: 8),
+            for (final conflict in conflicts.take(5))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '• ${conflict.label()}',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            const SizedBox(height: 4),
+            Text(
+              canForce
+                  ? 'Назначить всё равно?'
+                  : 'Выберите другой слот — назначить может администратор.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          if (canForce)
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColor.gold,
+                foregroundColor: AppColor.onGold,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(confirmLabel),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _forcePatchLesson(
+    String lessonId,
+    Map<String, dynamic> payload, {
+    required String successMessage,
+    required String failureMessage,
+  }) async {
+    try {
+      await ref
+          .read(magicApiClientProvider)
+          .updateLessonRaw(lessonId, payload, force: true);
+      if (!mounted) return;
+      await _fetchDayLessons(_selectedDate); // server re-derives conflicts
+      if (!mounted) return;
+      MagicToast.show(context, successMessage, type: MagicToastType.success);
+    } catch (e) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        failureMessage,
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
     }
   }
 
@@ -183,7 +330,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         content: const Text('Занятие перенесено'),
         backgroundColor: AppColor.success,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 5),
+        duration: const Duration(seconds: 3),
         action: SnackBarAction(
           label: 'Отменить',
           textColor: Colors.white,
@@ -200,7 +347,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
   ) async {
     if (prevScheduledAt == null) return;
     try {
-      await ref.read(magicCrmServiceProvider).updateLesson(
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateLesson(
             lessonId,
             scheduledAt: prevScheduledAt.toString(),
             roomId: prevRoomId?.toString(),
@@ -250,7 +399,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     });
 
     try {
-      await ref.read(magicCrmServiceProvider).updateLesson(
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateLesson(
             lessonId,
             scheduledAt: newScheduledAtIso,
             durationMinutes: newDurationMinutes,
@@ -263,6 +414,39 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         'Длительность обновлена',
         type: MagicToastType.success,
       );
+    } on MagicApiException catch (e) {
+      if (!mounted) return;
+      _emitState(() {
+        lesson['scheduled_at'] = prevScheduledAt;
+        lesson['duration_minutes'] = prevDuration;
+        lesson['conflict_types'] = prevConflicts;
+      });
+      // Контракт 2: растяжение налезло на чужое занятие → 409 с конфликтами.
+      final conflicts = scheduleConflictsFrom409(e);
+      if (conflicts == null) {
+        MagicToast.show(
+          context,
+          'Не удалось изменить длительность',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      } else {
+        final retry = await _confirmScheduleBusy(
+          conflicts,
+          confirmLabel: 'Изменить всё равно',
+        );
+        if (retry == true && mounted) {
+          await _forcePatchLesson(
+            lessonId,
+            {
+              'scheduledAt': newScheduledAtIso,
+              'durationMinutes': newDurationMinutes,
+            },
+            successMessage: 'Длительность обновлена',
+            failureMessage: 'Не удалось изменить длительность',
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         _emitState(() {
@@ -354,9 +538,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
                           : Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isSelected
-                            ? AppColor.gold
-                            : Colors.transparent,
+                        color: isSelected ? AppColor.gold : Colors.transparent,
                         width: 1.5,
                       ),
                     ),
@@ -454,8 +636,12 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – '
         '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
 
+    // Пробное по лиду: student_id пуст, имя приходит в lead_name — карточка
+    // не должна падать в безликое «Ученик».
+    final leadName = lesson['lead_name']?.toString().trim() ?? '';
     final studentName =
-        _studentNames[lesson['student_id']?.toString()] ?? 'Ученик';
+        _studentNames[lesson['student_id']?.toString()] ??
+        (leadName.isNotEmpty ? '$leadName (лид)' : 'Ученик');
     final roomId = lesson['room_id']?.toString();
     final roomName = roomId != null
         ? (_roomNames[roomId] ?? 'Аудитория')
@@ -498,8 +684,12 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
 
     final teacherName =
         _teacherNames[lesson['teacher_id']?.toString()] ?? 'Не назначен';
+    // Занятие лида (пробное): ученика нет, показываем имя лида вместо
+    // ложного «Не назначен».
+    final leadName = lesson['lead_name']?.toString().trim() ?? '';
     final studentName =
-        _studentNames[lesson['student_id']?.toString()] ?? 'Не назначен';
+        _studentNames[lesson['student_id']?.toString()] ??
+        (leadName.isNotEmpty ? '$leadName (лид)' : 'Не назначен');
     final roomId = lesson['room_id']?.toString();
     final roomName = roomId != null
         ? (_roomNames[roomId] ?? 'Аудитория')
@@ -533,7 +723,6 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           _updateLessonStatus(lessonId!, status, message),
     );
   }
-
 
   Future<void> _editLesson(Map<String, dynamic> lesson) async {
     final changed = await CreateLessonDialog.show(context, lesson: lesson);

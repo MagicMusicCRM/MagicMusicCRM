@@ -36,6 +36,10 @@ final pastLessonsRichProvider = FutureProvider<List<Map<String, dynamic>>>((
       .listLessons(
         studentId: studentId,
         to: DateTime.now().toUtc().toIso8601String(),
+        // Новейшие первыми. Сервер сортировал только asc и резал limit ПОСЛЕ
+        // сортировки — у учеников с сотнями занятий вкладка «История» вечно
+        // показывала 50 самых старых уроков 2024 года и ни одного свежего.
+        order: 'desc',
         limit: 50,
       );
 });

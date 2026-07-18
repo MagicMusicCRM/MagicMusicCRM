@@ -1,5 +1,24 @@
 part of 'client_card.dart';
 
+/// UUID-формат (8-4-4-4-12 hex). Сервер валидирует `statusId` как `@IsUUID()`,
+/// поэтому легаси-значения вроде 'new' или имени статуса слать нельзя — они
+/// роняют весь PATCH, включая правки имени/телефона (#2).
+final RegExp _uuidRe = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-'
+  r'[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+);
+
+bool _hasResponsibleInCustomData(Map<String, dynamic> customData) {
+  for (final key in const [
+    'responsibleUserId',
+    'responsible',
+    'responsibleName',
+  ]) {
+    if ((customData[key]?.toString().trim() ?? '').isNotEmpty) return true;
+  }
+  return false;
+}
+
 extension _ClientCardData on _ClientCardState {
   /// lead half (lead card, status history, statuses, metadata) and flip to
   /// `converted`. Failures degrade silently back to studentOnly.
@@ -111,24 +130,23 @@ extension _ClientCardData on _ClientCardState {
       // timeline: the rest of it (comments, tasks, trials) already has its own
       // sections on the card and would show up twice here.
       out.add(
-        _list(_leadCard?['timeline'])
-            .where((t) => t['type']?.toString() == 'audit')
-            .map((t) {
-              return {
-                'id': t['id'],
-                '_origin': 'lead',
-                '_kind': 'event',
-                '_date': t['occurred_at'],
-                '_title': t['title']?.toString() ?? 'Событие',
-                '_subtitle': [
-                  if ((t['actor_name']?.toString().trim() ?? '').isNotEmpty)
-                    t['actor_name'].toString().trim(),
-                  if ((t['body']?.toString().trim() ?? '').isNotEmpty)
-                    t['body'].toString().trim(),
-                ].join('\n'),
-              };
-            })
-            .toList(),
+        _list(
+          _leadCard?['timeline'],
+        ).where((t) => t['type']?.toString() == 'audit').map((t) {
+          return {
+            'id': t['id'],
+            '_origin': 'lead',
+            '_kind': 'event',
+            '_date': t['occurred_at'],
+            '_title': t['title']?.toString() ?? 'Событие',
+            '_subtitle': [
+              if ((t['actor_name']?.toString().trim() ?? '').isNotEmpty)
+                t['actor_name'].toString().trim(),
+              if ((t['body']?.toString().trim() ?? '').isNotEmpty)
+                t['body'].toString().trim(),
+            ].join('\n'),
+          };
+        }).toList(),
       );
     }
     if (_mode.hasStudentHalf) {
@@ -248,8 +266,6 @@ extension _ClientCardData on _ClientCardState {
       if (mounted) _emitState(() => _loadingCard = false);
       return;
     }
-    // Заявки грузятся параллельно и изолированно: их сбой не роняет карточку.
-    _fetchLeadApplications(id);
     try {
       final card = await ref.read(magicCrmServiceProvider).getLeadCard(id);
       if (!mounted) return;
@@ -268,20 +284,6 @@ extension _ClientCardData on _ClientCardState {
     } catch (e) {
       debugPrint('Lead card load failed: $e');
       if (mounted) _emitState(() => _loadingCard = false);
-    }
-  }
-
-  // KVA-234: заявки лида из app.lead_applications — секция «Заявки».
-  Future<void> _fetchLeadApplications(String leadId) async {
-    try {
-      final items = await ref
-          .read(magicCrmServiceProvider)
-          .listLeadApplications(leadId);
-      if (!mounted) return;
-      _emitState(() => _leadApplications = items);
-    } catch (e) {
-      // Секция останется с пустым состоянием «Заявок нет».
-      debugPrint('Lead applications load failed: $e');
     }
   }
 
@@ -415,14 +417,29 @@ extension _ClientCardData on _ClientCardState {
         if (_leadData['branch_id'] != null) {
           customData['branchId'] = _leadData['branch_id'];
         }
+        // #2 (контракт 6): statusId уходит только когда он UUID-формата И
+        // реально изменился. Легаси-фолбэк 'new' (лид «Без статуса») или имя
+        // статуса сервер отверг бы целиком — 400 на весь PATCH; пропущенное
+        // поле сервер сохраняет как есть (clearStatus — отдельный явный путь).
+        final rawStatus = _leadData['status']?.toString();
+        final originalStatus = _leadData['status_id']?.toString();
+        final statusId =
+            (rawStatus != null &&
+                _uuidRe.hasMatch(rawStatus) &&
+                rawStatus != originalStatus)
+            ? rawStatus
+            : null;
         await service.updateLead(
           _leadId,
           firstName: _clientFirstName,
           lastName: _clientLastName,
           phone: _clientPhone,
           email: _clientEmail,
-          statusId: _leadData['status']?.toString(),
-          notes: _notesCtrl.text,
+          statusId: statusId,
+          assignedTo: _leadData['assigned_to']?.toString(),
+          clearAssignedTo:
+              _leadResponsibleChanged &&
+              (_leadData['assigned_to']?.toString().trim().isEmpty ?? true),
           customDataPatch: customData,
         );
       }
@@ -442,6 +459,9 @@ extension _ClientCardData on _ClientCardState {
           phone: _clientPhone,
           email: _clientEmail,
           status: _student?['status']?.toString(),
+          clearResponsible:
+              _studentResponsibleChanged &&
+              !_hasResponsibleInCustomData(customData),
           customDataPatch: customData,
         );
       }

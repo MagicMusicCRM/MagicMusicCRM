@@ -21,6 +21,7 @@ import {
   UpdateScheduleSeriesDto,
 } from "./dto/schedule-series.dto";
 import { LessonQuery } from "./dto/lesson.query";
+import { ScheduleConflictsQuery } from "./dto/schedule-conflicts.query";
 import { ScheduleMatrixQuery } from "./dto/schedule-matrix.query";
 import {
   ScheduleSeriesDeleteQuery,
@@ -97,6 +98,15 @@ export class CrmScheduleController {
     @Query() query: ScheduleMatrixQuery,
   ) {
     return this.schedule.getScheduleMonthSummary(actor, query);
+  }
+
+  // Contract 1 (правки №2): busy-slot pre-flight for the lesson dialog.
+  @Get("schedule/conflicts")
+  getScheduleConflicts(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: ScheduleConflictsQuery,
+  ) {
+    return this.schedule.getScheduleConflicts(actor, query);
   }
 
   @Post("lessons")

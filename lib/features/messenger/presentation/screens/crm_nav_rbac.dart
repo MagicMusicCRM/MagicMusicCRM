@@ -12,6 +12,11 @@
 ///   0 Чат · 1 Обзор · 2 Расписание · 3 Клиенты ·
 ///   4 Пользователи · 5 Финансы · 6 Задачи · 7 Отчёты.
 /// Teacher reuses 0/1/2 for Чат/Расписание/Ученики.
+///
+/// The numbers are CANONICAL (alert_policy.dart's CrmSection and the unseen
+/// counters key off them) — per-role lists may omit or reorder them, but never
+/// renumber. Правки №2 #17: у Администратора вместо «Обзора» (1) в его слоте
+/// стоит «Задачи» (6) — админ живёт в задачах, а не в сводке.
 library;
 
 /// Operational CRM tab indices shared by admin/manager/director/system_admin.
@@ -44,6 +49,15 @@ bool crmHasTeacherRatesAccess(String role) => crmHasManagerAccess(role);
 /// Canonical CRM tab indices visible to [role], in display order.
 List<int> crmVisibleTabs(String role, {required bool isDesktop}) {
   if (role == 'teacher') return const [0, 1, 2];
+  // Правки №2 #17: у Администратора «Обзор» (1) заменён «Задачами» (6) — в его
+  // слоте сразу после Чата, и на телефоне тоже. Только role == 'admin':
+  // manager/director/system_admin сохраняют «Обзор» (system_admin намеренно
+  // приравнен к director — см. rbac_nav_matrix_test).
+  if (role == 'admin') {
+    // Administrator is the front-desk role: chat, own work queue, schedule and
+    // clients only. User management/reports belong to manager+.
+    return const [0, 6, 2, 3];
+  }
   // Финансы/Задачи/Отчёты remain desktop-only, preserved from the legacy
   // behaviour. Финансы (5) — only for roles with school-finance access.
   if (!isDesktop) return const [0, 1, 2, 3, 4];

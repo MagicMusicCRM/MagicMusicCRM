@@ -152,12 +152,18 @@ class LeadBoardFilters {
   Future<Map<String, dynamic>> fetchBoard(
     MagicCrmService service, {
     String? cursor,
+    String? columnId,
     int limit = 25,
   }) {
+    final pageUnassigned = columnId == 'unassigned';
+    final pageStatusId = columnId == null
+        ? statusId
+        : (pageUnassigned ? null : columnId);
     return service.listLeadBoard(
       q: q,
       branchId: branchId,
-      statusId: statusId,
+      statusId: pageStatusId,
+      unassigned: pageUnassigned ? true : null,
       source: source,
       discipline: discipline,
       level: level,

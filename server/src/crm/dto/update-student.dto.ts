@@ -1,4 +1,11 @@
-import { IsEmail, IsObject, IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  IsBoolean,
+  IsEmail,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from "class-validator";
 
 export class UpdateStudentDto {
   @IsOptional()
@@ -29,4 +36,10 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsObject()
   customDataPatch?: Record<string, unknown>;
+
+  // Students retain their legacy custom_data ownership surface. Clearing must
+  // be explicit because customDataPatch is a merge-patch for compatibility.
+  @IsOptional()
+  @IsBoolean()
+  clearResponsible?: boolean;
 }

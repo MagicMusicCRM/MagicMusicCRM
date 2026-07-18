@@ -41,18 +41,21 @@ export class MigrationRunner {
         completed.push(migration.id);
         continue;
       }
-      await this.pool.query('begin');
+      const client = await this.pool.connect();
       try {
-        await this.pool.query(sql);
-        await this.pool.query(
+        await client.query('begin');
+        await client.query(sql);
+        await client.query(
           `insert into ${migrationTable} (id, applied_at) values ($1, now())`,
           [migration.id]
         );
-        await this.pool.query('commit');
+        await client.query('commit');
         completed.push(migration.id);
       } catch (error) {
-        await this.pool.query('rollback');
+        await client.query('rollback');
         throw error;
+      } finally {
+        client.release();
       }
     }
 
@@ -80,17 +83,20 @@ export class MigrationRunner {
       ]);
       return migrationId;
     }
-    await this.pool.query('begin');
+    const client = await this.pool.connect();
     try {
-      await this.pool.query(sql);
-      await this.pool.query(`delete from ${migrationTable} where id = $1`, [
+      await client.query('begin');
+      await client.query(sql);
+      await client.query(`delete from ${migrationTable} where id = $1`, [
         migrationId
       ]);
-      await this.pool.query('commit');
+      await client.query('commit');
       return migrationId;
     } catch (error) {
-      await this.pool.query('rollback');
+      await client.query('rollback');
       throw error;
+    } finally {
+      client.release();
     }
   }
 

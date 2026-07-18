@@ -45,8 +45,12 @@ class MagicProfileAdminService {
   /// The signed-in user's own profile, including `homeBranchId` / `branchIds`
   /// (the staff member's assigned branches). Used to open the schedule on the
   /// branch the user actually works at rather than the first in the system.
+  ///
+  /// NB: the server route is singular `/profile/me` (profile.controller.ts).
+  /// The plural `/profiles/me` 404-ed forever, and the only caller swallowed
+  /// the error — so the default-branch feature silently never worked.
   Future<Map<String, dynamic>> getMyProfile() async {
-    return _api.get<Map<String, dynamic>>('/profiles/me');
+    return _api.get<Map<String, dynamic>>('/profile/me');
   }
 
   /// Загружает привязанные к профилю CRM-сущности (ученики/лиды).

@@ -87,6 +87,9 @@ extension MagicCrmSchedule on MagicCrmService {
     String? studentId,
     String? teacherId,
     bool? isTrial,
+    // 'desc' — новейшие первыми (история: сервер режет limit ПОСЛЕ сортировки,
+    // поэтому asc у давних учеников возвращал 50 самых СТАРЫХ занятий).
+    String? order,
     int limit = 100,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
@@ -95,6 +98,7 @@ extension MagicCrmSchedule on MagicCrmService {
     if (studentId != null) queryParameters['studentId'] = studentId;
     if (teacherId != null) queryParameters['teacherId'] = teacherId;
     if (isTrial != null) queryParameters['isTrial'] = isTrial;
+    if (order != null) queryParameters['order'] = order;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/lessons',
@@ -645,6 +649,7 @@ extension MagicCrmSchedule on MagicCrmService {
     String? beginTime,
     int? durationMinutes,
     String? validUntil,
+    bool clearValidUntil = false,
     String? effectiveFrom,
     String? notes,
   }) async {
@@ -654,7 +659,11 @@ extension MagicCrmSchedule on MagicCrmService {
     if (weekday != null) data['weekday'] = weekday;
     if (beginTime != null) data['beginTime'] = beginTime;
     if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
-    if (validUntil != null) data['validUntil'] = validUntil;
+    if (clearValidUntil) {
+      data['validUntil'] = null;
+    } else if (validUntil != null) {
+      data['validUntil'] = validUntil;
+    }
     if (effectiveFrom != null) data['effectiveFrom'] = effectiveFrom;
     if (notes != null) data['notes'] = notes;
     return _api.patch<Map<String, dynamic>>(

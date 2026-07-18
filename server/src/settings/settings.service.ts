@@ -86,7 +86,7 @@ const HOLLIHOP_CONTACT_RELATION_OPTIONS = [
   "другое",
 ];
 
-const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
+const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   {
     entity: "students",
     key: "hollihopId",
@@ -555,6 +555,24 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Дополнительные параметры",
     type: "text",
     required: false,
+  },
+];
+
+const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
+  ...LEGACY_DEFAULT_CRM_CUSTOM_FIELDS.filter(
+    (field) =>
+      !(
+        field.key === "source" &&
+        (field.entity === "students" || field.entity === "leads")
+      ),
+  ),
+  {
+    entity: "students",
+    key: "adSource",
+    label: "Рекламный источник",
+    type: "select",
+    required: false,
+    options: HOLLIHOP_SOURCE_OPTIONS,
   },
 ];
 

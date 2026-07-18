@@ -7,10 +7,30 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
+  Validate,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from "class-validator";
+
+const LEAD_BOARD_CURSOR_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{1,6}Z\|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+@ValidatorConstraint({ name: "leadBoardStatusScope", async: false })
+class LeadBoardStatusScopeConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args: ValidationArguments) {
+    const query = args.object as LeadBoardQuery;
+    return !(query.statusId && query.unassigned === true);
+  }
+
+  defaultMessage() {
+    return "statusId and unassigned=true are mutually exclusive";
+  }
+}
 
 export class LeadBoardQuery {
   @IsOptional()
@@ -20,7 +40,18 @@ export class LeadBoardQuery {
 
   @IsOptional()
   @IsUUID()
+  @Validate(LeadBoardStatusScopeConstraint)
   statusId?: string;
+
+  /** Explicitly selects the synthetic "Без статуса" board column. */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return value;
+  })
+  @IsBoolean()
+  unassigned?: boolean;
 
   @IsOptional()
   @IsUUID()
@@ -94,6 +125,7 @@ export class LeadBoardQuery {
 
   @IsOptional()
   @IsString()
+  @Matches(LEAD_BOARD_CURSOR_PATTERN)
   @MaxLength(180)
   cursor?: string;
 

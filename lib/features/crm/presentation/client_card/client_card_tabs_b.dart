@@ -67,6 +67,20 @@ extension _ClientCardTabsB on _ClientCardState {
             busy: _familyBusy,
             onRemove: _removeFamilyMember,
           ),
+          // #14: контактные лица живут на одной вкладке с семьёй — из Инфо
+          // дубль убран.
+          const SizedBox(height: AppSpace.lg),
+          _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),
+          // #9: строка «Контакты» из выгрузки HolliHop (custom_data.contacts) —
+          // только чтение, показывается когда заполнена.
+          if (_hhField('contacts') != null)
+            _buildInfoCard('Контакты из HolliHop', [
+              _InfoRow(
+                icon: Icons.family_restroom_outlined,
+                label: 'Контактные лица',
+                value: _hhField('contacts')!,
+              ),
+            ]),
         ],
       ),
     );

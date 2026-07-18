@@ -9,9 +9,9 @@ Flutter talks to the Magic Music API, not directly to Supabase.
 
 ## Status Snapshot
 
-Updated: 2026-07-17.
+Updated: 2026-07-18.
 
-- App version: `1.2.1+142`.
+- App version: `1.2.2+144`.
 - Current public v3 API: `https://api.magicmusiccrm.ru/api` (host
   `161.104.49.153`). The older `api.phantom-net.ru` is dead — do not use it.
 - Client: Flutter/Dart, Riverpod, GoRouter, Dio, Socket.IO client, Sentry,
@@ -21,11 +21,11 @@ Updated: 2026-07-17.
 - Active architecture: `.anws/v3` (Backend Independence).
 - Active product track: v7 redesign migration onto the existing app, reskin
   and reflow first, no backend rewrite.
-- Current database migration chain: `0001` through `0068` (prod deployed at
-  `0068`).
-- Windows desktop has an in-app self-updater (no store): the app polls
-  `https://api.magicmusiccrm.ru/downloads/latest.json` on launch. Android/iOS
-  update through their stores.
+- Current database migration chain: `0001` through `0071` (prod deployed at
+  `0071`).
+- Windows desktop has an in-app self-updater (no store): build 144+ polls
+  `https://api.magicmusiccrm.ru/downloads/latest-v2.json`; the legacy build-143
+  channel is frozen at `latest.json`. Android/iOS update through their stores.
 - Supabase is retained only as legacy export/import tooling. It is not a
   Flutter runtime dependency.
 - HolliHop is a backend-only import/reference source. Keys never belong in
@@ -302,7 +302,7 @@ Windows:
 ```powershell
 flutter build windows --release `
   --dart-define=MAGIC_API_BASE_URL=https://api.magicmusiccrm.ru/api `
-  --dart-define=APP_BUILD_NUMBER=142
+  --dart-define=APP_BUILD_NUMBER=144
 ```
 
 Android APK / App Bundle (updated through the store, no build-number define
@@ -319,21 +319,25 @@ Android release signing needs `android/key.properties` + `android/upload-keystor
 ### Windows self-update
 
 Windows has no store, so the app updates itself from a manifest we host on our
-own server. On launch it polls `https://api.magicmusiccrm.ru/downloads/latest.json`;
+own server. Build 144+ polls
+`https://api.magicmusiccrm.ru/downloads/latest-v2.json` on launch;
 if the published `buildNumber` is higher than the running one, it offers to
-install. A detached PowerShell helper waits for the app to exit, downloads and
-SHA-256-verifies the zip, unpacks it over the install directory and relaunches
-(on any failure it just relaunches the current build).
+install. The legacy `latest.json` is intentionally frozen because build 143's
+helper cannot safely install an update; build 144 is the one-time manual bridge
+to the v2 channel. An out-of-job PowerShell helper stages and SHA-256-verifies
+the complete payload before takeover, keeps a rollback snapshot, then accepts
+the new build only after its first-frame health acknowledgement.
 
 Publishing a new Windows release:
 
 1. Build Windows with `APP_BUILD_NUMBER` set (above) and package the
    `dist/MagicMusicCRM-<x.y.z-build>-windows-x64.zip`.
-2. Run the publish helper — it hashes the zip, writes `dist/latest.json` and
-   uploads both to the server:
+2. Run the publish helper — it hashes the zip, writes `dist/latest-v2.json`,
+   uploads the manifest under a temporary name and atomically renames it on the
+   server (without touching legacy `latest.json`):
 
    ```powershell
-   ./scripts/publish-windows-update.ps1 -BuildNumber 143 -Version "1.2.1+143" -Notes "Что нового"
+   ./scripts/publish-windows-update.ps1 -BuildNumber 144 -Version "1.2.2+144" -Notes "Что нового"
    ```
 
 Caddy serves `/downloads/*` from `/opt/magicmusiccrm/downloads` (a read-only

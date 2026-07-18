@@ -244,18 +244,17 @@ num _asNum(Object? value) {
   return num.tryParse(value?.toString() ?? '') ?? 0;
 }
 
-/// Lead «активность» aggregate: summary chips + linked-students/tasks/trials/
-/// applications/timeline mini-sections. [onScheduleTrial] wires the «На пробный»
-/// action (null hides it for a student-only card).
+/// Lead «активность» aggregate: summary chips + the «Пробные занятия»
+/// mini-section. Блоки «Связанные ученики»/«Заявки»/«Лента» удалены (#10):
+/// они дублировали другие вкладки и разделы карточки; запись на пробное из
+/// карточки убрана (#6) — вместо неё в баре действий «Открыть в расписании».
 Widget _aggregateCard(
   ColorScheme cs, {
   required bool loadingCard,
   required Map<String, dynamic>? card,
-  required List<Map<String, dynamic>> leadApplications,
   required int duplicateCount,
   required bool loadingDuplicates,
   required bool includeTasks,
-  required VoidCallback? onScheduleTrial,
 }) {
   if (loadingCard) {
     return const Padding(
@@ -270,11 +269,9 @@ Widget _aggregateCard(
     );
   }
 
-  final linkedStudents = _list(card['linked_students']);
   final tasks = _list(card['tasks']);
   final trials = _list(card['trials']);
   final otherLeads = _list(card['other_leads']);
-  final timeline = _list(card['timeline']);
 
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,7 +280,6 @@ Widget _aggregateCard(
         spacing: AppSpace.sm,
         runSpacing: AppSpace.sm,
         children: [
-          _summaryChip(Icons.school_outlined, 'Ученики', linkedStudents.length),
           _summaryChip(Icons.task_alt_rounded, 'Задачи', tasks.length),
           _summaryChip(Icons.event_available_rounded, 'Пробные', trials.length),
           _summaryChip(Icons.link_rounded, 'Похожие лиды', otherLeads.length),
@@ -292,15 +288,6 @@ Widget _aggregateCard(
         ],
       ),
       const SizedBox(height: AppSpace.md),
-      _miniSection(
-        cs,
-        title: 'Связанные ученики',
-        empty: 'Связанных учеников нет',
-        rows: linkedStudents,
-        titleBuilder: (row) =>
-            '${row['first_name'] ?? ''} ${row['last_name'] ?? ''}'.trim(),
-        subtitleBuilder: (row) => row['phone']?.toString(),
-      ),
       if (includeTasks)
         _miniSection(
           cs,
@@ -320,47 +307,6 @@ Widget _aggregateCard(
           row['teacher_name'],
           row['room_name'],
         ].where((value) => value != null && '$value'.isNotEmpty).join(' · '),
-        action: onScheduleTrial != null
-            ? TextButton.icon(
-                onPressed: onScheduleTrial,
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColor.gold,
-                  visualDensity: VisualDensity.compact,
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-                icon: const Icon(Icons.add_rounded, size: 15),
-                label: const Text('На пробный'),
-              )
-            : null,
-      ),
-      // KVA-234: заявки лида (HolliHop GetStudyRequests) — порядок секций по
-      // HolliHop: Связанные ученики → Пробные занятия → Заявки → Лента.
-      _miniSection(
-        cs,
-        title: 'Заявки',
-        empty: 'Заявок нет',
-        rows: leadApplications,
-        titleBuilder: (row) => _formatDate(row['applied_at']),
-        subtitleBuilder: (row) {
-          final utm = row['utm'];
-          final utmSource = utm is Map ? utm['Source']?.toString() : null;
-          return [
-            row['channel'],
-            row['discipline'],
-            utmSource,
-          ].where((value) => value != null && '$value'.isNotEmpty).join(' · ');
-        },
-      ),
-      _miniSection(
-        cs,
-        title: 'Лента',
-        empty: 'История пока пустая',
-        rows: timeline.take(8).toList(),
-        titleBuilder: (row) => row['title']?.toString() ?? 'Событие',
-        subtitleBuilder: (row) => _formatDate(row['occurred_at']),
       ),
     ],
   );

@@ -18,7 +18,17 @@ class ScheduleFocusState {
   /// resolved.
   final String? highlightLessonId;
 
-  const ScheduleFocusState({required this.focusDate, this.highlightLessonId});
+  /// Optional lead preset. When present the schedule first becomes the active
+  /// screen/day and only then opens its canonical create-lesson dialog.
+  final String? leadId;
+  final String? leadName;
+
+  const ScheduleFocusState({
+    required this.focusDate,
+    this.highlightLessonId,
+    this.leadId,
+    this.leadName,
+  });
 }
 
 class ScheduleFocusNotifier extends Notifier<ScheduleFocusState?> {
@@ -28,6 +38,20 @@ class ScheduleFocusNotifier extends Notifier<ScheduleFocusState?> {
   /// Focus the schedule on [date] with [lessonId] highlighted.
   void focus(DateTime date, String lessonId) =>
       state = ScheduleFocusState(focusDate: date, highlightLessonId: lessonId);
+
+  /// Open the schedule on [date] and start a trial lesson for an existing lead
+  /// from within that schedule. This replaces card/kanban-owned booking dialogs.
+  void createForLead(
+    DateTime date, {
+    required String leadId,
+    String? leadName,
+  }) {
+    state = ScheduleFocusState(
+      focusDate: date,
+      leadId: leadId,
+      leadName: leadName,
+    );
+  }
 
   /// Clear the focus once the schedule has consumed it, so re-entering works.
   void clear() => state = null;

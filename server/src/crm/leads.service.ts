@@ -10,6 +10,11 @@ import { resolveAppealDate } from "./appeal-date";
 import { attachStudentToLead, leadStudentMatchSql } from "./lead-student-link";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { branchIdExpr, extractBranchId } from "./branch-scope";
+import { ensureResponsibleSafe } from "./responsible";
+import {
+  applyEligibleResponsibleToCustomData,
+  assertEligibleResponsible,
+} from "./responsible-eligibility";
 import { sanitizeJsonObject } from "./crm-util";
 import { buildTextSearch } from "./search-text";
 import { CrmPolicy } from "./crm.policy";
@@ -63,6 +68,8 @@ interface LeadRow {
 }
 
 interface LeadBoardRow extends LeadRow {
+  /** Exact PostgreSQL timestamp text used only for lossless keyset cursors. */
+  cursor_created_at: string;
   status_color: string | null;
   status_sort_order: number | null;
   assigned_first_name: string | null;
@@ -78,6 +85,19 @@ interface LeadBoardRow extends LeadRow {
 interface LeadBoardCountRow {
   status_id: string | null;
   count: string | number;
+}
+
+export interface LeadBoardColumnDto {
+  id: string;
+  name: string;
+  color: string | null;
+  sortOrder: number;
+  createdAt: Date | string | null;
+  requiresReason: boolean;
+  isTerminal: boolean;
+  totalCount: number;
+  items: Record<string, unknown>[];
+  nextCursor: string | null;
 }
 
 interface LeadStatusRow {
@@ -132,6 +152,8 @@ export class LeadsService {
   async listLeadBoard(actor: ActorContext, query: LeadBoardQuery) {
     this.policy.assertCanWriteCrm(actor);
     const limit = Math.min(query.limit ?? 25, 50);
+    const requestedColumnId =
+      query.unassigned === true ? "unassigned" : (query.statusId ?? null);
     // Where the «Без статуса» column sits among the real ones. Stored by the
     // reorder endpoint; null (default) keeps it last, as before.
     const unassignedSortResult = await this.database.query<{ value: number }>(
@@ -196,6 +218,10 @@ export class LeadsService {
                 and lesson.is_trial = true
             ) as trial_lessons_count,
             l.created_by, l.created_at, l.updated_at,
+            to_char(
+              l.created_at at time zone 'UTC',
+              'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+            ) as cursor_created_at,
             row_number() over (
               partition by coalesce(l.status_id::text, 'unassigned')
               order by l.created_at desc, l.id desc
@@ -217,7 +243,9 @@ export class LeadsService {
         where rn <= $${filter.params.length + 1}
         order by status_sort_order nulls last, status_name nulls last, created_at desc, id desc
       `,
-      [...filter.params, limit],
+      // One look-ahead row per row_number partition proves whether that
+      // particular column has another page. It is trimmed before returning.
+      [...filter.params, limit + 1],
     );
 
     const counts = new Map(
@@ -226,15 +254,26 @@ export class LeadsService {
         this.toNumericStat(row.count),
       ]),
     );
-    const columns = statusResult.rows.map((status) => ({
-      ...this.toLeadStatusDto(status),
-      totalCount: counts.get(status.id) ?? 0,
-      items: [] as ReturnType<typeof this.toLeadBoardItemDto>[],
-    }));
+    const columns: LeadBoardColumnDto[] = statusResult.rows
+      .filter(
+        (status) =>
+          requestedColumnId === null || requestedColumnId === status.id,
+      )
+      .map((status) => ({
+        ...this.toLeadStatusDto(status),
+        totalCount: counts.get(status.id) ?? 0,
+        items: [],
+        nextCursor: null,
+      }));
 
     const byStatus = new Map(columns.map((column) => [column.id, column]));
+    const rowsByStatus = new Map<string, LeadBoardRow[]>();
+    const returnedLeadIds = new Set<string>();
     for (const row of leadResult.rows) {
       const statusKey = row.status_id ?? "unassigned";
+      const rows = rowsByStatus.get(statusKey) ?? [];
+      rows.push(row);
+      rowsByStatus.set(statusKey, rows);
       if (!byStatus.has(statusKey)) {
         const column = {
           id: statusKey,
@@ -249,12 +288,45 @@ export class LeadsService {
           requiresReason: false,
           isTerminal: false,
           totalCount: counts.get(statusKey) ?? 0,
-          items: [] as ReturnType<typeof this.toLeadBoardItemDto>[],
+          items: [] as Record<string, unknown>[],
+          nextCursor: null,
         };
         byStatus.set(statusKey, column);
         columns.push(column);
       }
-      byStatus.get(statusKey)?.items.push(this.toLeadBoardItemDto(row));
+    }
+
+    // A targeted empty final page still returns the requested synthetic
+    // column, so clients can deterministically clear its cursor.
+    if (requestedColumnId === "unassigned" && !byStatus.has("unassigned")) {
+      const column: LeadBoardColumnDto = {
+        id: "unassigned",
+        name: "Без статуса",
+        color: null,
+        sortOrder: unassignedSort ?? 9999,
+        createdAt: null,
+        requiresReason: false,
+        isTerminal: false,
+        totalCount: counts.get("unassigned") ?? 0,
+        items: [],
+        nextCursor: null,
+      };
+      byStatus.set(column.id, column);
+      columns.push(column);
+    }
+
+    for (const [statusKey, rows] of rowsByStatus) {
+      const column = byStatus.get(statusKey);
+      if (!column) continue;
+      const returnedRows = rows.slice(0, limit);
+      for (const row of returnedRows) returnedLeadIds.add(row.id);
+      column.items.push(
+        ...returnedRows.map((row) => this.toLeadBoardItemDto(row)),
+      );
+      column.nextCursor =
+        rows.length > limit && returnedRows.length > 0
+          ? this.encodeLeadCursor(returnedRows[returnedRows.length - 1])
+          : null;
     }
 
     columns.sort((a, b) => {
@@ -263,15 +335,26 @@ export class LeadsService {
       return String(a.name).localeCompare(String(b.name), "ru");
     });
 
-    const loadedRows = leadResult.rows;
-    const oldest = loadedRows[loadedRows.length - 1];
+    // Build 143 (frozen legacy update channel) still reads the top-level
+    // scalar cursor. Keep that deprecated path until users manually bridge to
+    // 144; new clients use only column.nextCursor. The boundary mirrors the
+    // final returned row in the legacy SQL order and is emitted only when at
+    // least one partition proved it has a look-ahead row.
+    const legacyBoundary = [...leadResult.rows]
+      .reverse()
+      .find((row) => returnedLeadIds.has(row.id));
+    const legacyHasMore = columns.some((column) => column.nextCursor !== null);
+
     return {
       columns,
       totalCount: Array.from(counts.values()).reduce(
         (sum, count) => sum + count,
         0,
       ),
-      nextCursor: oldest ? this.encodeLeadCursor(oldest) : null,
+      nextCursor:
+        requestedColumnId === null && legacyHasMore && legacyBoundary
+          ? this.encodeLeadCursor(legacyBoundary)
+          : null,
     };
   }
 
@@ -328,20 +411,27 @@ export class LeadsService {
     const lead = leadResult.rows[0];
     if (!lead) throw new NotFoundException("Лид не найден.");
 
-    const [students, otherLeads, comments, tasks, trials, chatWork, fieldAudit] =
-      await Promise.all([
-        this.listStudentsLinkedToLead(leadId),
-        this.listRelatedLeads(lead),
-        this.listLeadComments(leadId),
-        this.listLeadTasks(leadId),
-        this.listLeadTrialLessons(leadId),
-        this.listChatWorkTimeline("lead", leadId),
-        // Field edits («кто поменял телефон»). Empty for non-staff; caught so a
-        // missing audit list can not take the whole card down.
-        this.timeline
-          .listFieldAudit(actor, "lead", leadId, 50)
-          .catch(() => ({ items: [] as Record<string, unknown>[] })),
-      ]);
+    const [
+      students,
+      otherLeads,
+      comments,
+      tasks,
+      trials,
+      chatWork,
+      fieldAudit,
+    ] = await Promise.all([
+      this.listStudentsLinkedToLead(leadId),
+      this.listRelatedLeads(lead),
+      this.listLeadComments(leadId),
+      this.listLeadTasks(leadId),
+      this.listLeadTrialLessons(leadId),
+      this.listChatWorkTimeline("lead", leadId),
+      // Field edits («кто поменял телефон»). Empty for non-staff; caught so a
+      // missing audit list can not take the whole card down.
+      this.timeline
+        .listFieldAudit(actor, "lead", leadId, 50)
+        .catch(() => ({ items: [] as Record<string, unknown>[] })),
+    ]);
 
     const timeline = [
       ...comments.map((comment) => ({
@@ -522,8 +612,6 @@ export class LeadsService {
   // chat with them. Prefers an explicit user_crm_link, then falls back to a
   // client user whose profile phone matches the lead's phone.
 
-
-
   /**
    * Ручное «Прикрепить к ученику» из карточки лида (§1 спеки, эталон
    * HolliHop — ссылка «Прикрепить к ученику»).
@@ -559,15 +647,70 @@ export class LeadsService {
       entityId: leadId,
       metadata: { studentId },
     });
-    this.realtime.emitCrmChanged({ entity: "lead", action: "updated", id: leadId });
+    this.realtime.emitCrmChanged({
+      entity: "lead",
+      action: "updated",
+      id: leadId,
+    });
     return { leadId, studentId };
+  }
+
+  // Contract 6: statusId arrives as a UUID (normal path) OR as a status NAME
+  // (legacy clients / imported labels) OR as junk ('new' fallback). Resolve
+  // UUID-first, then by case-insensitive name; anything unresolvable becomes
+  // null, which the callers treat as «field not sent» — the save proceeds and
+  // the current status is preserved. Never throws, never 500s.
+  private async resolveStatusId(
+    raw: string | null | undefined,
+  ): Promise<string | null> {
+    const value = raw?.trim();
+    if (!value) return null;
+    const uuidRe =
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    if (uuidRe.test(value)) {
+      const byId = await this.database.query<{ id: string }>(
+        "select id from app.lead_statuses where id = $1 limit 1",
+        [value],
+      );
+      return byId.rows[0]?.id ?? null;
+    }
+    const byName = await this.database.query<{ id: string }>(
+      `select min(id::text)::uuid as id
+       from app.lead_statuses
+       where lower(btrim(name)) = lower(btrim($1))
+       having count(*) = 1`,
+      [value],
+    );
+    return byName.rows[0]?.id ?? null;
   }
 
   async createLead(actor: ActorContext, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
     const branchId = extractBranchId(dto.customDataPatch);
-    const result = await this.database.query<LeadRow>(
-      `
+    const statusId = await this.resolveStatusId(dto.statusId);
+    const initialCustomData = sanitizeJsonObject(dto.customDataPatch);
+    const result = await this.database.transaction(async (client) => {
+      let customData = { ...initialCustomData };
+      const assignedTo = dto.clearAssignedTo ? null : (dto.assignedTo ?? null);
+      if (assignedTo) {
+        const responsible = await assertEligibleResponsible(
+          client,
+          assignedTo,
+          {
+            lock: true,
+          },
+        );
+        customData = applyEligibleResponsibleToCustomData(
+          customData,
+          responsible,
+        );
+      } else if (dto.clearAssignedTo) {
+        delete customData.responsible;
+        delete customData.responsibleUserId;
+        delete customData.responsibleName;
+      }
+      return client.query<LeadRow>(
+        `
         insert into app.leads (
           status_id, first_name, last_name, phone, email,
           source, notes, assigned_to, custom_data, created_by, branch_id
@@ -578,21 +721,29 @@ export class LeadsService {
           blacklisted, blacklist_reason, custom_data, created_by, created_at,
           updated_at
       `,
-      [
-        dto.statusId ?? null,
-        dto.firstName?.trim() || null,
-        dto.lastName?.trim() || null,
-        dto.phone?.trim() || null,
-        dto.email?.trim().toLowerCase() || null,
-        dto.source?.trim() || null,
-        dto.notes?.trim() || null,
-        dto.assignedTo ?? null,
-        sanitizeJsonObject(dto.customDataPatch),
-        actor.userId,
-        branchId,
-      ],
-    );
+        [
+          statusId,
+          dto.firstName?.trim() || null,
+          dto.lastName?.trim() || null,
+          dto.phone?.trim() || null,
+          dto.email?.trim().toLowerCase() || null,
+          dto.source?.trim() || null,
+          dto.notes?.trim() || null,
+          assignedTo,
+          customData,
+          actor.userId,
+          branchId,
+        ],
+      );
+    });
     const lead = result.rows[0];
+    // Contract 5: the creating admin/manager/director becomes «Ответственный»
+    // unless the card already carries one. Awaited before publishing the
+    // lead; the helper remains best-effort so a mirror-field failure does not
+    // roll back an otherwise valid lead write.
+    if (!dto.clearAssignedTo && !dto.assignedTo) {
+      await ensureResponsibleSafe(this.database, actor, "lead", lead.id);
+    }
     await this.audit.record({
       actor,
       action: "crm.lead_created",
@@ -607,7 +758,8 @@ export class LeadsService {
     });
     this.notifyNewLeadSafe(
       lead.id,
-      [lead.first_name, lead.last_name].filter(Boolean).join(" ").trim() || "Без имени",
+      [lead.first_name, lead.last_name].filter(Boolean).join(" ").trim() ||
+        "Без имени",
       lead.source?.trim() || "CRM",
     );
     return this.toLeadDto(lead);
@@ -616,13 +768,19 @@ export class LeadsService {
   async updateLead(actor: ActorContext, leadId: string, dto: UpsertLeadDto) {
     this.policy.assertCanWriteCrm(actor);
     const branchId = extractBranchId(dto.customDataPatch);
+    const initialCustomData = sanitizeJsonObject(dto.customDataPatch);
+    // Contract 6: unresolvable statusId → null → `coalesce($2, status_id)`
+    // keeps the current status instead of failing the save.
+    const statusId = await this.resolveStatusId(dto.statusId);
     // The update and its status-history row must land atomically: a failure in
     // between would move the lead while silently dropping the history entry.
     const { before, lead } = await this.database.transaction(async (client) => {
       // Reads the whole editable row, not just status/owner: the audit diff
       // below is what makes «кто поменял телефон» answerable, and it can only
       // report fields it saw beforehand.
-      const beforeRes = await client.query<LeadRow & { branch_id: string | null }>(
+      const beforeRes = await client.query<
+        LeadRow & { branch_id: string | null }
+      >(
         `select id, status_id, null::text as status_name, first_name, last_name,
            phone, email, source, notes, assigned_to, custom_data, created_by,
            created_at, updated_at, branch_id
@@ -630,6 +788,21 @@ export class LeadsService {
         [leadId],
       );
       const beforeRow = beforeRes.rows[0] ?? null;
+      let customData = { ...initialCustomData };
+      const assignedTo = dto.clearAssignedTo ? null : (dto.assignedTo ?? null);
+      if (beforeRow && assignedTo) {
+        const responsible = await assertEligibleResponsible(
+          client,
+          assignedTo,
+          {
+            lock: true,
+          },
+        );
+        customData = applyEligibleResponsibleToCustomData(
+          customData,
+          responsible,
+        );
+      }
       const result = await client.query<LeadRow>(
         `
         update app.leads
@@ -641,8 +814,12 @@ export class LeadsService {
           email = coalesce($6, email),
           source = coalesce($7, source),
           notes = coalesce($8, notes),
-          assigned_to = coalesce($9, assigned_to),
-          custom_data = custom_data || $10::jsonb,
+          assigned_to = case when $13::boolean then null
+                             else coalesce($9, assigned_to) end,
+          custom_data = case when $13::boolean then
+              (coalesce(custom_data, '{}'::jsonb) || $10::jsonb)
+                - 'responsible' - 'responsibleUserId' - 'responsibleName'
+            else coalesce(custom_data, '{}'::jsonb) || $10::jsonb end,
           branch_id = coalesce($12::uuid, branch_id),
           updated_at = now()
         where id = $1 and deleted_at is null
@@ -653,17 +830,18 @@ export class LeadsService {
       `,
         [
           leadId,
-          dto.statusId ?? null,
+          statusId,
           dto.firstName?.trim() || null,
           dto.lastName?.trim() || null,
           dto.phone?.trim() || null,
           dto.email?.trim().toLowerCase() || null,
           dto.source?.trim() || null,
           dto.notes?.trim() || null,
-          dto.assignedTo ?? null,
-          sanitizeJsonObject(dto.customDataPatch),
+          assignedTo,
+          customData,
           dto.clearStatus ?? false,
           branchId,
+          dto.clearAssignedTo ?? false,
         ],
       );
       const updatedLead = result.rows[0];
@@ -695,6 +873,11 @@ export class LeadsService {
       return { before: beforeRow, lead: updatedLead };
     });
     if (!lead) throw new NotFoundException("Лид не найден.");
+    // Contract 5: an upsert by admin/manager/director claims the empty
+    // «Ответственный» slot (never overwrites an existing one).
+    if (!dto.clearAssignedTo && !dto.assignedTo) {
+      await ensureResponsibleSafe(this.database, actor, "lead", lead.id);
+    }
     await this.audit.record({
       actor,
       action: "crm.lead_updated",
@@ -723,15 +906,25 @@ export class LeadsService {
 
   async deleteLead(actor: ActorContext, leadId: string) {
     this.policy.assertCanWriteCrm(actor);
-    const result = await this.database.query<{ id: string }>(
-      `
-        update app.leads
-        set deleted_at = now(), updated_at = now()
-        where id = $1 and deleted_at is null
-        returning id
-      `,
-      [leadId],
-    );
+    const result = await this.database.transaction(async (client) => {
+      const deleted = await client.query<{ id: string }>(
+        `update app.leads
+         set deleted_at = now(), updated_at = now()
+         where id = $1 and deleted_at is null
+         returning id`,
+        [leadId],
+      );
+      if (deleted.rows[0]) {
+        await client.query(
+          `update app.user_crm_links
+           set deleted_at = now()
+           where entity_type = 'lead' and entity_id = $1
+             and deleted_at is null`,
+          [leadId],
+        );
+      }
+      return deleted;
+    });
     const row = result.rows[0];
     if (!row) throw new NotFoundException("Лид не найден.");
     await this.audit.record({
@@ -754,11 +947,13 @@ export class LeadsService {
   // so that both the check and the create happen inside a single transaction,
   // preventing duplicate leads from a race between two rapid chat messages.
 
-
-
   // Fire-and-forget staff notification about a new lead. A notification
   // failure (sync or async) must NEVER break lead creation — log and move on.
-  private notifyNewLeadSafe(leadId: string, name: string, source: string): void {
+  private notifyNewLeadSafe(
+    leadId: string,
+    name: string,
+    source: string,
+  ): void {
     try {
       void this.notifications
         .notifyNewLead({ leadId, name, source })
@@ -773,7 +968,6 @@ export class LeadsService {
       );
     }
   }
-
 
   private buildLeadBoardFilter(query: LeadBoardQuery) {
     const params: unknown[] = [];
@@ -805,15 +999,15 @@ export class LeadsService {
     }
     if (query.statusId) {
       filters.push(`l.status_id = ${add(query.statusId)}::uuid`);
+    } else if (query.unassigned === true) {
+      filters.push("l.status_id is null");
     }
     if (query.assignedTo) {
       filters.push(`l.assigned_to = ${add(query.assignedTo)}::uuid`);
     }
     if (query.branchId) {
       const p = add(query.branchId);
-      filters.push(
-        `${branchIdExpr("l")} = ${p}::text`,
-      );
+      filters.push(`${branchIdExpr("l")} = ${p}::text`);
     }
     this.addLeadTextFilter(filters, add, "l.source", query.source);
     this.addLeadTextFilter(
@@ -897,6 +1091,9 @@ export class LeadsService {
         )
       `);
     }
+    // Scoped cursors are the correct build-144 contract. Unscoped cursors stay
+    // temporarily accepted for frozen build-143 clients; they retain the old
+    // global-threshold semantics and are never consumed by the new Flutter UI.
     const cursor = this.decodeLeadCursor(query.cursor);
     if (cursor) {
       const createdAt = add(cursor.createdAt);
@@ -920,7 +1117,9 @@ export class LeadsService {
       } else if (quick === "new") {
         // «Новые» = no status assigned yet, or an explicit «Новый». Mirrors the
         // overview `new_leads_count` metric so the tile and this filter agree.
-        filters.push(`(l.status_id is null or ${statusExpr} in ('new', 'новый'))`);
+        filters.push(
+          `(l.status_id is null or ${statusExpr} in ('new', 'новый'))`,
+        );
       } else {
         filters.push(`not (${processed}) and not (${deferred})`);
       }
@@ -946,12 +1145,10 @@ export class LeadsService {
     );
   }
 
-  private encodeLeadCursor(row: { created_at: Date | string; id: string }) {
-    const createdAt =
-      row.created_at instanceof Date
-        ? row.created_at.toISOString()
-        : String(row.created_at);
-    return `${createdAt}|${row.id}`;
+  private encodeLeadCursor(
+    row: Pick<LeadBoardRow, "cursor_created_at" | "id">,
+  ) {
+    return `${row.cursor_created_at}|${row.id}`;
   }
 
   private decodeLeadCursor(cursor: string | undefined) {

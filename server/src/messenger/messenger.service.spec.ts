@@ -100,7 +100,9 @@ describe("MessengerService", () => {
         policy: {
           assertNotBlacklisted: jest
             .fn()
-            .mockRejectedValue(new ForbiddenException("Вы в чёрном списке школы.")),
+            .mockRejectedValue(
+              new ForbiddenException("Вы в чёрном списке школы."),
+            ),
         },
       });
 
@@ -191,7 +193,11 @@ describe("MessengerService", () => {
       { record: jest.fn() } as unknown as AuditService,
       policy,
       realtime,
-      { autoCreateLeadFromChat: jest.fn().mockResolvedValue({ leadId: "l1", created: true }) } as unknown as LeadIntakePort,
+      {
+        autoCreateLeadFromChat: jest
+          .fn()
+          .mockResolvedValue({ leadId: "l1", created: true }),
+      } as unknown as LeadIntakePort,
       { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
       new MessengerFanoutService(database, realtime),
     );
@@ -414,13 +420,16 @@ describe("MessengerService", () => {
     expect(chat.title).toBe("Администрация");
     expect(client.query).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining("values ('administration', 'Администрация', $1, $1)"),
+      expect.stringContaining(
+        "values ('administration', 'Администрация', $1, $1)",
+      ),
       ["user-a"],
     );
     expect(database.transaction).toHaveBeenCalledTimes(1);
   });
 
   it("auto-creates a lead when a non-staff user posts to the administration chat", async () => {
+    const order: string[] = [];
     const clientActor = { userId: "client-user-a", role: "client" as const };
     const adminChatId = "chat-admin-a";
     type MockClient = { query: jest.Mock };
@@ -454,7 +463,8 @@ describe("MessengerService", () => {
     const { service, crm } = createService({
       database: {
         transaction: jest.fn(
-          async (work: (client: MockClient) => Promise<unknown>) => work(client),
+          async (work: (client: MockClient) => Promise<unknown>) =>
+            work(client),
         ) as never,
       },
       policy: {
@@ -467,15 +477,31 @@ describe("MessengerService", () => {
         assertCanWriteChat: jest.fn(),
         assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
       },
+      crm: {
+        autoCreateLeadFromChat: jest.fn(async () => {
+          order.push("intake");
+          return { leadId: "lead-a", created: true };
+        }),
+      },
+      realtime: {
+        publishAdminInboxEvent: jest.fn(() => order.push("fanout")),
+      },
     });
 
-    await service.sendMessage(clientActor, adminChatId, { content: "Здравствуйте" } as never);
+    await service.sendMessage(clientActor, adminChatId, {
+      content: "Здравствуйте",
+    } as never);
 
-    expect(crm.autoCreateLeadFromChat).toHaveBeenCalledWith(clientActor, clientActor.userId);
+    expect(crm.autoCreateLeadFromChat).toHaveBeenCalledWith(
+      clientActor,
+      clientActor.userId,
+    );
+    expect(order[0]).toBe("intake");
+    expect(order).toContain("fanout");
   });
 
-  it("does NOT auto-create a lead for a staff sender or a non-administration chat", async () => {
-    const staffActor = { userId: "manager-user-a", role: "manager" as const };
+  it("does NOT auto-create a lead for a teacher in the administration chat", async () => {
+    const staffActor = { userId: "teacher-user-a", role: "teacher" as const };
     const adminChatId = "chat-admin-a";
     type MockClient = { query: jest.Mock };
     const client = {
@@ -508,7 +534,8 @@ describe("MessengerService", () => {
     const { service, crm } = createService({
       database: {
         transaction: jest.fn(
-          async (work: (client: MockClient) => Promise<unknown>) => work(client),
+          async (work: (client: MockClient) => Promise<unknown>) =>
+            work(client),
         ) as never,
       },
       policy: {
@@ -523,7 +550,9 @@ describe("MessengerService", () => {
       },
     });
 
-    await service.sendMessage(staffActor, adminChatId, { content: "ok" } as never);
+    await service.sendMessage(staffActor, adminChatId, {
+      content: "ok",
+    } as never);
 
     expect(crm.autoCreateLeadFromChat).not.toHaveBeenCalled();
   });
@@ -562,7 +591,8 @@ describe("MessengerService", () => {
     const { service, crm } = createService({
       database: {
         transaction: jest.fn(
-          async (work: (client: MockClient) => Promise<unknown>) => work(client),
+          async (work: (client: MockClient) => Promise<unknown>) =>
+            work(client),
         ) as never,
       },
       policy: {
@@ -577,7 +607,9 @@ describe("MessengerService", () => {
       },
     });
 
-    await service.sendMessage(clientActor, directChatId, { content: "hi" } as never);
+    await service.sendMessage(clientActor, directChatId, {
+      content: "hi",
+    } as never);
 
     expect(crm.autoCreateLeadFromChat).not.toHaveBeenCalled();
   });
@@ -709,7 +741,10 @@ describe("MessengerService", () => {
 
   it("fanoutChatListUpdate masks senderId for member rooms but keeps real senderId in admin-inbox when staff sends", async () => {
     const adminChatId = "chat-admin-fanout";
-    const staffActor = { userId: "staff-user-fanout", role: "manager" as const };
+    const staffActor = {
+      userId: "staff-user-fanout",
+      role: "manager" as const,
+    };
     const memberUserId = "client-member-fanout";
     type MockClient = { query: jest.Mock };
     const client = {
@@ -746,7 +781,9 @@ describe("MessengerService", () => {
           async (work: (c: MockClient) => Promise<unknown>) => work(client),
         ) as never,
         // getChatMemberUserIds query returns the member client
-        query: jest.fn().mockResolvedValue({ rows: [{ user_id: memberUserId }] }),
+        query: jest
+          .fn()
+          .mockResolvedValue({ rows: [{ user_id: memberUserId }] }),
       },
       policy: {
         getChatAccess: jest.fn().mockResolvedValue({
@@ -825,9 +862,168 @@ describe("MessengerService", () => {
     expect(result.items).toHaveLength(1);
     const item = result.items[0];
     expect(item.ownerName).toBe("Иван Петров");
-    expect(item.assignedTo).toEqual({ id: "staff-user-1", name: "Анна Иванова" });
+    expect(item.assignedTo).toEqual({
+      id: "staff-user-1",
+      name: "Анна Иванова",
+    });
     expect(item.folder).toBe("students");
     expect(item.archived).toBe(false);
+  });
+
+  it("listChats uses a stable updated_at/id cursor and caps each returned page at 100", async () => {
+    const staffActor = { userId: "manager-x", role: "manager" as const };
+    const updatedAt = new Date("2026-07-18T10:00:00.123Z");
+    const exactUpdatedAt = "2026-07-18T10:00:00.123456Z";
+    const rows = Array.from({ length: 101 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      type: "administration",
+      title: "Administration",
+      created_by: "client-1",
+      last_message_id: null,
+      last_message_content: null,
+      last_message_created_at: null,
+      unread_count: "0",
+      is_muted: false,
+      created_at: updatedAt,
+      updated_at: updatedAt,
+      cursor_updated_at: exactUpdatedAt,
+      archived_at: null,
+      folder: "students",
+    }));
+    const databaseQuery = jest.fn().mockResolvedValue({ rows });
+    const { service } = createService({ database: { query: databaseQuery } });
+
+    const firstPage = await service.listChats(staffActor, {
+      limit: 500,
+      folder: "students",
+    });
+
+    expect(firstPage.items).toHaveLength(100);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    expect(databaseQuery.mock.calls[0][1][3]).toBe(101);
+    expect(databaseQuery.mock.calls[0][1][8]).toBe("students");
+    const sql = String(databaseQuery.mock.calls[0][0]);
+    expect(sql).toContain("c.updated_at = $7::timestamptz and c.id < $8::uuid");
+    expect(sql).toContain("c.type = 'administration'");
+    expect(sql).toContain("inbox_folder.entity_folder = $9::text");
+    expect(sql).toContain("SS.US\"Z\"");
+    expect(sql).toContain("as cursor_updated_at");
+    expect(sql).toContain("s2.deleted_at is null");
+    expect(sql).toContain("ucs2.deleted_at is null");
+    expect(sql).toContain("s7.deleted_at is null");
+
+    databaseQuery.mockResolvedValueOnce({ rows: [] });
+    await service.listChats(staffActor, { cursor: firstPage.nextCursor! });
+    expect(databaseQuery.mock.calls[1][1][2]).toBeNull();
+    expect(databaseQuery.mock.calls[1][1][6]).toBe(exactUpdatedAt);
+    expect(databaseQuery.mock.calls[1][1][7]).toBe(rows[99].id);
+  });
+
+  it("listChats rejects malformed keyset cursors instead of falling back to page one", async () => {
+    const { service, database } = createService();
+
+    await expect(
+      service.listChats(
+        { userId: "manager-x", role: "manager" },
+        { cursor: "not-a-valid-chat-cursor" },
+      ),
+    ).rejects.toThrow("Invalid chat cursor");
+    expect(database.query).not.toHaveBeenCalled();
+  });
+
+  it("passes archived=true to the inbox query and returns only archived-shaped rows", async () => {
+    const staffActor = { userId: "manager-x", role: "manager" as const };
+    const query = jest.fn().mockResolvedValue({
+      rows: [
+        {
+          id: "chat-archived",
+          type: "administration",
+          title: "Архив",
+          created_by: "client-1",
+          last_message_id: null,
+          last_message_content: null,
+          last_message_created_at: null,
+          unread_count: "0",
+          is_muted: false,
+          created_at: new Date("2026-07-18T10:00:00Z"),
+          updated_at: new Date("2026-07-18T10:00:00Z"),
+          archived_at: new Date("2026-07-18T11:00:00Z"),
+          folder: "archive",
+        },
+      ],
+    });
+    const { service } = createService({ database: { query } });
+
+    const result = await service.listChats(staffActor, {
+      archived: true,
+      branchId: "00000000-0000-4000-8000-000000000099",
+      folder: "students",
+    });
+
+    expect(query.mock.calls[0][1][5]).toBe(true);
+    expect(query.mock.calls[0][1][4]).toBe(
+      "00000000-0000-4000-8000-000000000099",
+    );
+    expect(query.mock.calls[0][1][8]).toBe("students");
+    expect(String(query.mock.calls[0][0])).toContain(
+      "when $6::boolean then ist.archived_at is not null",
+    );
+    expect(result.items[0]).toMatchObject({
+      id: "chat-archived",
+      archived: true,
+      folder: "archive",
+    });
+  });
+
+  it("uses a strict branch predicate and hides unresolved branches", async () => {
+    const query = jest.fn().mockResolvedValue({ rows: [] });
+    const { service } = createService({ database: { query } });
+
+    await service.listChats(
+      { userId: "manager-x", role: "manager" },
+      { branchId: "branch-sport" },
+    );
+
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("owner_branch.branch_id = $5::text");
+    expect(sql).not.toContain("owner_branch.branch_id is null");
+    expect(sql).toContain("c.type <> 'administration'");
+    expect(query.mock.calls[0][1][4]).toBe("branch-sport");
+  });
+
+  it("declares announcements read-only for clients", async () => {
+    const query = jest.fn().mockResolvedValue({
+      rows: [
+        {
+          id: "chat-announcements",
+          type: "group",
+          title: "Объявления",
+          slug: "announcements",
+          is_system: true,
+          created_by: "manager-a",
+          last_message_id: null,
+          last_message_content: null,
+          last_message_created_at: null,
+          unread_count: "0",
+          is_muted: false,
+          created_at: new Date("2026-07-18T10:00:00Z"),
+          updated_at: new Date("2026-07-18T10:00:00Z"),
+          archived_at: null,
+        },
+      ],
+    });
+    const { service } = createService({ database: { query } });
+
+    const result = await service.listChats(
+      { userId: "client-a", role: "client" },
+      {},
+    );
+
+    expect(result.items[0]).toMatchObject({
+      slug: "announcements",
+      isSystem: true,
+      canWrite: false,
+    });
   });
 
   it("listChats: soft-deleted assignee yields assignedTo.name=null but preserves assignedTo.id", async () => {
@@ -865,7 +1061,9 @@ describe("MessengerService", () => {
 
     const { service } = createService({
       database: {
-        query: jest.fn().mockResolvedValueOnce({ rows: [rowWithDeletedAssignee] }),
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({ rows: [rowWithDeletedAssignee] }),
       },
     });
 
@@ -882,19 +1080,44 @@ describe("MessengerService", () => {
 
   it("creates an administration chat with the actor as owner", async () => {
     type MockClient = { query: jest.Mock };
-    const client = { query: jest.fn()
-      .mockResolvedValueOnce({ rows: [] }) // existing lookup
-      .mockResolvedValueOnce({ rows: [{ id: 'chat-admin', type: 'administration', title: 'Администрация',
-        created_by: 'user-a', last_message_id: null, last_message_content: null,
-        last_message_created_at: null, unread_count: '0',
-        created_at: new Date(), updated_at: new Date() }] }) // insert
-      .mockResolvedValueOnce({ rows: [] }) }; // insertMembers
-    const { service } = createService({ database: { transaction: jest.fn(
-      async (w: (c: MockClient) => Promise<unknown>) => w(client)) as never } });
-    await service.createDirectChat({ userId: 'user-a', role: 'client' }, { type: 'administration' });
-    const insert = client.query.mock.calls.find(c => String(c[0]).includes("values ('administration'"));
-    expect(insert![0]).toContain('owner_user_id');
-    expect(insert![1]).toContain('user-a');
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({ rows: [] }) // existing lookup
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "chat-admin",
+              type: "administration",
+              title: "Администрация",
+              created_by: "user-a",
+              last_message_id: null,
+              last_message_content: null,
+              last_message_created_at: null,
+              unread_count: "0",
+              created_at: new Date(),
+              updated_at: new Date(),
+            },
+          ],
+        }) // insert
+        .mockResolvedValueOnce({ rows: [] }),
+    }; // insertMembers
+    const { service } = createService({
+      database: {
+        transaction: jest.fn(async (w: (c: MockClient) => Promise<unknown>) =>
+          w(client),
+        ) as never,
+      },
+    });
+    await service.createDirectChat(
+      { userId: "user-a", role: "client" },
+      { type: "administration" },
+    );
+    const insert = client.query.mock.calls.find((c) =>
+      String(c[0]).includes("values ('administration'"),
+    );
+    expect(insert![0]).toContain("owner_user_id");
+    expect(insert![1]).toContain("user-a");
   });
 
   describe("client-side staff-identity masking in administration chats", () => {
@@ -1060,7 +1283,9 @@ describe("MessengerService", () => {
           transaction: jest.fn(
             async (work: (c: MockClient) => Promise<unknown>) => work(client),
           ) as never,
-          query: jest.fn().mockResolvedValue({ rows: [{ user_id: "client-owner" }] }),
+          query: jest
+            .fn()
+            .mockResolvedValue({ rows: [{ user_id: "client-owner" }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1133,7 +1358,9 @@ describe("MessengerService", () => {
           transaction: jest.fn(
             async (work: (c: MockClient) => Promise<unknown>) => work(client),
           ) as never,
-          query: jest.fn().mockResolvedValue({ rows: [{ user_id: clientActor.userId }] }),
+          query: jest
+            .fn()
+            .mockResolvedValue({ rows: [{ user_id: clientActor.userId }] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1171,6 +1398,7 @@ describe("MessengerService", () => {
   describe("sendMessage resurface on administration chat", () => {
     it("clears archived_at for all staff when a message is sent in an administration chat", async () => {
       const adminChatId = "chat-admin-resurface";
+      const order: string[] = [];
       type MockClient = { query: jest.Mock };
       const client = {
         query: jest
@@ -1197,15 +1425,28 @@ describe("MessengerService", () => {
               },
             ],
           })
-          .mockResolvedValueOnce({ rows: [] }), // update chats last_message_id
+          .mockResolvedValueOnce({ rows: [] }) // update chats last_message_id
+          .mockImplementationOnce(async () => {
+            order.push("resurface:write");
+            return { rows: [], rowCount: 2 };
+          }), // resurface inbox state
       };
       const dbQuery = jest.fn().mockResolvedValue({ rows: [] });
-      const { service, database } = createService({
+      const { service, realtime } = createService({
         database: {
           transaction: jest.fn(
-            async (work: (c: MockClient) => Promise<unknown>) => work(client),
+            async (work: (c: MockClient) => Promise<unknown>) => {
+              const result = await work(client);
+              order.push("transaction:commit");
+              return result;
+            },
           ) as never,
           query: dbQuery,
+        },
+        realtime: {
+          publishAdminInboxEvent: jest.fn(() => {
+            order.push("realtime:admin");
+          }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue({
@@ -1225,8 +1466,8 @@ describe("MessengerService", () => {
         { content: "Resurface me" } as never,
       );
 
-      // The resurface update must have been issued
-      const calls = dbQuery.mock.calls as Array<[string, unknown[]]>;
+      // The resurface update is in the same transaction as the message.
+      const calls = client.query.mock.calls as Array<[string, unknown[]]>;
       const resurface = calls.find(
         ([sql]) =>
           sql.includes("chat_inbox_state") &&
@@ -1235,6 +1476,22 @@ describe("MessengerService", () => {
       );
       expect(resurface).toBeDefined();
       expect(resurface![1]).toEqual([adminChatId]);
+      expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
+        "chat.updated",
+        { id: adminChatId, archived: false },
+      );
+      const resurfaceIndex = calls.indexOf(resurface!);
+      expect(
+        client.query.mock.invocationCallOrder[resurfaceIndex],
+      ).toBeLessThan(
+        (realtime.publishAdminInboxEvent as jest.Mock).mock
+          .invocationCallOrder[0],
+      );
+      expect(order.slice(0, 3)).toEqual([
+        "resurface:write",
+        "transaction:commit",
+        "realtime:admin",
+      ]);
     });
 
     it("does NOT resurface when a STAFF member replies (archive must stick)", async () => {
@@ -1293,10 +1550,11 @@ describe("MessengerService", () => {
         { content: "Отвечаю" } as never,
       );
 
-      const calls = dbQuery.mock.calls as Array<[string, unknown[]]>;
+      const calls = client.query.mock.calls as Array<[string, unknown[]]>;
       const resurface = calls.find(
         ([sql]) =>
-          sql.includes("chat_inbox_state") && sql.includes("archived_at = null"),
+          sql.includes("chat_inbox_state") &&
+          sql.includes("archived_at = null"),
       );
       expect(resurface).toBeUndefined();
     });
@@ -1357,9 +1615,11 @@ describe("MessengerService", () => {
         { content: "hi" } as never,
       );
 
-      const calls = dbQuery.mock.calls as Array<[string, unknown[]]>;
+      const calls = client.query.mock.calls as Array<[string, unknown[]]>;
       const resurface = calls.find(
-        ([sql]) => sql.includes("chat_inbox_state") && sql.includes("archived_at = null"),
+        ([sql]) =>
+          sql.includes("chat_inbox_state") &&
+          sql.includes("archived_at = null"),
       );
       expect(resurface).toBeUndefined();
     });
@@ -1430,7 +1690,9 @@ describe("MessengerService", () => {
         },
       });
 
-      await expect(service.leaveGroup(leaveActor, "chat-direct-1")).rejects.toThrow();
+      await expect(
+        service.leaveGroup(leaveActor, "chat-direct-1"),
+      ).rejects.toThrow();
     });
 
     it("rejects leaveGroup when the chat does not exist (getChatAccess returns null)", async () => {
@@ -1440,7 +1702,9 @@ describe("MessengerService", () => {
         },
       });
 
-      await expect(service.leaveGroup(leaveActor, "chat-group-leave")).rejects.toThrow();
+      await expect(
+        service.leaveGroup(leaveActor, "chat-group-leave"),
+      ).rejects.toThrow();
     });
 
     it("rejects leaveGroup when actor has no membership row (group exists but memberUserId is null), emits NO events", async () => {
@@ -1575,7 +1839,8 @@ describe("MessengerService", () => {
       const { service, realtime } = createService({
         database: {
           // assertActiveUsers call
-          query: jest.fn()
+          query: jest
+            .fn()
             .mockResolvedValueOnce({ rows: [{ id: "user-new" }] })
             // getChat inner query
             .mockResolvedValueOnce({ rows: [chatRow] }),
@@ -1599,7 +1864,12 @@ describe("MessengerService", () => {
       expect(realtime.publishUserEvent).toHaveBeenCalledWith(
         "user-new",
         "chat.created",
-        expect.objectContaining({ id: "chat-group-upd", type: "group", isMuted: false, unreadCount: 0 }),
+        expect.objectContaining({
+          id: "chat-group-upd",
+          type: "group",
+          isMuted: false,
+          unreadCount: 0,
+        }),
       );
       // chat.removed to removed member's user room
       expect(realtime.publishUserEvent).toHaveBeenCalledWith(

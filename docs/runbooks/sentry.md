@@ -28,7 +28,7 @@ For staging diagnostics:
 
 ```powershell
 flutter run --release `
-  --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api `
+  --dart-define=MAGIC_API_BASE_URL=https://api.magicmusiccrm.ru/api `
   --dart-define=SENTRY_DSN=<sentry_flutter_dsn> `
   --dart-define=SENTRY_ENVIRONMENT=staging `
   --dart-define=SENTRY_RELEASE=magic-music-crm@local

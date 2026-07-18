@@ -18,6 +18,12 @@ import { buildTextSearch } from "./search-text";
 import { audienceForStudent } from "./audience";
 import { resolveAge } from "./age";
 import { APPEAL_KEY, resolveAppealDate } from "./appeal-date";
+import { ensureResponsibleSafe } from "./responsible";
+import {
+  applyEligibleResponsibleToCustomData,
+  assertEligibleResponsible,
+  responsibleUserIdFromCustomDataPatch,
+} from "./responsible-eligibility";
 import {
   diffEntityFields,
   isDeliverableEmail,
@@ -272,6 +278,9 @@ export class CrmService {
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
     const leadId = dto.leadId ?? null;
     const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
+    const requestedResponsibleId = responsibleUserIdFromCustomDataPatch(
+      customDataPatch,
+    );
     const branchId = extractBranchId(dto.customDataPatch);
 
     if (leadId) {
@@ -306,7 +315,35 @@ export class CrmService {
     }
 
     try {
-      const result = await this.database.query<StudentRow>(
+      const result = await this.database.transaction(async (client) => {
+        if (leadId) {
+          await client.query(
+            "select pg_advisory_xact_lock(hashtextextended($1::uuid::text, 0))",
+            [leadId],
+          );
+          const existingStudent = await client.query<{ id: string }>(
+            "select id from app.students where lead_id = $1 and deleted_at is null limit 1",
+            [leadId],
+          );
+          if (existingStudent.rows[0]) {
+            throw new ConflictException(
+              "Этот лид уже конвертирован в ученика.",
+            );
+          }
+        }
+        let transactionCustomData = { ...customDataPatch };
+        if (requestedResponsibleId) {
+          const responsible = await assertEligibleResponsible(
+            client,
+            requestedResponsibleId,
+            { lock: true },
+          );
+          transactionCustomData = applyEligibleResponsibleToCustomData(
+            transactionCustomData,
+            responsible,
+          );
+        }
+        return client.query<StudentRow>(
         `
           with identity as (
             select coalesce($3::text, 'student-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid') as email
@@ -327,7 +364,28 @@ export class CrmService {
             insert into app.students (profile_id, status, lead_id, custom_data, branch_id)
             select id, $6, $7, $8::jsonb, $9::uuid
             from inserted_profile
-            returning id, status, profile_id, lead_id, custom_data, created_at
+            returning id, status, profile_id, lead_id, custom_data, created_at,
+              blacklisted, blacklist_reason
+          ),
+          inserted_student_link as (
+            insert into app.user_crm_links (
+              user_id, entity_type, entity_id, link_source, created_by, confirmed_at
+            )
+            select linked.user_id, 'student', s.id, 'manual_phone',
+              linked.created_by, now()
+            from inserted_student s
+            join lateral (
+              select ucl.user_id, ucl.created_by
+              from app.user_crm_links ucl
+              where ucl.entity_type = 'lead'
+                and ucl.entity_id = s.lead_id
+                and ucl.deleted_at is null
+              order by ucl.confirmed_at desc nulls last, ucl.created_at desc
+              limit 1
+            ) linked on true
+            where s.lead_id is not null
+            on conflict do nothing
+            returning entity_id
           )
           select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
             s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
@@ -345,11 +403,19 @@ export class CrmService {
           phone,
           status,
           leadId,
-          JSON.stringify(customDataPatch),
+          JSON.stringify(transactionCustomData),
           branchId,
         ],
-      );
+        );
+      });
       const student = result.rows[0];
+      // Chat re-bucketing is part of the insert CTE above, so conversion and
+      // the student user_crm_link commit (or roll back) together.
+      // Contract 5: creating admin/manager/director becomes «Ответственный»
+      // when the card has none. Await before audit/realtime publication.
+      if (!requestedResponsibleId) {
+        await ensureResponsibleSafe(this.database, actor, "student", student.id);
+      }
       await this.audit.record({
         actor,
         action: "crm.student_created",
@@ -369,6 +435,7 @@ export class CrmService {
     }
   }
 
+  /** Read one student subject to the regular row-level policy. */
   async getStudent(actor: ActorContext, studentId: string) {
     const student = await findStudent(this.database, studentId);
     if (!student) throw new NotFoundException("Ученик не найден.");
@@ -546,7 +613,10 @@ export class CrmService {
     dto: UpdateStudentDto,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
+    const initialCustomData = sanitizeJsonObject(dto.customDataPatch);
+    const requestedResponsibleId = dto.clearResponsible
+      ? undefined
+      : responsibleUserIdFromCustomDataPatch(initialCustomData);
     const branchId = extractBranchId(dto.customDataPatch);
     // The update and its status-history row must land atomically: a failure in
     // between would change the status while silently dropping the history.
@@ -577,6 +647,18 @@ export class CrmService {
               [studentId],
             )
           ).rows[0] ?? null;
+        let customDataPatch = { ...initialCustomData };
+        if (before && requestedResponsibleId) {
+          const responsible = await assertEligibleResponsible(
+            client,
+            requestedResponsibleId,
+            { lock: true },
+          );
+          customDataPatch = applyEligibleResponsibleToCustomData(
+            customDataPatch,
+            responsible,
+          );
+        }
         const updated = await client.query<StudentRow>(
           `
         with target as (
@@ -607,7 +689,10 @@ export class CrmService {
         updated_student as (
           update app.students s
           set status = coalesce($6, s.status),
-            custom_data = coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb,
+            custom_data = case when $9::boolean then
+                (coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb)
+                  - 'responsible' - 'responsibleUserId' - 'responsibleName'
+              else coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb end,
             branch_id = coalesce($8::uuid, s.branch_id),
             updated_at = now()
           from target
@@ -651,6 +736,7 @@ export class CrmService {
             trimOptional(dto.status),
             JSON.stringify(customDataPatch),
             branchId,
+            dto.clearResponsible ?? false,
           ],
         );
         const updatedStudent = updated.rows[0];
@@ -670,6 +756,11 @@ export class CrmService {
     );
     const student = result.rows[0];
     if (!student) throw new NotFoundException("Ученик не найден.");
+    // Contract 5: an upsert by admin/manager/director claims the empty
+    // «Ответственный» slot (never overwrites an existing one).
+    if (!dto.clearResponsible && !requestedResponsibleId) {
+      await ensureResponsibleSafe(this.database, actor, "student", student.id);
+    }
     await this.audit.record({
       actor,
       action: "crm.student_updated",
@@ -764,15 +855,25 @@ export class CrmService {
   // Лид→Ученик drag conversion: «Отменить» removes the just-created student.
   async deleteStudent(actor: ActorContext, studentId: string) {
     this.policy.assertCanWriteCrm(actor);
-    const result = await this.database.query<{ id: string }>(
-      `
-        update app.students
-        set deleted_at = now(), updated_at = now()
-        where id = $1 and deleted_at is null
-        returning id
-      `,
-      [studentId],
-    );
+    const result = await this.database.transaction(async (client) => {
+      const deleted = await client.query<{ id: string }>(
+        `update app.students
+         set deleted_at = now(), updated_at = now()
+         where id = $1 and deleted_at is null
+         returning id`,
+        [studentId],
+      );
+      if (deleted.rows[0]) {
+        await client.query(
+          `update app.user_crm_links
+           set deleted_at = now()
+           where entity_type = 'student' and entity_id = $1
+             and deleted_at is null`,
+          [studentId],
+        );
+      }
+      return deleted;
+    });
     const row = result.rows[0];
     if (!row) throw new NotFoundException("Ученик не найден.");
     await this.audit.record({
@@ -800,10 +901,12 @@ export class CrmService {
       last_name: string | null;
       email: string | null;
       phone: string | null;
+      profile_user_id: string | null;
     }>(
       `
         select s.id, s.lead_id, s.branch_id, s.custom_data,
-          p.first_name, p.last_name, u.email, p.phone
+          p.first_name, p.last_name, u.email, p.phone,
+          p.user_id as profile_user_id
         from app.students s
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
@@ -830,7 +933,10 @@ export class CrmService {
 
       if (!leadId) {
         const statusRow = await client.query<{ id: string }>(
-          `select id from app.lead_statuses where lower(btrim(name)) = 'новый' limit 1`,
+          `select min(id::text)::uuid as id
+           from app.lead_statuses
+           where lower(btrim(name)) = 'новый'
+           having count(*) = 1`,
         );
         const customData = {
           ...(student.custom_data ?? {}),
@@ -868,6 +974,48 @@ export class CrmService {
         `,
         [student.id],
       );
+      const linkedUser = await client.query<{
+        user_id: string;
+        matched_phone: string | null;
+      }>(
+        `select candidate.user_id, candidate.matched_phone
+         from (
+           select link.user_id, link.matched_phone, 0 as priority
+           from app.user_crm_links link
+           where link.entity_type = 'student' and link.entity_id = $1
+             and link.deleted_at is null
+           union all
+           select $2::uuid, null::text, 1
+           where $2::uuid is not null
+         ) candidate
+         order by candidate.priority
+         limit 1`,
+        [student.id, student.profile_user_id],
+      );
+      await client.query(
+        `update app.user_crm_links
+         set deleted_at = now()
+         where entity_type = 'student' and entity_id = $1
+           and deleted_at is null`,
+        [student.id],
+      );
+      if (linkedUser.rows[0]) {
+        await client.query(
+          `insert into app.user_crm_links (
+             user_id, entity_type, entity_id, matched_phone,
+             link_source, created_by, confirmed_at
+           )
+           values ($1, 'lead', $2, $3, 'manual_phone', $4, now())
+           on conflict (entity_type, entity_id) where deleted_at is null
+           do nothing`,
+          [
+            linkedUser.rows[0].user_id,
+            leadId,
+            linkedUser.rows[0].matched_phone,
+            actor.userId,
+          ],
+        );
+      }
       return { leadId, created };
     });
 

@@ -577,6 +577,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
         if (teacherId != null) _teacherNames[teacherId],
         if (studentId != null) _studentNames[studentId],
         if (roomId != null) _roomNames[roomId],
+        // Пробные по лидам ищутся по имени лида — ученика у них нет.
+        lesson['lead_name']?.toString(),
         lesson['status']?.toString(),
       ].whereType<String>().join(' ').toLowerCase();
 

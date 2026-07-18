@@ -35,6 +35,24 @@ class MagicApiClient {
 
   Future<MagicApiTokens?> readTokens() => _tokenStore.read();
 
+  /// Returns a currently-valid access token, proactively refreshing the stored
+  /// one when it is expired or near expiry. `null` when there is no session or
+  /// the refresh failed.
+  ///
+  /// Needed by consumers that authenticate OUTSIDE the HTTP request path (the
+  /// Socket.IO handshake): they cannot rely on the per-request 401-refresh
+  /// here, and a token baked in at connect() time outlives the 15-minute
+  /// access TTL, making every later reconnect loop with an expired JWT.
+  Future<String?> readFreshAccessToken() async {
+    var tokens = await _tokenStore.read();
+    if (tokens != null && _isAccessTokenExpired(tokens.accessToken)) {
+      await _tryRefresh();
+      tokens = await _tokenStore.read();
+    }
+    final token = tokens?.accessToken;
+    return (token == null || token.isEmpty) ? null : token;
+  }
+
   Future<void> saveTokens(MagicApiTokens tokens) => _tokenStore.write(tokens);
 
   Future<void> clearTokens() => _tokenStore.clear();

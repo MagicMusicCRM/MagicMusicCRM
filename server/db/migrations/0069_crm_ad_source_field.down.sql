@@ -1,0 +1,5 @@
+-- Intentionally irreversible: restoring the duplicate source fields, deleting
+-- an administrator's pre-existing students/adSource definition, or trying to
+-- distinguish copied values from pre-existing adSource data would lose
+-- configuration. Rollback therefore keeps both the normalized JSON setting and
+-- the source -> adSource preservation copies intact.

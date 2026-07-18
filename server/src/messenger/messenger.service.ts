@@ -11,6 +11,7 @@ import { PoolClient } from "pg";
 import { AuditService } from "../audit/audit.service";
 import {
   ActorContext,
+  isManagerRole,
   isStaffRole,
 } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
@@ -34,7 +35,6 @@ import {
 import { MessengerFanoutService } from "./messenger-fanout.service";
 import { MessengerPolicy } from "./messenger.policy";
 import { RealtimeGateway } from "./realtime.gateway";
-
 
 @Injectable()
 export class MessengerService implements OnModuleInit {
@@ -106,6 +106,100 @@ export class MessengerService implements OnModuleInit {
 
   async listChats(actor: ActorContext, query: MessengerListQuery) {
     const limit = Math.min(query.limit ?? 50, 100);
+    const cursor = this.decodeChatCursor(query.cursor);
+    const staffViewer = isStaffRole(actor.role);
+    // Folder classification («Лиды»/«Ученики»/архив) and the owner's branch
+    // are STAFF inbox concepts. Clients never see folders, so their query
+    // skips the classification work entirely (perf: this list is re-fetched
+    // by every online client's fallback poll).
+    //
+    // Folder rules (conversion-proof, правки №2):
+    //  1. owner's profile backs a student row (in-app created students);
+    //  2. owner has an explicit user_crm_links('student') row (conversion now
+    //     writes one in the createStudent conversion CTE);
+    //  3. a student exists whose lead_id is the owner's linked lead (covers
+    //     conversions from before the link backfill).
+    // The old school-wide phone fallback is gone: it pulled ANY same-phone
+    // family member's chat into «Ученики» and misfiled unconverted leads.
+    const entityFolderSql = staffViewer
+      ? `case
+            when exists (
+              select 1 from app.students s2
+              join app.profiles sp2 on sp2.id = s2.profile_id and sp2.deleted_at is null
+              where s2.deleted_at is null and sp2.user_id = c.owner_user_id
+            ) then 'students'
+            when exists (
+              select 1 from app.user_crm_links ucs2
+              join app.students s6 on s6.id = ucs2.entity_id and s6.deleted_at is null
+              where ucs2.user_id = c.owner_user_id
+                and ucs2.entity_type = 'student' and ucs2.deleted_at is null
+            ) then 'students'
+            when exists (
+              select 1 from app.user_crm_links ucl6
+              join app.students s7 on s7.lead_id = ucl6.entity_id and s7.deleted_at is null
+              where ucl6.user_id = c.owner_user_id
+                and ucl6.entity_type = 'lead' and ucl6.deleted_at is null
+            ) then 'students'
+            else 'leads'
+          end`
+      : `null::text`;
+    const folderSql = staffViewer
+      ? `case
+            when ist.archived_at is not null then 'archive'
+            else inbox_folder.entity_folder
+          end`
+      : `null::text`;
+    // The client's branch. Order matters after conversion: the STUDENT's
+    // branch (link or lead_id resolution) wins over the stale lead's, so
+    // moving the student to another branch moves the chat too. Every link
+    // subquery is deterministic (freshest confirmed link first) — previously
+    // an unordered `limit 1` picked a random duplicate lead.
+    const branchLateralSql = staffViewer
+      ? `left join lateral (
+          select b.id::text as branch_id, b.name as branch_name
+          from app.branches b
+          where b.deleted_at is null
+            and b.id::text = coalesce(
+              (
+                select ${branchIdExpr("s")}
+                from app.user_crm_links ucs
+                join app.students s on s.id = ucs.entity_id and s.deleted_at is null
+                where ucs.user_id = c.owner_user_id
+                  and ucs.entity_type = 'student' and ucs.deleted_at is null
+                order by ucs.confirmed_at desc nulls last, ucs.created_at desc
+                limit 1
+              ),
+              (
+                select ${branchIdExpr("s4")}
+                from app.user_crm_links ucl4
+                join app.students s4 on s4.lead_id = ucl4.entity_id and s4.deleted_at is null
+                where ucl4.user_id = c.owner_user_id
+                  and ucl4.entity_type = 'lead' and ucl4.deleted_at is null
+                order by ucl4.confirmed_at desc nulls last, ucl4.created_at desc
+                limit 1
+              ),
+              (
+                select ${branchIdExpr("s3")}
+                from app.students s3
+                join app.profiles sp3 on sp3.id = s3.profile_id and sp3.deleted_at is null
+                where sp3.user_id = c.owner_user_id and s3.deleted_at is null
+                limit 1
+              ),
+              (
+                select ${branchIdExpr("l")}
+                from app.user_crm_links ucl
+                join app.leads l on l.id = ucl.entity_id and l.deleted_at is null
+                where ucl.user_id = c.owner_user_id
+                  and ucl.entity_type = 'lead' and ucl.deleted_at is null
+                order by ucl.confirmed_at desc nulls last, ucl.created_at desc
+                limit 1
+              )
+            )
+          limit 1
+        ) owner_branch on true`
+      : `left join lateral (
+          select null::text as branch_id, null::text as branch_name
+        ) owner_branch on true`;
     const result = await this.database.query<ChatRow>(
       `
         select distinct c.id, c.type, c.title, c.created_by, c.last_message_id,
@@ -116,6 +210,10 @@ export class MessengerService implements OnModuleInit {
           partner_p.last_name as partner_last_name,
           partner_p.avatar_file_id as partner_avatar_file_id,
           c.created_at, c.updated_at,
+          to_char(
+            c.updated_at at time zone 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+          ) as cursor_updated_at,
           (me_state.muted_until is not null and me_state.muted_until > now()) as is_muted,
           c.slug, c.is_system,
           (
@@ -136,58 +234,7 @@ export class MessengerService implements OnModuleInit {
           asgp.first_name as assigned_first_name,
           asgp.last_name as assigned_last_name,
           ist.archived_at,
-          case
-            when ist.archived_at is not null then 'archive'
-            -- Direct link first: the chat owner IS a student (their profile
-            -- backs a student row). This is what makes a converted lead's chat
-            -- move to «Ученики» — conversion creates a student on the lead's
-            -- profile, and that profile is the chat owner's. The phone match
-            -- below stays as a fallback for imported students whose profile
-            -- isn't the chat owner's but whose number is the same.
-            when exists (
-              select 1 from app.students s2
-              join app.profiles sp2 on sp2.id = s2.profile_id and sp2.deleted_at is null
-              where s2.deleted_at is null and sp2.user_id = c.owner_user_id
-            ) then 'students'
-            when exists (
-              select 1 from app.students s
-              join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
-              where s.deleted_at is null
-                and (
-                  case
-                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 11
-                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) in ('7', '8')
-                      then '+7' || right(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 10)
-                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 10
-                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) = '9'
-                      then '+7' || regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')
-                    else null
-                  end
-                ) is not null
-                and (
-                  case
-                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 11
-                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) in ('7', '8')
-                      then '+7' || right(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 10)
-                    when length(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')) = 10
-                      and left(regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g'), 1) = '9'
-                      then '+7' || regexp_replace(coalesce(sp.phone, ''), '[^0-9]', '', 'g')
-                    else null
-                  end
-                ) = (
-                  case
-                    when length(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g')) = 11
-                      and left(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g'), 1) in ('7', '8')
-                      then '+7' || right(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g'), 10)
-                    when length(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g')) = 10
-                      and left(regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g'), 1) = '9'
-                      then '+7' || regexp_replace(coalesce(owp.phone, ''), '[^0-9]', '', 'g')
-                    else null
-                  end
-                )
-            ) then 'students'
-            else 'leads'
-          end as folder,
+          ${folderSql} as folder,
           owner_branch.branch_id as branch_id,
           owner_branch.branch_name as branch_name
         from app.chats c
@@ -211,56 +258,139 @@ export class MessengerService implements OnModuleInit {
         left join app.users asg on asg.id = c.assigned_to_user_id and asg.deleted_at is null
         left join app.profiles asgp on asgp.user_id = asg.id and asgp.deleted_at is null
         left join app.chat_inbox_state ist on ist.chat_id = c.id and ist.staff_user_id = $2
-        -- The client's branch, from their linked lead/student (the user_crm_links
-        -- row autoCreateLeadFromChat writes), falling back to the direct
-        -- profile→student path. Null when no branch has been assigned yet.
         left join lateral (
-          select b.id::text as branch_id, b.name as branch_name
-          from app.branches b
-          where b.deleted_at is null
-            and b.id::text = coalesce(
-              (
-                select ${branchIdExpr("l")}
-                from app.user_crm_links ucl
-                join app.leads l on l.id = ucl.entity_id and l.deleted_at is null
-                where ucl.user_id = c.owner_user_id
-                  and ucl.entity_type = 'lead' and ucl.deleted_at is null
-                limit 1
-              ),
-              (
-                select ${branchIdExpr("s")}
-                from app.user_crm_links ucs
-                join app.students s on s.id = ucs.entity_id and s.deleted_at is null
-                where ucs.user_id = c.owner_user_id
-                  and ucs.entity_type = 'student' and ucs.deleted_at is null
-                limit 1
-              ),
-              (
-                select ${branchIdExpr("s3")}
-                from app.students s3
-                join app.profiles sp3 on sp3.id = s3.profile_id and sp3.deleted_at is null
-                where sp3.user_id = c.owner_user_id and s3.deleted_at is null
-                limit 1
-              )
-            )
-          limit 1
-        ) owner_branch on true
+          select ${entityFolderSql} as entity_folder
+        ) inbox_folder on true
+        ${branchLateralSql}
         where c.deleted_at is null
           and ($3::timestamptz is null or c.updated_at < $3)
+          and (
+            $7::timestamptz is null
+            or c.updated_at < $7::timestamptz
+            or (c.updated_at = $7::timestamptz and c.id < $8::uuid)
+          )
           and (
             cm.user_id = $2
             or ($1::text in ('manager', 'director', 'admin', 'system_admin') and c.type = 'administration')
           )
-          -- Branch filter: match, OR the client has no branch yet (shown to all).
-          and ($5::uuid is null or owner_branch.branch_id is null
-               or owner_branch.branch_id = $5::text)
+          -- Branch filter is strict: unassigned clients stay out of every
+          -- branch-specific inbox until a branch is explicitly known.
+          and (
+            $5::uuid is null
+            or c.type <> 'administration'
+            or owner_branch.branch_id = $5::text
+          )
+          -- Contract 3: archived=true → only the actor's archived chats;
+          -- default → archived hidden. Clients have no inbox state, so their
+          -- chats are never archived away from them.
+          and (case when $6::boolean then ist.archived_at is not null
+                    else ist.archived_at is null end)
+          -- Folder classification is evaluated on active CRM entities and is
+          -- independent of archived state. Archived rows still report
+          -- folder='archive', while folder=leads|students can narrow them by
+          -- their underlying CRM entity when explicitly requested.
+          and (
+            $9::text = 'all'
+            or (
+              c.type = 'administration'
+              and inbox_folder.entity_folder = $9::text
+            )
+          )
         order by c.updated_at desc, c.id desc
         limit $4
       `,
-      [actor.role, actor.userId, query.before ?? null, limit, query.branchId ?? null],
+      [
+        actor.role,
+        actor.userId,
+        cursor == null ? (query.before ?? null) : null,
+        limit + 1,
+        query.branchId ?? null,
+        query.archived === true,
+        cursor?.updatedAt ?? null,
+        cursor?.id ?? null,
+        query.folder ?? "all",
+      ],
     );
 
-    return { items: result.rows.map((row) => toChatSummaryDto(row)) };
+    const pageRows = result.rows.slice(0, limit);
+    return {
+      items: pageRows.map((row) =>
+        toChatSummaryDto(row, {
+          canWrite: this.canWriteChatSummary(actor, row),
+        }),
+      ),
+      nextCursor:
+        result.rows.length > limit && pageRows.length > 0
+          ? this.encodeChatCursor(pageRows[pageRows.length - 1])
+          : null,
+    };
+  }
+
+  private decodeChatCursor(
+    cursor: string | undefined,
+  ): { updatedAt: string; id: string } | null {
+    if (!cursor) return null;
+    try {
+      const decoded = JSON.parse(
+        Buffer.from(cursor, "base64url").toString("utf8"),
+      ) as unknown;
+      if (!Array.isArray(decoded) || decoded.length !== 2) throw new Error();
+      const [updatedAt, id] = decoded;
+      if (
+        typeof updatedAt !== "string" ||
+        !/^[1-9]\d{3}-(0[1-9]|1[0-2])-([0-2]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{6}Z$/.test(
+          updatedAt,
+        ) ||
+        !this.isValidChatCursorCalendarDate(updatedAt) ||
+        typeof id !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      ) {
+        throw new Error();
+      }
+      // Keep PostgreSQL's six fractional digits verbatim. Normalising through
+      // JS Date/toISOString would truncate microseconds and skip keyset rows.
+      return { updatedAt, id };
+    } catch {
+      throw new BadRequestException("Invalid chat cursor");
+    }
+  }
+
+  private encodeChatCursor(
+    row: Pick<ChatRow, "cursor_updated_at" | "id">,
+  ): string {
+    const updatedAt = row.cursor_updated_at;
+    if (!updatedAt) {
+      throw new Error("Missing exact chat cursor timestamp");
+    }
+    return Buffer.from(
+      JSON.stringify([updatedAt, row.id]),
+      "utf8",
+    ).toString("base64url");
+  }
+
+  private isValidChatCursorCalendarDate(value: string): boolean {
+    const wholeSeconds = `${value.slice(0, 19)}Z`;
+    const parsed = new Date(wholeSeconds);
+    return (
+      Number.isFinite(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 19) === value.slice(0, 19)
+    );
+  }
+
+  /**
+   * Server-declared composer visibility (правки №2, «Объявления»): the client
+   * must not guess read-only-ness from a slug string. Mirrors
+   * MessengerPolicy.assertCanWriteChat for the announcements chat; every other
+   * chat in the actor's list is writable by construction.
+   */
+  private canWriteChatSummary(
+    actor: ActorContext,
+    row: Pick<ChatRow, "slug">,
+  ): boolean {
+    if (row.slug === MessengerService.announcementsSlug) {
+      return isManagerRole(actor.role);
+    }
+    return true;
   }
 
   async getMessages(
@@ -382,6 +512,8 @@ export class MessengerService implements OnModuleInit {
     if (dto.attachmentFileId) {
       await this.assertValidChatAttachment(chatId, dto.attachmentFileId);
     }
+    const shouldResurface =
+      chat.type === "administration" && actor.role === "client";
 
     const message = await this.database.transaction(async (client) => {
       const inserted = await client.query<MessageRow>(
@@ -437,10 +569,40 @@ export class MessengerService implements OnModuleInit {
         "update app.chats set last_message_id = $2, updated_at = now() where id = $1",
         [chatId, row.id],
       );
+      if (shouldResurface) {
+        // Inbox state and the inbound message are one commit. Realtime must
+        // never advertise a message while staff list reads still see Archive.
+        await client.query(
+          "update app.chat_inbox_state set archived_at = null where chat_id = $1",
+          [chatId],
+        );
+      }
       return row;
     });
 
     const payload = toMessageDto(message);
+    if (shouldResurface) {
+      // Complete first-contact intake before advertising the message/list
+      // update. Any staff refresh triggered by this event must observe the
+      // newly committed CRM link and therefore the authoritative bucket.
+      try {
+        await this.leadIntake.autoCreateLeadFromChat(actor, actor.userId);
+      } catch (error) {
+        // The message has already committed. Intake is idempotent and the next
+        // client message can retry it; never force a resend of stored content.
+        this.logger.error(
+          `First-contact lead intake failed for ${actor.userId}: ${String(error)}`,
+        );
+      }
+    }
+    if (shouldResurface) {
+      // State-only patch first: the regular list fanout below carries the one
+      // last-message/unread update, avoiding duplicate unread increments.
+      this.realtime.publishAdminInboxEvent("chat.updated", {
+        id: chatId,
+        archived: false,
+      });
+    }
     // Privacy: administration chat audiences need different sender views.
     // Clients receive masked staff authors; staff receive the real author.
     const maskedPayload =
@@ -458,23 +620,11 @@ export class MessengerService implements OnModuleInit {
       maskStaffSenderForMembers:
         chat.type === "administration" && isStaffRole(actor.role),
     });
-    if (chat.type === "administration" && !isStaffRole(actor.role)) {
+    if (shouldResurface) {
       // Resurface ONLY on a client message: a new client note should pull the
       // thread back into every staff inbox. A STAFF reply must not — otherwise
       // the moment you answer a chat you just archived, it un-archives itself
       // (and for every other staff member too), so «архивировать» never stuck.
-      // Best-effort: a failure here must not break the send.
-      try {
-        await this.database.query(
-          "update app.chat_inbox_state set archived_at = null where chat_id = $1",
-          [chatId],
-        );
-      } catch (err) {
-        this.logger.warn(`resurface chat_inbox_state failed: ${String(err)}`);
-      }
-      void this.leadIntake
-        .autoCreateLeadFromChat(actor, actor.userId)
-        .catch(() => undefined);
     }
     return payload;
   }
@@ -623,7 +773,11 @@ export class MessengerService implements OnModuleInit {
     // a neutral copy with isMuted: false and unreadCount: 0.
     const addedMemberSummary = { ...result, isMuted: false, unreadCount: 0 };
     for (const userId of dto.addUserIds ?? []) {
-      this.realtime.publishUserEvent(userId, "chat.created", addedMemberSummary);
+      this.realtime.publishUserEvent(
+        userId,
+        "chat.created",
+        addedMemberSummary,
+      );
     }
     for (const userId of dto.removeUserIds ?? []) {
       this.realtime.publishUserEvent(userId, "chat.removed", { id: chatId });
@@ -652,7 +806,9 @@ export class MessengerService implements OnModuleInit {
       `,
       [chatId, actor.userId],
     );
-    this.realtime.publishUserEvent(actor.userId, "chat.removed", { id: chatId });
+    this.realtime.publishUserEvent(actor.userId, "chat.removed", {
+      id: chatId,
+    });
     this.realtime.publishChatEvent(chatId, "chat.updated", { id: chatId });
     return { success: true };
   }
@@ -691,7 +847,9 @@ export class MessengerService implements OnModuleInit {
       `,
       [chatId, actor.userId],
     );
-    return toChatSummaryDto(result.rows[0]);
+    return toChatSummaryDto(result.rows[0], {
+      canWrite: this.canWriteChatSummary(actor, result.rows[0]),
+    });
   }
 
   async setChatMute(actor: ActorContext, chatId: string, dto: SetChatMuteDto) {
@@ -718,11 +876,6 @@ export class MessengerService implements OnModuleInit {
     });
     return { success: true, isMuted: dto.isMuted };
   }
-
-
-
-
-
 
   private async createAdministrationChat(actor: ActorContext) {
     const chat = await this.database.transaction(async (client) => {
@@ -765,8 +918,6 @@ export class MessengerService implements OnModuleInit {
     return chat;
   }
 
-
-
   private async insertMembers(
     client: PoolClient,
     chatId: string,
@@ -803,8 +954,6 @@ export class MessengerService implements OnModuleInit {
     }
   }
 
-
-
   private async assertValidChatAttachment(
     chatId: string,
     attachmentFileId: string,
@@ -826,7 +975,4 @@ export class MessengerService implements OnModuleInit {
       throw new NotFoundException("Файл не найден.");
     }
   }
-
-
-
 }

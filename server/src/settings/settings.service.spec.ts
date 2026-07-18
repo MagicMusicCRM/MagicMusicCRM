@@ -112,12 +112,21 @@ describe("SettingsService", () => {
           label: "ID в HolliHop",
         }),
         expect.objectContaining({
-          entity: "leads",
-          key: "source",
+          entity: "students",
+          key: "adSource",
+          label: "Рекламный источник",
           type: "select",
+          options: expect.any(Array),
         }),
       ]),
     );
+    expect(
+      result.fields.filter(
+        (field) =>
+          field.key === "source" &&
+          (field.entity === "students" || field.entity === "leads"),
+      ),
+    ).toEqual([]);
   });
 
   it("updates CRM custom field schema only for admins and records audit", async () => {

@@ -7,7 +7,7 @@ import { AuditService } from "../audit/audit.service";
 import {
   ActorContext,
   canAssignRole,
-  isAdminRole,
+  ROLE_LEVEL,
   UserRole,
 } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
@@ -15,6 +15,10 @@ import { CreateStaffDto } from "./dto/create-staff.dto";
 import { StaffListQuery } from "./dto/staff-list.query";
 import { UpdateStaffDto } from "./dto/update-staff.dto";
 import { CrmPolicy } from "./crm.policy";
+import {
+  ACTIVE_RESPONSIBLE_STAFF_STATUSES,
+  RESPONSIBLE_AUTH_ROLES,
+} from "./responsible-eligibility";
 import {
   rethrowCreatePersonError,
   requiredTrim,
@@ -38,6 +42,37 @@ interface StaffRow {
   phone: string | null;
   branches: Array<{ id: string; name: string }> | null;
   created_at: Date | string;
+}
+
+const USER_ROLES = new Set<UserRole>([
+  "client",
+  "teacher",
+  "admin",
+  "manager",
+  "director",
+  "system_admin",
+]);
+
+function isUserRole(value: string): value is UserRole {
+  return USER_ROLES.has(value as UserRole);
+}
+
+const STAFF_EDITOR_ROLES = new Set<UserRole>([
+  "admin",
+  "manager",
+  "director",
+  "system_admin",
+]);
+
+function canEditStaffTarget(
+  actorRole: UserRole,
+  targetRole: UserRole,
+): boolean {
+  if (actorRole === "system_admin") return true;
+  return (
+    STAFF_EDITOR_ROLES.has(actorRole) &&
+    ROLE_LEVEL[targetRole] < ROLE_LEVEL[actorRole]
+  );
 }
 
 /**
@@ -171,9 +206,8 @@ export class StaffService {
   }
 
   async createStaff(actor: ActorContext, dto: CreateStaffDto) {
-    // Назначить роль сотруднику может только тот, кто стоит в иерархии выше этой
-    // роли: Управляющий (manager) — admin и ниже; Администратор системы — любую.
-    // Администратор (admin) ролями не управляет вовсе. См. canAssignRole.
+    // manager/director назначают только роли строго ниже себя;
+    // system_admin сохраняет полный контроль, admin ролями не управляет.
     if (!canAssignRole(actor.role, dto.role)) {
       throw new ForbiddenException(
         "Недостаточно прав для назначения этой роли сотруднику.",
@@ -248,33 +282,93 @@ export class StaffService {
   }
 
   async updateStaff(actor: ActorContext, staffId: string, dto: UpdateStaffDto) {
-    if (!isAdminRole(actor.role)) {
+    if (!STAFF_EDITOR_ROLES.has(actor.role)) {
       throw new ForbiddenException(
-        "Только администратор может редактировать сотрудников.",
+        "Недостаточно прав для редактирования сотрудников.",
       );
     }
+
+    // Authorization is based on the linked app.users role (the actual auth
+    // privilege), never merely on the free-form staff-card display role. This
+    // prevents a branch admin from editing a manager/system administrator and
+    // closes the old email -> password-reset account-takeover path.
+    const current = await this.database.query<{
+      role: string | null;
+      app_role: string | null;
+      profile_user_id: string | null;
+      email: string | null;
+    }>(
+      `select sm.role, u.role::text as app_role,
+         p.user_id as profile_user_id, u.email
+       from app.staff_members sm
+       left join app.profiles p
+         on p.id = sm.profile_id and p.deleted_at is null
+       left join app.users u
+         on u.id = p.user_id and u.deleted_at is null
+       where sm.id = $1 and sm.deleted_at is null
+       limit 1`,
+      [staffId],
+    );
+    const target = current.rows[0];
+    if (!target) {
+      throw new NotFoundException("Сотрудник не найден.");
+    }
+
+    const authRole = target.app_role?.trim() ?? null;
+    if (authRole !== null && !isUserRole(authRole)) {
+      throw new ForbiddenException(
+        "Недостаточно прав для редактирования этого сотрудника.",
+      );
+    }
+    const displayRole = target.role?.trim() ?? null;
+    const effectiveRole =
+      authRole ??
+      (displayRole !== null && isUserRole(displayRole) ? displayRole : null);
+    if (
+      effectiveRole !== null &&
+      !canEditStaffTarget(actor.role, effectiveRole)
+    ) {
+      throw new ForbiddenException(
+        "Недостаточно прав для редактирования этого сотрудника.",
+      );
+    }
+
+    // The staff-card endpoint is not an identity-management endpoint. Keep an
+    // unchanged email in legacy form submissions as a no-op, but never mutate
+    // app.users.email here; email changes require a dedicated verified flow.
+    if (dto.email !== undefined) {
+      const requestedEmail = trimOptional(dto.email)?.toLowerCase() ?? null;
+      const currentEmail = target.email?.trim().toLowerCase() ?? null;
+      if (requestedEmail !== currentEmail) {
+        throw new ForbiddenException(
+          "Email для входа нельзя изменить через карточку сотрудника.",
+        );
+      }
+    }
+
     // The display role on the staff card (staff_members.role) is separate from
     // the auth role (app.users.role) — the latter changes only through
     // profile.updateRole, which is properly gated. But an ungated write here
     // could still MISLABEL a staff member as one rank above the editor, which
     // reads as an escalation on the card even though no privilege moves. Hold
     // the display role to the same rule the auth role obeys: you may set a role
-    // only strictly below your own, and only on a subject already below you.
+    // only under the centralized canAssignRole rule, and only on a subject the
+    // actor is allowed to edit.
+    let roleForUpdate: UserRole | null = null;
     if (dto.role !== undefined) {
-      const current = await this.database.query<{ role: string | null }>(
-        `select role from app.staff_members
-         where id = $1 and deleted_at is null limit 1`,
-        [staffId],
-      );
-      const currentRole = current.rows[0]?.role as UserRole | null | undefined;
+      const requestedRole = dto.role.trim();
+      const currentRole = displayRole;
+      const unchangedDisplayRole = requestedRole === currentRole;
       const blocked =
-        !canAssignRole(actor.role, dto.role as UserRole) ||
-        (currentRole != null && !canAssignRole(actor.role, currentRole));
+        !unchangedDisplayRole &&
+        (!isUserRole(requestedRole) ||
+          !canAssignRole(actor.role, requestedRole));
       if (blocked) {
         throw new ForbiddenException(
           "Недостаточно прав для назначения этой роли сотруднику.",
         );
       }
+      if (!unchangedDisplayRole) roleForUpdate = requestedRole as UserRole;
     }
     const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
 
@@ -298,20 +392,12 @@ export class StaffService {
             where p.id = target.profile_id
             returning p.id, p.user_id, p.first_name, p.last_name, p.phone
           ),
-          updated_user as (
-            update app.users u
-            set email = coalesce($5, u.email),
-              updated_at = now()
-            from target
-            where u.id = target.user_id
-            returning u.id, u.email, u.role, u.is_app_account
-          ),
           updated_staff as (
             update app.staff_members sm
-            set role = coalesce($6, sm.role),
-              position = coalesce($7, sm.position),
-              status = coalesce($8, sm.status),
-              custom_data = coalesce(sm.custom_data, '{}'::jsonb) || $9::jsonb,
+            set role = coalesce($5, sm.role),
+              position = coalesce($6, sm.position),
+              status = coalesce($7, sm.status),
+              custom_data = coalesce(sm.custom_data, '{}'::jsonb) || $8::jsonb,
               updated_at = now()
             from target
             where sm.id = target.id
@@ -321,11 +407,11 @@ export class StaffService {
           select us.id, us.role, us.position, us.status, us.custom_data,
             us.profile_id,
             coalesce(up.user_id, p.user_id) as profile_user_id,
-            coalesce(uu.role, u.role) as app_role,
-            coalesce(uu.is_app_account, u.is_app_account, false) as is_app_account,
+            u.role as app_role,
+            coalesce(u.is_app_account, false) as is_app_account,
             coalesce(up.first_name, p.first_name) as first_name,
             coalesce(up.last_name, p.last_name) as last_name,
-            coalesce(uu.email, u.email) as email,
+            u.email,
             coalesce(up.phone, p.phone) as phone,
             coalesce(
               jsonb_agg(
@@ -336,7 +422,6 @@ export class StaffService {
             us.created_at
           from updated_staff us
           left join updated_profile up on true
-          left join updated_user uu on true
           left join app.profiles p on p.id = us.profile_id and p.deleted_at is null
           left join app.users u on u.id = coalesce(up.user_id, p.user_id)
             and u.deleted_at is null
@@ -346,7 +431,7 @@ export class StaffService {
           group by us.id, us.role, us.position, us.status, us.custom_data,
             us.profile_id, us.created_at, p.id, u.id,
             up.user_id, up.first_name, up.last_name, up.phone,
-            uu.email, uu.role, uu.is_app_account
+            u.email, u.role, u.is_app_account
           limit 1
         `,
         [
@@ -354,8 +439,7 @@ export class StaffService {
           trimOptional(dto.firstName),
           trimOptional(dto.lastName),
           trimOptional(dto.phone),
-          trimOptional(dto.email)?.toLowerCase() ?? null,
-          trimOptional(dto.role),
+          roleForUpdate,
           trimOptional(dto.position),
           trimOptional(dto.status),
           JSON.stringify(customDataPatch),
@@ -373,5 +457,71 @@ export class StaffService {
     } catch (error) {
       rethrowCreatePersonError(error);
     }
+  }
+
+  /**
+   * Contract 4 (правки №2): slim picker for the «Ответственный» selector —
+   * GET /api/admin/staff?search=&roles=admin,manager,director.
+   *
+   * Returns app.USERS ids, not staff_members ids: contract 5 stores
+   * custom_data.responsibleUserId = users.id (the actor id), so the picker
+   * must live in the same id space or the round-trip breaks.
+   */
+  async listStaffPicker(
+    actor: ActorContext,
+    query: { search?: string; roles?: string },
+  ) {
+    this.policy.assertManagerOnly(actor);
+    const requested = (query.roles ?? "")
+      .split(",")
+      .map((role) => role.trim())
+      .filter((role) =>
+        (RESPONSIBLE_AUTH_ROLES as readonly string[]).includes(role),
+      );
+    const hasExplicitRoleFilter = Boolean(query.roles?.trim());
+    const roles = hasExplicitRoleFilter
+      ? requested
+      : [...RESPONSIBLE_AUTH_ROLES];
+    const search = query.search?.trim() || null;
+    const result = await this.database.query<{
+      id: string;
+      display_name: string | null;
+      role: string;
+    }>(
+      `
+        select distinct u.id,
+          coalesce(
+            nullif(btrim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')), ''),
+            u.full_name,
+            u.email
+          ) as display_name,
+          u.role::text as role
+        from app.users u
+        join app.profiles p on p.user_id = u.id and p.deleted_at is null
+        join app.staff_members sm
+          on sm.profile_id = p.id and sm.deleted_at is null
+        where u.deleted_at is null
+          and u.role::text = any($1::text[])
+          and lower(btrim(sm.status)) = any($2::text[])
+          and (
+            $3::text is null
+            or lower(
+              coalesce(p.first_name, '') || ' ' ||
+              coalesce(p.last_name, '') || ' ' ||
+              coalesce(u.full_name, '') || ' ' ||
+              coalesce(u.email, '')
+            ) like lower('%' || $3 || '%')
+          )
+        order by display_name asc, u.id asc
+        limit 100
+      `,
+      [roles, [...ACTIVE_RESPONSIBLE_STAFF_STATUSES], search],
+    );
+    // Contract pins a bare array, not {items}.
+    return result.rows.map((row) => ({
+      id: row.id,
+      displayName: row.display_name ?? "",
+      role: row.role,
+    }));
   }
 }

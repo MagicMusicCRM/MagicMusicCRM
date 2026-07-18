@@ -343,6 +343,15 @@ extension _MessengerMessaging on _MessengerScreenState {
       _onlineUsers.clear();
     });
 
+    // Resolve the existing CRM card shortcut. Lead/student creation is never
+    // offered from chat: the first incoming message already creates the lead.
+    if (_isManagerOrAdminRole &&
+        type == 'direct' &&
+        partnerId != null &&
+        partnerId.isNotEmpty) {
+      unawaited(_resolveContactLink(partnerId));
+    }
+
     _loadMessages();
     if (type == 'channel') {
       // Channels use a dedicated channel room; typing/presence/reactions do not
