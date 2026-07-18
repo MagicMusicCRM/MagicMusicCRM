@@ -14,6 +14,7 @@ import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { CommentQuery } from "./dto/comment.query";
 import { CreateCommentDto } from "./dto/create-comment.dto";
+import { ensureResponsibleSafe } from "./responsible";
 import { TimelineQuery } from "./dto/timeline.query";
 import { findStudent } from "./student-read";
 import { TimelineRow, toTimelineDto } from "./crm-mappers";
@@ -315,6 +316,16 @@ export class TimelineService {
       [dto.entityType, dto.entityId, actor.userId, body, kind],
     );
     const comment = result.rows[0];
+    // Contract 5: commenting on a lead/student card claims the empty
+    // «Ответственный» slot for admin/manager/director actors.
+    if (dto.entityType === "lead" || dto.entityType === "student") {
+      await ensureResponsibleSafe(
+        this.database,
+        actor,
+        dto.entityType,
+        dto.entityId,
+      );
+    }
     await this.audit.record({
       actor,
       action: "crm.comment_created",

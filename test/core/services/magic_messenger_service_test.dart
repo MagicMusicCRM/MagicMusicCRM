@@ -663,6 +663,53 @@ void main() {
     );
 
     test(
+      'listChats follows keyset pages, preserves filters, and deduplicates ids',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/messenger/chats',
+            statusCode: 200,
+            body: {
+              'items': [
+                {'id': 'c1', 'type': 'administration', 'folder': 'students'},
+                {'id': 'c2', 'type': 'administration', 'folder': 'students'},
+              ],
+              'nextCursor': 'cursor-page-2',
+            },
+          ),
+          _FakeResponse(
+            path: '/messenger/chats',
+            statusCode: 200,
+            body: {
+              'items': [
+                {'id': 'c2', 'type': 'administration', 'folder': 'students'},
+                {'id': 'c3', 'type': 'administration', 'folder': 'students'},
+              ],
+              'nextCursor': null,
+            },
+          ),
+        ]);
+        final service = MagicMessengerService(_client(adapter));
+
+        final chats = await service.listChats(
+          limit: 500,
+          branchId: 'branch-a',
+          archived: true,
+          folder: 'students',
+        );
+
+        expect(chats.map((chat) => chat['id']), ['c1', 'c2', 'c3']);
+        expect(adapter.requests, hasLength(2));
+        expect(adapter.requests.first.queryParameters['limit'], 100);
+        expect(adapter.requests.first.queryParameters['branchId'], 'branch-a');
+        expect(adapter.requests.first.queryParameters['archived'], isTrue);
+        expect(adapter.requests.first.queryParameters['folder'], 'students');
+        expect(adapter.requests[1].queryParameters['cursor'], 'cursor-page-2');
+        expect(adapter.requests[1].queryParameters['folder'], 'students');
+      },
+    );
+
+    test(
       'legacyChatFromSummary maps camelCase realtime summary to legacy keys',
       () {
         final adapter = _FakeAdapter([]);

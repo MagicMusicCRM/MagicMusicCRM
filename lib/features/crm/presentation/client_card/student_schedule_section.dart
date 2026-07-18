@@ -658,6 +658,7 @@ class _StudentScheduleSectionState
           beginTime: time,
           durationMinutes: duration,
           validUntil: untilStr,
+          clearValidUntil: infinite,
           effectiveFrom: dateStr,
         );
       } else {

@@ -1403,6 +1403,7 @@ void main() {
                 'sortOrder': 1,
                 'createdAt': '2026-06-12T00:00:00.000Z',
                 'totalCount': 3,
+                'nextCursor': 'cursor-a',
                 'items': [
                   {
                     'id': 'lead-a',
@@ -1436,7 +1437,7 @@ void main() {
               },
             ],
             'totalCount': 3,
-            'nextCursor': 'cursor-a',
+            'nextCursor': null,
           },
         ),
         _FakeResponse(
@@ -1590,7 +1591,10 @@ void main() {
         hideConverted: true,
       );
       final card = await service.getLeadCard('lead-a');
-      final nextPage = await service.listLeadBoard(cursor: 'cursor-a');
+      final nextPage = await service.listLeadBoard(
+        statusId: 'status-a',
+        cursor: 'cursor-a',
+      );
 
       final column = (board['columns'] as List).single as Map<String, dynamic>;
       final lead = (column['items'] as List).single as Map<String, dynamic>;
@@ -1611,7 +1615,8 @@ void main() {
             .single['name'],
         'Борис',
       );
-      expect(board['next_cursor'], 'cursor-a');
+      expect(board['next_cursor'], isNull);
+      expect(column['next_cursor'], 'cursor-a');
       expect(adapter.requests[0].queryParameters['q'], 'анна');
       expect(adapter.requests[0].queryParameters['openTasks'], true);
       // ⚠️ Фильтр hideConverted живёт на бэке с июня, но фронт его НИ РАЗУ не
@@ -1619,6 +1624,48 @@ void main() {
       // без параметра в запросе тумблер на доске ничего не делает.
       expect(adapter.requests[0].queryParameters['hideConverted'], true);
       expect(adapter.requests[2].queryParameters['cursor'], 'cursor-a');
+      expect(adapter.requests[2].queryParameters['statusId'], 'status-a');
+    });
+
+    test('requests and maps the unassigned lead-board column page', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/leads/board',
+          statusCode: 200,
+          body: {
+            'columns': [
+              {
+                'id': 'unassigned',
+                'name': 'Без статуса',
+                'color': null,
+                'sortOrder': 9999,
+                'createdAt': null,
+                'totalCount': 2,
+                'nextCursor': null,
+                'items': <dynamic>[],
+              },
+            ],
+            'totalCount': 2,
+            'nextCursor': null,
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final page = await service.listLeadBoard(
+        unassigned: true,
+        cursor:
+            '2026-07-18T10:11:12.123456Z|11111111-1111-4111-8111-111111111111',
+      );
+
+      final column = (page['columns'] as List).single as Map<String, dynamic>;
+      expect(column['id'], 'unassigned');
+      expect(column['next_cursor'], isNull);
+      expect(adapter.requests.single.queryParameters['unassigned'], true);
+      expect(
+        adapter.requests.single.queryParameters.containsKey('statusId'),
+        false,
+      );
     });
 
     test('manages leads and lead statuses through v3 API', () async {
@@ -1719,6 +1766,31 @@ void main() {
       expect(adapter.requests[1].body['statusId'], 'status-b');
       expect(adapter.requests[3].body['label'], 'Думает');
     });
+
+    test(
+      'sends explicit responsible clear flags only when requested',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/leads/lead-a',
+            statusCode: 200,
+            body: {'id': 'lead-a', 'customData': <String, dynamic>{}},
+          ),
+          _FakeResponse(
+            path: '/crm/students/student-a',
+            statusCode: 200,
+            body: {'id': 'student-a', 'customData': <String, dynamic>{}},
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        await service.updateLead('lead-a', clearAssignedTo: true);
+        await service.updateStudent('student-a', clearResponsible: true);
+
+        expect(adapter.requests[0].body, {'clearAssignedTo': true});
+        expect(adapter.requests[1].body, {'clearResponsible': true});
+      },
+    );
 
     test('creates lessons with branch and room ids', () async {
       final adapter = _FakeAdapter([
@@ -2617,6 +2689,29 @@ void main() {
 
         expect(result['family'], isNull);
         expect((result['members'] as List), isEmpty);
+      },
+    );
+
+    test(
+      'updateScheduleSeries sends explicit null to clear validUntil',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/schedule-series/series-a',
+            statusCode: 200,
+            body: {'id': 'series-b'},
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        await service.updateScheduleSeries(
+          'series-a',
+          clearValidUntil: true,
+          effectiveFrom: '2026-08-01',
+        );
+
+        expect(adapter.requests.single.body.containsKey('validUntil'), true);
+        expect(adapter.requests.single.body['validUntil'], isNull);
       },
     );
   });

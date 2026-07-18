@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
+import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
+import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/convert_lead_dialog.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:intl/intl.dart';
@@ -23,7 +25,6 @@ import 'package:magic_music_crm/features/manager/presentation/transfer/lead_tran
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
 import 'manage_statuses_dialog.dart';
 import 'package:magic_music_crm/core/models/lead.dart';
-import 'package:magic_music_crm/features/crm/presentation/trial_lesson_booking.dart';
 import 'lead_dialogs.dart';
 import 'lead_board_filters.dart';
 import 'leads_board_states.dart';
@@ -77,10 +78,11 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   final Set<String> _hiddenLeadIds = {};
   final Set<String> _pendingLeadIds = {};
   final Map<String, List<Map<String, dynamic>>> _extraLeadsByStatus = {};
-  final Set<String> _loadedExtraLeadIds = {};
-  bool _hasLoadedMore = false;
-  bool _loadingMore = false;
-  String? _nextCursor;
+  // Each row_number partition owns its cursor and in-flight state. Sharing a
+  // scalar cursor across columns skips leads when their timestamp thresholds
+  // diverge.
+  final Map<String, String?> _nextCursorByStatus = {};
+  final Set<String> _loadingMoreStatuses = {};
   // Horizontal board auto-scroll while dragging a card near an edge.
   Timer? _autoScrollTimer;
   double _autoScrollDir = 0;

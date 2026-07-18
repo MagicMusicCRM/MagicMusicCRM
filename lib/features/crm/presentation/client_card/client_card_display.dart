@@ -43,13 +43,17 @@ Widget _sectionTitle(String title) {
           ),
         ),
         const SizedBox(width: AppSpace.sm),
-        Text(
-          title,
-          style: const TextStyle(
-            color: AppColor.gold,
-            fontWeight: FontWeight.w700,
-            fontSize: 13.5,
-            letterSpacing: 0.2,
+        // Flexible: на телефонной ширине длинный заголовок переносится, а не
+        // переполняет Row (#13).
+        Flexible(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: AppColor.gold,
+              fontWeight: FontWeight.w700,
+              fontSize: 13.5,
+              letterSpacing: 0.2,
+            ),
           ),
         ),
       ],
@@ -430,36 +434,8 @@ Widget _summaryChip(IconData icon, String label, int value) {
   );
 }
 
-Widget _entityTile(
-  ColorScheme cs, {
-  required String title,
-  String? subtitle,
-  required IconData leading,
-  String? origin,
-}) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: ListTile(
-      dense: true,
-      visualDensity: VisualDensity.compact,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      tileColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-      leading: Icon(leading, size: 18, color: AppColor.gold),
-      title: Text(
-        title.isEmpty ? 'Без названия' : title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: subtitle == null || subtitle.isEmpty
-          ? null
-          : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: origin == null ? null : ClientOriginChip(entityType: origin),
-    ),
-  );
-}
+// _entityTile удалён: строки задач стали раскрываемым [_TaskTile] (#12), а
+// других потребителей у плоской плитки не осталось.
 
 Widget _miniSection(
   ColorScheme cs, {

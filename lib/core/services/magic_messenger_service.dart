@@ -14,15 +14,36 @@ class MagicMessengerService {
   Future<List<Map<String, dynamic>>> listChats({
     int limit = 50,
     String? branchId,
+    bool archived = false,
+    String folder = 'all',
   }) async {
-    final response = await _api.get<Map<String, dynamic>>(
-      '/messenger/chats',
-      queryParameters: {
-        'limit': limit,
-        if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
-      },
-    );
-    return _items(response).map(_legacyChat).toList();
+    final pageSize = limit.clamp(1, 100);
+    final byId = <String, Map<String, dynamic>>{};
+    String? cursor;
+    final seenCursors = <String>{};
+
+    do {
+      final response = await _api.get<Map<String, dynamic>>(
+        '/messenger/chats',
+        queryParameters: {
+          'limit': pageSize,
+          if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+          if (archived) 'archived': true,
+          if (folder != 'all') 'folder': folder,
+          'cursor': ?cursor,
+        },
+      );
+      for (final item in _items(response).map(_legacyChat)) {
+        final id = item['id']?.toString();
+        if (id != null && id.isNotEmpty) byId.putIfAbsent(id, () => item);
+      }
+
+      final next = response['nextCursor']?.toString().trim();
+      if (next == null || next.isEmpty || !seenCursors.add(next)) break;
+      cursor = next;
+    } while (true);
+
+    return byId.values.toList(growable: false);
   }
 
   Future<Map<String, dynamic>> ensureDirectChat(String targetUserId) async {

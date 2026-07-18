@@ -28,6 +28,7 @@ extension MagicCrmLeads on MagicCrmService {
   Future<Map<String, dynamic>> listLeadBoard({
     String? q,
     String? statusId,
+    bool? unassigned,
     String? branchId,
     String? assignedTo,
     String? source,
@@ -56,6 +57,7 @@ extension MagicCrmLeads on MagicCrmService {
 
     addString('q', q);
     addString('statusId', statusId);
+    if (unassigned != null) queryParameters['unassigned'] = unassigned;
     addString('branchId', branchId);
     addString('assignedTo', assignedTo);
     addString('source', source);
@@ -266,6 +268,7 @@ extension MagicCrmLeads on MagicCrmService {
     String? source,
     String? statusId,
     String? notes,
+    String? assignedTo,
     Map<String, dynamic>? customDataPatch,
   }) async {
     final data = <String, dynamic>{'firstName': firstName.trim()};
@@ -281,6 +284,9 @@ extension MagicCrmLeads on MagicCrmService {
       data['statusId'] = statusId.trim();
     }
     if (notes != null && notes.trim().isNotEmpty) data['notes'] = notes.trim();
+    if (assignedTo != null && assignedTo.trim().isNotEmpty) {
+      data['assignedTo'] = assignedTo.trim();
+    }
     if (customDataPatch != null) data['customDataPatch'] = customDataPatch;
 
     final response = await _api.post<Map<String, dynamic>>(
@@ -300,6 +306,8 @@ extension MagicCrmLeads on MagicCrmService {
     String? statusId,
     bool clearStatus = false,
     String? notes,
+    String? assignedTo,
+    bool clearAssignedTo = false,
     Map<String, dynamic>? customDataPatch,
     // P3-7: when moving to a requires_reason (terminal) status, capture why.
     String? reasonId,
@@ -316,6 +324,10 @@ extension MagicCrmLeads on MagicCrmService {
     // the backend treats this as set-to-null rather than coalesce-preserve.
     if (clearStatus) data['clearStatus'] = true;
     if (notes != null) data['notes'] = notes.trim();
+    if (assignedTo != null && assignedTo.trim().isNotEmpty) {
+      data['assignedTo'] = assignedTo.trim();
+    }
+    if (clearAssignedTo) data['clearAssignedTo'] = true;
     if (customDataPatch != null) data['customDataPatch'] = customDataPatch;
     if (reasonId != null) data['reasonId'] = reasonId;
     if (statusComment != null && statusComment.trim().isNotEmpty) {

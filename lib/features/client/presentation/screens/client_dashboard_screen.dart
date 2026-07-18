@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/lazy_indexed_stack.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/subscription_status_card.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/upcoming_lessons_list.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
@@ -85,7 +86,18 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
     });
 
     final isDesktop = MediaQuery.of(context).size.width >= 768;
-    final body = _buildBody(_selectedIndex);
+    // Mount tabs on first visit, then keep them in-place. A plain IndexedStack
+    // preserved MessengerScreen but eagerly mounted all four tabs at login,
+    // triggering their API providers simultaneously.
+    final body = LazyIndexedStack(
+      index: _selectedIndex,
+      children: const [
+        MessengerScreen(role: 'client'),
+        _ClientSectionFrame(child: UpcomingLessonsList()),
+        _ClientSubscriptionView(),
+        ProfileScreen(),
+      ],
+    );
 
     if (isDesktop) {
       return Scaffold(
@@ -129,16 +141,6 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
         ],
       ),
     );
-  }
-
-  Widget _buildBody(int index) {
-    return switch (index) {
-      0 => const MessengerScreen(role: 'client'),
-      1 => const _ClientSectionFrame(child: UpcomingLessonsList()),
-      2 => const _ClientSubscriptionView(),
-      3 => const ProfileScreen(),
-      _ => const MessengerScreen(role: 'client'),
-    };
   }
 }
 

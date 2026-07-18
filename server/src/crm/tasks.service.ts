@@ -14,6 +14,7 @@ import { TaskBoardQuery } from "./dto/task-board.query";
 import { TaskHistoryQuery } from "./dto/task-history.query";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
 import { branchIdExpr } from "./branch-scope";
+import { ensureResponsibleSafe } from "./responsible";
 import { CrmPolicy } from "./crm.policy";
 import {
   TaskHistoryRow,
@@ -304,6 +305,16 @@ export class TasksService {
       );
       return created;
     });
+    // Contract 5: creating a task on a lead/student card claims the empty
+    // «Ответственный» slot for admin/manager/director actors.
+    if (dto.entityType === "lead" || dto.entityType === "student") {
+      await ensureResponsibleSafe(
+        this.database,
+        actor,
+        dto.entityType,
+        dto.entityId,
+      );
+    }
     await this.audit.record({
       actor,
       action: "crm.task_created",

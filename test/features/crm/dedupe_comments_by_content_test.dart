@@ -11,14 +11,13 @@ void main() {
     required String content,
     String createdAt = '2026-05-01T10:00:00Z',
     String? lessonAt,
-  }) =>
-      {
-        'id': id,
-        '_origin': origin,
-        'content': content,
-        'created_at': createdAt,
-        if (lessonAt != null) 'lesson_at': lessonAt,
-      };
+  }) => {
+    'id': id,
+    '_origin': origin,
+    'content': content,
+    'created_at': createdAt,
+    'lesson_at': ?lessonAt,
+  };
 
   test('collapses the same note copied onto lead and student', () {
     final rows = [
@@ -28,8 +27,10 @@ void main() {
     ];
     final out = dedupeCommentsByContent(rows);
     expect(out.length, 2);
-    expect(out.map((r) => r['content']),
-        ['Перезвонить в среду', 'Оплатил абонемент']);
+    expect(out.map((r) => r['content']), [
+      'Перезвонить в среду',
+      'Оплатил абонемент',
+    ]);
     // First occurrence (the lead copy) is the one kept.
     expect(out.first['_origin'], 'lead');
   });
@@ -70,8 +71,18 @@ void main() {
 
   test('same text but different created_at is kept (re-comment later)', () {
     final rows = [
-      c(id: '1', origin: 'student', content: 'Ок', createdAt: '2026-05-01T10:00:00Z'),
-      c(id: '2', origin: 'student', content: 'Ок', createdAt: '2026-06-01T10:00:00Z'),
+      c(
+        id: '1',
+        origin: 'student',
+        content: 'Ок',
+        createdAt: '2026-05-01T10:00:00Z',
+      ),
+      c(
+        id: '2',
+        origin: 'student',
+        content: 'Ок',
+        createdAt: '2026-06-01T10:00:00Z',
+      ),
     ];
     expect(dedupeCommentsByContent(rows).length, 2);
   });

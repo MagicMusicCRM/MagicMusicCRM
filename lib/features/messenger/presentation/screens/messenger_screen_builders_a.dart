@@ -262,7 +262,10 @@ extension _MessengerBuildersA on _MessengerScreenState {
         initialSearch: _userRolesInitialSearch,
       ),
       5 when isDesktop && _hasSchoolFinanceAccess => const FinanceWidget(),
-      6 when isDesktop && _hasManagerAccess => const TasksWidget(),
+      // Не desktop-only: у Администратора «Задачи» — основная вкладка и на
+      // телефоне (#17). Роли без 6 в crmVisibleTabs сюда не попадут — выбор
+      // нормализуется по видимому списку в messenger_screen.dart.
+      6 when _hasManagerAccess => const TasksWidget(),
       7 when isDesktop && _hasManagerAccess => ReportsWidget(
         role: widget.role,
         initialTab: _selectedReportsTab,
@@ -504,8 +507,8 @@ extension _MessengerBuildersA on _MessengerScreenState {
             },
             onSelected: (f) => _emitState(() => _selectedFolder = f),
           ),
-        // Branch filter — staff only. «Все филиалы» + one per branch. A client
-        // with no branch assigned stays visible under every filter.
+        // Branch filter — staff only. «Все филиалы» + one per branch. With a
+        // concrete branch selected, only exact branch matches are rendered.
         if (showInboxFolders(widget.role) && _chatBranches.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
@@ -647,11 +650,20 @@ extension _MessengerBuildersA on _MessengerScreenState {
                               : assignee != null
                               ? 'ведёт: $assignee'
                               : 'Никто не взял в работу';
-                          final subtitleText = assignmentText != null
-                              ? '$assignmentText · $preview'
-                              : preview;
+                          // Филиал чата в подзаголовке (персоналу). При активном
+                          // фильтре сюда доходят только точные branch-id matches.
+                          final branchName = _isStaffRole && isAdminChat
+                              ? (item['branch_name'] ?? '').toString().trim()
+                              : '';
+                          final subtitleText = [
+                            ?assignmentText,
+                            if (branchName.isNotEmpty) branchName,
+                            preview,
+                          ].join(' · ');
 
-                          return ChatListTile(
+                          final canManageInboxChat =
+                              _isManagerOrAdminRole && isAdministration(item);
+                          final tile = ChatListTile(
                             title: name,
                             subtitle: subtitleText,
                             time: _formatTime(
@@ -673,10 +685,17 @@ extension _MessengerBuildersA on _MessengerScreenState {
                             onStatusTap: () =>
                                 showStatusInfoDialog(context, item),
                             // Archive long-press: manager/admin only, administration chats only.
-                            onLongPress:
-                                _isManagerOrAdminRole && isAdministration(item)
+                            onLongPress: canManageInboxChat
                                 ? () => _showChatRowMenu(item)
                                 : null,
+                          );
+                          if (!canManageInboxChat) return tile;
+                          // Windows-десктоп: долгое нажатие мышью никто не
+                          // находит — правый клик открывает то же меню строки
+                          // (архивировать / вернуть из архива).
+                          return GestureDetector(
+                            onSecondaryTapDown: (_) => _showChatRowMenu(item),
+                            child: tile,
                           );
                         },
                       ),

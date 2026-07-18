@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/services/alert_policy.dart';
 import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
@@ -48,6 +49,7 @@ import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:mime/mime.dart';
+import 'package:magic_music_crm/features/messenger/data/chat_archive_api.dart';
 import 'package:magic_music_crm/features/messenger/inbox_logic.dart';
 import 'package:magic_music_crm/features/messenger/widgets/inbox_folder_bar.dart';
 import 'messenger_dialogs.dart';
@@ -97,6 +99,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   bool _loadingMessages = false;
   String _searchQuery = '';
   int _selectedCrmTab = 0;
+
   /// Какой раздел уже отмечен просмотренным — чтобы не слать запрос на
   /// каждый кадр build().
   String? _lastMarkedSection;
@@ -132,6 +135,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   // Folder bar state (staff / manager+admin only)
   InboxFolder _selectedFolder = InboxFolder.leads;
+
+  /// #5 (дубли из чата): кэш «кто этот собеседник в CRM» по partnerId —
+  /// {'leadId': …, 'studentId': …}. Заполняется при открытии личного чата,
+  /// гейтит меню «Сохранить в CRM»: связанному контакту сохранение не
+  /// предлагаем, только карточку.
+  final Map<String, Map<String, String?>> _chatContactLinks = {};
   // Chat branch filter (staff only). null = «Все филиалы». A client with no
   // branch assigned is shown under every branch (server-side rule).
   String? _chatBranchFilter;
@@ -217,7 +226,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     _typingStopTimer?.cancel();
     _chatListReloadTimer?.cancel();
     _realtimeFallbackTimer?.cancel();
-    _leaveTypingChannel();
+    _leaveTypingChannel(notify: false);
     _realtimeConnection?.dispose();
     super.dispose();
   }
@@ -299,7 +308,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     // сырое значение врёт. Чат считается открытым только на своей вкладке.
     //
     // После кадра, а не в build(): менять провайдер во время построения нельзя.
-    final openChatId = selectedCrmTab == CrmSection.chat ? _selectedChatId : null;
+    final openChatId = selectedCrmTab == CrmSection.chat
+        ? _selectedChatId
+        : null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref

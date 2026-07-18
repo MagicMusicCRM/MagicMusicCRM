@@ -1,4 +1,8 @@
 import { AuditService } from "../audit/audit.service";
+import {
+  ACTIVE_RESPONSIBLE_STAFF_STATUSES,
+  RESPONSIBLE_AUTH_ROLES,
+} from "../crm/responsible-eligibility";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { ChatInboxService } from "./chat-inbox.service";
@@ -63,17 +67,26 @@ describe("ChatInboxService", () => {
       id: "chat-admin", type: "administration",
       memberUserId: null, memberRole: null, assignedToUserId: null,
     };
+    const eligibleAdmin = {
+      user_id: "staff-a",
+      role: "admin",
+      staff_member_id: "staff-record-a",
+      staff_status: "active",
+      display_name: "Admin A",
+    };
 
     it("assignChat sets assigned_to_user_id/assigned_at and publishes chat.updated to admin inbox", async () => {
       const { service, database, realtime } = createService({
         database: {
           query: jest.fn()
-            // requireStaffTarget: user role lookup
-            .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
+            // strict linked live-staff eligibility lookup
+            .mockResolvedValueOnce({ rows: [eligibleAdmin] })
             // conditional claim update (1 row = won the claim)
             .mockResolvedValueOnce({ rows: [], rowCount: 1 })
             // chat_work_events insert
-            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
+            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] })
+            // no linked CRM contact
+            .mockResolvedValueOnce({ rows: [] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue(adminChat),
@@ -97,9 +110,12 @@ describe("ChatInboxService", () => {
       const { service, realtime } = createService({
         database: {
           query: jest.fn()
-            .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
+            .mockResolvedValueOnce({
+              rows: [{ ...eligibleAdmin, user_id: "admin-b" }],
+            })
             .mockResolvedValueOnce({ rows: [], rowCount: 1 })
-            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
+            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] })
+            .mockResolvedValueOnce({ rows: [] }),
         },
         policy: {
           getChatAccess: jest.fn().mockResolvedValue(adminChat),
@@ -116,11 +132,67 @@ describe("ChatInboxService", () => {
       );
     });
 
+    it("claims the linked lead and student responsibility in the chat transaction", async () => {
+      const { service, database } = createService({
+        database: {
+          query: jest.fn()
+            .mockResolvedValueOnce({
+              rows: [
+                {
+                  ...eligibleAdmin,
+                  user_id: "manager-b",
+                  role: "manager",
+                  display_name: "Manager B",
+                },
+              ],
+            })
+            .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+            .mockResolvedValueOnce({ rows: [{ id: "work-1" }] })
+            .mockResolvedValueOnce({
+              rows: [{ lead_id: "lead-a", student_id: "student-a" }],
+            })
+            .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+            .mockResolvedValueOnce({ rows: [], rowCount: 1 }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(adminChat),
+          assertCanAssign: jest.fn(),
+        },
+      });
+
+      await service.assignChat(staffActor, "chat-admin", "manager-b");
+
+      const sql = (database.query as jest.Mock).mock.calls.map((call) =>
+        String(call[0]),
+      );
+      expect(sql.some((text) => text.includes("from app.chats c"))).toBe(true);
+      expect(
+        sql.some(
+          (text) =>
+            text.includes("update app.leads") &&
+            text.includes("assigned_to = eligible_actor.user_id"),
+        ),
+      ).toBe(true);
+      expect(
+        sql.some((text) => text.includes("update app.students")),
+      ).toBe(true);
+      expect(
+        (database.query as jest.Mock).mock.calls.find((call) =>
+          String(call[0]).includes("update app.leads"),
+        )?.[1],
+      ).toEqual([
+        "lead-a",
+        "manager-b",
+        [...RESPONSIBLE_AUTH_ROLES],
+        [...ACTIVE_RESPONSIBLE_STAFF_STATUSES],
+      ]);
+    });
+
     it("assignChat reports a conflict when another staffer claimed the chat first", async () => {
       const { service, realtime } = createService({
         database: {
           query: jest.fn()
-            .mockResolvedValueOnce({ rows: [{ role: "admin" }] })
+            .mockResolvedValueOnce({ rows: [eligibleAdmin] })
             // conditional claim update: 0 rows — someone else won the race
             .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
         },
@@ -136,6 +208,27 @@ describe("ChatInboxService", () => {
       expect(realtime.publishAdminInboxEvent).not.toHaveBeenCalled();
     });
 
+    it("rejects an unlinked, inactive, teacher, or system_admin target before assignment", async () => {
+      const { service, database, realtime } = createService({
+        database: {
+          query: jest.fn().mockResolvedValueOnce({ rows: [] }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(adminChat),
+          assertCanAssign: jest.fn(),
+        },
+      });
+
+      await expect(
+        service.assignChat(staffActor, "chat-admin", "teacher-or-inactive"),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(database.query).toHaveBeenCalledTimes(1);
+      expect(String((database.query as jest.Mock).mock.calls[0][0])).toContain(
+        "join app.staff_members",
+      );
+      expect(realtime.publishAdminInboxEvent).not.toHaveBeenCalled();
+    });
+
     it("unassignChat clears assignment and publishes chat.updated with assignedTo null", async () => {
       const assignedChat = {
         ...adminChat, assignedToUserId: "manager-a",
@@ -143,7 +236,7 @@ describe("ChatInboxService", () => {
       const { service, database, realtime } = createService({
         database: {
           query: jest.fn()
-            .mockResolvedValueOnce({ rows: [] })
+            .mockResolvedValueOnce({ rows: [], rowCount: 1 })
             .mockResolvedValueOnce({ rows: [{ id: "work-1" }] }),
         },
         policy: {
@@ -156,12 +249,40 @@ describe("ChatInboxService", () => {
 
       expect(database.query).toHaveBeenCalledWith(
         expect.stringContaining("assigned_to_user_id = null"),
-        ["chat-admin"],
+        ["chat-admin", "manager-a"],
       );
       expect(realtime.publishAdminInboxEvent).toHaveBeenCalledWith(
         "chat.updated",
         expect.objectContaining({ id: "chat-admin", assignedTo: null }),
       );
+    });
+
+    it("unassignChat reports a conflict and emits nothing when the assignment changed", async () => {
+      const assignedChat = {
+        ...adminChat,
+        assignedToUserId: "manager-a",
+      };
+      const { service, database, audit, realtime, realtimeBus } = createService({
+        database: {
+          query: jest.fn().mockResolvedValueOnce({ rows: [], rowCount: 0 }),
+        },
+        policy: {
+          getChatAccess: jest.fn().mockResolvedValue(assignedChat),
+          assertCanAssign: jest.fn(),
+        },
+      });
+
+      await expect(
+        service.unassignChat(managerActor, "chat-admin"),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(database.query).toHaveBeenCalledWith(
+        expect.stringContaining("assigned_to_user_id is not distinct from $2"),
+        ["chat-admin", "manager-a"],
+      );
+      expect(database.query).toHaveBeenCalledTimes(1);
+      expect(audit.record).not.toHaveBeenCalled();
+      expect(realtime.publishAdminInboxEvent).not.toHaveBeenCalled();
+      expect(realtimeBus.emitCrmChanged).not.toHaveBeenCalled();
     });
   });
 

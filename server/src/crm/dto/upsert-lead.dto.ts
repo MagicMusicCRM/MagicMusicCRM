@@ -9,8 +9,13 @@ import {
 } from "class-validator";
 
 export class UpsertLeadDto {
+  // Contract 6: NOT @IsUUID on purpose. The client historically sends status
+  // NAMES (and a legacy 'new' fallback) here; the server resolves UUID-shaped
+  // values as ids, other values as status names, and silently ignores what it
+  // cannot resolve — a bad status must never fail the whole card save.
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(120)
   statusId?: string;
 
   // Explicitly un-assign the lead's status (move to "Без статуса"). Distinct
@@ -51,6 +56,12 @@ export class UpsertLeadDto {
   @IsOptional()
   @IsUUID()
   assignedTo?: string;
+
+  // Explicitly clear ownership. Omission preserves the existing assignee;
+  // this keeps older partial-update clients backwards compatible.
+  @IsOptional()
+  @IsBoolean()
+  clearAssignedTo?: boolean;
 
   @IsOptional()
   @IsObject()

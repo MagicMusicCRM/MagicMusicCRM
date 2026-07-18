@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../common/security/jwt-auth.guard';
 import { DatabaseModule } from '../db/database.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ChatWorkTimelineModule } from '../messenger/chat-work-timeline.module';
+import { AdminStaffController } from './admin-staff.controller';
 import { CrmStudentsController } from './crm-students.controller';
 import { CrmDashboardController } from './crm-dashboard.controller';
 import { CrmScheduleController } from './crm-schedule.controller';
@@ -55,6 +56,7 @@ import { ScheduleSeriesWorker } from './schedule-series.worker';
     ChatWorkTimelineModule,
   ],
   controllers: [
+    AdminStaffController,
     CrmStudentsController,
     CrmDashboardController,
     CrmScheduleController,

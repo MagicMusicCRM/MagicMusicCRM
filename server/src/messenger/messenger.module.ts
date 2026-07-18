@@ -6,6 +6,7 @@ import { CrmModule } from '../crm/crm.module';
 import { DatabaseModule } from '../db/database.module';
 import { ChannelsService } from './channels.service';
 import { ChatInboxService } from './chat-inbox.service';
+import { ChatsController } from './chats.controller';
 import { MessageService } from './message.service';
 import { MessengerFanoutService } from './messenger-fanout.service';
 import { ReadReceiptService } from './read-receipt.service';
@@ -16,7 +17,7 @@ import { RealtimeGateway } from './realtime.gateway';
 
 @Module({
   imports: [AuditModule, CrmModule, DatabaseModule, JwtModule.register({})],
-  controllers: [MessengerController],
+  controllers: [ChatsController, MessengerController],
   providers: [MessengerService, ChannelsService, ChatInboxService, MessageService, MessengerFanoutService, ReadReceiptService, MessengerPolicy, RealtimeGateway, JwtAuthGuard],
   exports: [MessengerService, MessengerPolicy, RealtimeGateway]
 })

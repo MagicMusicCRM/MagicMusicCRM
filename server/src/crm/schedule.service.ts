@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { AuditService } from "../audit/audit.service";
+import type { QueryResult, QueryResultRow } from "pg";
+import { AuditEventInput, AuditService } from "../audit/audit.service";
 import {
   ActorContext,
   isManagerOrAdminRole,
@@ -16,6 +18,7 @@ import { RealtimeBus } from "../realtime/realtime-bus";
 import { audienceForLesson } from "./audience";
 import { CrmPolicy } from "./crm.policy";
 import { LessonQuery } from "./dto/lesson.query";
+import { ScheduleConflictsQuery } from "./dto/schedule-conflicts.query";
 import { ScheduleMatrixQuery } from "./dto/schedule-matrix.query";
 import {
   CreateScheduleSeriesDto,
@@ -40,10 +43,34 @@ interface ScheduleLessonRow extends LessonRow {
 // Pre-update snapshot used by updateLesson to detect a genuine reschedule
 // (time / room / teacher delta) and resolve the assigned teacher (KVA-158).
 interface RescheduleSnapshotRow {
+  student_id: string | null;
+  lead_id: string | null;
   teacher_id: string | null;
   room_id: string | null;
   scheduled_at: Date | string | null;
+  duration_minutes?: number | string | null;
+  group_id?: string | null;
+  is_trial: boolean;
   teacher_user_id: string | null;
+}
+
+interface ScheduleQueryExecutor {
+  query<T extends QueryResultRow = QueryResultRow>(
+    query: string,
+    params?: unknown[],
+  ): Promise<QueryResult<T>>;
+}
+
+// One busy-slot hit for the conflicts endpoint / 409 payload (contracts 1-2).
+interface ConflictRow {
+  lesson_id: string;
+  title: string;
+  starts_at: Date | string;
+  ends_at: Date | string;
+  room_name: string | null;
+  teacher_name: string | null;
+  teacher_hit: boolean;
+  room_hit: boolean;
 }
 
 interface ScheduleSeriesRow {
@@ -56,11 +83,14 @@ interface ScheduleSeriesRow {
   weekday: number | string;
   begin_time: string;
   duration_minutes: number | string;
-  valid_from: Date | string;
-  valid_until: Date | string | null;
+  // PostgreSQL DATE values are selected as text so the API contract is
+  // calendar-date-only and cannot shift with the Node process timezone.
+  valid_from: string;
+  valid_until: string | null;
   notes: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  superseded_by?: string | null;
   teacher_name?: string | null;
   room_name?: string | null;
   branch_name?: string | null;
@@ -91,6 +121,7 @@ export class ScheduleService {
             l.status, l.is_trial, l.notes,
             sp.user_id as student_user_id, tp.user_id as teacher_user_id,
             trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
+            trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
             trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
             b.name as branch_name,
             r.name as room_name,
@@ -101,6 +132,7 @@ export class ScheduleService {
           from app.lessons l
           left join app.students s on s.id = l.student_id and s.deleted_at is null
           left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+          left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
           left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
           left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
           left join app.branches b on b.id = l.branch_id and b.deleted_at is null
@@ -120,7 +152,8 @@ export class ScheduleService {
           scoped.teacher_id, scoped.branch_id, scoped.room_id,
           scoped.scheduled_at, scoped.duration_minutes, scoped.status,
           scoped.is_trial, scoped.notes, scoped.student_user_id,
-          scoped.teacher_user_id, scoped.student_name, scoped.teacher_name,
+          scoped.teacher_user_id, scoped.student_name, scoped.lead_name,
+          scoped.teacher_name,
           scoped.branch_name, scoped.room_name, scoped.group_name,
           scoped.group_price_per_lesson,
           array_remove(array[
@@ -369,6 +402,10 @@ export class ScheduleService {
     // выше и так отдаёт ему только его занятия.
     const canSeePayments =
       this.policy.canReadStudentFinance(actor) || actor.role === "client";
+    // Closed enum from the DTO (@IsIn) — never raw user input. desc serves the
+    // client «История»: with limit 50 the OLD asc order returned the 50 oldest
+    // imported lessons and hid everything recent.
+    const sortDir = query.order === "desc" ? "desc" : "asc";
     const paidSql = canSeePayments
       ? `(
             select sum(pay.amount)
@@ -384,6 +421,7 @@ export class ScheduleService {
           ${paidSql} as paid_amount,
           sp.user_id as student_user_id, tp.user_id as teacher_user_id,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
+          trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
           b.name as branch_name,
           r.name as room_name,
@@ -392,6 +430,7 @@ export class ScheduleService {
         from app.lessons l
         left join app.students s on s.id = l.student_id and s.deleted_at is null
         left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         left join app.branches b on b.id = l.branch_id and b.deleted_at is null
@@ -445,7 +484,7 @@ export class ScheduleService {
               )
             )
           )
-        order by l.scheduled_at asc, l.id asc
+        order by l.scheduled_at ${sortDir}, l.id ${sortDir}
         limit $8
       `,
       [
@@ -463,17 +502,289 @@ export class ScheduleService {
     return { items: result.rows.map((row) => toLessonDto(row)) };
   }
 
-  async createLesson(actor: ActorContext, dto: UpsertLessonDto) {
+  /**
+   * Contract 1: busy-slot lookup for the lesson dialog pre-flight. Overlap
+   * semantics mirror getScheduleMatrix: cancelled and soft-deleted lessons
+   * never conflict, and two rows of the SAME group are one class, not a clash.
+   */
+  async getScheduleConflicts(actor: ActorContext, query: ScheduleConflictsQuery) {
+    this.policy.assertManagerOnly(actor);
+    const startsAt = new Date(query.startsAt);
+    const endsAt = new Date(query.endsAt);
+    if (
+      Number.isNaN(startsAt.getTime()) ||
+      Number.isNaN(endsAt.getTime()) ||
+      startsAt.getTime() >= endsAt.getTime()
+    ) {
+      throw new BadRequestException(
+        "Время окончания должно быть позже времени начала.",
+      );
+    }
+    const rows = await this.queryConflicts({
+      teacherId: query.teacherId ?? null,
+      roomId: query.roomId ?? null,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      excludeLessonId: query.excludeLessonId ?? null,
+      groupId: null,
+    });
+    return {
+      teacherBusy: rows.some((row) => row.teacher_hit),
+      roomBusy: rows.some((row) => row.room_hit),
+      conflicts: rows.map((row) => this.toConflictDto(row)),
+    };
+  }
+
+  private toConflictDto(row: ConflictRow) {
+    return {
+      lessonId: row.lesson_id,
+      title: row.title,
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+      roomName: row.room_name ?? null,
+      teacherName: row.teacher_name || null,
+    };
+  }
+
+  /**
+   * Shared overlap SQL for contract 1 (GET conflicts) and contract 2 (the
+   * 409-on-busy guard). Sargable bounds lean on the partial indexes
+   * lessons_teacher_active_overlap_idx / lessons_room_active_overlap_idx
+   * (btree on scheduled_at, deleted_at is null and status <> 'cancelled');
+   * the exact check is the tstzrange overlap. A lesson longer than 24h does
+   * not exist (durationMinutes is capped at 360), so the cheap left bound of
+   * «start > startsAt - 24h» is safe.
+   */
+  private async queryConflicts(params: {
+    teacherId: string | null;
+    roomId: string | null;
+    startsAt: string | Date;
+    endsAt: string | Date;
+    excludeLessonId: string | null;
+    groupId: string | null;
+  }, executor: ScheduleQueryExecutor = this.database): Promise<ConflictRow[]> {
+    if (!params.teacherId && !params.roomId) return [];
+    const result = await executor.query<ConflictRow>(
+      `
+        select l.id as lesson_id,
+          l.scheduled_at as starts_at,
+          l.scheduled_at + l.duration_minutes * interval '1 minute' as ends_at,
+          ($1::uuid is not null and l.teacher_id = $1) as teacher_hit,
+          ($2::uuid is not null and l.room_id = $2) as room_hit,
+          r.name as room_name,
+          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
+          coalesce(
+            nullif(g.name, ''),
+            nullif(trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')), ''),
+            nullif(trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')), ''),
+            'Занятие'
+          ) as title
+        from app.lessons l
+        left join app.rooms r on r.id = l.room_id and r.deleted_at is null
+        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        left join app.students s on s.id = l.student_id and s.deleted_at is null
+        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        left join app.groups g on g.id = l.group_id and g.deleted_at is null
+        left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
+        where l.deleted_at is null
+          and l.status <> 'cancelled'
+          and ($5::uuid is null or l.id <> $5)
+          and l.scheduled_at < $4::timestamptz
+          and l.scheduled_at > $3::timestamptz - interval '24 hours'
+          and tstzrange(l.scheduled_at, l.scheduled_at + l.duration_minutes * interval '1 minute', '[)')
+              && tstzrange($3::timestamptz, $4::timestamptz, '[)')
+          -- Matrix semantics: the same group's rows share teacher and room by
+          -- construction — that is one class, not a double-booking.
+          and (l.group_id is null or $6::uuid is null or l.group_id <> $6)
+          and (
+            ($1::uuid is not null and l.teacher_id = $1)
+            or ($2::uuid is not null and l.room_id = $2)
+          )
+        order by l.scheduled_at asc, l.id asc
+        limit 20
+      `,
+      [
+        params.teacherId,
+        params.roomId,
+        params.startsAt,
+        params.endsAt,
+        params.excludeLessonId,
+        params.groupId,
+      ],
+    );
+    return result.rows;
+  }
+
+  private async acquireScheduleResourceLocks(
+    executor: ScheduleQueryExecutor,
+    teacherId: string | null,
+    roomId: string | null,
+  ): Promise<void> {
+    await this.acquireScheduleLockKeys(executor, [
+      teacherId ? `teacher:${teacherId}` : null,
+      roomId ? `room:${roomId}` : null,
+    ]);
+  }
+
+  /**
+   * Advisory locks are always acquired in lexical order. Besides making
+   * create/update conflict checks atomic, the deterministic order prevents two
+   * cross-resource moves (teacher A -> B and B -> A) from deadlocking.
+   */
+  private async acquireScheduleLockKeys(
+    executor: ScheduleQueryExecutor,
+    keys: Array<string | null | undefined>,
+  ): Promise<void> {
+    const resources = [...new Set(
+      keys
+        .filter((resource): resource is string => typeof resource === "string")
+        .map((resource) => resource.toLowerCase()),
+    )]
+      .sort();
+    for (const resource of resources) {
+      await executor.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [resource],
+      );
+    }
+  }
+
+  private acquireScheduleSeriesLock(
+    executor: ScheduleQueryExecutor,
+    seriesId: string,
+  ): Promise<void> {
+    return this.acquireScheduleLockKeys(executor, [`series:${seriesId}`]);
+  }
+
+  /**
+   * Contract 2: throw 409 {message, conflicts} when the teacher OR the room is
+   * busy in the slot — unless force===true (admin+ override; every caller who
+   * can reach this code path is already admin+ via assertCanWriteCrm).
+   */
+  private async assertNoScheduleConflicts(params: {
+    teacherId: string | null;
+    roomId: string | null;
+    startsAt: string | Date;
+    durationMinutes: number;
+    excludeLessonId?: string | null;
+    groupId?: string | null;
+    force?: boolean;
+  }, executor: ScheduleQueryExecutor): Promise<void> {
+    await this.acquireScheduleResourceLocks(
+      executor,
+      params.teacherId,
+      params.roomId,
+    );
+    if (params.force === true) return;
+    if (!params.teacherId && !params.roomId) return;
+    const startsAt = new Date(params.startsAt);
+    if (Number.isNaN(startsAt.getTime())) return;
+    const endsAt = new Date(
+      startsAt.getTime() + params.durationMinutes * 60_000,
+    );
+    const rows = await this.queryConflicts(
+      {
+        teacherId: params.teacherId,
+        roomId: params.roomId,
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        excludeLessonId: params.excludeLessonId ?? null,
+        groupId: params.groupId ?? null,
+      },
+      executor,
+    );
+    if (!rows.length) return;
+    throw new ConflictException({
+      message: "Преподаватель или аудитория заняты в это время.",
+      conflicts: rows.map((row) => this.toConflictDto(row)),
+    });
+  }
+
+  /**
+   * Contract 7: map the pinned clientRef {type, id} onto the legacy
+   * studentId/leadId fields. An explicit clientRef wins over both.
+   */
+  private applyClientRef(dto: UpsertLessonDto): UpsertLessonDto {
+    if (!dto.clientRef) return dto;
+    const mapped: UpsertLessonDto = {
+      ...dto,
+      studentId: undefined,
+      groupId: undefined,
+      leadId: undefined,
+      clientRef: undefined,
+    };
+    if (dto.clientRef.type === "lead") {
+      mapped.leadId = dto.clientRef.id;
+      mapped.studentId = undefined;
+    } else {
+      mapped.studentId = dto.clientRef.id;
+      mapped.leadId = undefined;
+    }
+    return mapped;
+  }
+
+  private assertUnambiguousLessonSubject(
+    dto: UpsertLessonDto,
+    required: boolean,
+  ): boolean {
+    const selections = [
+      dto.studentId != null,
+      dto.groupId != null,
+      dto.leadId != null,
+    ].filter(Boolean).length;
+    if (selections > 1) {
+      throw new BadRequestException(
+        "Для занятия можно выбрать только одного участника: ученика, группу или лида.",
+      );
+    }
+    if (required && selections === 0) {
+      throw new BadRequestException(
+        "Укажите ученика, группу или лида для урока.",
+      );
+    }
+    return selections === 1;
+  }
+
+  private assertLeadLessonIsTrial(
+    leadId: string | null | undefined,
+    isTrial: boolean | null | undefined,
+  ): void {
+    if (leadId && isTrial !== true) {
+      throw new BadRequestException(
+        "Занятие с лидом должно быть отмечено как пробное.",
+      );
+    }
+  }
+
+  async createLesson(actor: ActorContext, rawDto: UpsertLessonDto) {
     this.policy.assertCanWriteCrm(actor);
+    const dto = this.applyClientRef(rawDto);
+    this.assertUnambiguousLessonSubject(dto, true);
     if (!dto.scheduledAt) {
       throw new BadRequestException("Дата урока обязательна.");
     }
+    this.assertScheduledAtWithinBookingWindow(dto.scheduledAt);
     if (!dto.studentId && !dto.groupId && !dto.leadId) {
       throw new BadRequestException(
         "Укажите ученика, группу или лид для урока.",
       );
     }
-    const result = await this.database.query<LessonRow>(
+    this.assertLeadLessonIsTrial(dto.leadId, dto.isTrial);
+    // Resource locks, conflict check and insert share one transaction.
+    const result = await this.database.transaction(async (client) => {
+      await this.assertNoScheduleConflicts(
+        {
+          teacherId: dto.teacherId ?? null,
+          roomId: dto.roomId ?? null,
+          startsAt: dto.scheduledAt!,
+          durationMinutes: dto.durationMinutes ?? 60,
+          groupId: dto.groupId ?? null,
+          force: dto.force,
+        },
+        client as unknown as ScheduleQueryExecutor,
+      );
+      return client.query<LessonRow>(
       `
         insert into app.lessons (
           student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
@@ -482,7 +793,7 @@ export class ScheduleService {
         values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 60), coalesce($9, 'scheduled'), coalesce($10, false), $11, $12::numeric)
         returning id, student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
           status, is_trial, notes, teacher_rate, null::uuid as student_user_id, null::uuid as teacher_user_id,
-          null::text as student_name, null::text as teacher_name, null::text as branch_name,
+          null::text as student_name, null::text as lead_name, null::text as teacher_name, null::text as branch_name,
           null::text as room_name, null::text as group_name, null::numeric as group_price_per_lesson
       `,
       [
@@ -499,9 +810,10 @@ export class ScheduleService {
         dto.notes?.trim() || null,
         dto.teacherRate ?? null,
       ],
-    );
+      );
+    });
     const lesson = result.rows[0];
-    await this.audit.record({
+    await this.recordAuditSafe({
       actor,
       action: "crm.lesson_created",
       entityType: "lesson",
@@ -521,15 +833,111 @@ export class ScheduleService {
   // ── KVA-236: постоянное расписание (серии) ────────────────────────────────
 
   /** Горизонт материализации занятий серии, дней вперёд. */
-  private static readonly SERIES_HORIZON_DAYS = 60;
+  private static readonly MAX_BOOKING_AHEAD_DAYS = 365;
+  private static readonly SERIES_HORIZON_DAYS = 400;
 
   /**
    * Догенерировать занятия серии до горизонта. Идемпотентно: дата серии,
    * уже закрытая строкой lessons.series_date (включая перенесённые и
    * отменённые), повторно не создаётся.
    */
-  private async materializeSeries(seriesId: string): Promise<number> {
-    const result = await this.database.query(
+  private async assertNoScheduleSeriesConflicts(
+    seriesId: string,
+    executor: ScheduleQueryExecutor = this.database,
+  ): Promise<void> {
+    const series = await executor.query<{
+      teacher_id: string | null;
+      room_id: string | null;
+    }>(
+      `select teacher_id, room_id
+       from app.schedule_series
+       where id = $1 and deleted_at is null
+       limit 1`,
+      [seriesId],
+    );
+    const resource = series.rows[0];
+    if (!resource) return;
+    await this.acquireScheduleResourceLocks(
+      executor,
+      resource.teacher_id,
+      resource.room_id,
+    );
+    const result = await executor.query<ConflictRow>(
+      `
+        with candidates as (
+          select s.id as series_id, d::date as series_date,
+            s.teacher_id, s.room_id,
+            (d::date + s.begin_time) at time zone 'Europe/Moscow' as starts_at,
+            (d::date + s.begin_time) at time zone 'Europe/Moscow'
+              + s.duration_minutes * interval '1 minute' as ends_at
+          from app.schedule_series s
+          cross join lateral generate_series(
+            greatest(s.valid_from, (now() at time zone 'Europe/Moscow')::date)::timestamp,
+            least(
+              coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date + $2::int),
+              (now() at time zone 'Europe/Moscow')::date + $2::int
+            )::timestamp,
+            interval '1 day'
+          ) as d
+          where s.id = $1 and s.deleted_at is null
+            and extract(isodow from d) = s.weekday
+        )
+        select l.id as lesson_id,
+          l.scheduled_at as starts_at,
+          l.scheduled_at + l.duration_minutes * interval '1 minute' as ends_at,
+          (c.teacher_id is not null and l.teacher_id = c.teacher_id) as teacher_hit,
+          (c.room_id is not null and l.room_id = c.room_id) as room_hit,
+          r.name as room_name,
+          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
+          coalesce(
+            nullif(g.name, ''),
+            nullif(trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')), ''),
+            nullif(trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')), ''),
+            'Занятие'
+          ) as title
+        from candidates c
+        join app.lessons l
+          on l.deleted_at is null
+          and l.status <> 'cancelled'
+          and (
+            l.series_id is distinct from c.series_id
+            or l.series_date is distinct from c.series_date
+          )
+          and l.scheduled_at < c.ends_at
+          and l.scheduled_at + l.duration_minutes * interval '1 minute' > c.starts_at
+          and (
+            (c.teacher_id is not null and l.teacher_id = c.teacher_id)
+            or (c.room_id is not null and l.room_id = c.room_id)
+          )
+        left join app.rooms r on r.id = l.room_id and r.deleted_at is null
+        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        left join app.students s on s.id = l.student_id and s.deleted_at is null
+        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        left join app.groups g on g.id = l.group_id and g.deleted_at is null
+        left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
+        order by l.scheduled_at asc, l.id asc
+        limit 20
+      `,
+      [seriesId, ScheduleService.SERIES_HORIZON_DAYS],
+    );
+    if (!result.rows.length) return;
+    throw new ConflictException({
+      message: "Преподаватель или аудитория заняты в это время.",
+      conflicts: result.rows.map((row) => this.toConflictDto(row)),
+    });
+  }
+
+  private async materializeSeries(
+    seriesId: string,
+    executor: ScheduleQueryExecutor = this.database,
+  ): Promise<number> {
+    // The worker, edit and stop flows all serialize on the same key. Without
+    // this lock a worker can commit old future lessons after an edit deleted
+    // them, or two edits can create competing continuations.
+    await this.acquireScheduleSeriesLock(executor, seriesId);
+    await this.assertNoScheduleSeriesConflicts(seriesId, executor);
+    const result = await executor.query(
       `
         insert into app.lessons (
           student_id, group_id, teacher_id, branch_id, room_id,
@@ -542,10 +950,10 @@ export class ScheduleService {
           s.id, d::date, s.created_by
         from app.schedule_series s
         cross join lateral generate_series(
-          greatest(s.valid_from, current_date)::timestamp,
+          greatest(s.valid_from, (now() at time zone 'Europe/Moscow')::date)::timestamp,
           least(
-            coalesce(s.valid_until, current_date + $2::int),
-            current_date + $2::int
+            coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date + $2::int),
+            (now() at time zone 'Europe/Moscow')::date + $2::int
           )::timestamp,
           interval '1 day'
         ) as d
@@ -555,6 +963,8 @@ export class ScheduleService {
             select 1 from app.lessons l
             where l.series_id = s.id and l.series_date = d::date
           )
+        on conflict (series_id, series_date) where deleted_at is null
+        do nothing
       `,
       [seriesId, ScheduleService.SERIES_HORIZON_DAYS],
     );
@@ -571,7 +981,10 @@ export class ScheduleService {
       `
         select id from app.schedule_series
         where deleted_at is null
-          and (valid_until is null or valid_until >= current_date)
+          and (
+            valid_until is null
+            or valid_until >= (now() at time zone 'Europe/Moscow')::date
+          )
       `,
     );
     let created = 0;
@@ -580,7 +993,12 @@ export class ScheduleService {
       // Per-series isolation: one poison series must not starve every series
       // after it in the batch until the next worker tick.
       try {
-        created += await this.materializeSeries(row.id);
+        created += await this.database.transaction((client) =>
+          this.materializeSeries(
+            row.id,
+            client as unknown as ScheduleQueryExecutor,
+          ),
+        );
       } catch (error) {
         failed += 1;
         this.logger.error(
@@ -600,7 +1018,9 @@ export class ScheduleService {
       `
         select s.id, s.student_id, s.group_id, s.teacher_id, s.room_id,
           s.branch_id, s.weekday, s.begin_time, s.duration_minutes,
-          s.valid_from, s.valid_until, s.notes, s.created_at, s.updated_at,
+          s.valid_from::text as valid_from,
+          s.valid_until::text as valid_until,
+          s.notes, s.created_at, s.updated_at,
           concat_ws(' ', tp.first_name, tp.last_name) as teacher_name,
           r.name as room_name, b.name as branch_name
         from app.schedule_series s
@@ -611,7 +1031,11 @@ export class ScheduleService {
         where s.deleted_at is null
           and ($1::uuid is null or s.student_id = $1)
           and ($2::uuid is null or s.group_id = $2)
-          and ($3::boolean or s.valid_until is null or s.valid_until >= current_date)
+          and (
+            $3::boolean
+            or s.valid_until is null
+            or s.valid_until >= (now() at time zone 'Europe/Moscow')::date
+          )
         order by s.weekday, s.begin_time
       `,
       [
@@ -625,10 +1049,20 @@ export class ScheduleService {
 
   async createScheduleSeries(actor: ActorContext, dto: CreateScheduleSeriesDto) {
     this.policy.assertCanWriteCrm(actor);
+    this.assertSeriesDateWithinBookingWindow(dto.validFrom);
+    const subjectCount =
+      Number(dto.studentId != null) + Number(dto.groupId != null);
+    if (subjectCount > 1) {
+      throw new BadRequestException(
+        "Для серии можно выбрать только одного участника: ученика или группу.",
+      );
+    }
     if (!dto.studentId && !dto.groupId) {
       throw new BadRequestException("Укажите ученика или группу.");
     }
-    const result = await this.database.query<{ id: string }>(
+    const { seriesId, created } = await this.database.transaction(
+      async (client) => {
+        const result = await client.query<{ id: string }>(
       `
         insert into app.schedule_series (
           student_id, group_id, teacher_id, room_id, branch_id,
@@ -652,10 +1086,16 @@ export class ScheduleService {
         dto.notes?.trim() || null,
         actor.userId,
       ],
+        );
+        const seriesId = result.rows[0].id;
+        const created = await this.materializeSeries(
+          seriesId,
+          client as unknown as ScheduleQueryExecutor,
+        );
+        return { seriesId, created };
+      },
     );
-    const seriesId = result.rows[0].id;
-    const created = await this.materializeSeries(seriesId);
-    await this.audit.record({
+    await this.recordAuditSafe({
       actor,
       action: "crm.schedule_series_created",
       entityType: "schedule_series",
@@ -682,45 +1122,80 @@ export class ScheduleService {
     dto: UpdateScheduleSeriesDto,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    const existing = await this.database.query<ScheduleSeriesRow>(
-      `select * from app.schedule_series where id = $1 and deleted_at is null`,
-      [seriesId],
-    );
-    const series = existing.rows[0];
-    if (!series) throw new NotFoundException("Серия расписания не найдена.");
-
-    const effectiveFrom =
-      dto.effectiveFrom ??
-      new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const effectiveFrom = (
+      dto.effectiveFrom ?? this.moscowDate(1)
+    ).slice(0, 10);
+    this.assertSeriesMutationDateNotPast(effectiveFrom);
+    this.assertSeriesDateWithinBookingWindow(effectiveFrom);
 
     // Close-old / detach-future / insert-continuation must be atomic: a crash
     // in between would leave the series closed with no continuation (or future
     // lessons removed for a series that was never rewritten).
-    const newSeriesId = await this.database.transaction(async (client) => {
+    const { newSeriesId, created } = await this.database.transaction(async (client) => {
+      await this.acquireScheduleSeriesLock(
+        client as unknown as ScheduleQueryExecutor,
+        seriesId,
+      );
+      const existing = await client.query<ScheduleSeriesRow>(
+        `select id, student_id, group_id, teacher_id, room_id, branch_id,
+           weekday, begin_time, duration_minutes,
+           valid_from::text as valid_from,
+           valid_until::text as valid_until,
+           notes, created_at, updated_at, superseded_by
+         from app.schedule_series
+         where id = $1 and deleted_at is null
+         for update`,
+        [seriesId],
+      );
+      const series = existing.rows[0];
+      if (!series) throw new NotFoundException("Серия расписания не найдена.");
+      if (series.superseded_by) {
+        throw new ConflictException(
+          "Серия уже изменена; обновите расписание и повторите для её продолжения.",
+        );
+      }
+      const seriesValidFrom = series.valid_from;
+      const inheritedValidUntil = series.valid_until;
+      const continuationValidUntil = Object.prototype.hasOwnProperty.call(
+        dto,
+        "validUntil",
+      )
+        ? (dto.validUntil?.slice(0, 10) ?? null)
+        : inheritedValidUntil;
+      if (effectiveFrom < seriesValidFrom) {
+        throw new BadRequestException(
+          "Дата применения правки не может быть раньше начала серии.",
+        );
+      }
+      if (
+        continuationValidUntil !== null &&
+        continuationValidUntil < effectiveFrom
+      ) {
+        throw new BadRequestException(
+          "Дата окончания серии не может быть раньше даты применения правки.",
+        );
+      }
       // Закрываем старую серию накануне effectiveFrom (если она уже шла).
       await client.query(
         `
         update app.schedule_series
-        set valid_until = least(
-            coalesce(valid_until, ($2::date - 1)::date),
-            ($2::date - 1)::date
-          ),
+        set valid_until = case
+            when valid_from < $2::date then least(
+              coalesce(valid_until, ($2::date - 1)::date),
+              ($2::date - 1)::date
+            )
+            else valid_until
+          end,
+          deleted_at = case
+            when valid_from >= $2::date then coalesce(deleted_at, now())
+            else deleted_at
+          end,
           updated_at = now()
         where id = $1
       `,
         [seriesId, effectiveFrom],
       );
       // Снимаем будущие нетронутые занятия старой серии.
-      await client.query(
-        `
-        update app.lessons
-        set deleted_at = now(), updated_at = now()
-        where series_id = $1 and series_date >= $2::date
-          and status = 'scheduled' and original_scheduled_at is null
-          and deleted_at is null
-      `,
-        [seriesId, effectiveFrom],
-      );
       // Продолжение с новыми параметрами.
       const inserted = await client.query<{ id: string }>(
         `
@@ -742,15 +1217,49 @@ export class ScheduleService {
           dto.beginTime ?? String(series.begin_time).slice(0, 5),
           dto.durationMinutes ?? series.duration_minutes,
           effectiveFrom,
-          dto.validUntil ?? series.valid_until,
+          continuationValidUntil,
           dto.notes?.trim() ?? series.notes,
           actor.userId,
         ],
       );
-      return inserted.rows[0].id;
+      const newSeriesId = inserted.rows[0].id;
+      // Carry every future exception into the continuation before removing
+      // untouched old occurrences. Moved, cancelled and soft-deleted dates act
+      // as lineage tombstones, so materialization cannot resurrect them under
+      // the continuation's new series id.
+      await client.query(
+        `update app.lessons
+         set series_id = $2, updated_at = now()
+         where series_id = $1
+           and series_date >= $3::date
+           and (
+             deleted_at is not null
+             or status <> 'scheduled'
+             or original_scheduled_at is not null
+           )`,
+        [seriesId, newSeriesId, effectiveFrom],
+      );
+      await client.query(
+        `update app.lessons
+         set deleted_at = now(), updated_at = now()
+         where series_id = $1 and series_date >= $2::date
+           and status = 'scheduled' and original_scheduled_at is null
+           and deleted_at is null`,
+        [seriesId, effectiveFrom],
+      );
+      await client.query(
+        `update app.schedule_series
+         set superseded_by = $2, updated_at = now()
+         where id = $1 and superseded_by is null`,
+        [seriesId, newSeriesId],
+      );
+      const created = await this.materializeSeries(
+        newSeriesId,
+        client as unknown as ScheduleQueryExecutor,
+      );
+      return { newSeriesId, created };
     });
-    const created = await this.materializeSeries(newSeriesId);
-    await this.audit.record({
+    await this.recordAuditSafe({
       actor,
       action: "crm.schedule_series_updated",
       entityType: "schedule_series",
@@ -772,32 +1281,70 @@ export class ScheduleService {
     from?: string,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    const stopFrom = from ?? new Date().toISOString().slice(0, 10);
+    const stopFrom = (from ?? this.moscowDate()).slice(0, 10);
+    this.assertSeriesMutationDateNotPast(stopFrom);
+    this.assertSeriesDateWithinBookingWindow(stopFrom);
     // Closing the series and detaching its future lessons must be atomic.
     await this.database.transaction(async (client) => {
+      await this.acquireScheduleSeriesLock(
+        client as unknown as ScheduleQueryExecutor,
+        seriesId,
+      );
+      const current = await client.query<{
+        id: string;
+        superseded_by: string | null;
+      }>(
+        `select id, superseded_by
+         from app.schedule_series
+         where id = $1 and deleted_at is null
+         for update`,
+        [seriesId],
+      );
+      if (!current.rows[0]) {
+        throw new NotFoundException("Серия расписания не найдена.");
+      }
+      if (current.rows[0].superseded_by) {
+        throw new ConflictException(
+          "Серия уже изменена; остановите её актуальное продолжение.",
+        );
+      }
       const result = await client.query(
         `
         update app.schedule_series
-        set valid_until = ($2::date - 1)::date,
-          deleted_at = case when valid_from >= $2::date then now() else deleted_at end,
+        set valid_until = case
+            when valid_from < $2::date then least(
+              coalesce(valid_until, ($2::date - 1)::date),
+              ($2::date - 1)::date
+            )
+            else valid_until
+          end,
+          deleted_at = case
+            when $2::date <= (now() at time zone 'Europe/Moscow')::date
+              or valid_from >= $2::date
+            then coalesce(deleted_at, now())
+            else deleted_at
+          end,
           updated_at = now()
-        where id = $1 and deleted_at is null
+        where id = $1 and deleted_at is null and superseded_by is null
       `,
         [seriesId, stopFrom],
       );
-      if (!result.rowCount) throw new NotFoundException("Серия расписания не найдена.");
+      if (!result.rowCount) {
+        throw new ConflictException("Состояние серии уже изменилось.");
+      }
       await client.query(
         `
         update app.lessons
         set deleted_at = now(), updated_at = now()
-        where series_id = $1 and series_date >= $2::date
-          and status = 'scheduled' and original_scheduled_at is null
+        where series_id = $1
+          and (scheduled_at at time zone 'Europe/Moscow')::date >= $2::date
+          and status = 'scheduled'
           and deleted_at is null
       `,
         [seriesId, stopFrom],
       );
     });
-    await this.audit.record({
+    await this.recordAuditSafe({
       actor,
       action: "crm.schedule_series_stopped",
       entityType: "schedule_series",
@@ -833,33 +1380,86 @@ export class ScheduleService {
   async updateLesson(
     actor: ActorContext,
     lessonId: string,
-    dto: UpsertLessonDto,
+    rawDto: UpsertLessonDto,
   ) {
-    await this.assertCanUpdateLesson(actor, lessonId, dto);
+    const dto = this.applyClientRef(rawDto);
+    if (dto.scheduledAt) {
+      this.assertScheduledAtWithinBookingWindow(dto.scheduledAt);
+    }
+    const replacesSubject = this.assertUnambiguousLessonSubject(dto, false);
     // Snapshot the pre-update state so we can tell a genuine RESCHEDULE
     // (time / room / teacher change) from an ordinary save (e.g. notes or
     // status edit). The UPDATE ... RETURNING below cannot surface the OLD
     // values, so we read them first. Also resolves the currently-assigned
     // teacher's user_id for the reschedule notification (KVA-158).
-    const before = await this.database.query<RescheduleSnapshotRow>(
+    const { previous, result } = await this.database.transaction(
+      async (client) => {
+        const before = await client.query<RescheduleSnapshotRow>(
       `
-        select l.teacher_id, l.room_id, l.scheduled_at,
+        select l.student_id, l.group_id, l.lead_id, l.teacher_id,
+          l.room_id, l.scheduled_at, l.duration_minutes, l.is_trial,
           tp.user_id as teacher_user_id
         from app.lessons l
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         where l.id = $1 and l.deleted_at is null
         limit 1
+        for update of l
       `,
       [lessonId],
-    );
-    const previous = before.rows[0] ?? null;
-    const result = await this.database.query<LessonRow>(
+        );
+        const previous = before.rows[0] ?? null;
+        await this.assertCanUpdateLesson(actor, lessonId, dto, previous);
+    const effectiveLeadId = replacesSubject
+      ? (dto.leadId ?? null)
+      : previous?.lead_id;
+    const effectiveIsTrial = dto.isTrial ?? previous?.is_trial;
+    if (previous) {
+      this.assertLeadLessonIsTrial(effectiveLeadId, effectiveIsTrial);
+    }
+    // Contract 2: 409 on a busy teacher/room — but ONLY when the PATCH
+    // actually touches scheduling. Teacher status/notes saves and attendance
+    // flows carry none of these fields and must stay 409-free.
+    const touchesScheduling =
+      dto.scheduledAt !== undefined ||
+      dto.teacherId !== undefined ||
+      dto.roomId !== undefined ||
+      dto.durationMinutes !== undefined ||
+      replacesSubject;
+    if (previous && touchesScheduling) {
+      const effectiveTeacherId = dto.teacherId ?? previous.teacher_id;
+      const effectiveRoomId = dto.roomId ?? previous.room_id;
+      await this.acquireScheduleLockKeys(
+        client as unknown as ScheduleQueryExecutor,
+        [
+          previous.teacher_id ? `teacher:${previous.teacher_id}` : null,
+          previous.room_id ? `room:${previous.room_id}` : null,
+          effectiveTeacherId ? `teacher:${effectiveTeacherId}` : null,
+          effectiveRoomId ? `room:${effectiveRoomId}` : null,
+        ],
+      );
+      await this.assertNoScheduleConflicts(
+        {
+          teacherId: effectiveTeacherId,
+          roomId: effectiveRoomId,
+          startsAt: dto.scheduledAt ?? previous.scheduled_at ?? new Date(),
+          durationMinutes:
+            dto.durationMinutes ?? Number(previous.duration_minutes ?? 60),
+          excludeLessonId: lessonId,
+          groupId: replacesSubject
+            ? (dto.groupId ?? null)
+            : (previous.group_id ?? null),
+          force: dto.force,
+        },
+        client as unknown as ScheduleQueryExecutor,
+      );
+    }
+        const result = await client.query<LessonRow>(
       `
         update app.lessons
-        set student_id = coalesce($2, student_id),
-          group_id = coalesce($3, group_id),
-          lead_id = coalesce($4, lead_id),
+        set student_id = case when $14::boolean then $2::uuid else student_id end,
+          group_id = case when $14::boolean then $3::uuid else group_id end,
+          lead_id = case when $14::boolean then $4::uuid else lead_id end,
           teacher_id = coalesce($5, teacher_id),
           branch_id = coalesce($6, branch_id),
           room_id = coalesce($7, room_id),
@@ -882,7 +1482,7 @@ export class ScheduleService {
         where id = $1 and deleted_at is null
         returning id, student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
           status, is_trial, notes, teacher_rate, null::uuid as student_user_id, null::uuid as teacher_user_id,
-          null::text as student_name, null::text as teacher_name, null::text as branch_name,
+          null::text as student_name, null::text as lead_name, null::text as teacher_name, null::text as branch_name,
           null::text as room_name, null::text as group_name, null::numeric as group_price_per_lesson
       `,
       [
@@ -899,7 +1499,11 @@ export class ScheduleService {
         dto.isTrial ?? null,
         dto.notes?.trim() || null,
         dto.teacherRate ?? null,
+        replacesSubject,
       ],
+        );
+        return { previous, result };
+      },
     );
     const lesson = result.rows[0];
     if (!lesson) throw new NotFoundException("Урок не найден.");
@@ -913,7 +1517,7 @@ export class ScheduleService {
       );
     }
     await this.notifyTeacherOfReschedule(lessonId, previous, lesson);
-    await this.audit.record({
+    await this.recordAuditSafe({
       actor,
       action: "crm.lesson_updated",
       entityType: "lesson",
@@ -1032,6 +1636,7 @@ export class ScheduleService {
           l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
           sp.user_id as student_user_id, tp.user_id as teacher_user_id,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
+          trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
           b.name as branch_name,
           r.name as room_name,
@@ -1040,6 +1645,7 @@ export class ScheduleService {
         from app.lessons l
         left join app.students s on s.id = l.student_id and s.deleted_at is null
         left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         left join app.branches b on b.id = l.branch_id and b.deleted_at is null
@@ -1077,7 +1683,8 @@ export class ScheduleService {
         returning id, student_id, group_id, lead_id, teacher_id, branch_id,
           room_id, scheduled_at, duration_minutes, status, is_trial, notes,
           null::uuid as student_user_id, null::uuid as teacher_user_id,
-          null::text as student_name, null::text as teacher_name,
+          null::text as student_name, null::text as lead_name,
+          null::text as teacher_name,
           null::text as branch_name, null::text as room_name,
           null::text as group_name, null::numeric as group_price_per_lesson
       `,
@@ -1090,7 +1697,7 @@ export class ScheduleService {
       "delete from app.lesson_reminders where lesson_id = $1",
       [lessonId],
     );
-    await this.audit.record({
+    await this.recordAuditSafe({
       actor,
       action: "crm.lesson_deleted",
       entityType: "lesson",
@@ -1133,7 +1740,7 @@ export class ScheduleService {
       [dto.lessonIds, rate],
     );
     const updated = result.rows.map((row) => row.id);
-    await this.audit.record({
+    await this.recordAuditSafe({
       actor,
       action: "crm.lessons_teacher_rate_bulk_set",
       entityType: "lesson",
@@ -1153,6 +1760,7 @@ export class ScheduleService {
     actor: ActorContext,
     lessonId: string,
     dto: UpsertLessonDto,
+    lockedSnapshot?: RescheduleSnapshotRow | null,
   ) {
     if (isManagerOrAdminRole(actor.role)) return;
     if (actor.role !== "teacher") {
@@ -1180,20 +1788,24 @@ export class ScheduleService {
       return;
     }
 
-    const result = await this.database.query<{
-      teacher_user_id: string | null;
-    }>(
-      `
-        select tp.user_id as teacher_user_id
-        from app.lessons l
-        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
-        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        where l.id = $1 and l.deleted_at is null
-        limit 1
-      `,
-      [lessonId],
-    );
-    const row = result.rows[0];
+    let row: { teacher_user_id: string | null } | null | undefined =
+      lockedSnapshot;
+    if (lockedSnapshot === undefined) {
+      const result = await this.database.query<{
+        teacher_user_id: string | null;
+      }>(
+        `
+          select tp.user_id as teacher_user_id
+          from app.lessons l
+          left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+          left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+          where l.id = $1 and l.deleted_at is null
+          limit 1
+        `,
+        [lessonId],
+      );
+      row = result.rows[0] ?? null;
+    }
     if (!row) throw new NotFoundException("Урок не найден.");
     if (row.teacher_user_id === actor.userId) return;
     throw new NotFoundException("Урок не найден.");
@@ -1245,6 +1857,66 @@ export class ScheduleService {
       groups.set(key, group);
     }
     return Array.from(groups.values());
+  }
+
+  private assertSeriesDateWithinBookingWindow(value: string): void {
+    if (
+      value.slice(0, 10) >
+      this.moscowDate(ScheduleService.MAX_BOOKING_AHEAD_DAYS)
+    ) {
+      throw new BadRequestException(
+        `Schedule date cannot be more than ${ScheduleService.MAX_BOOKING_AHEAD_DAYS} days ahead.`,
+      );
+    }
+  }
+
+  private assertSeriesMutationDateNotPast(value: string): void {
+    if (value.slice(0, 10) < this.moscowDate()) {
+      throw new BadRequestException(
+        "Past schedule-series occurrences cannot be changed.",
+      );
+    }
+  }
+
+  private assertScheduledAtWithinBookingWindow(value: string): void {
+    const scheduledAt = new Date(value);
+    const upperBound =
+      Date.now() +
+      (ScheduleService.MAX_BOOKING_AHEAD_DAYS + 1) * 24 * 60 * 60 * 1000;
+    if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() > upperBound) {
+      throw new BadRequestException(
+        `Lesson cannot be scheduled more than ${ScheduleService.MAX_BOOKING_AHEAD_DAYS} days ahead.`,
+      );
+    }
+  }
+
+  /** Business dates in schedule_series/series_date are Europe/Moscow dates. */
+  private moscowDate(offsetDays = 0): string {
+    // Moscow has no DST, but Intl keeps this correct if the runtime timezone is
+    // UTC or the server is ever moved. Add whole instants before formatting so
+    // 00:00-02:59 MSK never falls back to the previous UTC calendar date.
+    const date = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Moscow",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const value = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((part) => part.type === type)?.value;
+    return `${value("year")}-${value("month")}-${value("day")}`;
+  }
+
+  private async recordAuditSafe(event: AuditEventInput): Promise<void> {
+    try {
+      await this.audit.record(event);
+    } catch (error) {
+      // Schedule writes have already committed when this helper is called.
+      // Do not return a false 5xx that makes clients retry a persisted lesson.
+      this.logger.error(
+        `Audit write failed for ${event.action}/${event.entityId ?? "batch"}: ${String(error)}`,
+      );
+    }
   }
 
 }

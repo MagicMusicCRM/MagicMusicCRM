@@ -297,10 +297,12 @@ class ScheduleMonthView extends StatelessWidget {
     final time = start == null
         ? ''
         : '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} ';
+    // Пробное по лиду: student_id/group_name пусты, имя приходит в lead_name.
+    final leadName = lesson['lead_name']?.toString().trim() ?? '';
     final name =
         studentNames[lesson['student_id']?.toString()] ??
         lesson['group_name']?.toString() ??
-        'Занятие';
+        (leadName.isNotEmpty ? leadName : 'Занятие');
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),

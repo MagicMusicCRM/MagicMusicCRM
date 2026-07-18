@@ -1,6 +1,5 @@
 import {
   IsEmail,
-  IsIn,
   IsObject,
   IsOptional,
   IsString,
@@ -29,8 +28,9 @@ export class UpdateStaffDto {
   email?: string;
 
   @IsOptional()
-  @IsIn(["manager", "admin", "system_admin"])
-  role?: "manager" | "admin" | "system_admin";
+  @IsString()
+  @MaxLength(80)
+  role?: string;
 
   @IsOptional()
   @IsString()

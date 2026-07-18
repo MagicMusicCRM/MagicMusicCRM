@@ -8,7 +8,9 @@ extension _ClientCardTabsA on _ClientCardState {
 
   String? get _blacklistReason {
     final fromStudent = _student?['blacklist_reason']?.toString();
-    if (fromStudent != null && fromStudent.trim().isNotEmpty) return fromStudent;
+    if (fromStudent != null && fromStudent.trim().isNotEmpty) {
+      return fromStudent;
+    }
     final fromLead = _leadData['blacklist_reason']?.toString();
     if (fromLead != null && fromLead.trim().isNotEmpty) return fromLead;
     return null;
@@ -24,7 +26,12 @@ extension _ClientCardTabsA on _ClientCardState {
     final reason = _blacklistReason;
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(AppSpace.xl, 0, AppSpace.xl, AppSpace.md),
+      margin: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        0,
+        AppSpace.xl,
+        AppSpace.md,
+      ),
       padding: const EdgeInsets.all(AppSpace.md),
       decoration: BoxDecoration(
         color: AppTheme.danger.withValues(alpha: 0.10),
@@ -279,6 +286,20 @@ extension _ClientCardTabsA on _ClientCardState {
                 icon: const Icon(Icons.link_rounded, size: 18),
                 label: const Text('Прикрепить к ученику'),
               ),
+            // #6: вместо записи на пробное из карточки — переход в расписание
+            // (на ближайшее занятие клиента, иначе на сегодня).
+            OutlinedButton.icon(
+              onPressed: _saving || _converting ? null : _openScheduleFromCard,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: cs.onSurface,
+                side: BorderSide(color: cs.outlineVariant),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+              ),
+              icon: const Icon(Icons.calendar_month_rounded, size: 18),
+              label: const Text('Открыть в расписании'),
+            ),
             TextButton(
               onPressed: _saving || _converting ? null : _handleClose,
               style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
@@ -391,12 +412,15 @@ extension _ClientCardTabsA on _ClientCardState {
               includeKeys: _ClientCardState._commonClientCustomFieldKeys,
               excludedKeys: _ClientCardState._customKeysWithDedicatedEditor,
             ),
+            // #7: «Ответственный» — пикер по справочнику сотрудников. A lead
+            // writes canonical assignedTo; a student keeps compatible custom_data.
+            _buildResponsiblePicker(cs, _isStudent ? 'students' : 'leads'),
             // Возраст: поле ввода, пока нет даты рождения, иначе — посчитанное
             // сервером значение только на просмотр.
             _buildAgeCustomField(cs, _isStudent ? 'students' : 'leads'),
-            // KVA-234: мультидисциплины чипами + список контактных лиц.
+            // KVA-234: мультидисциплины чипами. Контактные лица переехали на
+            // вкладку «Семья» (#14) — здесь они дублировали её.
             _buildDisciplinesChips(cs, _isStudent ? 'students' : 'leads'),
-            _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),
             // Чёрный список — у обеих половин карточки, а не только у ученика:
             // аккаунт клиента цепляется к любой из них.
             _buildBlacklistToggle(cs),
@@ -485,7 +509,9 @@ extension _ClientCardTabsA on _ClientCardState {
           // Дата обращения ученика (✔ решение владельца 16.07: поле живёт на
           // стороне students). У импортированных 3105 учеников она уже лежала
           // в custom_data.addressDate — просто её никто не показывал.
-          if (_mode.hasStudentHalf && !_mode.hasLeadHalf && _student != null) ...[
+          if (_mode.hasStudentHalf &&
+              !_mode.hasLeadHalf &&
+              _student != null) ...[
             if (_appealAtLabel(_student!) != null) ...[
               const SizedBox(height: AppSpace.lg),
               _buildInfoCard('Обращение', [
@@ -495,6 +521,14 @@ extension _ClientCardTabsA on _ClientCardState {
                   value: _appealAtLabel(_student!)!,
                   hint: _appealAtSourceLabel(_student!),
                 ),
+                // #9: «Дата визита» из бывшей секции «Дополнительно» — теперь
+                // строкой в «Обращении», рядом с датой обращения.
+                if (_visitDateLabel() != null)
+                  _InfoRow(
+                    icon: Icons.event_available_outlined,
+                    label: 'Дата визита',
+                    value: _visitDateLabel()!,
+                  ),
               ]),
             ],
           ],
@@ -509,25 +543,15 @@ extension _ClientCardTabsA on _ClientCardState {
                   value: _leadCreatedAtLabel()!,
                   hint: _appealAtSourceLabel(_leadData),
                 ),
+                if (_visitDateLabel() != null)
+                  _InfoRow(
+                    icon: Icons.event_available_outlined,
+                    label: 'Дата визита',
+                    value: _visitDateLabel()!,
+                  ),
               ]),
             ],
-            const SizedBox(height: AppSpace.lg),
-            _sectionTitle('Заметки'),
-            TextField(
-              controller: _notesCtrl,
-              maxLines: 3,
-              decoration: _inputDecoration(
-                cs,
-                hint: 'Общие примечания по клиенту...',
-              ),
-            ),
           ],
-
-          // Данные из HolliHop, которым нет отдельной строки/пикера, но которые
-          // залиты в custom_data (ответственный, статус HH, рекл. источник,
-          // тип/дата обращения, контакты родителей, UTM, тип лида). Секция сама
-          // прячется, если ни одно поле не заполнено.
-          _buildExtraInfoCard(cs),
 
           const SizedBox(height: AppSpace.lg),
           ClientAppUserPanel(
@@ -535,9 +559,15 @@ extension _ClientCardTabsA on _ClientCardState {
             entityId: _mode.hasStudentHalf ? _studentId : _leadId,
           ),
 
-          const SizedBox(height: AppSpace.lg),
-          _sectionTitle('Связи и активность'),
-          _buildAggregateCard(cs, includeTasks: false),
+          // Агрегат «Связи и активность» — это активность ЛИДА (пробные,
+          // похожие лиды). У ученика без лид-половины лид-карточка не грузится
+          // вовсе (_loadingCard остался бы true), и секция крутила бы спиннер
+          // вечно — поэтому она только при наличии лид-половины.
+          if (_mode.hasLeadHalf) ...[
+            const SizedBox(height: AppSpace.lg),
+            _sectionTitle('Связи и активность'),
+            _buildAggregateCard(cs, includeTasks: false),
+          ],
 
           if (_mode.hasLeadHalf &&
               (_loadingDuplicates || duplicateCandidates.isNotEmpty)) ...[
@@ -612,40 +642,10 @@ extension _ClientCardTabsA on _ClientCardState {
     return dt != null ? DateFormat('d MMM yyyy', 'ru').format(dt) : raw;
   }
 
-  String? _utmLabel() {
-    final parts = [
-      _hhField('utmSource'),
-      _hhField('utmMedium'),
-      _hhField('utmCampaign'),
-    ].whereType<String>().toList();
-    return parts.isEmpty ? null : parts.join(' / ');
-  }
-
-  Widget _buildExtraInfoCard(ColorScheme cs) {
-    final rows = <Widget>[];
-    void add(IconData icon, String label, String? value) {
-      if (value == null || value.trim().isEmpty) return;
-      rows.add(_InfoRow(icon: icon, label: label, value: value));
-    }
-
-    add(Icons.person_pin_outlined, 'Ответственный', _responsibleLabel());
-    add(Icons.flag_outlined, 'Статус (HolliHop)', _hhField('statusName'));
-    add(Icons.campaign_outlined, 'Рекламный источник', _hhField('adSource'));
-    add(Icons.call_outlined, 'Тип обращения', _hhField('addressType'));
-    add(Icons.event_available_outlined, 'Дата визита', _visitDateLabel());
-    add(Icons.family_restroom_outlined, 'Контактные лица', _hhField('contacts'));
-    // Тип лида / UTM — только для лид-стороны (у ученика их нет).
-    if (_mode.hasLeadHalf) {
-      add(Icons.sell_outlined, 'Тип лида', _hhField('leadType'));
-      add(Icons.link_outlined, 'UTM', _utmLabel());
-    }
-
-    if (rows.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpace.lg),
-      child: _buildInfoCard('Дополнительно', rows),
-    );
-  }
+  // Секция «Дополнительно» распущена (#9): «Ответственный» стал пикером (#7),
+  // статус HolliHop — подписью у пикеров статуса, «Тип обращения» читается
+  // алиасом addressType в общей форме, «Дата визита» — строкой в «Обращении»,
+  // «Контактные лица» — на вкладке «Семья» (#14). «Тип лида» и UTM удалены.
 
   // ── Tab: Задачи ──────────────────────────────────────────────────────────
   Widget _buildTasksTab(ColorScheme cs) {
@@ -680,14 +680,9 @@ extension _ClientCardTabsA on _ClientCardState {
           else if (tasks.isEmpty)
             _emptyHint(cs, 'Открытых задач нет')
           else
-            ...tasks.map(
-              (row) => _entityTile(
-                cs,
-                title: row['title']?.toString() ?? 'Задача',
-                subtitle: _formatStatus(row['status']),
-                leading: Icons.task_alt_rounded,
-              ),
-            ),
+            // #12: задача раскрывается по тапу — полный текст, автор,
+            // исполнитель, срок.
+            ...tasks.map((row) => _TaskTile(task: row)),
         ],
       ),
     );
@@ -795,24 +790,27 @@ extension _ClientCardTabsA on _ClientCardState {
     }
   }
 
-  /// «Записать на пробный урок» прямо из карточки лида — тот же диалог, что в
-  /// меню канбан-доски (leads_widget._scheduleTrial).
-  Future<void> _scheduleTrialFromCard() async {
-    await bookTrialLesson(
-      context,
-      ref,
-      leadId: _leadId,
-      leadName: _leadData['name']?.toString() ?? '',
-      feedback: (message, {detail, ok = false}) => MagicToast.show(
-        context,
-        message,
-        detail: detail,
-        type: ok ? MagicToastType.success : MagicToastType.danger,
-      ),
-      onBooked: () async {
-        _dirty = true;
-        await _fetchCard();
-      },
-    );
+  /// «Открыть в расписании» (#6): фокусирует расписание дашборда на ближайшем
+  /// предстоящем занятии клиента, а если занятий нет — просто на сегодняшнем
+  /// дне, затем закрывает карточку и уводит на /admin (вкладка «Расписание»).
+  ///
+  /// Тот же механизм, что у тапа по занятию ([_openScheduleForLesson]): один
+  /// one-shot [scheduleNavigationProvider] + [crmNavigationRequestProvider].
+  void _openScheduleFromCard() {
+    final now = DateTime.now();
+    DateTime? bestDt;
+    String bestId = '';
+    for (final l in _lessons) {
+      final dt = DateTime.tryParse(l.scheduledAt ?? '');
+      final id = l.id;
+      if (dt == null || id == null || id.isEmpty || dt.isBefore(now)) continue;
+      if (bestDt == null || dt.isBefore(bestDt)) {
+        bestDt = dt;
+        bestId = id;
+      }
+    }
+    // Пустой highlight-id — валидная деградация: расписание откроет день, а
+    // подсвечивать будет нечего (id не совпадёт ни с одним занятием).
+    _openScheduleForLesson(bestDt ?? now, bestId);
   }
 }

@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
+  IsIn,
   IsInt,
   IsOptional,
   IsUUID,
@@ -37,4 +38,11 @@ export class LessonQuery {
   @Min(1)
   @Max(200)
   limit?: number;
+
+  // Sort direction for scheduled_at. Default 'asc' (upcoming feeds). The
+  // client «История» view passes 'desc' so long-standing students see their
+  // RECENT lessons, not the 50 oldest imported HolliHop rows.
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  order?: 'asc' | 'desc';
 }

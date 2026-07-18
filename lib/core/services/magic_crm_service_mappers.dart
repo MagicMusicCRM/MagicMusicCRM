@@ -25,6 +25,7 @@ Map<String, dynamic> _legacyLeadBoard(Map<String, dynamic> item) {
       return {
         ...status,
         'total_count': column['totalCount'] ?? rawItems.length,
+        'next_cursor': column['nextCursor'],
         'items': rawItems
             .whereType<Map<String, dynamic>>()
             .map(_legacyLeadBoardItem)
@@ -469,6 +470,8 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
     'paid_amount': item['paidAmount'],
     'student_name': item['studentName'],
     'teacher_name': item['teacherName'],
+    // Пробное занятие лида: ученика/группы нет, подписывается именем лида.
+    'lead_name': item['leadName'],
     'branch_name': item['branchName'],
     'room_name': item['roomName'],
     'group_name': item['groupName'],

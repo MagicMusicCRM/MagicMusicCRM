@@ -24,8 +24,9 @@ import 'package:magic_music_crm/core/models/student_balance.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/models/subscription.dart';
 import 'package:magic_music_crm/core/models/lesson.dart';
-import '../trial_lesson_booking.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'client_card_aggregation.dart';
+import 'client_card_staff_api.dart';
 import 'client_card_dialogs.dart';
 import 'client_card_sheets.dart';
 import 'client_card_ui.dart';
@@ -68,7 +69,6 @@ class ClientCard extends ConsumerStatefulWidget {
 class _ClientCardState extends ConsumerState<ClientCard>
     with SingleTickerProviderStateMixin {
   late Map<String, dynamic> _leadData;
-  late TextEditingController _notesCtrl;
   late TextEditingController _commentCtrl;
   // Тип нового комментария (0037): admin_comment | teacher_note. Переключатель
   // виден staff-ролям и только когда комментарий уйдёт на ученик-половину.
@@ -194,6 +194,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // never recreate the field (which would drop cursor/focus/IME state), while
   // a server refresh still re-seeds initialValue.
   int _editorEpoch = 0;
+  // Distinguish an untouched empty responsible from an explicit user clear.
+  // The former lets the backend auto-claim on ordinary work; only the latter
+  // sends clearAssignedTo/clearResponsible.
+  bool _leadResponsibleChanged = false;
+  bool _studentResponsibleChanged = false;
 
   /// Бан применяется своим запросом, а не «Сохранить» вместе с полями карточки
   /// — на время запроса тумблер заперт, чтобы двойной тап не отправил бан и
@@ -235,8 +240,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   List<CrmCustomFieldDefinition> _customFieldSchema = const [];
   // KVA-234: справочник дисциплин (GET /crm/disciplines) для мультивыбора.
   List<Map<String, dynamic>> _disciplineOptions = const [];
-  // KVA-234: заявки лида (app.lead_applications) — секция «Заявки».
-  List<Map<String, dynamic>> _leadApplications = const [];
 
   static const Set<String> _systemOnlyCustomFieldKeys = {
     'hollihopid',
@@ -256,7 +259,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'gender',
     'birthday',
     'age',
-    'source',
+    // #8: «Источник заявки» ('source') удалён — на проде он пуст у всех, а
+    // настоящие данные выгрузки лежат в 'adSource' («Рекламный источник»).
     'adSource',
     'requestType',
     'learningGoal',
@@ -265,6 +269,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'category',
     'lessonType',
     'responsible',
+    // #7: id выбранного ответственного едет рядом с именем и в converted-режиме
+    // зеркалится между половинами так же, как само имя.
+    'responsibleUserId',
     'preferredSchedule',
     'contactPersonName',
     'contactPersonRelation',
@@ -292,6 +299,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'contactPersonPhone',
     'contactPersonEmail',
     'discipline',
+    // #7: «Ответственный» — не свободный текст, а выбор сотрудника из
+    // справочника (GET /api/admin/staff); своя строка-пикер.
+    'responsible',
+    'responsibleUserId',
   };
 
   // `blacklisted` здесь больше нет: ✔ решение владельца 17.07 сделало чёрный
@@ -316,9 +327,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   void initState() {
     super.initState();
     _leadData = Map<String, dynamic>.from(widget.lead);
-    _notesCtrl = TextEditingController(
-      text: _leadData['notes']?.toString() ?? '',
-    );
     _commentCtrl = TextEditingController();
     if (widget.entityType == 'student') {
       // Opened as a student. Start in studentOnly; once the student loads we
@@ -361,7 +369,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   @override
   void dispose() {
-    _notesCtrl.dispose();
     _commentCtrl.dispose();
     super.dispose();
   }

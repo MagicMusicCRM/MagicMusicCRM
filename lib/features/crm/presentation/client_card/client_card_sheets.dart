@@ -132,13 +132,9 @@ class SubscriptionPackageTile extends StatelessWidget {
   }
 }
 
-// `showScheduleTrialDialog` удалён (✔ владелец 17.07: «при назначении пробного
-// это просто готовый пресет под создание нового занятия — можно не дублировать
-// функционал, а переиспользовать создание нового занятия»). Это была отдельная
-// форма на четыре поля: без филиала, длительности, ставки и проверки конфликта
-// аудитории. Аудитории в ней не фильтровались по филиалу ровно потому, что
-// филиала в ней не было. Теперь пробное открывает
-// `CreateLessonDialog.showTrialPreset` — см. trial_lesson_booking.dart.
+// Booking dialogs intentionally do not live in a client card. Card/kanban
+// actions navigate to the Schedule tab; Schedule alone owns CreateLessonDialog
+// and its branch/room/teacher conflict validation.
 
 /// Collected values from [showAddTaskSheet].
 typedef TaskInput = ({String title, DateTime? due, String? assignedTo});

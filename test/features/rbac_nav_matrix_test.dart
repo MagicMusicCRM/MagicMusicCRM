@@ -9,15 +9,17 @@ import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_
 /// separately by backend policy.
 void main() {
   group('crmHasManagerAccess — operational CRM access', () {
-    test('admin, manager, director and system_admin have operational access',
-        () {
-      expect(crmHasManagerAccess('manager'), isTrue);
-      expect(crmHasManagerAccess('director'), isTrue);
-      expect(crmHasManagerAccess('system_admin'), isTrue);
-      expect(crmHasManagerAccess('admin'), isTrue);
-      expect(crmHasManagerAccess('teacher'), isFalse);
-      expect(crmHasManagerAccess('client'), isFalse);
-    });
+    test(
+      'admin, manager, director and system_admin have operational access',
+      () {
+        expect(crmHasManagerAccess('manager'), isTrue);
+        expect(crmHasManagerAccess('director'), isTrue);
+        expect(crmHasManagerAccess('system_admin'), isTrue);
+        expect(crmHasManagerAccess('admin'), isTrue);
+        expect(crmHasManagerAccess('teacher'), isFalse);
+        expect(crmHasManagerAccess('client'), isFalse);
+      },
+    );
   });
 
   group('crmHasSchoolFinanceAccess — общешкольные финансы (KVA-239)', () {
@@ -60,9 +62,10 @@ void main() {
   });
 
   group('crmVisibleTabs — per-role destination matrix', () {
-    test('Администратор: operational CRM без раздела «Финансы» (5)', () {
-      expect(crmVisibleTabs('admin', isDesktop: true), [0, 1, 2, 3, 4, 6, 7]);
-      expect(crmVisibleTabs('admin', isDesktop: false), [0, 1, 2, 3, 4]);
+    test('Администратор (#17): «Задачи» (6) вместо «Обзора» (1) сразу после '
+        'Чата, без лишних разделов', () {
+      expect(crmVisibleTabs('admin', isDesktop: true), [0, 6, 2, 3]);
+      expect(crmVisibleTabs('admin', isDesktop: false), [0, 6, 2, 3]);
     });
 
     test('Управляющий: operational CRM без раздела «Финансы» (5)', () {
@@ -71,15 +74,20 @@ void main() {
     });
 
     test('Директор: полный набор, включая «Финансы» (5)', () {
-      expect(
-        crmVisibleTabs('director', isDesktop: true),
-        [0, 1, 2, 3, 4, 5, 6, 7],
-      );
+      expect(crmVisibleTabs('director', isDesktop: true), [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+      ]);
       expect(crmVisibleTabs('director', isDesktop: false), [0, 1, 2, 3, 4]);
     });
 
-    test('Администратор системы == Директор (superuser keeps full access)',
-        () {
+    test('Администратор системы == Директор (superuser keeps full access)', () {
       expect(
         crmVisibleTabs('system_admin', isDesktop: true),
         crmVisibleTabs('director', isDesktop: true),
@@ -96,22 +104,34 @@ void main() {
     });
 
     test(
-        'operational tabs are visible to admin/manager/director/system_admin '
-        'on desktop', () {
-      for (final tab in kManagerOnlyCrmTabs) {
-        expect(crmVisibleTabs('admin', isDesktop: true), contains(tab));
-        expect(crmVisibleTabs('manager', isDesktop: true), contains(tab));
-        expect(crmVisibleTabs('director', isDesktop: true), contains(tab));
-        expect(crmVisibleTabs('system_admin', isDesktop: true), contains(tab));
-      }
+      'manager-tier operational tabs are visible to manager+ on desktop',
+      () {
+        for (final tab in kManagerOnlyCrmTabs) {
+          expect(crmVisibleTabs('manager', isDesktop: true), contains(tab));
+          expect(crmVisibleTabs('director', isDesktop: true), contains(tab));
+          expect(
+            crmVisibleTabs('system_admin', isDesktop: true),
+            contains(tab),
+          );
+        }
+      },
+    );
+
+    test('«Обзор» (1) скрыт у admin на любой ширине, «Задачи» (6) видны', () {
+      expect(crmVisibleTabs('admin', isDesktop: true), isNot(contains(1)));
+      expect(crmVisibleTabs('admin', isDesktop: false), isNot(contains(1)));
+      expect(crmVisibleTabs('admin', isDesktop: true), contains(6));
+      expect(crmVisibleTabs('admin', isDesktop: false), contains(6));
     });
 
-    test('«Финансы» (5) скрыт у manager/admin, виден director/system_admin',
-        () {
-      expect(crmVisibleTabs('manager', isDesktop: true), isNot(contains(5)));
-      expect(crmVisibleTabs('admin', isDesktop: true), isNot(contains(5)));
-      expect(crmVisibleTabs('director', isDesktop: true), contains(5));
-      expect(crmVisibleTabs('system_admin', isDesktop: true), contains(5));
-    });
+    test(
+      '«Финансы» (5) скрыт у manager/admin, виден director/system_admin',
+      () {
+        expect(crmVisibleTabs('manager', isDesktop: true), isNot(contains(5)));
+        expect(crmVisibleTabs('admin', isDesktop: true), isNot(contains(5)));
+        expect(crmVisibleTabs('director', isDesktop: true), contains(5));
+        expect(crmVisibleTabs('system_admin', isDesktop: true), contains(5));
+      },
+    );
   });
 }

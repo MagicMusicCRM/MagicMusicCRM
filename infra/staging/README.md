@@ -9,13 +9,13 @@ external backups are added after the real Moscow server is available.
 Create an `A` record:
 
 ```text
-api.phantom-net.ru -> <server IPv4>
+api.magicmusiccrm.ru -> <server IPv4>
 ```
 
 Wait until both commands resolve to the new server:
 
 ```bash
-dig +short api.phantom-net.ru
+dig +short api.magicmusiccrm.ru
 curl -4 ifconfig.me
 ```
 
@@ -58,7 +58,7 @@ docker compose logs -f api
 ## Smoke
 
 ```bash
-curl -fsS https://api.phantom-net.ru/api/health
+curl -fsS https://api.magicmusiccrm.ru/api/health
 curl -fsS http://127.0.0.1:3000/api/health
 ```
 

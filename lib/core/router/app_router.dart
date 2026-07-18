@@ -319,15 +319,58 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class _AppGateLoadingScreen extends ConsumerWidget {
+class _AppGateLoadingScreen extends ConsumerStatefulWidget {
   const _AppGateLoadingScreen();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AppGateLoadingScreen> createState() =>
+      _AppGateLoadingScreenState();
+}
+
+class _AppGateLoadingScreenState extends ConsumerState<_AppGateLoadingScreen> {
+  Timer? _retryTimer;
+  int _retryAttempt = 0;
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Auto-retry with exponential backoff (5 → 10 → 20 → 40 → 60 s cap): a
+  /// flaky mobile start must not dead-end on a screen whose only recovery is a
+  /// manual «Повторить» tap. The manual button stays and retries immediately.
+  void _scheduleAutoRetry() {
+    if (_retryTimer != null) return;
+    final seconds = (5 << (_retryAttempt > 4 ? 4 : _retryAttempt)).clamp(5, 60);
+    _retryTimer = Timer(Duration(seconds: seconds), () {
+      _retryTimer = null;
+      _retryAttempt++;
+      if (!mounted) return;
+      ref.invalidate(releaseGateStatusProvider);
+    });
+  }
+
+  void _cancelAutoRetry({required bool resetBackoff}) {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    if (resetBackoff) _retryAttempt = 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final gateState = ref.watch(_routeGateStateProvider);
     final isGateError =
         gateState.phase == _RouteGatePhase.gateError &&
         !_isUnauthorizedRouteError(gateState.error);
+
+    if (isGateError) {
+      _scheduleAutoRetry();
+    } else {
+      // Loading (a retry in flight) keeps the backoff position; a real success
+      // routes away from this screen and resets it via dispose anyway.
+      _cancelAutoRetry(resetBackoff: gateState.phase == _RouteGatePhase.ready);
+    }
 
     return Scaffold(
       backgroundColor: AppColor.bg,
@@ -397,8 +440,10 @@ class _AppGateLoadingScreen extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(
                               AppRadius.control,
                             ),
-                            onTap: () =>
-                                ref.invalidate(releaseGateStatusProvider),
+                            onTap: () {
+                              _cancelAutoRetry(resetBackoff: true);
+                              ref.invalidate(releaseGateStatusProvider);
+                            },
                             child: const Center(
                               child: Text(
                                 'Повторить',

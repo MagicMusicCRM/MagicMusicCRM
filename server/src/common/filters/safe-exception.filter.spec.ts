@@ -23,7 +23,10 @@ function makeHost(path = '/api/x', method = 'GET') {
 }
 
 describe('SafeExceptionFilter Sentry reporting', () => {
-  const filter = new SafeExceptionFilter({ error: jest.fn() } as never);
+  const filter = new SafeExceptionFilter({
+    error: jest.fn(),
+    warn: jest.fn(),
+  } as never);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -48,7 +51,7 @@ describe('SafeExceptionFilter diagnostics', () => {
   // DB check violation is legible in the logs instead of opaque.
   it('logs the error name, message and stack for an unhandled 500', () => {
     const error = jest.fn();
-    const filter = new SafeExceptionFilter({ error } as never);
+    const filter = new SafeExceptionFilter({ error, warn: jest.fn() } as never);
     const { host } = makeHost('/api/messenger/messages/x', 'DELETE');
 
     class DatabaseError extends Error {}
@@ -71,9 +74,18 @@ describe('SafeExceptionFilter diagnostics', () => {
 
   it('does not log a body for a handled 4xx (only 500s are unhandled)', () => {
     const error = jest.fn();
-    const filter = new SafeExceptionFilter({ error } as never);
+    const warn = jest.fn();
+    const filter = new SafeExceptionFilter({ error, warn } as never);
     const { host } = makeHost();
     filter.catch(new BadRequestException('bad'), host);
     expect(error).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Request rejected',
+        status: HttpStatus.BAD_REQUEST,
+        detail: 'bad'
+      }),
+      'SafeExceptionFilter'
+    );
   });
 });

@@ -1,7 +1,7 @@
 # Android Real-Device Staging Smoke
 
 Use this runbook when a stable Android device is connected and staging smoke can
-mutate disposable test data on `https://api.phantom-net.ru/api`.
+mutate disposable test data on `https://api.magicmusiccrm.ru/api`.
 
 ## Preconditions
 
@@ -12,7 +12,7 @@ mutate disposable test data on `https://api.phantom-net.ru/api`.
 - Build from the current working tree:
 
 ```powershell
-flutter build apk --debug --dart-define=MAGIC_API_BASE_URL=https://api.phantom-net.ru/api
+flutter build apk --debug --dart-define=MAGIC_API_BASE_URL=https://api.magicmusiccrm.ru/api
 ```
 
 ## Automated Helper

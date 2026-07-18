@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:intl/intl.dart';
+
+/// Итог предсейв-проверки занятости (контракт 1): продолжать, продолжать с
+/// `force: true` (админ подтвердил «Всё равно назначить») или отменить.
+enum _ConflictDecision { proceed, force, cancel }
 
 class CreateLessonDialog extends ConsumerStatefulWidget {
   final DateTime? initialDate;
@@ -67,27 +76,6 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     );
   }
 
-  /// Пресет «Пробное занятие»: тот же диалог, что и «Новое занятие», но с
-  /// предзаполненными полями по логике пробного.
-  ///
-  /// Раньше пробное было отдельным окном (`showScheduleTrialDialog`) на четыре
-  /// поля — без филиала, а аудитории в нём не фильтровались по филиалу, потому
-  /// что фильтровать было не по чему. Здесь всё это уже есть.
-  static Future<bool?> showTrialPreset(
-    BuildContext context, {
-    required String leadId,
-    required String leadName,
-  }) {
-    return show(
-      context,
-      leadId: leadId,
-      leadName: leadName,
-      initialIsTrial: true,
-      // Завтра в 10:00 — то же умолчание, что было у прежнего окна пробного.
-      initialDate: DateTime.now().add(const Duration(days: 1)),
-    );
-  }
-
   @override
   ConsumerState<CreateLessonDialog> createState() => _CreateLessonDialogState();
 }
@@ -105,6 +93,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   String? _selectedTeacherId;
   String? _selectedGroupId;
   String? _selectedStudentId;
+  // Лид, выбранный прямо в диалоге (из расписания, а не через пресет карточки).
+  // Лид приходит только на пробное, поэтому выбор лида форсит _isTrial.
+  String? _selectedLeadId;
+  String? _selectedLeadName;
+  List<Map<String, dynamic>> _leads = [];
+  bool _leadsLoaded = false;
   String? _selectedBranchId;
   String? _selectedRoomId;
   DateTime _selectedDate = DateTime.now();
@@ -124,9 +118,23 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   /// Занятие вешается на лида (пресет пробного), а не на ученика/группу.
   bool get _isLeadLesson => widget.leadId != null;
 
+  /// Редактируется существующее занятие лида: перевесить его здесь не на кого,
+  /// показываем лида строкой только для чтения (сервер сохраняет привязку).
+  bool get _isEditingLeadLesson => _isEdit && widget.lesson?['lead_id'] != null;
+
+  /// Кому разрешена кнопка «Всё равно назначить» при конфликте (admin+).
+  bool get _canForceConflicts {
+    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    return kScheduleForceRoles.contains(role);
+  }
+
   @override
   void initState() {
     super.initState();
+    // Прогреваем статус роли: к моменту показа диалога конфликтов
+    // releaseGateStatusProvider уже должен быть разрешён, иначе admin+ не
+    // увидит кнопку «Всё равно назначить» при первом же конфликте.
+    ref.read(releaseGateStatusProvider);
     _isTrial = widget.initialIsTrial;
     if (widget.initialDate != null) {
       _selectedDate = widget.initialDate!;
@@ -239,9 +247,14 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   }
 
   Future<void> _save() async {
-    // Занятие всегда чьё-то: группы, ученика или — у пробного — лида.
+    // Занятие всегда чьё-то: группы, ученика или — у пробного — лида (пресет
+    // из карточки, выбор в диалоге или уже привязанный при редактировании).
     final hasSubject =
-        _isLeadLesson || _selectedGroupId != null || _selectedStudentId != null;
+        _isLeadLesson ||
+        _isEditingLeadLesson ||
+        _selectedGroupId != null ||
+        _selectedStudentId != null ||
+        _selectedLeadId != null;
     if (_selectedTeacherId == null ||
         !hasSubject ||
         _selectedBranchId == null) {
@@ -267,55 +280,47 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
       final scheduledAt = moscowTime.toIso8601String();
 
-      // KVA-154: pre-save soft conflict check. Ask the backend whether the
-      // chosen room is free at this slot; if it reports a busy/overlapping room
-      // we surface a confirmable warning instead of silently creating a clashing
-      // lesson. This is a soft warn — the manager may still proceed.
-      final proceed = await _confirmIfConflicting(
+      // Контракт 1: предсейв-проверка «занят ли педагог/аудитория». При
+      // конфликте — блок со списком (кто/когда/где); «Всё равно назначить»
+      // доступно только admin+ и уходит на сервер с force: true.
+      final decision = await _checkConflictsBeforeSave(
         slotStartUtc: moscowTime,
       );
-      if (!proceed) {
+      if (decision == _ConflictDecision.cancel) {
         if (mounted) setState(() => _saving = false);
         return;
       }
 
-      if (_isEdit) {
-        await _crm.updateLesson(
-          widget.lesson!['id'].toString(),
-          teacherId: _selectedTeacherId,
-          groupId: _selectedGroupId,
-          studentId: _selectedStudentId,
-          branchId: _selectedBranchId,
-          roomId: _selectedRoomId,
-          scheduledAt: scheduledAt,
-          durationMinutes: _durationMinutes,
-          teacherRate: _teacherRate,
-          isTrial: _isTrial,
+      final payload = _lessonPayload(scheduledAt);
+      final api = ref.read(magicApiClientProvider);
+      final lessonId = widget.lesson?['id']?.toString();
+      try {
+        await _sendSave(
+          api,
+          lessonId,
+          payload,
+          force: decision == _ConflictDecision.force,
         );
-      } else {
-        await _crm.createLesson(
-          teacherId: _selectedTeacherId,
-          groupId: _selectedGroupId,
-          studentId: _selectedStudentId,
-          leadId: widget.leadId,
-          branchId: _selectedBranchId,
-          roomId: _selectedRoomId,
-          scheduledAt: scheduledAt,
-          durationMinutes: _durationMinutes,
-          status: 'scheduled',
-          teacherRate: _teacherRate,
-          isTrial: _isTrial,
-          notes: _isLeadLesson
-              ? 'Пробное занятие по лиду: ${widget.leadName ?? ''}'.trim()
-              : null,
-        );
+      } on MagicApiException catch (e) {
+        // Контракт 2: гонка между проверкой и записью — сервер всё равно
+        // ответил 409 со списком конфликтов. Показываем тот же диалог и по
+        // подтверждению повторяем один раз с force: true.
+        final conflicts = scheduleConflictsFrom409(e);
+        if (conflicts == null) rethrow;
+        if (!mounted) return;
+        final retry = await _showConflictDialog(conflicts: conflicts);
+        if (retry != true) {
+          if (mounted) setState(() => _saving = false);
+          return;
+        }
+        await _sendSave(api, lessonId, payload, force: true);
       }
 
       if (mounted) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_savedMessage)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_savedMessage)));
       }
     } catch (e) {
       if (mounted) {
@@ -328,159 +333,191 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     }
   }
 
-  // KVA-154: returns true if it's safe to proceed with the save. Queries room
-  // availability for the chosen slot and, on a detected conflict (room busy or a
-  // listed conflict type), prompts the user with a confirmable soft warning.
-  // Any read failure is treated as "proceed" — the conflict check must never
-  // hard-block lesson creation if the backend is momentarily unreachable.
-  Future<bool> _confirmIfConflicting({required DateTime slotStartUtc}) async {
-    final branchId = _selectedBranchId;
+  Future<void> _sendSave(
+    MagicApiClient api,
+    String? lessonId,
+    Map<String, dynamic> payload, {
+    required bool force,
+  }) async {
+    if (_isEdit) {
+      await api.updateLessonRaw(lessonId!, payload, force: force);
+    } else {
+      await api.createLessonRaw(payload, force: force);
+    }
+  }
+
+  /// Тело POST/PATCH /crm/lessons — то же, что раньше собирал
+  /// MagicCrmService.createLesson/updateLesson, но в одном месте, чтобы
+  /// force-повтор после 409 гарантированно слал ровно тот же запрос.
+  Map<String, dynamic> _lessonPayload(String scheduledAt) {
+    final leadId = widget.leadId ?? _selectedLeadId;
+    final leadName = widget.leadName ?? _selectedLeadName;
+    final notes = leadId != null
+        ? 'Пробное занятие по лиду: ${leadName ?? ''}'.trim()
+        : null;
+    return {
+      'scheduledAt': scheduledAt,
+      'durationMinutes': _durationMinutes,
+      'isTrial': _isTrial,
+      if (_selectedTeacherId != null) 'teacherId': _selectedTeacherId,
+      if (_selectedGroupId != null) 'groupId': _selectedGroupId,
+      if (_selectedStudentId != null) 'studentId': _selectedStudentId,
+      if (_selectedBranchId != null) 'branchId': _selectedBranchId,
+      if (_selectedRoomId != null) 'roomId': _selectedRoomId,
+      if (_teacherRate != null) 'teacherRate': _teacherRate,
+      if (!_isEdit) 'status': 'scheduled',
+      // Лид привязывается только при создании; при редактировании сервер
+      // сохраняет существующую привязку (coalesce).
+      if (!_isEdit && leadId != null) 'leadId': leadId,
+      if (!_isEdit && notes != null && notes.isNotEmpty) 'notes': notes,
+    };
+  }
+
+  // Контракт 1: спрашиваем /crm/schedule/conflicts, занят ли выбранный педагог
+  // и/или аудитория в этом окне. Любая ошибка чтения (в т.ч. 404 до ребилда
+  // сервера) трактуется как «проверить нельзя — не блокируем»: предпроверка не
+  // должна останавливать создание занятий при недоступном бекенде.
+  Future<_ConflictDecision> _checkConflictsBeforeSave({
+    required DateTime slotStartUtc,
+  }) async {
+    final teacherId = _selectedTeacherId;
     final roomId = _selectedRoomId;
-    // No room selected → nothing to conflict on (the lesson has no room).
-    if (branchId == null || roomId == null || roomId.isEmpty) return true;
+    final hasTeacher = teacherId != null && teacherId.isNotEmpty;
+    final hasRoom = roomId != null && roomId.isNotEmpty;
+    // Ни педагога, ни аудитории — конфликтовать нечему.
+    if (!hasTeacher && !hasRoom) return _ConflictDecision.proceed;
 
-    final durationMinutes = _durationMinutes;
-
-    List<String> conflictTypes = const [];
+    final editedLessonId = _isEdit ? widget.lesson!['id']?.toString() : null;
+    ScheduleConflictCheck check;
     try {
-      final dayUtc = DateTime.utc(
-        slotStartUtc.year,
-        slotStartUtc.month,
-        slotStartUtc.day,
-      );
-      final availability = await _crm.listRoomAvailability(
-        branchId: branchId,
-        roomId: roomId,
-        date:
-            '${dayUtc.year.toString().padLeft(4, '0')}-'
-            '${dayUtc.month.toString().padLeft(2, '0')}-'
-            '${dayUtc.day.toString().padLeft(2, '0')}',
-        from: slotStartUtc.toIso8601String(),
-        durationMinutes: durationMinutes,
-        limit: 100,
-      );
-      final items = availability['items'];
-      if (items is List) {
-        for (final raw in items) {
-          if (raw is! Map) continue;
-          if (raw['room_id']?.toString() != roomId) continue;
-          // NB: is_available == false only means the room already has a lesson
-          // in this window — that is normal, NOT a conflict. We warn solely on
-          // real conflict_types (room_overlap/teacher_overlap/…), mirroring the
-          // schedule grid's own conflict semantics. Reading is_available as a
-          // block is what made «Создать» silently no-op on any busy room.
-          final ct = raw['conflict_types'];
-          if (ct is List) {
-            conflictTypes = ct.map((e) => e.toString()).toList();
-          }
-          break;
-        }
-      }
+      check = await ref
+          .read(magicApiClientProvider)
+          .checkScheduleConflicts(
+            teacherId: hasTeacher ? teacherId : null,
+            roomId: hasRoom ? roomId : null,
+            startsAt: slotStartUtc.toIso8601String(),
+            endsAt: slotStartUtc
+                .add(Duration(minutes: _durationMinutes))
+                .toIso8601String(),
+            excludeLessonId: editedLessonId,
+          );
     } catch (e) {
-      debugPrint('Room availability pre-check failed: $e');
-      return true; // soft-fail open — never block on a read error.
+      debugPrint('Schedule conflicts pre-check failed: $e');
+      return _ConflictDecision.proceed; // soft-fail open.
     }
 
-    if (conflictTypes.isEmpty) return true;
+    if (!check.hasConflicts) return _ConflictDecision.proceed;
+    if (!mounted) return _ConflictDecision.cancel;
 
-    if (!mounted) return true;
-    final labels = _conflictLabels(conflictTypes);
-    final confirmed = await showDialog<bool>(
+    final confirmed = await _showConflictDialog(
+      conflicts: check.conflicts,
+      teacherBusy: check.teacherBusy,
+      roomBusy: check.roomBusy,
+    );
+    return confirmed == true
+        ? _ConflictDecision.force
+        : _ConflictDecision.cancel;
+  }
+
+  /// Диалог конфликтов: кто/когда/где уже стоит в слоте. «Всё равно назначить»
+  /// строится ТОЛЬКО для admin+ (контракт 2) — остальным остаётся «Отмена».
+  Future<bool?> _showConflictDialog({
+    required List<ScheduleConflictInfo> conflicts,
+    bool? teacherBusy,
+    bool? roomBusy,
+  }) {
+    final headers = <String>[
+      if (teacherBusy == true) 'Преподаватель занят в это время',
+      if (roomBusy == true) 'Аудитория занята в это время',
+    ];
+    if (headers.isEmpty) headers.add('В выбранное время слот уже занят');
+    final canForce = _canForceConflicts;
+
+    return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.card),
         ),
         icon: const Icon(Icons.warning_amber_rounded, color: AppColor.danger),
-        title: const Text('Возможен конфликт'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('В выбранное время возможны конфликты:'),
-            const SizedBox(height: 12),
-            for (final label in labels)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColor.dangerSoft,
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                    border: Border.all(color: const Color(0x52E53935)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.error_outline_rounded,
-                        size: 16,
-                        color: AppColor.danger,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
+        title: const Text('Время занято'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final header in headers)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    header,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
+              if (conflicts.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                for (final conflict in conflicts)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColor.dangerSoft,
+                        borderRadius: BorderRadius.circular(AppRadius.control),
+                        border: Border.all(color: const Color(0x52E53935)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            size: 16,
+                            color: AppColor.danger,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              conflict.label(),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+              const SizedBox(height: 4),
+              Text(
+                canForce
+                    ? 'Назначить занятие всё равно?'
+                    : 'Выберите другое время или аудиторию.',
               ),
-            const SizedBox(height: 4),
-            const Text('Создать занятие всё равно?'),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Отмена'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColor.gold,
-              foregroundColor: AppColor.onGold,
+          if (canForce)
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColor.gold,
+                foregroundColor: AppColor.onGold,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Всё равно назначить'),
             ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Создать всё равно'),
-          ),
         ],
       ),
     );
-    return confirmed ?? false;
-  }
-
-  /// All four matrix conflict types surfaced at booking time (P2-4). Mirrors the
-  /// schedule's `_conflictLabel` mapping; falls back to a generic label.
-  List<String> _conflictLabels(List<String> conflictTypes) {
-    final labels = <String>[];
-    for (final type in conflictTypes) {
-      switch (type) {
-        case 'room_overlap':
-          labels.add('Аудитория занята в это время');
-          break;
-        case 'teacher_overlap':
-          labels.add('Преподаватель занят в это время');
-          break;
-        case 'missing_teacher':
-          labels.add('Не назначен преподаватель');
-          break;
-        case 'branch_mismatch':
-          labels.add('Филиал комнаты не совпадает');
-          break;
-      }
-    }
-    // Reached only for a genuine (but unmapped) conflict_type — stay generic
-    // rather than wrongly claiming the room is busy.
-    if (labels.isEmpty) labels.add('Возможен конфликт расписания');
-    return labels;
   }
 
   @override
@@ -506,14 +543,21 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Пробное по лиду: «кто» уже известен и менять его здесь нечем —
-            // диалог открыт из карточки именно этого лида.
-            if (_isLeadLesson) ...[
+            // диалог открыт из карточки именно этого лида. При редактировании
+            // занятия лида привязку тоже не перевешивают — строка read-only.
+            if (_isLeadLesson || _isEditingLeadLesson) ...[
               InputDecorator(
                 decoration: const InputDecoration(labelText: 'Лид'),
-                child: Text(
-                  widget.leadName?.trim().isNotEmpty == true
-                      ? widget.leadName!
-                      : 'Без имени',
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _presetLeadName ?? 'Без имени',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    _leadBadge(),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -547,7 +591,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
             // У пробного по лиду занятие уже привязано к нему — группы и
             // ученика у него нет.
-            if (!_isLeadLesson) ...[
+            if (!_isLeadLesson && !_isEditingLeadLesson) ...[
               // Group Selection
               SearchablePickerField(
                 label: 'Группа',
@@ -562,8 +606,11 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 ],
                 onSelected: (item) => setState(() {
                   _selectedGroupId = item?.id;
-                  // A group lesson has no single student.
-                  if (item != null) _selectedStudentId = null;
+                  // A group lesson has no single student (and no lead).
+                  if (item != null) {
+                    _selectedStudentId = null;
+                    _clearSelectedLead();
+                  }
                 }),
               ),
 
@@ -598,7 +645,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                           limit: 50,
                         );
                         final rows = response['items'];
-                        if (rows is! List) return const <SearchableSelectItem>[];
+                        if (rows is! List) {
+                          return const <SearchableSelectItem>[];
+                        }
                         return [
                           for (final row
                               in rows.whereType<Map<String, dynamic>>())
@@ -613,6 +662,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       isNullable: false,
                       onSelected: (item) => setState(() {
                         _selectedStudentId = item?.id;
+                        // Ученик и лид взаимоисключающи: занятие либо
+                        // ученика, либо пробное лида.
+                        if (item != null) _clearSelectedLead();
                         // A student found by the server search is not in the
                         // pre-loaded page, and _getStudentName only reads that
                         // page — without this the field would keep saying «Не
@@ -628,6 +680,17 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     );
                   },
                 ),
+                // #6: лид доступен и из расписания, а не только через пресет
+                // карточки. Выбор лида = пробное занятие (галочка форсится).
+                if (!_isEdit) ...[
+                  const SizedBox(height: 16),
+                  _buildSelectionField(
+                    label: 'Лид (на пробное)',
+                    value: _selectedLeadName ?? 'Не выбран',
+                    badge: _selectedLeadId != null ? _leadBadge() : null,
+                    onTap: _pickLead,
+                  ),
+                ],
               ],
               const SizedBox(height: 16),
             ],
@@ -749,8 +812,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 ),
               ),
               // У пресета пробного галочку не снимают: диалог открыт кнопкой
-              // «На пробный», и снятая пометка сделала бы её ложью.
-              onChanged: _isLeadLesson
+              // «На пробный», и снятая пометка сделала бы её ложью. То же при
+              // выбранном в диалоге лиде — лид приходит только на пробное.
+              onChanged: (_isLeadLesson || _selectedLeadId != null)
                   ? null
                   : (value) => setState(() => _isTrial = value),
             ),
@@ -787,6 +851,119 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
               : Text(_isEdit ? 'Сохранить' : 'Создать'),
         ),
       ],
+    );
+  }
+
+  // ── Лид в диалоге ─────────────────────────────────────────────────────────
+
+  /// Имя лида для read-only строки: пресет карточки или редактируемое занятие
+  /// (lead_name приходит с бекенда вместе с уроком).
+  String? get _presetLeadName {
+    final name = widget.leadName ?? widget.lesson?['lead_name']?.toString();
+    final trimmed = name?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
+  void _clearSelectedLead() {
+    _selectedLeadId = null;
+    _selectedLeadName = null;
+  }
+
+  /// Визуальная пометка «лид» — чтобы пробное по лиду не читалось как занятие
+  /// ученика.
+  Widget _leadBadge() {
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColor.gold.withAlpha(36),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColor.gold.withAlpha(120)),
+      ),
+      child: const Text(
+        'лид',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: AppColor.gold,
+        ),
+      ),
+    );
+  }
+
+  String _leadLabelFromData(Map<String, dynamic> lead) {
+    final name = '${lead['first_name'] ?? ''} ${lead['last_name'] ?? ''}'
+        .trim();
+    final phone = lead['phone']?.toString().trim() ?? '';
+    if (name.isEmpty && phone.isEmpty) return 'Без имени';
+    if (name.isEmpty) return phone;
+    return phone.isEmpty ? name : '$name · $phone';
+  }
+
+  String _leadNameFromData(Map<String, dynamic> lead) {
+    final name = '${lead['first_name'] ?? ''} ${lead['last_name'] ?? ''}'
+        .trim();
+    if (name.isNotEmpty) return name;
+    final phone = lead['phone']?.toString().trim() ?? '';
+    return phone.isEmpty ? 'Без имени' : phone;
+  }
+
+  Future<void> _pickLead() async {
+    // Первая страница подгружается лениво — лид в диалоге нужен нечасто.
+    if (!_leadsLoaded) {
+      try {
+        final leads = await _crm.listLeads(limit: 100);
+        if (!mounted) return;
+        setState(() {
+          _leads = leads;
+          _leadsLoaded = true;
+        });
+      } catch (e) {
+        debugPrint('Error loading leads: $e');
+      }
+    }
+    if (!mounted) return;
+
+    SearchableSelect.show(
+      context: context,
+      title: 'Выберите лида',
+      hintText: 'Поиск по имени или телефону...',
+      items: [
+        for (final lead in _leads)
+          SearchableSelectItem(
+            id: lead['id'].toString(),
+            label: _leadLabelFromData(lead),
+            data: lead,
+          ),
+      ],
+      // Предзагружена только первая страница — настоящий поиск идёт на сервер
+      // (тот же серверный q, что и у канбана лидов).
+      onSearch: (query) async {
+        final rows = await _crm.listLeads(q: query, limit: 50);
+        return [
+          for (final row in rows)
+            SearchableSelectItem(
+              id: row['id'].toString(),
+              label: _leadLabelFromData(row),
+              data: row,
+            ),
+        ];
+      },
+      selectedId: _selectedLeadId,
+      onSelected: (item) => setState(() {
+        if (item == null) {
+          _clearSelectedLead();
+          return;
+        }
+        _selectedLeadId = item.id;
+        final row = item.data;
+        _selectedLeadName = row is Map<String, dynamic>
+            ? _leadNameFromData(row)
+            : item.label;
+        // Лид приходит только на пробное: ученик снимается, пометка форсится.
+        _selectedStudentId = null;
+        _isTrial = true;
+      }),
     );
   }
 
@@ -838,6 +1015,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     required String label,
     required String value,
     required VoidCallback onTap,
+    Widget? badge,
   }) {
     return InkWell(
       onTap: onTap,
@@ -873,6 +1051,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     ),
                   ),
                 ),
+                ?badge,
                 Icon(
                   Icons.arrow_drop_down,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,

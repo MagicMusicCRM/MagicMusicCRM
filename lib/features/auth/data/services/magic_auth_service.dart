@@ -113,8 +113,15 @@ class MagicAuthProfile {
 class MagicAuthService {
   final MagicApiClient _api;
   final _sessionController = StreamController<MagicAuthSession?>.broadcast();
+  final FutureOr<void> Function()? _onBeforeSessionChange;
+  final FutureOr<void> Function()? _onAfterSessionChange;
 
-  MagicAuthService(this._api);
+  MagicAuthService(
+    this._api, {
+    FutureOr<void> Function()? onBeforeSessionChange,
+    FutureOr<void> Function()? onAfterSessionChange,
+  }) : _onBeforeSessionChange = onBeforeSessionChange,
+       _onAfterSessionChange = onAfterSessionChange;
 
   Stream<MagicAuthSession?> watchSession() async* {
     yield await currentSession();
@@ -177,11 +184,13 @@ class MagicAuthService {
   }
 
   Future<void> signOut() async {
+    await _beforeSessionChange();
     await _api.clearTokens();
     unawaited(
       Future.sync(() => Sentry.configureScope((scope) => scope.setUser(null))),
     );
     _sessionController.add(null);
+    await _afterSessionChange();
   }
 
   Future<void> logoutAllDevices() async {
@@ -312,9 +321,11 @@ class MagicAuthService {
     MagicAuthSession? session;
     if (sessionJson is Map<String, dynamic>) {
       final tokens = MagicApiTokens.fromJson(sessionJson);
+      await _beforeSessionChange();
       await _api.saveTokens(tokens);
       session = MagicAuthSession.fromTokens(tokens);
       _sessionController.add(session);
+      await _afterSessionChange();
     }
     final user = _parseUser(response['user']);
     await _setSentryUser(user);
@@ -368,7 +379,17 @@ class MagicAuthService {
   }
 
   Future<void> _clearLocalSession() async {
+    await _beforeSessionChange();
     await _api.clearTokens();
     _sessionController.add(null);
+    await _afterSessionChange();
+  }
+
+  Future<void> _beforeSessionChange() async {
+    await _onBeforeSessionChange?.call();
+  }
+
+  Future<void> _afterSessionChange() async {
+    await _onAfterSessionChange?.call();
   }
 }

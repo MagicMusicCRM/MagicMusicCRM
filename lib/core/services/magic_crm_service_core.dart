@@ -195,6 +195,7 @@ extension MagicCrmCore on MagicCrmService {
     String? phone,
     String? email,
     String? status,
+    bool clearResponsible = false,
     Map<String, dynamic>? customDataPatch,
   }) async {
     final data = <String, dynamic>{};
@@ -203,6 +204,7 @@ extension MagicCrmCore on MagicCrmService {
     if (phone != null) data['phone'] = phone.trim();
     if (email != null) data['email'] = email.trim();
     if (status != null) data['status'] = status.trim();
+    if (clearResponsible) data['clearResponsible'] = true;
     if (customDataPatch != null) data['customDataPatch'] = customDataPatch;
 
     final response = await _api.patch<Map<String, dynamic>>(

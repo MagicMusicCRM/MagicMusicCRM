@@ -20,6 +20,10 @@ export interface ChatRow {
   partner_avatar_file_id?: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  // Exact PostgreSQL timestamptz projection used only for keyset cursors.
+  // The pg JS Date parser truncates microseconds, so cursor code must never
+  // derive its boundary from `updated_at`.
+  cursor_updated_at?: string;
   slug?: string | null;
   is_system?: boolean | null;
   // Staff inbox fields (administration chats only)
@@ -72,7 +76,10 @@ export interface ChatMemberRow {
   joined_at: Date | string;
 }
 
-export function toChatSummaryDto(row: ChatRow) {
+export function toChatSummaryDto(
+  row: ChatRow,
+  opts?: { canWrite?: boolean },
+) {
     const ownerFullName = [row.owner_first_name, row.owner_last_name]
       .filter(Boolean)
       .join(" ")
@@ -113,6 +120,10 @@ export function toChatSummaryDto(row: ChatRow) {
       branchName: row.branch_name ?? null,
       slug: row.slug ?? null,
       isSystem: row.is_system == true,
+      // Server-declared composer visibility («Объявления» are read-only for
+      // non-manager roles). Default true: callers that cannot compute it
+      // (fan-out paths) must not accidentally hide the composer.
+      canWrite: opts?.canWrite ?? true,
     };
 }
 

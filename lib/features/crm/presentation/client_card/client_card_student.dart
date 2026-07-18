@@ -72,12 +72,11 @@ extension _ClientCardStudent on _ClientCardState {
             if (_mergedTasks.isEmpty)
               _emptyHint(cs, 'Открытых задач нет')
             else
+              // #12: задача раскрывается по тапу — полный текст, автор,
+              // исполнитель, срок.
               ..._mergedTasks.map(
-                (row) => _entityTile(
-                  cs,
-                  title: row['title']?.toString() ?? 'Задача',
-                  subtitle: _formatStatus(row['status']),
-                  leading: Icons.task_alt_rounded,
+                (row) => _TaskTile(
+                  task: row,
                   origin: _isConverted ? row['_origin']?.toString() : null,
                 ),
               ),
@@ -214,6 +213,10 @@ extension _ClientCardStudent on _ClientCardState {
   }
 
   // ── Student action bar (overflow menu hosts the v7 student actions) ───────
+  // #13: Align + Wrap (как у лид-бара в tabs_a) вместо жёсткого Row: на
+  // телефоне карточка — bottom sheet во всю ширину, и три кнопки с отступами
+  // не влезали в 320–360dp — правый край переполнялся. Wrap переносит кнопки
+  // на вторую строку.
   Widget _buildStudentActionBar(ColorScheme cs) {
     final busy = _loadingStudent || _student == null;
     return Padding(
@@ -223,9 +226,15 @@ extension _ClientCardStudent on _ClientCardState {
         AppSpace.xl,
         AppSpace.lg,
       ),
-      child: Row(
-        children: [
-          PopupMenuButton<String>(
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Wrap(
+          alignment: WrapAlignment.end,
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            PopupMenuButton<String>(
             enabled: !busy,
             tooltip: 'Действия',
             position: PopupMenuPosition.under,
@@ -276,42 +285,59 @@ extension _ClientCardStudent on _ClientCardState {
               icon: const Icon(Icons.bolt_rounded, size: 18),
               label: const Text('Действия'),
             ),
-          ),
-          const Spacer(),
-          TextButton(
-            onPressed: _saving || _converting ? null : _handleClose,
-            style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
-            child: const Text('Отмена'),
-          ),
-          const SizedBox(width: AppSpace.sm),
-          FilledButton(
-            onPressed: busy || _saving || _converting ? null : _save,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColor.gold,
-              foregroundColor: AppColor.onGold,
-              disabledBackgroundColor: AppColor.gold.withValues(alpha: 0.42),
-              disabledForegroundColor: AppColor.onGold.withValues(alpha: 0.7),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.control),
-              ),
-              textStyle: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
             ),
-            child: _saving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColor.onGold,
-                    ),
-                  )
-                : const Text('Сохранить'),
-          ),
-        ],
+            // #6: переход в расписание — на ближайшее занятие ученика, а без
+            // занятий просто на сегодняшний день.
+            OutlinedButton.icon(
+              onPressed: busy ? null : _openScheduleFromCard,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: cs.onSurface,
+                side: BorderSide(color: cs.outlineVariant),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+              ),
+              icon: const Icon(Icons.calendar_month_rounded, size: 18),
+              label: const Text('Открыть в расписании'),
+            ),
+            TextButton(
+              onPressed: _saving || _converting ? null : _handleClose,
+              style: TextButton.styleFrom(
+                foregroundColor: cs.onSurfaceVariant,
+              ),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: busy || _saving || _converting ? null : _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColor.gold,
+                foregroundColor: AppColor.onGold,
+                disabledBackgroundColor: AppColor.gold.withValues(alpha: 0.42),
+                disabledForegroundColor: AppColor.onGold.withValues(
+                  alpha: 0.7,
+                ),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColor.onGold,
+                      ),
+                    )
+                  : const Text('Сохранить'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -438,13 +464,31 @@ extension _ClientCardStudent on _ClientCardState {
     suffixIcon: suffixIcon,
   );
 
+  /// #9: статус из HolliHop — подписью под пикером статуса, а не отдельной
+  /// строкой в «Дополнительно»: это одно и то же поле в двух системах.
+  String? get _hhStatusHelper {
+    final name = _hhField('statusName');
+    return name == null ? null : 'Статус в HolliHop: $name';
+  }
+
   Widget _buildStatusPicker(ColorScheme cs, StatusRecord current) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: DropdownButtonFormField<String>(
-        initialValue: _leadData['status'],
+        // Легаси-фолбэк 'new' (лид «Без статуса») и имена статусов в списке
+        // UUID-значений не встречаются — такой «статус» показываем как пустой
+        // выбор, а не роняем dropdown-assert (#2).
+        initialValue:
+            _statuses.any((s) => s.$1 == _leadData['status']?.toString())
+            ? _leadData['status']?.toString()
+            : null,
         isExpanded: true,
-        decoration: _inputDecoration(cs, label: 'Статус', isDense: true),
+        decoration: _inputDecoration(
+          cs,
+          label: 'Статус',
+          helperText: _hhStatusHelper,
+          isDense: true,
+        ),
         items: _statuses.map((s) {
           return DropdownMenuItem(
             value: s.$1,
@@ -492,6 +536,7 @@ extension _ClientCardStudent on _ClientCardState {
         decoration: _inputDecoration(
           cs,
           label: 'Статус ученика',
+          helperText: _hhStatusHelper,
           isDense: true,
         ),
         items: options

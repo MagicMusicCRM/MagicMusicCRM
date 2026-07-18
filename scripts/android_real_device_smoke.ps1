@@ -1,6 +1,6 @@
 param(
   [string]$DeviceId = "",
-  [string]$ApiBaseUrl = "https://api.phantom-net.ru/api",
+  [string]$ApiBaseUrl = "https://api.magicmusiccrm.ru/api",
   [string]$EvidenceDir = ".supergoal/hollihop-crm-import-adaptation-loading-ux-Guw3IO/evidence",
   [switch]$SkipBuild,
   [switch]$RunIntegrationSmoke,

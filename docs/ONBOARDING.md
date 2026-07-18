@@ -241,7 +241,7 @@ Messenger UI:
 | `scripts/hollihop_staging_dry_run.ps1` | Guarded HolliHop dry-run helper |
 | `scripts/android_real_device_smoke.ps1` | Android real-device smoke helper |
 
-Staging API: `https://api.phantom-net.ru/api`.
+Live API: `https://api.magicmusiccrm.ru/api`.
 
 ### Тесты и quality gates
 
@@ -465,7 +465,7 @@ Supabase export, v3 import и HolliHop import - high-risk зона. Default до
 - `infra/scripts/restore-staging.sh`
 - `infra/scripts/monitor-staging.sh`
 
-Цель: понять реальное окружение `api.phantom-net.ru`.
+Цель: понять реальное окружение `api.magicmusiccrm.ru`.
 
 ### Step 10 - Acceptance and smoke
 

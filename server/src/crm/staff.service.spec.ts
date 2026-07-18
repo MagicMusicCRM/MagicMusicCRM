@@ -10,7 +10,10 @@ describe("StaffService", () => {
     const query = jest.fn().mockResolvedValue({ rows });
     const database = { query };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
-    const policy = { assertCanReadOperationalData: jest.fn() };
+    const policy = {
+      assertCanReadOperationalData: jest.fn(),
+      assertManagerOnly: jest.fn(),
+    };
     const service = new StaffService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
@@ -19,7 +22,7 @@ describe("StaffService", () => {
     return { service, query, audit, policy };
   };
 
-  it("forbids admin from creating staff and manager from minting manager/system_admin", async () => {
+  it("enforces manager/admin role-creation limits", async () => {
     const { service } = createService();
 
     // Администратор (ниже Управляющего) не управляет ролями вовсе.
@@ -44,6 +47,7 @@ describe("StaffService", () => {
         role: "system_admin",
       }),
     ).rejects.toThrow("Недостаточно прав");
+
   });
 
   it("creates staff profiles for privileged roles (system_admin)", async () => {
@@ -53,7 +57,7 @@ describe("StaffService", () => {
         id: "profile-a",
         userId: "user-a",
         email: "staff@example.com",
-        role: "manager",
+        role: "system_admin",
         firstName: "Ольга",
         lastName: "Смирнова",
         phone: "+79992222222",
@@ -70,19 +74,19 @@ describe("StaffService", () => {
         lastName: " Смирнова ",
         email: "Staff@Example.com",
         phone: "+79992222222",
-        role: "manager",
+        role: "system_admin",
       }),
     ).resolves.toMatchObject({
       id: "profile-a",
       email: "staff@example.com",
-      role: "manager",
+      role: "system_admin",
     });
 
     expect(query.mock.calls[0][1]).toEqual([
       "staff@example.com",
       "Ольга Смирнова",
       "+79992222222",
-      "manager",
+      "system_admin",
       "Ольга",
       "Смирнова",
     ]);
@@ -95,14 +99,14 @@ describe("StaffService", () => {
     );
   });
 
-  it("limits staff updates to admins", async () => {
+  it("rejects staff edits from roles below admin", async () => {
     const { service } = createService();
 
     await expect(
-      service.updateStaff(actor, "staff-a", {
+      service.updateStaff({ userId: "teacher-a", role: "teacher" }, "staff-a", {
         firstName: "Ольга",
       }),
-    ).rejects.toThrow("Только администратор");
+    ).rejects.toThrow("Недостаточно прав");
   });
 
   it("updates staff profile and CRM fields, changing the role as system_admin", async () => {
@@ -158,8 +162,7 @@ describe("StaffService", () => {
       "Ольга",
       "Смирнова",
       "+79992222222",
-      "staff@example.com",
-      "manager",
+      null,
       "Операционный управляющий",
       "working",
       JSON.stringify({ telegram: "@staff" }),
@@ -173,7 +176,7 @@ describe("StaffService", () => {
     );
   });
 
-  it("edits an admin's non-role fields without reading the current role", async () => {
+  it("lets an admin edit a strictly lower teacher record", async () => {
     const adminActor = { userId: "admin-a", role: "admin" as const };
     const { service, query } = createService([
       {
@@ -199,8 +202,171 @@ describe("StaffService", () => {
       service.updateStaff(adminActor, "staff-a", { phone: "+79991112233" }),
     ).resolves.toMatchObject({ id: "staff-a" });
 
-    // No role in the patch → no guard SELECT, straight to the UPDATE.
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an unchanged imported display role as a no-op", async () => {
+    const adminActor = { userId: "admin-a", role: "admin" as const };
+    const { service, query } = createService([
+      {
+        id: "staff-a",
+        role: "Ответственный",
+        position: null,
+        status: "Работает",
+        custom_data: {},
+        profile_id: null,
+        profile_user_id: null,
+        app_role: null,
+        is_app_account: false,
+        first_name: "Иван",
+        last_name: null,
+        email: null,
+        phone: null,
+        branches: [],
+        created_at: "2026-07-18T00:00:00.000Z",
+      },
+    ]);
+
+    await expect(
+      service.updateStaff(adminActor, "staff-a", {
+        role: "Ответственный",
+        phone: "+79990000000",
+      }),
+    ).resolves.toMatchObject({
+      id: "staff-a",
+      role: "Ответственный",
+      status: "Работает",
+    });
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1][1][4]).toBeNull();
+  });
+
+  it.each([
+    ["admin", "admin"],
+    ["admin", "manager"],
+    ["manager", "manager"],
+    ["manager", "director"],
+    ["director", "director"],
+  ] as const)(
+    "forbids %s from mutating non-lower %s staff",
+    async (actorRole, targetRole) => {
+      const { service, query } = createService([
+        { role: targetRole, app_role: targetRole, email: "staff@example.com" },
+      ]);
+
+      await expect(
+        service.updateStaff(
+          { userId: `${actorRole}-a`, role: actorRole },
+          "staff-a",
+          { phone: "+79990000000" },
+        ),
+      ).rejects.toThrow("Недостаточно прав");
+      expect(query).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    ["manager", "admin"],
+    ["director", "manager"],
+    ["system_admin", "director"],
+    ["system_admin", "system_admin"],
+  ] as const)(
+    "lets %s mutate an authorized %s staff target",
+    async (actorRole, targetRole) => {
+      const row = {
+        id: "staff-a",
+        role: targetRole,
+        position: null,
+        status: "working",
+        custom_data: {},
+        profile_id: "profile-a",
+        profile_user_id: "user-a",
+        app_role: targetRole,
+        is_app_account: true,
+        first_name: "Иван",
+        last_name: null,
+        email: "staff@example.com",
+        phone: "+79990000000",
+        branches: [],
+        created_at: "2026-07-18T00:00:00.000Z",
+      };
+      const { service, query } = createService([row]);
+
+      await expect(
+        service.updateStaff(
+          { userId: `${actorRole}-a`, role: actorRole },
+          "staff-a",
+          { position: "Новая должность" },
+        ),
+      ).resolves.toMatchObject({ id: "staff-a" });
+      expect(query).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("never changes the auth email through a staff-card save", async () => {
+    const { service, query } = createService([
+      {
+        role: "manager",
+        app_role: "manager",
+        profile_user_id: "user-a",
+        email: "owner@example.com",
+      },
+    ]);
+
+    await expect(
+      service.updateStaff(
+        { userId: "sys-a", role: "system_admin" },
+        "staff-a",
+        { email: "attacker@example.com" },
+      ),
+    ).rejects.toThrow("Email для входа нельзя изменить");
     expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["working", "active", "Работает", "работает", "активен"])(
+    "preserves active staff status spelling: %s",
+    async (status) => {
+      const row = {
+        id: "staff-a",
+        role: "admin",
+        position: null,
+        status,
+        custom_data: {},
+        profile_id: "profile-a",
+        profile_user_id: "user-a",
+        app_role: "admin",
+        is_app_account: true,
+        first_name: "Иван",
+        last_name: null,
+        email: "staff@example.com",
+        phone: null,
+        branches: [],
+        created_at: "2026-07-18T00:00:00.000Z",
+      };
+      const { service, query } = createService([row]);
+
+      await expect(
+        service.updateStaff(
+          { userId: "manager-a", role: "manager" },
+          "staff-a",
+          { status },
+        ),
+      ).resolves.toMatchObject({ status });
+      expect(query.mock.calls[1][1][6]).toBe(status);
+    },
+  );
+
+  it("rejects changing an imported display role to an arbitrary label", async () => {
+    const { service } = createService([{ role: "Ответственный" }]);
+
+    await expect(
+      service.updateStaff(
+        { userId: "sys-a", role: "system_admin" },
+        "staff-a",
+        { role: "Главный ответственный" },
+      ),
+    ).rejects.toThrow("Недостаточно прав");
   });
 
   it("blocks an admin from changing a staff member's role (admin manages no roles)", async () => {
@@ -210,6 +376,33 @@ describe("StaffService", () => {
     await expect(
       service.updateStaff(adminActor, "staff-a", { role: "manager" }),
     ).rejects.toThrow("Недостаточно прав");
+  });
+
+  it("limits the responsible picker to linked active admin/manager/director users", async () => {
+    const { service, query, policy } = createService([
+      { id: "admin-a", display_name: "Анна", role: "admin" },
+    ]);
+
+    await expect(
+      service.listStaffPicker(actor, {
+        search: " анна ",
+        roles: "admin,system_admin,director",
+      }),
+    ).resolves.toEqual([
+      { id: "admin-a", displayName: "Анна", role: "admin" },
+    ]);
+
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain("join app.profiles p");
+    expect(query.mock.calls[0][0]).toContain("join app.staff_members sm");
+    expect(query.mock.calls[0][0]).toContain(
+      "lower(btrim(sm.status)) = any($2::text[])",
+    );
+    expect(query.mock.calls[0][1]).toEqual([
+      ["admin", "director"],
+      ["working", "active", "работает", "активен"],
+      "анна",
+    ]);
   });
 
   it("lists staff with role status authorization and birthday filters", async () => {

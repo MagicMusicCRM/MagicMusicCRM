@@ -13,10 +13,19 @@ extension _MessengerBuildersB on _MessengerScreenState {
     // «Объявления» is a group chat everyone reads but only управляющий/директор
     // may post to.
     final isAnnouncements = _selectedChatSlug == 'announcements';
+    // Read-only для текущего пользователя: «Объявления» без права письма или
+    // канал без права публикации. Клиент просто читает — ни композера, ни
+    // подсказки, ни приёма файлов перетаскиванием.
+    final isReadOnlyForMe =
+        (!isChannel && isAnnouncements && !_isManagerTier) ||
+        (isChannel && !_canPostToChannel());
 
     return DropTarget(
       onDragDone: (details) async {
         if (details.files.isEmpty) return;
+        // В read-only разговор файлы не принимаем — как и композер, приём
+        // перетаскиванием скрыт от тех, кто не может писать.
+        if (isReadOnlyForMe) return;
         final messenger = ScaffoldMessenger.of(context);
         if (isChannel) {
           messenger.showSnackBar(
@@ -85,60 +94,31 @@ extension _MessengerBuildersB on _MessengerScreenState {
                       () => _hiddenPinnedBars.remove(_selectedChatId),
                     ),
                   ),
-                // Staff CRM actions for a 1:1 client chat: save the contact as a
-                // lead/student or jump to their existing card.
+                // The first incoming message already creates a lead. A direct
+                // chat therefore exposes only an existing-card shortcut; no
+                // «save as lead/student» action exists, even while resolution is
+                // pending or failed (otherwise a fast click can create a duplicate).
                 if (_isManagerOrAdminRole &&
                     _selectedChatType == 'direct' &&
                     (_selectedPartnerId?.isNotEmpty ?? false))
-                  PopupMenuButton<String>(
-                    icon: const Icon(
-                      Icons.person_add_alt_1_rounded,
-                      size: 20,
-                      color: AppColor.gold,
-                    ),
-                    tooltip: 'Сохранить в CRM',
-                    onSelected: (value) {
-                      if (value == 'open_card') {
-                        _openContactCard();
-                      } else if (value == 'save_lead') {
-                        _saveContactFromChat('lead');
-                      } else if (value == 'save_student') {
-                        _saveContactFromChat('student');
-                      }
+                  Builder(
+                    builder: (context) {
+                      final link = _chatContactLinks[_selectedPartnerId];
+                      final linkedStudentId = link?['studentId'];
+                      final linkedLeadId = link?['leadId'];
+                      final isLinked =
+                          linkedStudentId != null || linkedLeadId != null;
+                      if (!isLinked) return const SizedBox.shrink();
+                      return IconButton(
+                        icon: const Icon(
+                          Icons.badge_outlined,
+                          size: 20,
+                          color: AppColor.gold,
+                        ),
+                        tooltip: 'Открыть карточку клиента',
+                        onPressed: _openContactCard,
+                      );
                     },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: 'open_card',
-                        child: Row(
-                          children: [
-                            Icon(Icons.badge_outlined, size: 18),
-                            SizedBox(width: 8),
-                            Text('Открыть карточку клиента'),
-                          ],
-                        ),
-                      ),
-                      PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'save_lead',
-                        child: Row(
-                          children: [
-                            Icon(Icons.assignment_ind_outlined, size: 18),
-                            SizedBox(width: 8),
-                            Text('Сохранить как лид'),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'save_student',
-                        child: Row(
-                          children: [
-                            Icon(Icons.school_outlined, size: 18),
-                            SizedBox(width: 8),
-                            Text('Сохранить как ученик'),
-                          ],
-                        ),
-                      ),
-                    ],
                   ),
                 // Assignment actions for administration (inbox) chats.
                 if (_selectedChatId != null &&
@@ -161,13 +141,14 @@ extension _MessengerBuildersB on _MessengerScreenState {
                           assignedToId != null &&
                           assignedToId == _currentUserId;
                       final isAssigned = assignedToId != null;
+                      final isArchived = openChat['archived'] == true;
                       return PopupMenuButton<String>(
                         icon: const Icon(
                           Icons.assignment_ind_rounded,
                           size: 20,
                           color: AppColor.gold,
                         ),
-                        tooltip: 'Назначение',
+                        tooltip: 'Действия с чатом',
                         itemBuilder: (_) => [
                           // Advisory marker: any staff member can mark that they
                           // started working the chat. This is not an exclusive
@@ -201,6 +182,26 @@ extension _MessengerBuildersB on _MessengerScreenState {
                                 ],
                               ),
                             ),
+                          // #4: архив прямо из шапки открытого чата — жест
+                          // долгого нажатия по строке на Windows не находили.
+                          const PopupMenuDivider(),
+                          PopupMenuItem(
+                            value: 'toggle_archive',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isArchived
+                                      ? Icons.unarchive_rounded
+                                      : Icons.archive_rounded,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  isArchived ? 'Вернуть из архива' : 'В архив',
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                         onSelected: (value) async {
                           final chatId = _selectedChatId;
@@ -209,6 +210,12 @@ extension _MessengerBuildersB on _MessengerScreenState {
                             await _assignChatToMe(chatId);
                           } else if (value == 'unassign') {
                             await _unassignChat(chatId);
+                          } else if (value == 'toggle_archive') {
+                            if (isArchived) {
+                              await _unarchiveChat(chatId);
+                            } else {
+                              await _archiveChat(chatId);
+                            }
                           }
                         },
                       );
@@ -331,15 +338,20 @@ extension _MessengerBuildersB on _MessengerScreenState {
             ),
             // Input (not for channels unless user has permission). «Объявления»
             // is read-only for everyone except управляющий/директор.
+            // #18: клиент просто читает — композер скрыт целиком, без подсказки
+            // (ни поля ввода, ни голосового, ни скрепки). Подсказку «кто может
+            // писать» оставляем только персоналу без права письма.
             if (!isChannel && isAnnouncements && !_isManagerTier)
-              Padding(
-                padding: const EdgeInsets.all(AppSpace.md),
-                child: Text(
-                  'В «Объявления» пишут только управляющий и директор',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: secondaryText),
-                ),
-              )
+              (widget.role == 'client'
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.all(AppSpace.md),
+                      child: Text(
+                        'В «Объявления» пишут только управляющий и директор',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: secondaryText),
+                      ),
+                    ))
             else if (!isChannel)
               Column(
                 children: [
