@@ -318,6 +318,33 @@ graph TD
   - **Estimate**: 4 h.
   - **Status**: Code-ready 2026-06-18, acceptance pending (Linear `KVA-123` = In Review). Remediation mapping recorded in `docs/audits/windows-ux-ui-2026-06-18/report.md`; verified by `flutter analyze` (clean), `flutter test` (94/94, incl. new `test/features/s8_desktop_ux_states_test.dart`). The live Windows desktop re-audit + native build still need a networked environment (blocked here: `firebase_core` CMake SDK download has no outbound network, no manager session) before this gate can be marked done. Added on 2026-06-16 as the acceptance gate for the desktop UX/UI remediation backlog derived from the latest local audit.
 
+### S9 - Four-role Android demo workflow
+
+- [ ] **T9.1** [REQ-V3-DATA-001, REQ-V3-MSG-001]: Close the demo-critical lead, homework, subscription and billing flow
+  - **Description**: Preserve the lead through trial booking, trial homework and feedback; let the assigned teacher create and inspect homework for their own trial lead, and let the linked client inspect and submit it. Convert the lead exactly once only when the administrator issues a subscription, carrying the trial lesson and homework into the resulting student record. Notify the linked client immediately when the trial is booked, keep linked-account access/audience rules consistent, and ensure a trial never deducts the personal account automatically while an attended ordinary lesson deducts its configured cost exactly once.
+  - **Verification**: Backend actor-matrix and integration tests cover client/teacher/admin/manager scopes, lead homework lifecycle, immediate trial push audience, atomic subscription-triggered conversion, retry/idempotency, recurring ordinary lessons and one-time attendance charge; Flutter widget/service tests cover the three-role homework views and the lead-to-subscription transition.
+  - **Estimate**: 32 h.
+
+- [ ] **T9.2** [REQ-V3-OPS-001, REQ-V3-DATA-001]: Add a guarded, repeatable demo reset and preflight
+  - **Description**: Provide a dry-run-by-default reset for the exact allowlisted account `magic1@gmail.com`. Take and verify a production backup before apply; remove only its exact CRM lead/student/demo dependants and private administration-chat messages while preserving the auth account, role, profile, legal consent, FCM device, chat container/memberships, immutable audit trail and shared announcements. Validate the four existing account roles, teacher/staff CRM links, branch/room and an active subscription package without changing account roles; create only missing supporting CRM records explicitly required by the demo or stop with an actionable error.
+  - **Verification**: Reset can run twice safely; guard assertions abort on unexpected IDs/dependencies; post-check proves the four auth accounts/roles and shared data are unchanged, the personal administration chat is clean, API health is green and the next client message creates one fresh lead.
+  - **Estimate**: 16 h.
+
+- [ ] **T9.3** [REQ-V3-SEC-001]: Automate the four Android role sessions
+  - **Description**: Add a project-local Appium/UiAutomator2/WebdriverIO runner that binds roles by AVD name (`Client`, `Teacher`, `Admin`, `Manager`), logs the supplied accounts into the matching devices, executes the approved cross-role workflow sequentially, waits for explicit UI/server postconditions and holds each demonstrated result for 5 seconds. Credentials are accepted only at runtime and never persisted. Include deterministic notification-shade PUSH evidence, safe screenshots/XML on failure and resumable checkpoints.
+  - **Verification**: Preflight aborts before mutation on any AVD/package/version/role mismatch; Unicode input works; `--dry-run`, `--resume`, `--from`, `--to` and `--hold-ms` pass; a recorded rehearsal can resume after an injected device-session failure without duplicating business mutations.
+  - **Estimate**: 24 h.
+
+- [ ] **T9.4** [REQ-V3-DATA-001]: Publish the executable four-role demo scenario
+  - **Description**: Replace the previous demo story with the approved sequence: fresh lead intake, administrator card data/comment, manager feedback task, trial booking and client PUSH, client/teacher lesson visibility, teacher homework with client/admin/teacher verification, client feedback and task completion, subscription-triggered conversion, subscription visibility for client/admin/manager, Tuesday 12:00 recurring schedule, ordinary-lesson visibility and manager verification of the one-time personal-account deduction. Add only directly related proof points such as responsibility assignment, branch filtering, conflict prevention, notification history, idempotency and final RBAC/closure.
+  - **Verification**: Every stage names the acting device, locator/postcondition, expected shared server state, 5-second visual hold, fallback and reset effect; no step relies on an unavailable role tab or an artificial admin broadcast.
+  - **Estimate**: 8 h.
+
+- [ ] **INT-S9** [MILESTONE]: Four-role Android demo acceptance
+  - **Description**: Run reset/preflight, install the same release APK on all four named AVDs, execute the full scenario against the production API and retain redacted evidence for every cross-role transition.
+  - **Verification**: The complete run finishes from a clean lead state without manual data repair, all role/account/device bindings are correct, requested PUSH is visible while the client app is backgrounded, all 5-second proof holds occur, one ordinary lesson charge is visible and a second attendance save cannot charge again.
+  - **Estimate**: 8 h.
+
 ## User Story Overlay
 
 | Story | Critical path | Coverage |
