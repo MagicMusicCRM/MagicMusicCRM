@@ -74,8 +74,9 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
 
   Future<void> _loadBranches() async {
     try {
-      final branches =
-          await ref.read(magicCrmServiceProvider).listBranches(limit: 100);
+      final branches = await ref
+          .read(magicCrmServiceProvider)
+          .listBranches(limit: 100);
       if (!mounted) return;
       ref.read(leadTransferControllerProvider).setBranches(branches);
     } catch (_) {
@@ -83,76 +84,22 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
     }
   }
 
-  /// Runs the conversion when a card is dropped on a column. Uses the existing
-  /// `createStudent` contract (status = column, branch/discipline/sourceLeadId
-  /// in `customDataPatch`) — no backend contract is added or changed.
+  /// Legacy drag-to-student callbacks must not create a student directly.
+  /// New conversions are atomic and start from «Выдать абонемент» in the lead
+  /// card, so a stale drag gesture is cancelled with a clear operator hint.
   Future<void> _commitTransfer(TransferDropResult result) async {
     if (!mounted) return;
     final lead = result.lead;
-    if (lead == null || _converting) return;
+    if (lead == null) return;
     final leadId = lead['id']?.toString() ?? '';
     if (leadId.isEmpty) return;
-    if ((lead['linked_student_id']?.toString() ?? '').isNotEmpty) {
-      _showError('Лид уже связан с учеником');
-      return;
-    }
-
-    setState(() => _converting = true);
     final controller = ref.read(leadTransferControllerProvider);
-    // Optimistic: drop the lead out of the funnel at once (LeadsWidget filters
-    // controller.hiddenLeadIds), keeping the dragged context intact for undo.
-    controller.addHiddenLead(leadId);
-
-    final firstName = (lead['name'] ?? '').toString().trim();
-    final lastName = (lead['last_name'] ?? '').toString().trim();
-    final phone = (lead['phone'] ?? '').toString().trim();
-    final email = (lead['email'] ?? '').toString().trim();
-    final custom = lead['custom_data'];
-    final discipline =
-        custom is Map ? (custom['discipline']?.toString().trim() ?? '') : '';
-
-    final patch = <String, dynamic>{'sourceLeadId': leadId};
-    if (result.branchId != null && result.branchId!.isNotEmpty) {
-      patch['branchId'] = result.branchId;
-    }
-    if (discipline.isNotEmpty) patch['discipline'] = discipline;
-
-    try {
-      final student = await ref.read(magicCrmServiceProvider).createStudent(
-            firstName: firstName.isEmpty ? 'Без имени' : firstName,
-            lastName: lastName.isEmpty ? null : lastName,
-            phone: phone.isEmpty ? null : phone,
-            email: email.isEmpty ? null : email,
-            status: result.columnStatus ?? 'active',
-            leadId: leadId,
-            customDataPatch: patch,
-          );
-      // Refresh the destination board so the new student card appears in its
-      // column; the leads funnel relies on hiddenLeadIds for the optimistic
-      // removal so «Отменить» can cleanly restore the card.
-      ref.invalidate(studentBoardProvider);
-      if (!mounted) return;
-      final branchLabel = result.branchName ?? 'Без филиала';
-      final columnLabel = result.columnName ?? result.columnStatus ?? '';
-      _showSuccess(
-        leadId,
-        student['id']?.toString(),
-        'Лид перенесён в Ученики · $branchLabel · $columnLabel',
-      );
-    } catch (e) {
-      controller.removeHiddenLead(leadId);
-      _showError('Не удалось перенести в ученики: $e');
-    } finally {
-      if (mounted) setState(() => _converting = false);
-    }
-  }
-
-  void _showSuccess(String leadId, String? studentId, String message) {
-    _successTimer?.cancel();
-    setState(() => _success = _SuccessInfo(leadId, studentId, message));
-    _successTimer = Timer(const Duration(seconds: 8), () {
-      if (mounted) setState(() => _success = null);
-    });
+    controller.removeHiddenLead(leadId);
+    setState(() => _segment = 0);
+    _toast(
+      'Лид станет учеником только после выдачи абонемента. '
+      'Откройте карточку лида → «Выдать абонемент».',
+    );
   }
 
   /// Real undo: soft-delete the created student (DELETE /crm/students/:id) and
@@ -186,8 +133,9 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
     if (studentId.isEmpty) return;
     setState(() => _converting = true);
     try {
-      final result =
-          await ref.read(magicCrmServiceProvider).returnStudentToLead(studentId);
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .returnStudentToLead(studentId);
       ref.invalidate(studentBoardProvider);
       if (!mounted) return;
       final leadId = result['leadId']?.toString() ?? '';
@@ -297,12 +245,11 @@ class _Header extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child:
-                        _CompactTabs(
-                          segment: segment,
-                          onSelect: onSelectSegment,
-                          onReturnStudentToLead: onReturnStudentToLead,
-                        ),
+                    child: _CompactTabs(
+                      segment: segment,
+                      onSelect: onSelectSegment,
+                      onReturnStudentToLead: onReturnStudentToLead,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   // D1: the notification center (read + mark-read), surfaced where
@@ -347,10 +294,7 @@ class _CompactTabs extends StatelessWidget {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            _leadPill(),
-            _pill('Ученики', Icons.school_outlined, 1),
-          ],
+          children: [_leadPill(), _pill('Ученики', Icons.school_outlined, 1)],
         ),
       ),
     );
@@ -488,9 +432,7 @@ class _BigField extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.card),
         border: dashed
             ? null
-            : Border.all(
-                color: active ? AppColor.goldLine : AppColor.divider,
-              ),
+            : Border.all(color: active ? AppColor.goldLine : AppColor.divider),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -576,8 +518,7 @@ class _BranchStrip extends StatelessWidget {
     bool isNone = false,
   }) {
     final selectedValue = controller.selectedBranchId;
-    final selected =
-        isNone ? selectedValue == null : selectedValue == id;
+    final selected = isNone ? selectedValue == null : selectedValue == id;
     return SizedBox(
       width: 168,
       child: TransferDropZone(
@@ -591,7 +532,9 @@ class _BranchStrip extends StatelessWidget {
           final field = Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: selected ? color.withValues(alpha: 0.16) : AppColor.surface,
+              color: selected
+                  ? color.withValues(alpha: 0.16)
+                  : AppColor.surface,
               borderRadius: BorderRadius.circular(AppRadius.control),
               border: hovering || selected
                   ? null
@@ -616,8 +559,8 @@ class _BranchStrip extends StatelessWidget {
                   selected
                       ? 'выбран'
                       : (hovering
-                          ? 'подтверждение…'
-                          : (isNone ? 'если неизвестен' : 'перенести сюда')),
+                            ? 'подтверждение…'
+                            : (isNone ? 'если неизвестен' : 'перенести сюда')),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: AppColor.text2, fontSize: 11),
@@ -663,8 +606,11 @@ class _SuccessStrip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_rounded,
-              color: AppColor.success, size: 18),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: AppColor.success,
+            size: 18,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

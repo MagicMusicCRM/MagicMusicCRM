@@ -329,7 +329,12 @@ export class TasksService {
       affectedUserIds: task.assigned_to ? [task.assigned_to] : null,
     });
     if (task.assigned_to && task.assigned_to !== actor.userId) {
-      this.notifyNewTaskSafe(task.assigned_to, task.title, task.due_at);
+      this.notifyNewTaskSafe(
+        task.assigned_to,
+        task.id,
+        task.title,
+        task.due_at,
+      );
     }
     return toTaskDto(task);
   }
@@ -338,6 +343,7 @@ export class TasksService {
   // задача"). A notification failure must NEVER break task creation.
   private notifyNewTaskSafe(
     userId: string,
+    taskId: string,
     title: string,
     dueAt: Date | string | null,
   ): void {
@@ -350,6 +356,7 @@ export class TasksService {
           userId,
           title: "У вас новая задача",
           body: `«${title}»${when}`,
+          data: { entityType: "task", entityId: taskId },
           // Without an explicit list notifyUser defaults to ['in_app'], which
           // only lights up the bell: mobile assignees would never be told.
           channels: ["in_app", "push"],

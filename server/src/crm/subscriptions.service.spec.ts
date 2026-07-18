@@ -1,3 +1,4 @@
+import { ConflictException, ForbiddenException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
@@ -9,7 +10,11 @@ describe("SubscriptionsService", () => {
 
   const createService = (rows: Record<string, unknown>[] = []) => {
     const query = jest.fn().mockResolvedValue({ rows });
-    const database = { query };
+    const transaction = jest.fn(
+      async (work: (client: { query: typeof query }) => Promise<unknown>) =>
+        work({ query }),
+    );
+    const database = { query, transaction };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const policy = {
       assertCanReadOperationalData: jest.fn(),
@@ -25,7 +30,34 @@ describe("SubscriptionsService", () => {
       realtime as unknown as RealtimeBus,
     );
 
-    return { service, query, audit, policy, realtime };
+    return { service, query, transaction, audit, policy, realtime };
+  };
+
+  const createServiceWithQueryResults = (
+    results: { rows: Record<string, unknown>[] }[],
+  ) => {
+    const queued = [...results];
+    const query = jest.fn().mockImplementation(() =>
+      Promise.resolve(queued.shift() ?? { rows: [] }),
+    );
+    const transaction = jest.fn(
+      async (work: (client: { query: typeof query }) => Promise<unknown>) =>
+        work({ query }),
+    );
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const policy = {
+      assertCanReadOperationalData: jest.fn(),
+      assertCanWriteCrm: jest.fn(),
+      assertCanManageSubscriptionPackages: jest.fn(),
+    };
+    const realtime = { emitCrmChanged: jest.fn() };
+    const service = new SubscriptionsService(
+      { query, transaction } as unknown as DatabaseService,
+      audit as unknown as AuditService,
+      policy as unknown as CrmPolicy,
+      realtime as unknown as RealtimeBus,
+    );
+    return { service, query, transaction, audit, policy, realtime };
   };
 
   it("lists subscriptions with actor-scoped query and safe DTO", async () => {
@@ -175,17 +207,20 @@ describe("SubscriptionsService", () => {
   });
 
   it("issues a subscription from a package atomically with audit (P5b)", async () => {
-    const { service, query, audit, policy } = createService([
-      {
-        id: "sub-a",
-        lessons_total: 8,
-        lessons_used: 0,
-        starts_at: "2026-06-22",
-        expires_at: "2026-08-21",
-        status: "active",
-        package_id: "pkg-a",
-        payment_id: "pay-a",
-      },
+    const { service, query, transaction, audit, policy } =
+      createServiceWithQueryResults([
+      { rows: [{ id: "student-a" }] },
+      { rows: [{
+          id: "sub-a",
+          lessons_total: 8,
+          lessons_used: 0,
+          starts_at: "2026-06-22",
+          expires_at: "2026-08-21",
+          status: "active",
+          package_id: "pkg-a",
+          payment_id: "pay-a",
+        }] },
+      { rows: [] }, // realtime audience
     ]);
 
     await expect(
@@ -203,10 +238,11 @@ describe("SubscriptionsService", () => {
     });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    const sql = String(query.mock.calls[0][0]);
+    expect(transaction).toHaveBeenCalledTimes(1);
+    const sql = String(query.mock.calls[1][0]);
     expect(sql).toContain("insert into app.payments");
     expect(sql).toContain("insert into app.subscriptions");
-    expect(query.mock.calls[0][1]).toEqual(["student-a", "pkg-a", "manager-a"]);
+    expect(query.mock.calls[1][1]).toEqual(["student-a", "pkg-a", "manager-a"]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.subscription_issued",
@@ -214,6 +250,314 @@ describe("SubscriptionsService", () => {
         entityId: "student-a",
       }),
     );
+  });
+
+  it("atomically converts a lead only when issuing its subscription", async () => {
+    const { service, query, audit, policy, realtime } =
+      createServiceWithQueryResults([
+        { rows: [] }, // advisory lock
+        { rows: [] }, // no previous conversion issue
+        {
+          rows: [
+            {
+              id: "lead-a",
+              first_name: "Анна",
+              last_name: "Иванова",
+              email: "anna@example.com",
+              phone: "+79990000000",
+              custom_data: { discipline: "Фортепиано" },
+              branch_id: "branch-a",
+              created_at: "2026-07-18T09:00:00.000Z",
+            },
+          ],
+        },
+        {
+          rows: [
+            {
+              id: "pkg-a",
+              name: "8 занятий",
+              discipline_id: "discipline-a",
+              branch_id: "branch-a",
+              lessons_total: "8",
+              price: "8000.00",
+              validity_days: 60,
+              is_active: true,
+              sort_order: 0,
+              created_at: "2026-07-01T00:00:00.000Z",
+            },
+          ],
+        },
+        { rows: [] }, // no existing student
+        { rows: [{ profile_id: "profile-client" }] },
+        { rows: [{ id: "student-a" }] },
+        { rows: [] }, // copy user_crm_link
+        { rows: [] }, // copy family membership
+        { rows: [] }, // retire lead family membership
+        {
+          rows: [
+            {
+              id: "trial-a",
+              student_id: "student-a",
+              group_id: null,
+              lead_id: null,
+              teacher_id: "teacher-a",
+            },
+          ],
+        }, // rebind trial
+        { rows: [{ id: "hw-trial" }] }, // rebind homework
+        {
+          rows: [
+            {
+              id: "payment-a",
+              student_id: "student-a",
+              amount: "8000.00",
+              currency: "RUB",
+              payment_date: "2026-07-18T10:00:00.000Z",
+              method: null,
+              notes: "Покупка абонемента",
+            },
+          ],
+        },
+        {
+          rows: [
+            {
+              id: "subscription-a",
+              student_id: "student-a",
+              lessons_total: "8",
+              lessons_used: "0",
+              starts_at: "2026-07-18",
+              expires_at: "2026-09-16",
+              status: "active",
+              package_id: "pkg-a",
+              payment_id: "payment-a",
+            },
+          ],
+        },
+        {
+          rows: [
+            {
+              id: "student-a",
+              lead_id: "lead-a",
+              status: "active",
+              custom_data: {
+                discipline: "Фортепиано",
+                sourceLeadId: "lead-a",
+              },
+              profile_id: "profile-client",
+              profile_user_id: "client-a",
+              first_name: "Анна",
+              last_name: "Иванова",
+              email: "anna@example.com",
+              phone: "+79990000000",
+              created_at: "2026-07-18T10:00:00.000Z",
+            },
+          ],
+        },
+        { rows: [{ user_id: "client-a" }] }, // student realtime audience
+        {
+          rows: [
+            { user_id: "client-a" },
+            { user_id: "teacher-user" },
+          ],
+        }, // converted lesson audience
+        {
+          rows: [
+            { user_id: "client-a" },
+            { user_id: "teacher-user" },
+          ],
+        }, // converted homework audience
+      ]);
+
+    await expect(
+      service.issueLeadSubscription(actor, "lead-a", { packageId: "pkg-a" }),
+    ).resolves.toEqual({
+      student: expect.objectContaining({ id: "student-a", leadId: "lead-a" }),
+      subscription: expect.objectContaining({
+        id: "subscription-a",
+        packageId: "pkg-a",
+        paymentId: "payment-a",
+      }),
+      payment: expect.objectContaining({ id: "payment-a", amount: 8000 }),
+      converted: true,
+    });
+
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(String(query.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes(
+          "set student_id = $2, lead_id = null, updated_at = now()",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("conversion_lead_id"),
+      ),
+    ).toBe(true);
+    expect(String(query.mock.calls[6][0])).toContain("updated_profile as");
+    const linkedProfileParams = query.mock.calls[6][1] as unknown[];
+    expect(linkedProfileParams[0]).toBe("profile-client");
+    expect(linkedProfileParams[3]).toBe("+79990000000");
+    expect(linkedProfileParams[4]).toBe("lead-a");
+    expect(JSON.parse(String(linkedProfileParams[5]))).toMatchObject({
+      sourceLeadId: "lead-a",
+      sourceLeadEmail: "anna@example.com",
+      appealAt: "2026-07-18T09:00:00.000Z",
+    });
+    expect(linkedProfileParams[6]).toBe("branch-a");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.student_created",
+        metadata: { leadId: "lead-a", trigger: "subscription" },
+      }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.subscription_issued",
+        metadata: expect.objectContaining({ leadId: "lead-a" }),
+      }),
+    );
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entity: "lesson",
+        id: "trial-a",
+        affectedUserIds: ["client-a", "teacher-user"],
+      }),
+    );
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entity: "homework",
+        id: "hw-trial",
+        affectedUserIds: ["client-a", "teacher-user"],
+      }),
+    );
+  });
+
+  it("keeps generic issuance available for legacy students linked to leads", async () => {
+    const { service, query, transaction, audit } =
+      createServiceWithQueryResults([
+        {
+          // Imported students commonly retain lead_id but predate the durable
+          // conversion marker introduced by migration 0072.
+          rows: [{ id: "student-a", lead_id: "lead-a" }],
+        },
+        {
+          rows: [{
+            id: "sub-a",
+            lessons_total: 8,
+            lessons_used: 0,
+            starts_at: "2026-07-18",
+            expires_at: "2026-09-16",
+            status: "active",
+            package_id: "pkg-a",
+            payment_id: "pay-a",
+          }],
+        },
+        { rows: [] },
+      ]);
+
+    await expect(
+      service.issueSubscription(actor, "student-a", { packageId: "pkg-a" }),
+    ).resolves.toEqual(expect.objectContaining({
+      id: "sub-a",
+      studentId: "student-a",
+      packageId: "pkg-a",
+      paymentId: "pay-a",
+    }));
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(String(query.mock.calls[0][0])).toContain("select student.id");
+    expect(String(query.mock.calls[0][0])).not.toContain("conversion_lead_id");
+    expect(String(query.mock.calls[1][0])).toContain("insert into app.payments");
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "crm.subscription_issued",
+      entityId: "student-a",
+      metadata: expect.objectContaining({ subscriptionId: "sub-a" }),
+    }));
+  });
+
+  it("returns the original lead issuance on retry and rejects a different package", async () => {
+    const existing = {
+      id: "student-a",
+      lead_id: "lead-a",
+      status: "active",
+      custom_data: {},
+      profile_id: "profile-a",
+      profile_user_id: "client-a",
+      first_name: "Анна",
+      last_name: "Иванова",
+      email: "anna@example.com",
+      phone: null,
+      created_at: "2026-07-18T10:00:00.000Z",
+      subscription_id: "subscription-a",
+      lessons_total: "8",
+      lessons_used: "0",
+      starts_at: "2026-07-18",
+      expires_at: null,
+      subscription_status: "active",
+      package_id: "pkg-a",
+      payment_id: "payment-a",
+      payment_amount: "8000.00",
+      payment_currency: "RUB",
+      payment_date: "2026-07-18T10:00:00.000Z",
+      payment_method: null,
+      payment_notes: "Покупка абонемента",
+    };
+    const retry = createServiceWithQueryResults([
+      { rows: [] },
+      { rows: [existing] },
+    ]);
+
+    await expect(
+      retry.service.issueLeadSubscription(actor, "lead-a", {
+        packageId: "pkg-a",
+      }),
+    ).resolves.toMatchObject({
+      subscription: { id: "subscription-a" },
+      payment: { id: "payment-a", amount: 8000 },
+      converted: false,
+    });
+    expect(retry.audit.record).not.toHaveBeenCalled();
+    expect(
+      retry.query.mock.calls.some((call) =>
+        String(call[0]).includes("insert into app.payments"),
+      ),
+    ).toBe(false);
+
+    const mismatch = createServiceWithQueryResults([
+      { rows: [] },
+      { rows: [existing] },
+    ]);
+    await expect(
+      mismatch.service.issueLeadSubscription(actor, "lead-a", {
+        packageId: "pkg-other",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("keeps lead subscription conversion behind the CRM write actor matrix", async () => {
+    const { service, policy, transaction } = createServiceWithQueryResults([]);
+    policy.assertCanWriteCrm.mockImplementation((candidate) => {
+      if (candidate.role === "client" || candidate.role === "teacher") {
+        throw new ForbiddenException();
+      }
+    });
+
+    await expect(
+      service.issueLeadSubscription(
+        { userId: "client-a", role: "client" },
+        "lead-a",
+        { packageId: "pkg-a" },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.issueLeadSubscription(
+        { userId: "teacher-a", role: "teacher" },
+        "lead-a",
+        { packageId: "pkg-a" },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(transaction).not.toHaveBeenCalled();
   });
 
   describe("«Оплачено» по абонементу — из личного счёта", () => {

@@ -245,14 +245,14 @@ extension _ClientCardTabsA on _ClientCardState {
           runSpacing: AppSpace.sm,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            // Hide «Создать ученика» once a linked student exists (the card is
-            // — or is about to become — converted): the conversion already
-            // happened. `_isConverted` covers the resolved case; the
-            // linked_students check covers the brief window before resolution
-            // flips the mode.
+            // Product rule: a trial, its homework and feedback all belong to
+            // the lead. Conversion happens only when a paid package is chosen,
+            // so there is no standalone «Создать ученика» mutation here.
             if (!_isConverted && !_hasLinkedStudent)
               OutlinedButton.icon(
-                onPressed: _saving || _converting ? null : _convertToStudent,
+                onPressed: _saving || _converting
+                    ? null
+                    : _showIssueSubscriptionSheet,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: cs.onSurface,
                   side: BorderSide(color: cs.outlineVariant),
@@ -266,10 +266,10 @@ extension _ClientCardTabsA on _ClientCardState {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                label: const Text('Создать ученика'),
+                    : const Icon(Icons.card_membership_rounded, size: 18),
+                label: const Text('Выдать абонемент'),
               ),
-            // «Прикрепить к ученику» (§1 спеки). Рядом с «Создать ученика»,
+            // «Прикрепить к ученику» (§1 спеки). Рядом с выдачей абонемента,
             // потому что это тот же выбор: клиент уже заведён или ещё нет.
             // Раньше связать можно было только пару, которую нашёл автоподбор
             // дублей — если он молчал, привязать было нельзя вовсе.

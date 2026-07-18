@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/client_card_sheets.dart';
 import 'package:intl/intl.dart';
 
 /// Teacher schedule (P2-7 / KVA-195). v7 restyle + parity with the admin
 /// schedule: shows the signed-in teacher's lessons from the same
 /// `listLessons` payload the manager view consumes (student / room / branch
 /// names, status, plan notes). Read-only chrome is fine for the teacher — the
-/// service calls (`listTeachers` / `listLessons` / `updateLesson` and the
-/// attendance dialog) are unchanged; only the surfaces/accents are migrated to
+/// service calls (`listTeachers` / `listLessons` / `updateLesson`) are
+/// unchanged; only the surfaces/accents are migrated to
 /// the v7 tokens (AppColor / AppRadius / AppSpace) and the P0 components
 /// (showMagicSheet / MagicToast / SkeletonBox). Surfaces follow the app theme
 /// (light + dark) via [Theme.of]; accents use the v7 gold/success/danger.
@@ -28,11 +29,11 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
   bool _isLoading = true;
 
   List<Appointment> _appointments = [];
-  // Keeps the raw lesson payload keyed by lesson id so a tapped appointment can
-  // open the attendance dialog (which needs the full lesson map, not just the
-  // Appointment) — KVA-152.
+  // Keeps the raw lesson payload keyed by lesson id so trial-only completion
+  // can be distinguished from ordinary lessons (completed by admin attendance).
   final Map<String, Map<String, dynamic>> _lessonsById = {};
   final CalendarController _calendarController = CalendarController();
+  bool _realtimeRefreshQueued = false;
 
   @override
   void initState() {
@@ -77,10 +78,16 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
         final end = start.add(Duration(minutes: duration));
 
         final status = lesson['status'] as String?;
-        final studentName =
-            lesson['student_name']?.toString().trim().isNotEmpty == true
-            ? lesson['student_name'].toString()
-            : 'Ученик';
+        final subjectName =
+            [lesson['student_name'], lesson['lead_name'], lesson['group_name']]
+                .map((value) => value?.toString().trim() ?? '')
+                .firstWhere(
+                  (value) => value.isNotEmpty,
+                  orElse: () => 'Ученик',
+                );
+        final studentName = lesson['is_trial'] == true
+            ? 'Пробное · $subjectName'
+            : subjectName;
         final roomName = lesson['room_name']?.toString() ?? 'Аудитория';
         final branchName = lesson['branch_name']?.toString() ?? '';
         final locationInfo = branchName.isNotEmpty
@@ -194,12 +201,73 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
     }
   }
 
-  // Opens the attendance dialog for a lesson. The teacher can mark any lesson
-  // (the backend already permits both teacher and manager) — KVA-152.
-  Future<void> _openAttendance(String lessonId) async {
-    final lesson =
-        _lessonsById[lessonId] ?? <String, dynamic>{'id': lessonId};
-    await LessonAttendanceDialog.show(context, lesson);
+  Future<void> _assignHomework(String lessonId) async {
+    final lesson = _lessonsById[lessonId];
+    if (lesson == null) return;
+    final studentId = lesson['student_id']?.toString();
+    final leadId = lesson['lead_id']?.toString();
+    if ((studentId == null || studentId.isEmpty) &&
+        (leadId == null || leadId.isEmpty)) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'У занятия нет ученика или лида',
+          type: MagicToastType.danger,
+        );
+      }
+      return;
+    }
+
+    final crm = ref.read(magicCrmServiceProvider);
+    List<Map<String, dynamic>> recent = const [];
+    try {
+      recent = await crm.listHomeworks(lessonId: lessonId, limit: 20);
+    } catch (_) {
+      // The create form remains usable if the preview fetch is temporarily
+      // unavailable; the mutation itself still has server-side lesson scope.
+    }
+    if (!mounted) return;
+
+    final input = await showAssignHomeworkSheet(
+      context,
+      recentHomeworks: recent,
+    );
+    if (input == null || !mounted) return;
+
+    try {
+      await crm.createHomework(
+        studentId: studentId?.isNotEmpty == true ? studentId : null,
+        leadId: leadId?.isNotEmpty == true ? leadId : null,
+        lessonId: lessonId,
+        title: input.title,
+        description: input.description,
+        dueAt: input.dueAt?.toIso8601String(),
+      );
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'ДЗ назначено',
+        detail: input.title,
+        type: MagicToastType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось назначить ДЗ',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
+    }
+  }
+
+  void _scheduleRealtimeRefresh() {
+    if (_realtimeRefreshQueued || !mounted) return;
+    _realtimeRefreshQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _realtimeRefreshQueued = false;
+      if (mounted) _fetchScheduleData();
+    });
   }
 
   void _showLessonDetails(Appointment appointment) {
@@ -208,6 +276,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
     final cs = Theme.of(context).colorScheme;
     final accent = appointment.color;
     final hasPlan = appointment.notes?.isNotEmpty == true;
+    final isTrial = _lessonsById[lessonId]?['is_trial'] == true;
 
     showMagicSheet<void>(
       context,
@@ -251,9 +320,8 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
               ),
             ),
             const SizedBox(height: AppSpace.lg),
-            // Read-only-friendly action stack: editing the plan, marking
-            // attendance and completing the lesson keep their existing service
-            // calls; only the chrome is v7.
+            // Teachers edit the plan/homework. Attendance and ordinary-lesson
+            // completion are admin+ because they drive subscription charges.
             _ActionTile(
               icon: Icons.edit_note_rounded,
               label: 'Изменить план',
@@ -264,18 +332,18 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
               },
             ),
             _ActionTile(
-              icon: Icons.how_to_reg_rounded,
-              label: 'Посещаемость',
+              icon: Icons.assignment_rounded,
+              label: 'Домашнее задание',
               accent: AppColor.gold,
               onTap: () {
                 Navigator.pop(ctx);
-                _openAttendance(lessonId);
+                _assignHomework(lessonId);
               },
             ),
-            if (accent == AppColor.gold)
+            if (isTrial && accent == AppColor.gold)
               _ActionTile(
                 icon: Icons.check_circle_outline_rounded,
-                label: 'Завершить занятие',
+                label: 'Завершить пробное',
                 accent: AppColor.success,
                 onTap: () {
                   Navigator.pop(ctx);
@@ -296,6 +364,12 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(crmRealtimeProvider, (previous, next) {
+      final entity = next.value?.entity;
+      if (entity == 'lesson' || entity == 'homework') {
+        _scheduleRealtimeRefresh();
+      }
+    });
     final cs = Theme.of(context).colorScheme;
     return Column(
       children: [
@@ -357,10 +431,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
               ),
               const Spacer(),
               IconButton(
-                icon: Icon(
-                  Icons.refresh_rounded,
-                  color: cs.onSurfaceVariant,
-                ),
+                icon: Icon(Icons.refresh_rounded, color: cs.onSurfaceVariant),
                 tooltip: 'Обновить',
                 onPressed: _fetchScheduleData,
               ),
@@ -406,8 +477,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: app.color.withValues(alpha: 0.18),
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.chip),
+                            borderRadius: BorderRadius.circular(AppRadius.chip),
                             border: Border.all(color: app.color, width: 1),
                           ),
                           child: Column(
@@ -427,24 +497,6 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  // Per-card attendance shortcut (KVA-152). Opens
-                                  // the same dialog reachable from the details
-                                  // popup so a teacher can mark посещаемость in
-                                  // one tap.
-                                  if (app.id != null)
-                                    GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () =>
-                                          _openAttendance(app.id.toString()),
-                                      child: Tooltip(
-                                        message: 'Посещаемость',
-                                        child: Icon(
-                                          Icons.how_to_reg_rounded,
-                                          size: 14,
-                                          color: app.color,
-                                        ),
-                                      ),
-                                    ),
                                 ],
                               ),
                               Text(
@@ -479,12 +531,7 @@ class _ScheduleLoading extends StatelessWidget {
         children: [
           SkeletonBox(width: 44, height: 14, radius: AppRadius.sm),
           SizedBox(width: AppSpace.md),
-          Expanded(
-            child: SkeletonBox(
-              height: 54,
-              radius: AppRadius.chip,
-            ),
-          ),
+          Expanded(child: SkeletonBox(height: 54, radius: AppRadius.chip)),
         ],
       ),
     );
@@ -635,9 +682,7 @@ class _SheetButton extends StatelessWidget {
       onPressed: onPressed,
       style: style.copyWith(
         foregroundColor: WidgetStatePropertyAll(cs.onSurface),
-        side: const WidgetStatePropertyAll(
-          BorderSide(color: AppColor.divider),
-        ),
+        side: const WidgetStatePropertyAll(BorderSide(color: AppColor.divider)),
       ),
       child: Text(label),
     );

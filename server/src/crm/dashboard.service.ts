@@ -202,6 +202,13 @@ export class DashboardService {
                       end,
                       0
                     )
+                    * case
+                        when lp.id is null then 1
+                        when lp.attendance_kind in ('attended', 'paid_miss') then 1
+                        when lp.attendance_kind = 'partially_paid'
+                          then lp.charge_share
+                        else 0
+                      end
                   ) as total_cost
                 from app.lessons l
                 left join app.lesson_participation lp on lp.lesson_id = l.id
@@ -209,6 +216,7 @@ export class DashboardService {
                 left join app.groups g on g.id = l.group_id and g.deleted_at is null
                 where l.deleted_at is null
                   and l.status in ('completed', 'done')
+                  and l.is_trial = false
                   and coalesce(l.student_id, lp.student_id) is not null
                 group by coalesce(l.student_id, lp.student_id)
               ) cost on cost.student_id = st.id

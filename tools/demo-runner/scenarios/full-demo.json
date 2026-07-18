@@ -1,0 +1,2414 @@
+{
+  "version": "t9.3-full-four-role-demo-v2",
+  "presentationHoldMs": 5000,
+  "fixture": {
+    "client": "magic1@gmail.com",
+    "teacher": "magic2@gmail.com",
+    "admin": "magic3@gmail.com",
+    "manager": "magic4@gmail.com",
+    "branch": "Сокол",
+    "discipline": "Фортепиано",
+    "room": "Piano room 7",
+    "package": "Демо — Фортепиано, 8 часов",
+    "packagePriceRub": 24000,
+    "expectedOneHourChargeRub": 3000,
+    "regularSchedule": "каждый вторник в 12:00 по Москве"
+  },
+  "roleDeviceMap": {
+    "client": { "avd": "Client", "serial": "emulator-5554" },
+    "teacher": { "avd": "Teacher", "serial": "emulator-5558" },
+    "admin": { "avd": "Admin", "serial": "emulator-5556" },
+    "manager": { "avd": "Manager", "serial": "emulator-5560" }
+  },
+  "steps": [
+    {
+      "id": "fixture.reset-magic1",
+      "role": "manager",
+      "description": "Оператор применяет защищённый reset только для magic1 и проверяет четыре demo-аккаунта",
+      "mutating": true,
+      "action": {
+        "type": "manual",
+        "placeholder": true,
+        "placeholderId": "RESET_DEMO_FIXTURE",
+        "instructions": "В отдельном PowerShell выполните scripts/demo/demo-reset.ps1 сначала Preflight, затем явно подтверждённый Reset для magic1@gmail.com. После reset повторите Preflight; support fixture magic2/magic3/magic4, Сокол, Фортепиано и Piano room 7 должны быть OK. Не продолжайте при BLOCKER."
+      },
+      "reconcile": [
+        {
+          "type": "manualConfirm",
+          "instructions": "Подтвердите, что защищённый reset magic1 завершён, повторный Preflight не содержит BLOCKER, а остальные три аккаунта сохранены."
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "fixture.restart-four-apps",
+      "role": "manager",
+      "description": "После server reset все четыре приложения перезапускаются без очистки токенов",
+      "actions": [
+        { "type": "restartApp", "role": "client" },
+        { "type": "restartApp", "role": "teacher" },
+        { "type": "restartApp", "role": "admin" },
+        { "type": "restartApp", "role": "manager" }
+      ],
+      "assert": [
+        { "type": "currentPackage", "role": "client", "value": "magic.crm" },
+        { "type": "currentPackage", "role": "teacher", "value": "magic.crm" },
+        { "type": "currentPackage", "role": "admin", "value": "magic.crm" },
+        { "type": "currentPackage", "role": "manager", "value": "magic.crm" }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "login.client",
+      "role": "client",
+      "description": "Авторизация magic1 на AVD Client",
+      "action": {
+        "type": "login",
+        "successLocator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Абонемент\")"
+        }
+      },
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Абонемент\")"
+          }
+        }
+      ],
+      "assert": [{ "type": "currentPackage", "value": "magic.crm" }],
+      "holdMs": 5000
+    },
+    {
+      "id": "login.teacher",
+      "role": "teacher",
+      "description": "Авторизация magic2 на AVD Teacher",
+      "action": {
+        "type": "login",
+        "successLocator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Ученики\")"
+        }
+      },
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Ученики\")"
+          }
+        }
+      ],
+      "assert": [{ "type": "currentPackage", "value": "magic.crm" }],
+      "holdMs": 5000
+    },
+    {
+      "id": "login.admin",
+      "role": "admin",
+      "description": "Авторизация magic3 на AVD Admin",
+      "action": {
+        "type": "login",
+        "successLocator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Задачи\")"
+        }
+      },
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Задачи\")"
+          }
+        }
+      ],
+      "assert": [{ "type": "currentPackage", "value": "magic.crm" }],
+      "holdMs": 5000
+    },
+    {
+      "id": "login.manager",
+      "role": "manager",
+      "description": "Авторизация magic4 на AVD Manager",
+      "action": {
+        "type": "login",
+        "successLocator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Обзор\")"
+        }
+      },
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Обзор\")"
+          }
+        }
+      ],
+      "assert": [{ "type": "currentPackage", "value": "magic.crm" }],
+      "holdMs": 5000
+    },
+    {
+      "id": "client.create-lead-from-chat",
+      "role": "client",
+      "description": "Клиент отправляет первое обращение, система автоматически создаёт ровно одного лида",
+      "mutating": true,
+      "actions": [
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionStartsWith(\"Администрация\")"
+          }
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Сообщение\")"
+          },
+          "value": "Здравствуйте! Хочу записаться на пробный урок фортепиано в филиале Сокол. Удобно в ближайший свободный день"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Отправить" } }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionStartsWith(\"Администрация\")"
+          }
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Хочу записаться на пробный урок фортепиано\")"
+          }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Хочу записаться на пробный урок фортепиано\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.filter-and-open-lead",
+      "role": "admin",
+      "description": "Администратор демонстрирует разделение Лиды/Ученики и фильтр филиала Сокол",
+      "actions": [
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Лиды" }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionMatches(\"^(Все филиалы|Сокол)$\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "xpath", "value": "(//*[@content-desc=\"Все филиалы\"])[last()]" }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Все филиалы\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "xpath", "value": "(//*[@content-desc=\"Сокол\"])[last()]" }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")"
+          }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.take-lead-chat-in-work",
+      "role": "admin",
+      "description": "Администратор берёт обращение в работу; система назначает ответственного без дубля лида",
+      "mutating": true,
+      "actions": [
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Действия с чатом" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Взять в работу" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Действия с чатом" }
+        }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Действия с чатом" }
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "accessibility id", "value": "Снять с работы" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "accessibility id", "value": "Снять с работы" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.open-lead-card",
+      "role": "admin",
+      "description": "Администратор открывает связанную карточку лида из чата",
+      "actions": [
+        { "type": "back" },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Ученик Тестов\").descriptionContains(\"Лид\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.fill-lead-card",
+      "role": "admin",
+      "description": "Администратор собирает и сохраняет доступные до конверсии данные карточки лида",
+      "mutating": true,
+      "actions": [
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Статус\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "В процессе" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Основной филиал\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Основной филиал\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Сокол" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Цель обучения\")" }
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Цель обучения\")" },
+          "value": "Научиться играть любимые композиции"
+        },
+        { "type": "hideKeyboard" },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Желаемое расписание\")" }
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Желаемое расписание\")" },
+          "value": "Вторник, 12:00"
+        },
+        { "type": "hideKeyboard" },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ответственный\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ответственный\")" }
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Имя сотрудника\")" },
+          "value": "Администратор Тестов"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "pause", "ms": 700 },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Администратор Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "accessibility id", "value": "Фортепиано" }
+        },
+        {
+          "type": "tapIfVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().description(\"Фортепиано\").checked(false)" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Сохранить" } },
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Желаемое расписание\")" }
+        }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Желаемое расписание\")" }
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "text",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Желаемое расписание\")" },
+          "value": "Вторник, 12:00",
+          "contains": true
+        }
+      ],
+      "wait": [
+        {
+          "type": "text",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Желаемое расписание\")" },
+          "value": "Вторник, 12:00",
+          "contains": true
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.add-lead-comment",
+      "role": "admin",
+      "description": "Администратор добавляет комментарий в единую временную шкалу клиента",
+      "mutating": true,
+      "actions": [
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Комментарии" } },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Написать комментарий\")"
+          },
+          "value": "Интересуется фортепиано, ранее не занимался, цель — играть любимые композиции"
+        },
+        { "type": "hideKeyboard" },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Отправить комментарий" }
+        }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Комментарии" } }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"цель — играть любимые композиции\")"
+          }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"цель — играть любимые композиции\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "manager.create-feedback-task",
+      "role": "manager",
+      "description": "Управляющий ставит администратору связанную задачу собрать обратную связь",
+      "mutating": true,
+      "actions": [
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Ещё\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Задачи" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Новая задача" } },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "value": "[DEMO] Собрать ОС после пробного"
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(1)"
+          },
+          "value": "Уточнить впечатления и готовность купить абонемент"
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionStartsWith(\"Тип объекта\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лид" } },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionStartsWith(\"Объект\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionStartsWith(\"Ответственный\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Администратор Тестов (Администратор)\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionStartsWith(\"Приоритет\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Высокий" } },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionStartsWith(\"Установить срок\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Переключиться на ручной ввод" }
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "valueFromClock": { "offsetDays": 2, "format": "dd.MM.yyyy", "timeZone": "Europe/Moscow" }
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "ОК" } },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Перейти в режим ввода текста" }
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "value": "20"
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(1)"
+          },
+          "value": "30"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "ОК" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Создать" } },
+        { "type": "pause", "ms": 700 },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionStartsWith(\"Срок\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Любой срок" } },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "value": "[DEMO] Собрать ОС после пробного"
+        }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Ещё\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Задачи" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Срок\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Любой срок" } },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "value": "[DEMO] Собрать ОС после пробного"
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"[DEMO] Собрать ОС после пробного\")"
+          }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"[DEMO] Собрать ОС после пробного\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.verify-feedback-task",
+      "role": "admin",
+      "description": "Администратор видит назначенную ему задачу со всеми реквизитами",
+      "actions": [
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Задачи\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionStartsWith(\"Срок\").descriptionContains(\"По дням\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Любой срок" }
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "value": "[DEMO] Собрать ОС после пробного"
+        },
+        { "type": "pause", "ms": 700 }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"[DEMO] Собрать ОС после пробного\")"
+          }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Создал:\")"
+          }
+        },
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Ответственный\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "client.background-for-trial-push",
+      "role": "client",
+      "description": "Клиентское приложение переводится в фон перед назначением пробного",
+      "action": { "type": "home" },
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.schedule-trial",
+      "role": "admin",
+      "description": "Администратор назначает пробное занятие именно лиду через Расписание",
+      "mutating": true,
+      "actions": [
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Расписание\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Новое занятие" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Преподаватель\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Учитель Тестов\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Лид (на пробное)\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Филиал\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Сокол" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Аудитория\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Piano room 7\")" }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionMatches(\"^\\d{2}\\.\\d{2}\\.\\d{4}$\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Переключиться на ручной ввод" } },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)" },
+          "valueFromClock": { "offsetDays": 2, "format": "dd.MM.yyyy", "timeZone": "Europe/Moscow" }
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "ОК" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionMatches(\"^\\d{2}:\\d{2}$\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Перейти в режим ввода текста" } },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)" },
+          "value": "19"
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").instance(1)" },
+          "value": "30"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "ОК" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Создать" } },
+        { "type": "pause", "ms": 700 },
+        { "type": "tapIfVisible", "locator": { "using": "accessibility id", "value": "Всё равно назначить" } }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Открыть в расписании" } }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Пробное\").descriptionContains(\"Ученик Тестов\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Пробное\").descriptionContains(\"Ученик Тестов\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "client.open-trial-push",
+      "role": "client",
+      "description": "Клиент получает PUSH о назначенном пробном, шторка показывается пять секунд",
+      "action": {
+        "type": "pushShadeTap",
+        "marker": "Пробное занятие назначено",
+        "locator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().textContains(\"Пробное занятие\")"
+        },
+        "shadeHoldMs": 5000,
+        "expectedPackage": "magic.crm",
+        "notificationTimeoutMs": 30000
+      },
+      "holdMs": 5000
+    },
+    {
+      "id": "client.verify-trial",
+      "role": "client",
+      "description": "Клиент видит пробное в предстоящих занятиях",
+      "actions": [
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Занятия\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Предстоящие" } }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Пробный урок\")"
+          }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Учитель Тестов\")"
+          }
+        },
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Piano room 7\")"
+          }
+        },
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Сокол\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "teacher.verify-trial-and-plan",
+      "role": "teacher",
+      "description": "Преподаватель видит пробное и добавляет план занятия",
+      "mutating": true,
+      "actions": [
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Расписание\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Пробное · Ученик Тестов\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Изменить план" } },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "value": "Знакомство, постановка рук, мини-диагностика слуха и ритма"
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Сохранить" } },
+        { "type": "pause", "ms": 700 },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Пробное · Ученик Тестов\")"
+          }
+        }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Расписание\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Пробное · Ученик Тестов\")"
+          }
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Знакомство, постановка рук, мини-диагностика слуха и ритма\")"
+          }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Знакомство, постановка рук, мини-диагностика слуха и ритма\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "teacher.assign-homework",
+      "role": "teacher",
+      "description": "Преподаватель выдаёт структурированное ДЗ по пробному лиду",
+      "mutating": true,
+      "actions": [
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Домашнее задание" } },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "value": "[DEMO] Ритмический рисунок"
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(1)"
+          },
+          "value": "Простучать четверти и восьмые под метроном 60 BPM, записать результат"
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Срок не задан" } },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Переключиться на ручной ввод" }
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "valueFromClock": {
+            "offsetDays": 2,
+            "format": "dd.MM.yyyy",
+            "timeZone": "Europe/Moscow"
+          }
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "ОК" } },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Перейти в режим ввода текста" }
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)"
+          },
+          "value": "18"
+        },
+        {
+          "type": "setValue",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.EditText\").instance(1)"
+          },
+          "value": "00"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "ОК" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Создать" } },
+        { "type": "pause", "ms": 700 },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Пробное · Ученик Тестов\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Домашнее задание" } }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Расписание\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Пробное · Ученик Тестов\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Домашнее задание" } }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"[DEMO] Ритмический рисунок\")"
+          }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"[DEMO] Ритмический рисунок\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "teacher.verify-homework",
+      "role": "teacher",
+      "description": "Преподаватель повторно открывает ДЗ и видит статус Назначено",
+      "action": { "type": "pause", "ms": 100 },
+      "assert": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"[DEMO] Ритмический рисунок\")"
+          }
+        },
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Назначено\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.verify-lead-homework",
+      "role": "admin",
+      "description": "Администратор видит выданное преподавателем ДЗ в карточке лида",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "accessibility id", "value": "Прогресс" },
+          "containerLocator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.HorizontalScrollView\")" },
+          "direction": "right",
+          "maxSwipes": 4
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Прогресс" } }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"[DEMO] Ритмический рисунок\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Задано\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "client.verify-and-submit-homework",
+      "role": "client",
+      "description": "Клиент видит ДЗ и отправляет выполнение",
+      "mutating": true,
+      "actions": [
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Занятия\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Задания" } },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Сдать" }
+        }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Занятия\")"
+          }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Задания" } }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Сдано\")"
+          }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Сдано\")"
+          }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"[DEMO] Ритмический рисунок\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "teacher-and-admin-verify-submission",
+      "role": "teacher",
+      "description": "Преподаватель и администратор видят единый статус сданного ДЗ",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Расписание\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"День\")" }
+        },
+        { "type": "tap", "locator": { "using": "xpath", "value": "(//*[@content-desc=\"Расписание\"])[last()]" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Пробное · Ученик Тестов\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Домашнее задание" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Сдано\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        { "type": "restartApp", "role": "admin" },
+        {
+          "type": "tap",
+          "role": "admin",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "role": "admin", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "role": "admin",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "tap", "role": "admin", "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" } },
+        {
+          "type": "scrollUntilVisible",
+          "role": "admin",
+          "locator": { "using": "accessibility id", "value": "Прогресс" },
+          "containerLocator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.HorizontalScrollView\")" },
+          "direction": "right",
+          "maxSwipes": 4
+        },
+        { "type": "tap", "role": "admin", "locator": { "using": "accessibility id", "value": "Прогресс" } }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "role": "admin",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"[DEMO] Ритмический рисунок\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "role": "admin",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Сдано\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "teacher-complete-trial",
+      "role": "teacher",
+      "description": "Преподаватель завершает своё пробное, после чего администратор собирает ОС",
+      "mutating": true,
+      "actions": [
+        { "type": "back" },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Пробное · Ученик Тестов\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Завершить занятие" }
+        },
+        { "type": "pause", "ms": 700 },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Пробное · Ученик Тестов\")"
+          }
+        }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Расписание\")"
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Пробное · Ученик Тестов\")"
+          }
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "hidden",
+          "locator": { "using": "accessibility id", "value": "Завершить занятие" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "hidden",
+          "locator": { "using": "accessibility id", "value": "Завершить занятие" }
+        },
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Знакомство, постановка рук, мини-диагностика слуха и ритма\")"
+          }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.request-feedback",
+      "role": "admin",
+      "description": "Администратор собирает обратную связь после пробного через чат",
+      "mutating": true,
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Сообщение\")" },
+          "value": "Как прошло пробное? Всё ли понравилось? Готовы продолжить и оформить абонемент?"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Отправить" } }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Готовы продолжить и оформить абонемент\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Готовы продолжить и оформить абонемент\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "client-send-feedback-and-intent",
+      "role": "client",
+      "description": "Клиент даёт положительную ОС и сообщает о желании купить абонемент",
+      "mutating": true,
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Администрация\")" }
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Сообщение\")" },
+          "value": "Пробное понравилось, преподаватель всё понятно объяснил. Хочу купить абонемент и заниматься регулярно по вторникам в 12:00"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Отправить" } }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Администрация\")" }
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"заниматься регулярно по вторникам в 12:00\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"заниматься регулярно по вторникам в 12:00\")" }
+        },
+        {
+          "type": "visible",
+          "role": "admin",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"заниматься регулярно по вторникам в 12:00\")" },
+          "timeoutMs": 30000
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin-record-feedback-and-complete-task",
+      "role": "admin",
+      "description": "Администратор фиксирует полученную обратную связь в карточке клиента",
+      "mutating": true,
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Комментарии" } },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Написать комментарий\")" },
+          "value": "ОС положительная; готов купить абонемент; предпочтение — вторник 12:00"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Отправить комментарий" } }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Комментарии" } }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"ОС положительная; готов купить абонемент\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"ОС положительная; готов купить абонемент\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "manager-verify-task-completion",
+      "role": "manager",
+      "description": "Администратор завершает задачу, управляющий видит автора, ответственного и итоговый статус",
+      "mutating": true,
+      "actions": [
+        { "type": "restartApp", "role": "admin" },
+        {
+          "type": "tap",
+          "role": "admin",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Задачи\")" }
+        },
+        {
+          "type": "tap",
+          "role": "admin",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Срок\")" }
+        },
+        { "type": "tap", "role": "admin", "locator": { "using": "accessibility id", "value": "Любой срок" } },
+        {
+          "type": "setValue",
+          "role": "admin",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Поиск задач\")" },
+          "value": "[DEMO] Собрать ОС после пробного"
+        },
+        { "type": "hideKeyboard", "role": "admin" },
+        { "type": "pause", "role": "admin", "ms": 700 },
+        { "type": "tap", "role": "admin", "locator": { "using": "accessibility id", "value": "Действия задачи" } },
+        { "type": "tap", "role": "admin", "locator": { "using": "accessibility id", "value": "Завершить" } },
+        { "type": "pause", "role": "admin", "ms": 900 },
+        {
+          "type": "scrollUntilVisible",
+          "role": "admin",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Завершена\")" }
+        },
+        { "type": "pause", "role": "admin", "ms": 5000 },
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Ещё\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Задачи" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Завершены" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Срок\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Любой срок" } },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Поиск задач\")" },
+          "value": "[DEMO] Собрать ОС после пробного"
+        },
+        { "type": "hideKeyboard" }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Ещё\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Задачи" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Завершены" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Срок\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Любой срок" } },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Поиск задач\")" },
+          "value": "[DEMO] Собрать ОС после пробного"
+        },
+        { "type": "hideKeyboard" }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"[DEMO] Собрать ОС после пробного\")" }
+        },
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Завершена\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"[DEMO] Собрать ОС после пробного\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Завершена\")" }
+        },
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Администратор Тестов\")" }
+        },
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Создал: Управляющий Тестов\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin.issue-subscription-from-lead",
+      "role": "admin",
+      "description": "Администратор из карточки лида атомарно выдаёт абонемент, создавая ученика, оплату и подписку",
+      "mutating": true,
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Лиды" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Выдать абонемент" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Демо — Фортепиано, 8 часов\")" }
+        },
+        { "type": "pause", "ms": 900 },
+        { "type": "back" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "client-verify-subscription",
+      "role": "client",
+      "description": "Клиент видит активный абонемент и оплату",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Абонемент\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Осталось: 8 ч\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Оплаты" } }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionMatches(\".*24.?000.*₽.*\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin-set-lesson-price-and-verify-subscription",
+      "role": "admin",
+      "description": "Администратор дополняет карточку ученика, задаёт стоимость часа и сверяет абонемент",
+      "mutating": true,
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Место работы/учёбы\")" }
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Место работы/учёбы\")" },
+          "value": "Школа №1252"
+        },
+        { "type": "hideKeyboard" },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Должность/класс\")" }
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Должность/класс\")" },
+          "value": "9 класс"
+        },
+        { "type": "hideKeyboard" },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Индивидуальная цена\")" }
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Индивидуальная цена\")" },
+          "value": "3000"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Сохранить" } },
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Индивидуальная цена\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Демо — Фортепиано, 8 часов\")" }
+        }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Индивидуальная цена\")" }
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "text",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").descriptionContains(\"Индивидуальная цена\")" },
+          "value": "3000",
+          "contains": true
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Остаток: 8 из 8\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Оплачено: 24000 ₽\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "manager-verify-subscription-and-balance-before",
+      "role": "manager",
+      "description": "Управляющий сверяет абонемент и фиксирует баланс до первого обычного занятия",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Демо — Фортепиано, 8 часов\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Личный счёт:\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Приход" } }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"+24000 ₽\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Личный счёт: 24000 ₽ − 0 ₽ = 24000 ₽\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin-create-tuesday-series",
+      "role": "admin",
+      "description": "Администратор создаёт постоянное расписание каждый вторник в 12:00",
+      "mutating": true,
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "accessibility id", "value": "График занятий" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Добавить" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"День недели\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Вт" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Время\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Перейти в режим ввода текста" } },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)" },
+          "value": "12"
+        },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").instance(1)" },
+          "value": "00"
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "ОК" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Педагог\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Учитель Тестов\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Аудитория\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Piano room 7\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Начало занятий\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Переключиться на ручной ввод" } },
+        {
+          "type": "setValue",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.EditText\").instance(0)" },
+          "valueFromClock": { "nextWeekday": 2, "format": "dd.MM.yyyy", "timeZone": "Europe/Moscow" }
+        },
+        { "type": "hideKeyboard" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "ОК" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Создать" } }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        { "type": "scrollUntilVisible", "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Вт 12:00\")" } }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Вт 12:00\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Вт 12:00\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "client-verify-regular-lessons",
+      "role": "client",
+      "description": "Клиент видит обычные вторничные занятия отдельно от пробного",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Занятия\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Предстоящие" } }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"12:00\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Учитель Тестов\")" }
+        },
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Piano room 7\")" }
+        },
+        {
+          "type": "hidden",
+          "locator": { "using": "accessibility id", "value": "Пробный урок" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "teacher-verify-regular-lessons",
+      "role": "teacher",
+      "description": "Преподаватель видит тот же ряд обычных занятий в своём расписании",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Расписание\")" }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"День\")" }
+        },
+        { "type": "tap", "locator": { "using": "xpath", "value": "(//*[@content-desc=\"Расписание\"])[last()]" } }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\").descriptionContains(\"12:00\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Piano room 7\")" }
+        },
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Сокол\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin-verify-regular-lessons",
+      "role": "admin",
+      "description": "Администратор сверяет серию в расписании и карточке ученика",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Вт 12:00\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Открыть в расписании" } }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\").descriptionContains(\"12:00\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Piano room 7\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "client-background-for-attendance-push",
+      "role": "client",
+      "description": "Клиентское приложение переводится в фон перед фиксацией посещения",
+      "action": { "type": "home" },
+      "holdMs": 5000
+    },
+    {
+      "id": "admin-complete-first-regular-lesson",
+      "role": "admin",
+      "description": "Администратор отмечает первое обычное занятие посещённым и включает уведомление клиента",
+      "mutating": true,
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().description(\"{clock}\")",
+            "valueFromClock": { "nextWeekday": 2, "format": "dd.MM", "timeZone": "Europe/Moscow" }
+          }
+        },
+        {
+          "type": "tap",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().description(\"{clock}\")",
+            "valueFromClock": { "nextWeekday": 2, "format": "dd.MM", "timeZone": "Europe/Moscow" }
+          }
+        },
+        {
+          "type": "tap",
+          "locator": { "using": "accessibility id", "value": "Уведомить об изменениях" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Сохранить" } }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Личный счёт: 24000 ₽ − 3000 ₽ = 21000 ₽\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Расход" } }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Личный счёт: 24000 ₽ − 3000 ₽ = 21000 ₽\")" }
+        },
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"-3000 ₽\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "accessibility id", "value": "Посещаемость сохранена" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "client-open-attendance-push",
+      "role": "client",
+      "description": "Клиент получает PUSH об изменении занятия",
+      "action": {
+        "type": "pushShadeTap",
+        "marker": "Изменение по занятию",
+        "locator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().textContains(\"Изменение по занятию\")"
+        },
+        "shadeHoldMs": 5000,
+        "expectedPackage": "magic.crm",
+        "notificationTimeoutMs": 30000
+      },
+      "holdMs": 5000
+    },
+    {
+      "id": "manager-verify-one-hour-charge",
+      "role": "manager",
+      "description": "Управляющий проверяет однократное списание стоимости часа с личного счёта",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Личный счёт:\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Расход" } }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"-3000 ₽\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Личный счёт: 24000 ₽ − 3000 ₽ = 21000 ₽\")" }
+        },
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Остаток: 7 из 8\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "client-verify-history-and-seven-hours",
+      "role": "client",
+      "description": "Клиент видит завершённое занятие в Истории и остаток 7 часов",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Занятия\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "История" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"12:00\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Завершено\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Абонемент\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Осталось: 7 ч\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"АБОНЕМЕНТ\")" }
+        },
+        {
+          "type": "hidden",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Осталось: 8 ч\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "admin-archive-completed-chat",
+      "role": "admin",
+      "description": "Администратор архивирует обработанный чат после завершения продажи",
+      "mutating": true,
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Действия с чатом" } },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "В архив" } },
+        { "type": "pause", "ms": 700 },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Действия с чатом" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "accessibility id", "value": "Вернуть из архива" }
+        },
+        { "type": "pause", "ms": 5000 },
+        { "type": "back" },
+        { "type": "back" },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        { "type": "pause", "ms": 5000 },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Архив" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        }
+      ],
+      "resumeActions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Чат\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Архив" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        }
+      ],
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Ученик Тестов\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"заниматься регулярно по вторникам в 12:00\")" }
+        }
+      ],
+      "assert": [
+        { "type": "visible", "locator": { "using": "accessibility id", "value": "Открыть карточку клиента" } }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "manager-final-overview",
+      "role": "manager",
+      "description": "Финальный управленческий контроль всей цепочки",
+      "actions": [
+        { "type": "restartApp" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Обзор\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Сводка менеджера\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Клиенты\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Ученики" } },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionStartsWith(\"Ученик Тестов\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Остаток: 7 из 8\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Вт 12:00\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Личный счёт: 24000 ₽ − 3000 ₽ = 21000 ₽\")" }
+        },
+        { "type": "tap", "locator": { "using": "accessibility id", "value": "Расход" } },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"-3000 ₽\")" }
+        },
+        { "type": "pause", "ms": 5000 },
+        { "type": "back" },
+        {
+          "type": "tap",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Обзор\")" }
+        },
+        {
+          "type": "scrollUntilVisible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Требует внимания\")" }
+        }
+      ],
+      "wait": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Требует внимания\")" }
+        }
+      ],
+      "assert": [
+        {
+          "type": "visible",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().descriptionContains(\"Требует внимания\")" }
+        },
+        {
+          "type": "hidden",
+          "locator": { "using": "android uiautomator", "value": "new UiSelector().className(\"android.widget.Button\").descriptionStartsWith(\"Финансы\")" }
+        }
+      ],
+      "holdMs": 5000
+    },
+    {
+      "id": "optional.admin-conflict-validation",
+      "enabled": false,
+      "role": "admin",
+      "description": "Опционально показать запрет конфликта преподавателя/аудитории",
+      "action": {
+        "type": "manual",
+        "placeholder": true,
+        "placeholderId": "OPTIONAL_SCHEDULE_CONFLICT",
+        "instructions": "Только если заранее подготовлен безопасный конфликт: попробуйте создать второе занятие magic2 в Piano room 7 на занятое время, покажите блокирующую валидацию и отмените форму без сохранения."
+      },
+      "holdMs": 5000
+    }
+  ]
+}

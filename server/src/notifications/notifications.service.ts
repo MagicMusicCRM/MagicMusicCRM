@@ -614,22 +614,42 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   async registerDevice(actor: ActorContext, dto: RegisterDeviceDto) {
     const tokenHash = this.tokenCrypto.hash(dto.token);
     const encryptedToken = this.tokenCrypto.encrypt(dto.token);
-    const result = await this.database.query<DeviceRow>(
-      `
-        insert into app.notification_devices (
-          user_id, platform, token_hash, encrypted_token, enabled, last_seen_at
-        )
-        values ($1, $2, $3, $4, true, now())
-        on conflict (user_id, token_hash) do update
-        set platform = excluded.platform,
-            encrypted_token = excluded.encrypted_token,
-            enabled = true,
-            last_seen_at = now(),
-            updated_at = now()
-        returning id, user_id, platform, token_hash, enabled, last_seen_at, created_at, updated_at
-      `,
-      [actor.userId, dto.platform, tokenHash, encryptedToken]
-    );
+    const result = await this.database.transaction(async (client) => {
+      // A physical installation may log out and then log in as another demo
+      // role. Serialize ownership transfer by token hash, disable the previous
+      // owner, then enable/upsert only the current actor. Migration 0072 adds a
+      // partial unique index as the final race-proof invariant.
+      await client.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [tokenHash]
+      );
+      await client.query(
+        `
+          update app.notification_devices
+          set enabled = false, updated_at = now()
+          where token_hash = $1
+            and user_id <> $2
+            and enabled = true
+        `,
+        [tokenHash, actor.userId]
+      );
+      return client.query<DeviceRow>(
+        `
+          insert into app.notification_devices (
+            user_id, platform, token_hash, encrypted_token, enabled, last_seen_at
+          )
+          values ($1, $2, $3, $4, true, now())
+          on conflict (user_id, token_hash) do update
+          set platform = excluded.platform,
+              encrypted_token = excluded.encrypted_token,
+              enabled = true,
+              last_seen_at = now(),
+              updated_at = now()
+          returning id, user_id, platform, token_hash, enabled, last_seen_at, created_at, updated_at
+        `,
+        [actor.userId, dto.platform, tokenHash, encryptedToken]
+      );
+    });
     await this.audit.record({
       actor,
       action: 'notifications.device_registered',

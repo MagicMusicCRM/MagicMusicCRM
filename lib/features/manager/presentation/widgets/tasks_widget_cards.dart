@@ -545,6 +545,7 @@ class _TaskCard extends StatelessWidget {
                     icon: const Icon(Icons.history_rounded),
                   ),
                   PopupMenuButton<String>(
+                    tooltip: 'Действия задачи',
                     enabled: !isPending,
                     icon: isPending
                         ? const SizedBox(

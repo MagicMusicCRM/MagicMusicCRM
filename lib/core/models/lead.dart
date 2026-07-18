@@ -9,7 +9,7 @@
 /// is behaviour-preserving: string getters carry the `?.toString() ?? ''`
 /// fallbacks, counts parse leniently (matching lead_card's `_intValue`), and
 /// [raw] is the underlying map for the few APIs that still take a map
-/// (e.g. `ConvertLeadDialog.show(lead: ...)`).
+/// (for example, when opening the unified client card from the lead board).
 class Lead {
   final Map<String, dynamic> _m;
 

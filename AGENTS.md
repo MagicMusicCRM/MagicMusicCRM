@@ -123,7 +123,7 @@
 - **Последняя версия архитектуры**: `.anws/v3` (Backend Independence)
 - **Активный список задач**: `.anws/v3/05_TASKS.md`
 - **Количество задач к выполнению**: 1
-- **Последнее обновление**: `2026-06-18`
+- **Последнее обновление**: `2026-07-18`
 
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
@@ -158,6 +158,9 @@ _`S7` pre-release gate completed 2026-06-12 and evidence is in `.anws/v3/09_S7_R
 ### 🌊 Wave v3/S8 — Desktop UX/UI Stabilization
 _Последнее обновление 2026-06-18: `S8` remediation выполнена (`T8.1`–`T8.4` закрыты в Linear: `KVA-119`–`KVA-122`): schedule loading/empty/error+retry с видимым header, trustworthy task FAB с pending/error feedback, lead columns modal loading/empty/error states + board scroll affordance, lead status-menu current-state marker, role/activity/finance clarity. Проверки: `flutter analyze` clean, `flutter test` 94/94 (вкл. `test/features/s8_desktop_ux_states_test.dart`). Осталась 1 задача — `INT-S8` (`KVA-123`, In Review): нативная Windows-сборка и живой Computer-Use desktop re-audit заблокированы окружением без сети (CMake `firebase_core` SDK download) и должны быть выполнены в сетевом окружении перед закрытием gate и публичным релизом. `KVA-117`/`KVA-118` оставлены In Review до прохождения acceptance. Acceptance write-up: `docs/audits/windows-ux-ui-2026-06-18/report.md`._ Linear `KVA-117`/`KVA-118` и дочерние `KVA-119`–`KVA-123` закрыты. Следующий этап: дальнейший P2 polish (design tokens, overview hierarchy)._
 _Последнее обновление 2026-06-16: локальный manager-role Windows audit `docs/audits/windows-ux-ui-2026-06-16/report.md` выявил новые product-quality blockers после v3 cutover. Критические trust failures: Schedule может зависать в безымянной blank/skeleton state, Task FAB не открывает create flow и не показывает pending/error feedback, lead columns modal рендерится пустым серым телом. Дополнительно зафиксированы `P1/P2` проблемы в lead board affordance, role/status mutation clarity, manager-facing reports activity copy, finance form guidance и design-token consistency. В `.anws/v3/05_TASKS.md` создан remediation backlog `T8.1`-`T8.4` + `INT-S8`; те же follow-ups привязаны к текущему stabilization parent `KVA-117` в Linear. Следующий шаг: выполнить `T8.1` и `T8.2`, затем повторить Windows audit до закрытия `INT-S8`._
+
+### 🌊 Wave v3/S9 — Four-role Android Demo Workflow
+_Последнее обновление 2026-07-18: `S9` завершён и готов к записи. Backend с migration `0072_demo_workflow_invariants` развернут на production и health green: лид сохраняется через пробное/ДЗ и атомарно конвертируется только при выдаче абонемента; обычное посещение списывает стоимость один раз, пробное не списывает; реальный PUSH подтверждён. Проверки: backend `96/96` suites, `907/907` tests, typecheck/build; Flutter analyze clean, `392/392` tests; demo runner `14/14` tests и полный dry-run сценария green. Подписанные APK/AAB `1.2.2+145` собраны, старая версия удалена и новая установлена на точные AVD `Client`, `Teacher`, `Admin`, `Manager`; вход четырёх аккаунтов в соответствующие роли подтверждён. Production fixture `magic1@gmail.com` очищена после проверенного backup. Сценарий содержит `43` автоматических шага с пятисекундными показами и единственный ручной guarded reset; мутационный запуск сохранён для OBS-дубля, чтобы запись начиналась с чистого состояния._
 
 ### Технологические решения
 - Язык/фреймворк: Dart + Flutter client, NestJS + TypeScript backend.

@@ -7,8 +7,13 @@ import {
 } from "class-validator";
 
 export class CreateHomeworkDto {
+  @IsOptional()
   @IsUUID()
-  studentId: string;
+  studentId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  leadId?: string;
 
   @IsOptional()
   @IsUUID()

@@ -127,4 +127,85 @@ describe("FilesPolicy", () => {
       ),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it("lets a linked lead client read a trial-homework attachment", async () => {
+    const query = jest.fn().mockResolvedValue({
+      rows: [
+        {
+          assigned_by: "teacher-user",
+          teacher_user_id: "teacher-user",
+          client_can_access: true,
+        },
+      ],
+    });
+    const homeworkPolicy = new FilesPolicy(
+      { query } as unknown as DatabaseService,
+      {} as MessengerPolicy,
+    );
+
+    await expect(
+      homeworkPolicy.assertCanRead(
+        { userId: "client-user", role: "client" },
+        {
+          id: "file-homework",
+          owner_user_id: "teacher-user",
+          owner_type: "homework",
+          owner_id: "homework-lead",
+          purpose: "homework_attachment",
+          deleted_at: null,
+        },
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      homeworkPolicy.assertCanUpload(
+        { userId: "client-user", role: "client" },
+        "homework_attachment",
+        "homework",
+        "homework-lead",
+      ),
+    ).resolves.toBe("client-user");
+    expect(String(query.mock.calls[0][0])).toContain(
+      "app.user_crm_links lead_link",
+    );
+    expect(String(query.mock.calls[0][0])).toContain(
+      "subject_member.entity_type = 'lead'",
+    );
+    expect(query.mock.calls[0][1]).toEqual([
+      "homework-lead",
+      "client-user",
+    ]);
+  });
+
+  it("checks homework ownership before accepting an attachment upload", async () => {
+    const query = jest.fn().mockResolvedValue({
+      rows: [
+        {
+          assigned_by: "teacher-user",
+          teacher_user_id: "teacher-user",
+          client_can_access: false,
+        },
+      ],
+    });
+    const homeworkPolicy = new FilesPolicy(
+      { query } as unknown as DatabaseService,
+      {} as MessengerPolicy,
+    );
+
+    await expect(
+      homeworkPolicy.assertCanUpload(
+        { userId: "teacher-user", role: "teacher" },
+        "homework_attachment",
+        "homework",
+        "homework-a",
+      ),
+    ).resolves.toBe("teacher-user");
+    await expect(
+      homeworkPolicy.assertCanUpload(
+        { userId: "other-user", role: "client" },
+        "homework_attachment",
+        "homework",
+        "homework-a",
+      ),
+    ).rejects.toThrow(NotFoundException);
+  });
 });

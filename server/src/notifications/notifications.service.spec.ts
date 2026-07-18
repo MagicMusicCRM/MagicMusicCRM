@@ -110,22 +110,29 @@ describe('NotificationsService', () => {
     expect(worker.dispatchPendingEmails).toHaveBeenCalled();
   });
 
-  it('registers device with encrypted token instead of raw token', async () => {
+  it('registers an encrypted device token and atomically transfers its active owner', async () => {
     const { service, database, tokenCrypto } = createService();
-    database.query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: 'device-a',
-          user_id: 'user-a',
-          platform: 'android',
-          token_hash: 'hash-push-token-1234567890',
-          enabled: true,
-          last_seen_at: new Date('2026-06-13T00:00:00Z'),
-          created_at: new Date('2026-06-13T00:00:00Z'),
-          updated_at: new Date('2026-06-13T00:00:00Z')
-        }
-      ]
-    } as never);
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({ rows: [] }) // token advisory lock
+        .mockResolvedValueOnce({ rows: [] }) // disable previous owner
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'device-a',
+              user_id: 'user-a',
+              platform: 'android',
+              token_hash: 'hash-push-token-1234567890',
+              enabled: true,
+              last_seen_at: new Date('2026-06-13T00:00:00Z'),
+              created_at: new Date('2026-06-13T00:00:00Z'),
+              updated_at: new Date('2026-06-13T00:00:00Z')
+            }
+          ]
+        })
+    };
+    database.transaction.mockImplementationOnce(async (work) => work(client as never));
 
     await expect(
       service.registerDevice({ userId: 'user-a', role: 'client' }, {
@@ -135,13 +142,19 @@ describe('NotificationsService', () => {
     ).resolves.toMatchObject({ id: 'device-a', tokenHash: 'hash-push-token-1234567890' });
 
     expect(tokenCrypto.encrypt).toHaveBeenCalledWith('push-token-1234567890');
-    expect(database.query).toHaveBeenCalledWith(expect.stringContaining('encrypted_token'), [
+    expect(String(client.query.mock.calls[0][0])).toContain('pg_advisory_xact_lock');
+    expect(String(client.query.mock.calls[1][0])).toContain('enabled = false');
+    expect(client.query.mock.calls[1][1]).toEqual([
+      'hash-push-token-1234567890',
+      'user-a'
+    ]);
+    expect(client.query).toHaveBeenLastCalledWith(expect.stringContaining('encrypted_token'), [
       'user-a',
       'android',
       'hash-push-token-1234567890',
       'encrypted-push-token-1234567890'
     ]);
-    expect(database.query.mock.calls[0][0]).toContain('encrypted_token = excluded.encrypted_token');
+    expect(client.query.mock.calls[2][0]).toContain('encrypted_token = excluded.encrypted_token');
   });
 
   it('queues push delivery and schedules push worker', async () => {

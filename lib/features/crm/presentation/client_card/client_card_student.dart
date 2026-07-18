@@ -212,6 +212,16 @@ extension _ClientCardStudent on _ClientCardState {
     );
   }
 
+  /// Trial homework belongs to the lead until a paid subscription is issued.
+  /// Staff therefore need the same progress surface before conversion; the
+  /// server moves these rows to the student atomically with subscription issue.
+  Widget _buildLeadProgressTab(ColorScheme cs) {
+    return _HomeworkProgressList(
+      leadId: _leadId,
+      refreshKey: _homeworkRefreshKey,
+    );
+  }
+
   // ── Student action bar (overflow menu hosts the v7 student actions) ───────
   // #13: Align + Wrap (как у лид-бара в tabs_a) вместо жёсткого Row: на
   // телефоне карточка — bottom sheet во всю ширину, и три кнопки с отступами
@@ -235,56 +245,59 @@ extension _ClientCardStudent on _ClientCardState {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             PopupMenuButton<String>(
-            enabled: !busy,
-            tooltip: 'Действия',
-            position: PopupMenuPosition.under,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.control),
-            ),
-            onSelected: (value) {
-              switch (value) {
-                case 'subscription':
-                  _showIssueSubscriptionSheet();
-                case 'homework':
-                  _showAssignHomeworkSheet();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'subscription',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.card_membership_rounded,
-                    color: AppColor.gold,
+              enabled: !busy,
+              tooltip: 'Действия',
+              position: PopupMenuPosition.under,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              onSelected: (value) {
+                switch (value) {
+                  case 'subscription':
+                    _showIssueSubscriptionSheet();
+                  case 'homework':
+                    _showAssignHomeworkSheet();
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'subscription',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.card_membership_rounded,
+                      color: AppColor.gold,
+                    ),
+                    title: Text('Выдать абонемент'),
                   ),
-                  title: Text('Выдать абонемент'),
                 ),
-              ),
-              PopupMenuItem(
-                value: 'homework',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.assignment_rounded, color: AppColor.gold),
-                  title: Text('Задать ДЗ'),
+                PopupMenuItem(
+                  value: 'homework',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.assignment_rounded,
+                      color: AppColor.gold,
+                    ),
+                    title: Text('Задать ДЗ'),
+                  ),
                 ),
-              ),
-            ],
-            child: OutlinedButton.icon(
-              onPressed: null,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: cs.onSurface,
-                disabledForegroundColor: cs.onSurface,
-                side: BorderSide(color: cs.outlineVariant),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
+              ],
+              child: OutlinedButton.icon(
+                onPressed: null,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: cs.onSurface,
+                  disabledForegroundColor: cs.onSurface,
+                  side: BorderSide(color: cs.outlineVariant),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                  ),
                 ),
+                icon: const Icon(Icons.bolt_rounded, size: 18),
+                label: const Text('Действия'),
               ),
-              icon: const Icon(Icons.bolt_rounded, size: 18),
-              label: const Text('Действия'),
-            ),
             ),
             // #6: переход в расписание — на ближайшее занятие ученика, а без
             // занятий просто на сегодняшний день.
@@ -302,9 +315,7 @@ extension _ClientCardStudent on _ClientCardState {
             ),
             TextButton(
               onPressed: _saving || _converting ? null : _handleClose,
-              style: TextButton.styleFrom(
-                foregroundColor: cs.onSurfaceVariant,
-              ),
+              style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
               child: const Text('Отмена'),
             ),
             FilledButton(
@@ -313,9 +324,7 @@ extension _ClientCardStudent on _ClientCardState {
                 backgroundColor: AppColor.gold,
                 foregroundColor: AppColor.onGold,
                 disabledBackgroundColor: AppColor.gold.withValues(alpha: 0.42),
-                disabledForegroundColor: AppColor.onGold.withValues(
-                  alpha: 0.7,
-                ),
+                disabledForegroundColor: AppColor.onGold.withValues(alpha: 0.7),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppRadius.control),
@@ -345,6 +354,7 @@ extension _ClientCardStudent on _ClientCardState {
   /// Flat gold button used inside the v7 «Задать ДЗ» sheet (ported helper).
   Future<void> _showIssueSubscriptionSheet() async {
     final crm = ref.read(magicCrmServiceProvider);
+    final issuingForLead = !_isStudent;
     List<Map<String, dynamic>> packages;
     try {
       packages = await crm.listSubscriptionPackages(limit: 100);
@@ -379,17 +389,30 @@ extension _ClientCardStudent on _ClientCardState {
     final packageId = selected['id']?.toString();
     if (packageId == null || packageId.isEmpty) return;
 
+    if (issuingForLead) _emitState(() => _converting = true);
     try {
-      await crm.issueSubscription(_entityId, packageId);
+      if (issuingForLead) {
+        await crm.issueLeadSubscription(_leadId, packageId);
+      } else {
+        await crm.issueSubscription(_studentId, packageId);
+      }
       if (!mounted) return;
       _dirty = true;
       MagicToast.show(
         context,
-        'Абонемент выдан',
+        issuingForLead
+            ? 'Абонемент выдан — лид стал учеником'
+            : 'Абонемент выдан',
         detail: selected['name']?.toString(),
         type: MagicToastType.success,
       );
-      _fetchStudentData();
+      if (issuingForLead) {
+        // Reopen from «Ученики» against the freshly-created student id. This
+        // also prevents any stale lead id from being reused by later actions.
+        Navigator.pop(context, true);
+      } else {
+        _fetchStudentData();
+      }
     } catch (e) {
       if (!mounted) return;
       MagicToast.show(
@@ -398,6 +421,10 @@ extension _ClientCardStudent on _ClientCardState {
         detail: '$e',
         type: MagicToastType.danger,
       );
+    } finally {
+      if (issuingForLead && mounted) {
+        _emitState(() => _converting = false);
+      }
     }
   }
 
@@ -406,7 +433,7 @@ extension _ClientCardStudent on _ClientCardState {
 
     List<Map<String, dynamic>> homeworks = const [];
     try {
-      homeworks = await crm.listHomeworks(studentId: _entityId, limit: 5);
+      homeworks = await crm.listHomeworks(studentId: _studentId, limit: 5);
     } catch (_) {
       // Listing is best-effort; the assign form still works without it.
     }
@@ -420,7 +447,7 @@ extension _ClientCardStudent on _ClientCardState {
 
     try {
       await crm.createHomework(
-        studentId: _entityId,
+        studentId: _studentId,
         title: input.title,
         description: input.description,
         dueAt: input.dueAt?.toIso8601String(),

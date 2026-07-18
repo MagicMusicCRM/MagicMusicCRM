@@ -15,6 +15,10 @@ export class HomeworkQuery {
 
   @IsOptional()
   @IsUUID()
+  leadId?: string;
+
+  @IsOptional()
+  @IsUUID()
   lessonId?: string;
 
   @IsOptional()

@@ -18,12 +18,14 @@ import { DuplicatesService } from "./duplicates.service";
 import { MergeService } from "./merge.service";
 import { PhoneReviewService } from "./phone-review.service";
 import { LeadsService } from "./leads.service";
+import { SubscriptionsService } from "./subscriptions.service";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { DuplicateCandidatesQuery } from "./dto/duplicate-candidates.query";
 import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
 import { LeadBoardQuery } from "./dto/lead-board.query";
 import { QueueLimitQuery } from "./dto/queue-limit.query";
 import { LinkStudentDto } from "./dto/link-student.dto";
+import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { SetBlacklistDto } from "./dto/set-blacklist.dto";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 
@@ -36,6 +38,7 @@ export class CrmLeadsController {
     private readonly leads: LeadsService,
     private readonly merge: MergeService,
     private readonly phoneReview: PhoneReviewService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   @Get("duplicates")
@@ -95,6 +98,15 @@ export class CrmLeadsController {
   @Post("leads")
   createLead(@CurrentActor() actor: ActorContext, @Body() dto: UpsertLeadDto) {
     return this.leads.createLead(actor, dto);
+  }
+
+  @Post("leads/:leadId/subscriptions/issue")
+  issueLeadSubscription(
+    @CurrentActor() actor: ActorContext,
+    @Param("leadId", ParseUUIDPipe) leadId: string,
+    @Body() dto: IssueSubscriptionDto,
+  ) {
+    return this.subscriptions.issueLeadSubscription(actor, leadId, dto);
   }
 
   // Ручное «Прикрепить к ученику»: до этого связать можно было только пару,

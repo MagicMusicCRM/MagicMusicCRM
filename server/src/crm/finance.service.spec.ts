@@ -107,6 +107,11 @@ describe("FinanceService", () => {
     });
     expect(policy.assertCanReadStudentFinance).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual(["student-a", "income", 50]);
+    expect(String(query.mock.calls[0][0])).toContain("l.is_trial = false");
+    expect(String(query.mock.calls[0][0])).toContain(
+      "lp.attendance_kind = 'partially_paid'",
+    );
+    expect(String(query.mock.calls[0][0])).toContain("then lp.charge_share");
   });
 
   it("creates a refund adjustment as a negative amount and audits it", async () => {
@@ -256,6 +261,10 @@ describe("FinanceService", () => {
     // Без этого фильтра сторнирование не меняло бы баланс — то есть отмена
     // ничего бы не отменяла.
     expect(String(query.mock.calls[0][0])).toContain("adj.status <> 'void'");
+    expect(String(query.mock.calls[0][0])).toContain("l.is_trial = false");
+    expect(String(query.mock.calls[0][0])).toContain(
+      "lp.attendance_kind in ('attended', 'paid_miss')",
+    );
   });
 
   it("lists payments with date filters and student summary", async () => {

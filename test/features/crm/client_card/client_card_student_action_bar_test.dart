@@ -71,4 +71,28 @@ void main() {
     expect(api.updateStudentBody, isNotNull);
     expect(api.updateStudentBody!['firstName'], 'Анна');
   });
+
+  testWidgets('лид конвертируется только кнопкой выдачи абонемента', (
+    tester,
+  ) async {
+    final api = FakeCardApiClient(
+      lead: {
+        'id': 'lead-1',
+        'firstName': 'Анна',
+        'lastName': 'Смирнова',
+        'phone': '+79990000000',
+        'statusId': null,
+        'customData': <String, dynamic>{},
+      },
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: {'id': 'lead-1', 'name': 'Анна', 'custom_data': {}},
+      statuses: const [],
+    );
+
+    expect(find.text('Выдать абонемент'), findsOneWidget);
+    expect(find.text('Создать ученика'), findsNothing);
+  });
 }

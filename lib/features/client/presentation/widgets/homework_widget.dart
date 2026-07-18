@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 /// Loads the lesson homeworks for a given student (or, when [studentId] is
-/// null, the caller's own homeworks — the server scopes a `client` actor to the
-/// students they own). Family-keyed on the (nullable) student id so the widget
-/// can be reused across student detail screens without provider collisions.
+/// null, the caller's own homeworks — including lead-bound trial homework
+/// before subscription conversion). Family-keyed on the (nullable) student id
+/// so the widget can be reused across student detail screens without provider
+/// collisions.
 final _studentHomeworksProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String?>((
       ref,
@@ -37,6 +39,11 @@ class HomeworkWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(crmRealtimeProvider, (previous, next) {
+      if (next.value?.entity == 'homework') {
+        ref.invalidate(_studentHomeworksProvider(studentId));
+      }
+    });
     final scheme = Theme.of(context).colorScheme;
     final homeworkAsync = ref.watch(_studentHomeworksProvider(studentId));
 

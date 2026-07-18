@@ -14,6 +14,7 @@ export type CrmEntity =
   | 'user'
   | 'setting'
   | 'notification'
+  | 'homework'
   | 'chat_work';
 
 export interface CrmChangedPayload {

@@ -66,9 +66,17 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   void initState() {
     super.initState();
     _searchCtrl.addListener(_onSearchChanged);
-    _applyOverviewFocus();
-    _loadFilterData();
-    _loadTasks();
+    // When Tasks is opened from an Overview tile it is inserted while the
+    // parent messenger is rebuilding. Consuming the one-shot Riverpod focus
+    // synchronously here would mutate a provider during that build. Initialise
+    // after the first frame so the deep-link filter is still applied before
+    // either request, without violating Riverpod's lifecycle guard.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _applyOverviewFocus();
+      _loadFilterData();
+      _loadTasks();
+    });
   }
 
   /// Apply a filter handed in from the overview (e.g. «Просроченные задачи» →
@@ -208,7 +216,10 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
                 .subtract(const Duration(days: 2))
                 .toUtc()
                 .toIso8601String(),
-            to: periodEnd.add(const Duration(days: 2)).toUtc().toIso8601String(),
+            to: periodEnd
+                .add(const Duration(days: 2))
+                .toUtc()
+                .toIso8601String(),
             q: _searchCtrl.text,
             status: _statusFilter == 'all' ? null : _statusFilter,
             entityType: _entityTypeFilter == 'all' ? null : _entityTypeFilter,
@@ -300,10 +311,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
           if (entityType == 'lead') {
             return crmService.listLeads(limit: 30, q: query);
           }
-          final response = await crmService.searchStudents(
-            q: query,
-            limit: 30,
-          );
+          final response = await crmService.searchStudents(q: query, limit: 30);
           final items = response['items'];
           return items is List
               ? items.whereType<Map<String, dynamic>>().toList()
@@ -438,9 +446,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     try {
       await ref.read(magicCrmServiceProvider).deleteTask(id);
       if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Задача удалена')),
-        );
+        messenger.showSnackBar(const SnackBar(content: Text('Задача удалена')));
       }
     } catch (e) {
       if (!mounted) return;

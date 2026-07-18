@@ -122,6 +122,10 @@ describe("DashboardService", () => {
       "2026-07-01T00:00:00.000Z",
       "branch-a",
     ]);
+    expect(String(query.mock.calls[0][0])).toContain("l.is_trial = false");
+    expect(String(query.mock.calls[0][0])).toContain(
+      "lp.attendance_kind = 'partially_paid'",
+    );
   });
 
   it("returns finance report aggregates through CRM write policy", async () => {

@@ -718,10 +718,26 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       lessonId: lessonId,
       completable: completable,
       onEdit: () => _editLesson(lesson),
+      onComplete: () => _completeLesson(lesson),
       onDelete: () => _deleteLesson(lessonId!),
       onUpdateStatus: (status, message) =>
           _updateLessonStatus(lessonId!, status, message),
     );
+  }
+
+  Future<void> _completeLesson(Map<String, dynamic> lesson) async {
+    final lessonId = lesson['id']?.toString();
+    if (lessonId == null || lessonId.isEmpty) return;
+    if (lesson['is_trial'] == true) {
+      await _updateLessonStatus(
+        lessonId,
+        'completed',
+        'Пробное занятие отмечено проведённым',
+      );
+      return;
+    }
+    await LessonAttendanceDialog.show(context, lesson);
+    if (mounted) _fetchAll();
   }
 
   Future<void> _editLesson(Map<String, dynamic> lesson) async {

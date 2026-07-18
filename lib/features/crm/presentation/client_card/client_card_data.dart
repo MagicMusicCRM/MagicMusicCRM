@@ -385,6 +385,9 @@ extension _ClientCardData on _ClientCardState {
 
   void _refreshFromRealtime(String entity) {
     switch (entity) {
+      case 'homework':
+        _emitState(() => _homeworkRefreshKey++);
+        break;
       case 'lead':
       case 'student':
       case 'task':
@@ -537,55 +540,6 @@ extension _ClientCardData on _ClientCardState {
         }
       },
     );
-  }
-
-  Future<void> _convertToStudent() async {
-    final firstName = (_leadData['name'] ?? '').toString().trim();
-    if (firstName.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('У лида должно быть имя.')));
-      return;
-    }
-
-    _emitState(() => _converting = true);
-    try {
-      final customData = Map<String, dynamic>.from(
-        _leadData['custom_data'] as Map? ?? {},
-      );
-      if (_leadData['branch_id'] != null) {
-        customData['branchId'] = _leadData['branch_id'];
-      }
-      customData['sourceLeadId'] = _leadData['id'].toString();
-
-      await ref
-          .read(magicCrmServiceProvider)
-          .createStudent(
-            firstName: firstName,
-            lastName: _leadData['last_name']?.toString(),
-            phone: _leadData['phone']?.toString(),
-            email: _leadData['email']?.toString(),
-            leadId: _leadData['id'].toString(),
-            customDataPatch: customData,
-          );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Лид конвертирован в ученика.')),
-        );
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка конвертации: $e')));
-      }
-    } finally {
-      if (mounted) {
-        _emitState(() => _converting = false);
-      }
-    }
   }
 
   void _updateCustomDataForEntity(String entity, String key, dynamic value) {

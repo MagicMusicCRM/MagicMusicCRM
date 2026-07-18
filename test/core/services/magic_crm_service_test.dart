@@ -2714,6 +2714,89 @@ void main() {
         expect(adapter.requests.single.body['validUntil'], isNull);
       },
     );
+
+    test(
+      'issueLeadSubscription converts only through the package endpoint',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/leads/lead-a/subscriptions/issue',
+            statusCode: 201,
+            body: {
+              'converted': true,
+              'student': {'id': 'student-a'},
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        final result = await service.issueLeadSubscription(
+          'lead-a',
+          'package-a',
+        );
+
+        expect(result['converted'], true);
+        expect(adapter.requests.single.body, {'packageId': 'package-a'});
+      },
+    );
+
+    test('lead homework list and create preserve lead ownership', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/homeworks',
+          statusCode: 200,
+          body: {'items': <dynamic>[]},
+        ),
+        _FakeResponse(
+          path: '/crm/homeworks',
+          statusCode: 201,
+          body: {'id': 'homework-a'},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      await service.listHomeworks(leadId: 'lead-a', limit: 5);
+      await service.createHomework(
+        leadId: 'lead-a',
+        lessonId: 'trial-a',
+        title: 'Гамма до мажор',
+      );
+
+      expect(adapter.requests.first.queryParameters, {
+        'leadId': 'lead-a',
+        'limit': 5,
+      });
+      expect(adapter.requests.last.body, {
+        'title': 'Гамма до мажор',
+        'leadId': 'lead-a',
+        'lessonId': 'trial-a',
+      });
+    });
+
+    test('createScheduleSeries sends selected room branch', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/schedule-series',
+          statusCode: 201,
+          body: {'id': 'series-a'},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      await service.createScheduleSeries(
+        studentId: 'student-a',
+        teacherId: 'teacher-a',
+        roomId: 'room-a',
+        branchId: 'branch-a',
+        weekday: DateTime.tuesday,
+        beginTime: '12:00',
+        validFrom: '2026-07-21',
+      );
+
+      expect(adapter.requests.single.body['branchId'], 'branch-a');
+      expect(adapter.requests.single.body['weekday'], DateTime.tuesday);
+      expect(adapter.requests.single.body['beginTime'], '12:00');
+    });
   });
 }
 

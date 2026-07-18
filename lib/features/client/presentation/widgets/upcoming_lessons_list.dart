@@ -193,6 +193,7 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
 
                           final room = lesson['room_name'] as String? ?? '';
                           final status = lesson['status'] as String?;
+                          final isTrial = lesson['is_trial'] == true;
                           final dt = DateTime.tryParse(
                             lesson['scheduled_at'] as String? ?? '',
                           );
@@ -229,6 +230,29 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
+                                        if (isTrial) ...[
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 7,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.primaryGold
+                                                  .withAlpha(30),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                            ),
+                                            child: const Text(
+                                              'Пробный урок',
+                                              style: TextStyle(
+                                                color: AppTheme.primaryGold,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                        ],
                                         Text(
                                           dateStr,
                                           style: const TextStyle(

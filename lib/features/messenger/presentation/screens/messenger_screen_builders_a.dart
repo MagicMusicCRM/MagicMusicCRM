@@ -192,30 +192,32 @@ extension _MessengerBuildersA on _MessengerScreenState {
   List<int> _visibleCrmTabs(bool isDesktop) =>
       crmVisibleTabs(widget.role, isDesktop: isDesktop);
 
-  int _maxCrmTab(bool isDesktop) => _visibleCrmTabs(isDesktop).last;
-
   void _handleOverviewTabChange(
     int index,
     int? subIndex, {
     required bool isDesktop,
   }) {
-    final targetTab = _overviewTargetTab(index, subIndex, isDesktop: isDesktop);
+    final targetTab = _overviewTargetTab(index, subIndex);
+    final visibleTabs = _visibleCrmTabs(isDesktop);
     _emitState(() {
-      _selectedCrmTab = targetTab.clamp(0, _maxCrmTab(isDesktop));
+      // Canonical tab ids are sparse and role-specific (admin is
+      // [0, 6, 2, 3]), so numeric clamping can silently route Tasks (6) to
+      // Clients (3). Resolve by membership instead.
+      _selectedCrmTab = crmResolveVisibleTab(
+        visibleTabs: visibleTabs,
+        requestedTab: targetTab,
+        currentTab: _selectedCrmTab,
+      );
       if (isDesktop && targetTab == 7 && subIndex != null) {
         _selectedReportsTab = subIndex.clamp(0, 2);
       }
     });
   }
 
-  int _overviewTargetTab(int index, int? subIndex, {required bool isDesktop}) {
+  int _overviewTargetTab(int index, int? subIndex) {
     if (index == 1 && subIndex != null) {
       if (subIndex == 3 || subIndex == 4) return 2;
       return 4;
-    }
-    if (!isDesktop) {
-      if (index == 5 || index == 7) return 4;
-      if (index == 6) return 3;
     }
     return index;
   }

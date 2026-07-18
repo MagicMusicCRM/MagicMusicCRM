@@ -51,7 +51,6 @@ class _LeadCard extends ConsumerWidget {
     final discipline = lead.discipline;
     final level = lead.level;
 
-    final transfer = ref.read(leadTransferControllerProvider);
     // True while THIS card is the one carried by the transfer drag — the card
     // stays mounted (so the Draggable survives) but renders as a faded source
     // placeholder.
@@ -178,8 +177,6 @@ class _LeadCard extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      if (linkedStudentId.isEmpty)
-                        _LeadDragHandle(lead: lead, controller: transfer),
                       Expanded(
                         child: Text(
                           displayName,
@@ -231,8 +228,8 @@ class _LeadCard extends ConsumerWidget {
                             _addTask(context, ref);
                           } else if (v == 'schedule') {
                             _openInSchedule(ref);
-                          } else if (v == 'convert') {
-                            _convertToStudent(context, ref);
+                          } else if (v == 'subscription') {
+                            onTap();
                           } else {
                             onMove(id, v);
                           }
@@ -288,17 +285,17 @@ class _LeadCard extends ConsumerWidget {
                             if (linkedStudentId.isEmpty) ...[
                               const PopupMenuDivider(),
                               const PopupMenuItem(
-                                value: 'convert',
+                                value: 'subscription',
                                 child: Row(
                                   children: [
                                     Icon(
-                                      Icons.school_rounded,
+                                      Icons.card_membership_rounded,
                                       size: 18,
                                       color: AppColor.success,
                                     ),
                                     SizedBox(width: 8),
                                     Text(
-                                      'Сделать учеником',
+                                      'Выдать абонемент',
                                       style: TextStyle(
                                         color: AppColor.success,
                                         fontWeight: FontWeight.w600,
@@ -612,27 +609,6 @@ class _LeadCard extends ConsumerWidget {
         ),
       );
     }
-  }
-
-  Future<void> _convertToStudent(BuildContext context, WidgetRef ref) async {
-    if (lead.linkedStudentId.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Лид уже связан с учеником')),
-      );
-      return;
-    }
-    final student = await ConvertLeadDialog.show(context, lead: lead.raw);
-    if (student == null) return; // cancelled / failed in-dialog
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Лид конвертирован в ученика'),
-          backgroundColor: AppColor.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-    onRefresh();
   }
 
   void _openInSchedule(WidgetRef ref) {

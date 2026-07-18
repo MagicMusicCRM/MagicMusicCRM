@@ -20,7 +20,6 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
-
   /// KVA-235: ручная операция личного счёта (возврат/корректировка).
   Future<Map<String, dynamic>> createAdjustment({
     required String studentId,
@@ -173,6 +172,7 @@ extension MagicCrmFinance on MagicCrmService {
     String? method,
     String? externalId,
     String? notes,
+
     /// Занятие, за которое пришёл платёж (✔ владелец 17.07). Необязательно:
     /// пополнение счёта авансом ни к какому занятию не относится.
     String? lessonId,
@@ -302,15 +302,32 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
+  /// Issues the first subscription for a lead and converts it to a student in
+  /// the same server transaction.  Keeping this separate from
+  /// [issueSubscription] makes the product rule explicit: booking a trial (or
+  /// assigning trial homework) never converts the lead; choosing the paid
+  /// package does.
+  Future<Map<String, dynamic>> issueLeadSubscription(
+    String leadId,
+    String packageId,
+  ) async {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/leads/$leadId/subscriptions/issue',
+      data: {'packageId': packageId},
+    );
+  }
+
   // ── Homework (P5c) ───────────────────────────────────────────────────────
   Future<List<Map<String, dynamic>>> listHomeworks({
     String? studentId,
+    String? leadId,
     String? lessonId,
     String? status,
     int? limit,
   }) async {
     final q = <String, dynamic>{};
     if (studentId != null) q['studentId'] = studentId;
+    if (leadId != null) q['leadId'] = leadId;
     if (lessonId != null) q['lessonId'] = lessonId;
     if (status != null) q['status'] = status;
     if (limit != null) q['limit'] = limit;
@@ -325,19 +342,36 @@ extension MagicCrmFinance on MagicCrmService {
   }
 
   Future<Map<String, dynamic>> createHomework({
-    required String studentId,
+    String? studentId,
+    String? leadId,
     required String title,
     String? lessonId,
     String? description,
     String? dueAt,
   }) async {
-    final data = <String, dynamic>{'studentId': studentId, 'title': title};
+    assert(
+      (studentId == null) != (leadId == null),
+      'Exactly one of studentId or leadId is required.',
+    );
+    final data = <String, dynamic>{'title': title};
+    if (studentId != null) data['studentId'] = studentId;
+    if (leadId != null) data['leadId'] = leadId;
     if (lessonId != null) data['lessonId'] = lessonId;
     if (description != null && description.trim().isNotEmpty) {
       data['description'] = description.trim();
     }
     if (dueAt != null) data['dueAt'] = dueAt;
     return _api.post<Map<String, dynamic>>('/crm/homeworks', data: data);
+  }
+
+  Future<Map<String, dynamic>> updateHomeworkStatus(
+    String id,
+    String status,
+  ) async {
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/homeworks/$id',
+      data: {'status': status},
+    );
   }
 
   Future<Map<String, dynamic>> submitHomework(String id) async {

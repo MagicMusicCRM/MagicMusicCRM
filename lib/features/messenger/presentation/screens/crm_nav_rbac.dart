@@ -58,10 +58,27 @@ List<int> crmVisibleTabs(String role, {required bool isDesktop}) {
     // clients only. User management/reports belong to manager+.
     return const [0, 6, 2, 3];
   }
-  // Финансы/Задачи/Отчёты remain desktop-only, preserved from the legacy
-  // behaviour. Финансы (5) — only for roles with school-finance access.
-  if (!isDesktop) return const [0, 1, 2, 3, 4];
+  // School-wide finance/reports remain desktop-only. Tasks are operational
+  // work, however, so manager-tier roles must be able to open them on a phone
+  // too (directly from Overview or through the nav shell's «Ещё» menu).
+  if (!isDesktop) return const [0, 1, 2, 3, 4, 6];
   return crmHasSchoolFinanceAccess(role)
       ? const [0, 1, 2, 3, 4, 5, 6, 7]
       : const [0, 1, 2, 3, 4, 6, 7];
+}
+
+/// Resolves a canonical navigation request without ever crossing the role's
+/// visible-tab boundary. Hidden desktop-only targets on a phone keep the
+/// current tab; stale current state falls back to the first visible tab.
+int crmResolveVisibleTab({
+  required List<int> visibleTabs,
+  required int requestedTab,
+  required int currentTab,
+}) {
+  if (visibleTabs.isEmpty) {
+    throw ArgumentError.value(visibleTabs, 'visibleTabs', 'must not be empty');
+  }
+  if (visibleTabs.contains(requestedTab)) return requestedTab;
+  if (visibleTabs.contains(currentTab)) return currentTab;
+  return visibleTabs.first;
 }

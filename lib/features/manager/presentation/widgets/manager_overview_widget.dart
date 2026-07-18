@@ -68,6 +68,7 @@ extension _DashboardPeriodBounds on _DashboardPeriod {
 
 class ManagerOverviewWidget extends ConsumerStatefulWidget {
   final Function(int index, int? subIndex)? onTabChange;
+
   /// Реальная роль текущего пользователя (KVA-239): общешкольные денежные
   /// KPI (Выручка/Ожидаемые платежи) видны только director/system_admin.
   final String role;
@@ -217,7 +218,10 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
                           : null,
                       onTasksTap: () => widget.onTabChange?.call(6, null),
                       onScheduleTap: () => widget.onTabChange?.call(2, null),
-                      onDebtsTap: () => widget.onTabChange?.call(5, null),
+                      onDebtsTap: () => widget.onTabChange?.call(
+                        _canSeeFinance ? 5 : 3,
+                        null,
+                      ),
                     ),
                     const SizedBox(height: 14),
                     LayoutBuilder(
@@ -259,11 +263,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
   /// Set a one-shot filter for the target section, then navigate to it. The
   /// section widget consumes the focus on open (clear-on-consume) — so «Новые
   /// лиды» opens the leads board already filtered to new leads, etc.
-  void _focusAndGo(
-    String section,
-    Map<String, String> filters,
-    int tabIndex,
-  ) {
+  void _focusAndGo(String section, Map<String, String> filters, int tabIndex) {
     ref
         .read(crmSectionFocusProvider.notifier)
         .focus(CrmSectionFocus(section, filters));
@@ -299,7 +299,9 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         accent: AppTheme.danger,
         sourceLabel: _sourceLabel(sources['debtStudents'], 'Балансы'),
         format: _count,
-        onTap: () => widget.onTabChange?.call(5, null),
+        // Managers retain per-student balances in Clients, but do not have
+        // access to the school-wide Finance destination.
+        onTap: () => widget.onTabChange?.call(_canSeeFinance ? 5 : 3, null),
       ),
       _KpiSpec(
         key: 'active_students',
@@ -308,7 +310,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         accent: AppTheme.primaryGold,
         sourceLabel: 'CRM',
         format: _count,
-        onTap: () => widget.onTabChange?.call(4, null),
+        onTap: () => widget.onTabChange?.call(3, null),
       ),
       _KpiSpec(
         key: 'new_leads',
@@ -326,8 +328,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         accent: AppTheme.warning,
         sourceLabel: _sourceLabel(sources['tasks'], 'Задачи'),
         format: _count,
-        onTap: () =>
-            _focusAndGo('tasks', {'due': 'all', 'status': 'open'}, 6),
+        onTap: () => _focusAndGo('tasks', {'due': 'all', 'status': 'open'}, 6),
       ),
       _KpiSpec(
         key: 'overdue_tasks',
@@ -377,4 +378,3 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
     ];
   }
 }
-

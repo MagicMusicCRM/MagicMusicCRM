@@ -193,9 +193,7 @@ class _StudentScheduleSectionState
     final time = (s['begin_time'] ?? '').toString();
     final duration = s['duration_minutes'] ?? 60;
     final until = s['valid_until'];
-    final untilLabel = until == null
-        ? 'до ∞'
-        : 'по ${_formatDate(until)}';
+    final untilLabel = until == null ? 'до ∞' : 'по ${_formatDate(until)}';
     final meta = [
       s['teacher_name'],
       s['room_name'],
@@ -252,14 +250,15 @@ class _StudentScheduleSectionState
   // ── Лента дат-квадратиков (HolliHop image2) ────────────────────────────────
   Widget _lessonStrip(ColorScheme cs) {
     final now = DateTime.now();
-    final sorted = widget.lessons
-        .map((l) {
-          final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
-          return dt == null ? null : (dt, l);
-        })
-        .whereType<(DateTime, Map<String, dynamic>)>()
-        .toList()
-      ..sort((a, b) => a.$1.compareTo(b.$1));
+    final sorted =
+        widget.lessons
+            .map((l) {
+              final dt = DateTime.tryParse(l['scheduled_at']?.toString() ?? '');
+              return dt == null ? null : (dt, l);
+            })
+            .whereType<(DateTime, Map<String, dynamic>)>()
+            .toList()
+          ..sort((a, b) => a.$1.compareTo(b.$1));
     if (sorted.isEmpty) return const SizedBox.shrink();
     final past = sorted.where((e) => e.$1.isBefore(now)).toList();
     final future = sorted.where((e) => !e.$1.isBefore(now)).toList();
@@ -441,9 +440,7 @@ class _StudentScheduleSectionState
     var weekday = isEdit
         ? ((series['weekday'] as num?)?.toInt() ?? 1)
         : DateTime.now().weekday;
-    var time = isEdit
-        ? (series['begin_time'] ?? '15:00').toString()
-        : '15:00';
+    var time = isEdit ? (series['begin_time'] ?? '15:00').toString() : '15:00';
     var duration = isEdit
         ? ((series['duration_minutes'] as num?)?.toInt() ?? 60)
         : 60;
@@ -601,9 +598,7 @@ class _StudentScheduleSectionState
                         context: context,
                         initialDate: untilDate ?? startDate,
                         firstDate: startDate,
-                        lastDate: DateTime.now().add(
-                          const Duration(days: 730),
-                        ),
+                        lastDate: DateTime.now().add(const Duration(days: 730)),
                       );
                       if (picked != null) {
                         setSheetState(() => untilDate = picked);
@@ -649,6 +644,13 @@ class _StudentScheduleSectionState
       final untilStr = infinite || untilDate == null
           ? null
           : DateFormat('yyyy-MM-dd').format(untilDate!);
+      String? branchId;
+      for (final room in rooms) {
+        if (room['id']?.toString() == roomId) {
+          branchId = room['branch_id']?.toString();
+          break;
+        }
+      }
       if (isEdit) {
         await crm.updateScheduleSeries(
           series['id'].toString(),
@@ -666,6 +668,7 @@ class _StudentScheduleSectionState
           studentId: widget.studentId,
           teacherId: teacherId,
           roomId: roomId,
+          branchId: branchId,
           weekday: weekday,
           beginTime: time,
           durationMinutes: duration,

@@ -309,6 +309,13 @@ export class FinanceService {
                 end,
                 0
               )
+              * case
+                  when lp.id is null then 1
+                  when lp.attendance_kind in ('attended', 'paid_miss') then 1
+                  when lp.attendance_kind = 'partially_paid'
+                    then lp.charge_share
+                  else 0
+                end
             ) as total_cost,
             max(l.updated_at) as updated_at
           from app.lessons l
@@ -317,6 +324,7 @@ export class FinanceService {
           left join app.groups g on g.id = l.group_id and g.deleted_at is null
           where l.deleted_at is null
             and l.status in ('completed', 'done')
+            and l.is_trial = false
             and coalesce(l.student_id, lp.student_id) is not null
           group by coalesce(l.student_id, lp.student_id)
         ),
@@ -417,7 +425,8 @@ export class FinanceService {
           union all
 
           select l.id, 'lesson_charge' as kind,
-            -coalesce(
+            -(
+              coalesce(
               g.price_per_lesson,
               case
                 when s.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
@@ -427,6 +436,14 @@ export class FinanceService {
                 else null
               end,
               0
+              )
+              * case
+                  when lp.id is null then 1
+                  when lp.attendance_kind in ('attended', 'paid_miss') then 1
+                  when lp.attendance_kind = 'partially_paid'
+                    then lp.charge_share
+                  else 0
+                end
             ) as amount,
             trim(concat('Занятие', ' ', coalesce(g.name, 'индивидуально'))) as description,
             null as method,
@@ -446,6 +463,7 @@ export class FinanceService {
           left join app.branches b on b.id = l.branch_id
           where l.deleted_at is null
             and l.status in ('completed', 'done')
+            and l.is_trial = false
             and coalesce(l.student_id, lp.student_id) = $1
 
           union all

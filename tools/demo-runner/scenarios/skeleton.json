@@ -1,0 +1,101 @@
+{
+  "version": "t9.3-login-skeleton-v1",
+  "steps": [
+    {
+      "id": "login.client",
+      "role": "client",
+      "description": "Авторизация клиента на AVD Client",
+      "action": {
+        "type": "login",
+        "successLocator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Абонемент\")"
+        }
+      },
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Абонемент\")"
+          }
+        }
+      ],
+      "assert": [
+        { "type": "currentPackage", "value": "magic.crm" }
+      ]
+    },
+    {
+      "id": "login.teacher",
+      "role": "teacher",
+      "description": "Авторизация преподавателя на AVD Teacher",
+      "action": {
+        "type": "login",
+        "successLocator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Ученики\")"
+        }
+      },
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Ученики\")"
+          }
+        }
+      ],
+      "assert": [
+        { "type": "currentPackage", "value": "magic.crm" }
+      ]
+    },
+    {
+      "id": "login.admin",
+      "role": "admin",
+      "description": "Авторизация администратора на AVD Admin",
+      "action": {
+        "type": "login",
+        "successLocator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Задачи\")"
+        }
+      },
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Задачи\")"
+          }
+        }
+      ],
+      "assert": [
+        { "type": "currentPackage", "value": "magic.crm" }
+      ]
+    },
+    {
+      "id": "login.manager",
+      "role": "manager",
+      "description": "Авторизация управляющего на AVD Manager",
+      "action": {
+        "type": "login",
+        "successLocator": {
+          "using": "android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Обзор\")"
+        }
+      },
+      "reconcile": [
+        {
+          "type": "visible",
+          "locator": {
+            "using": "android uiautomator",
+            "value": "new UiSelector().descriptionContains(\"Обзор\")"
+          }
+        }
+      ],
+      "assert": [
+        { "type": "currentPackage", "value": "magic.crm" }
+      ]
+    }
+  ]
+}

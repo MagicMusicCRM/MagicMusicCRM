@@ -519,12 +519,7 @@ class _TaskTileState extends State<_TaskTile> {
                       valueColor: _isOverdue ? AppTheme.danger : null,
                     ),
                   if (created.isNotEmpty)
-                    _metaRow(
-                      cs,
-                      Icons.event_outlined,
-                      'Создана',
-                      created,
-                    ),
+                    _metaRow(cs, Icons.event_outlined, 'Создана', created),
                   if (priority != null)
                     _metaRow(cs, Icons.flag_outlined, 'Приоритет', priority),
                 ],
@@ -613,16 +608,19 @@ class _InfoRow extends StatelessWidget {
 }
 
 /// «Прогресс» tab body: homework assigned to the student by the teacher
-/// (`app.lesson_homeworks`). Holds its own future so the aggregated card's
-/// frequent rebuilds don't refetch; recomputed when [refreshKey]/[studentId]
-/// change (a new homework bumps the key).
+/// (`app.lesson_homeworks`). Trial homework can still belong to a lead; after
+/// subscription-triggered conversion the server moves it to the student.
+/// Holds its own future so the aggregated card's frequent rebuilds don't
+/// refetch; recomputed when its subject or [refreshKey] changes.
 class _HomeworkProgressList extends ConsumerStatefulWidget {
-  final String studentId;
+  final String? studentId;
+  final String? leadId;
   final int refreshKey;
   const _HomeworkProgressList({
-    required this.studentId,
+    this.studentId,
+    this.leadId,
     required this.refreshKey,
-  });
+  }) : assert(studentId != null || leadId != null);
 
   @override
   ConsumerState<_HomeworkProgressList> createState() =>
@@ -642,26 +640,30 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
   void didUpdateWidget(covariant _HomeworkProgressList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.refreshKey != widget.refreshKey ||
-        oldWidget.studentId != widget.studentId) {
+        oldWidget.studentId != widget.studentId ||
+        oldWidget.leadId != widget.leadId) {
       _future = _load();
     }
   }
 
   Future<List<Map<String, dynamic>>> _load() {
-    if (widget.studentId.isEmpty) {
+    final studentId = widget.studentId?.trim();
+    final leadId = widget.leadId?.trim();
+    if ((studentId == null || studentId.isEmpty) &&
+        (leadId == null || leadId.isEmpty)) {
       return Future.value(const <Map<String, dynamic>>[]);
     }
     return ref
         .read(magicCrmServiceProvider)
-        .listHomeworks(studentId: widget.studentId, limit: 50);
+        .listHomeworks(studentId: studentId, leadId: leadId, limit: 50);
   }
 
   String _statusLabel(Object? s) => switch (s?.toString()) {
-        'assigned' => 'Задано',
-        'submitted' => 'Сдано',
-        'done' || 'completed' || 'checked' => 'Проверено',
-        _ => s?.toString() ?? '',
-      };
+    'assigned' => 'Задано',
+    'submitted' => 'Сдано',
+    'done' || 'completed' || 'checked' => 'Проверено',
+    _ => s?.toString() ?? '',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -703,7 +705,9 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
             final title = (h['title'] ?? 'Домашнее задание').toString();
             final desc = (h['description'] ?? '').toString().trim();
             final due = DateTime.tryParse((h['dueAt'] ?? '').toString());
-            final created = DateTime.tryParse((h['createdAt'] ?? '').toString());
+            final created = DateTime.tryParse(
+              (h['createdAt'] ?? '').toString(),
+            );
             final meta = [
               if (due != null)
                 'Срок: ${DateFormat('d MMM yyyy', 'ru').format(due.toLocal())}',
@@ -743,7 +747,9 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
                             ),
                             decoration: BoxDecoration(
                               color: AppColor.goldSoft,
-                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.pill,
+                              ),
                               border: Border.all(color: AppColor.goldLine),
                             ),
                             child: Text(

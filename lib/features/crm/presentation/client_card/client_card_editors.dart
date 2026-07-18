@@ -881,18 +881,21 @@ extension _ClientCardEditors on _ClientCardState {
               ),
             ),
             const SizedBox(width: AppSpace.sm),
-            Material(
-              color: AppColor.gold,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              child: InkWell(
+            Tooltip(
+              message: 'Отправить комментарий',
+              child: Material(
+                color: AppColor.gold,
                 borderRadius: BorderRadius.circular(AppRadius.control),
-                onTap: _addComment,
-                child: const Padding(
-                  padding: EdgeInsets.all(AppSpace.md),
-                  child: Icon(
-                    Icons.send_rounded,
-                    color: AppColor.onGold,
-                    size: 18,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  onTap: _addComment,
+                  child: const Padding(
+                    padding: EdgeInsets.all(AppSpace.md),
+                    child: Icon(
+                      Icons.send_rounded,
+                      color: AppColor.onGold,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),

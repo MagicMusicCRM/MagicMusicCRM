@@ -6,10 +6,11 @@ import 'package:magic_music_crm/features/auth/providers/release_gate_provider.da
 
 /// A CRM realtime invalidation hint (carries no PII — listeners refetch via API).
 class CrmChangedEvent {
-  final String entity; // lesson | lead | student | payment | task | comment
+  final String entity; // lesson | lead | student | homework | payment | task…
   final String action; // created | updated | deleted
   final String? id;
   final String? branchId;
+
   /// Recipient-scoped user ids (e.g. a task's assignee) for targeted UI hints.
   final List<String> affectedUserIds;
 
@@ -26,9 +27,8 @@ class CrmChangedEvent {
     action: map['action']?.toString() ?? '',
     id: map['id']?.toString(),
     branchId: map['branchId']?.toString(),
-    affectedUserIds: (map['affectedUserIds'] as List?)
-            ?.map((e) => e.toString())
-            .toList() ??
+    affectedUserIds:
+        (map['affectedUserIds'] as List?)?.map((e) => e.toString()).toList() ??
         const [],
   );
 
@@ -102,6 +102,7 @@ const _fallbackCrmEntities = <String>[
   'lesson',
   'lead',
   'student',
+  'homework',
   'payment',
   'subscription',
   'task',

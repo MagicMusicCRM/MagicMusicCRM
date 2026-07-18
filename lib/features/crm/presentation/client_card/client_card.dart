@@ -147,6 +147,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     (Icons.task_alt_rounded, 'Задачи'),
     (Icons.forum_outlined, 'Комментарии'),
     (Icons.people_alt_outlined, 'Семья'),
+    (Icons.auto_graph_rounded, 'Прогресс'),
     (Icons.history_rounded, 'История'),
   ];
 
@@ -453,6 +454,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                           _buildTasksTab(cs),
                           _buildCommentsTab(cs),
                           _buildFamilyTab(cs),
+                          _buildLeadProgressTab(cs),
                           _buildHistoryTab(cs),
                         ],
                 ),

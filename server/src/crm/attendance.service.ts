@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import type { PoolClient } from "pg";
 import { AuditService } from "../audit/audit.service";
 import {
   ActorContext,
@@ -11,6 +12,7 @@ import {
 } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { audienceForStudent } from "./audience";
 import { UpsertAttendanceDto } from "./dto/upsert-attendance.dto";
 
 interface LessonAccessRow {
@@ -107,10 +109,25 @@ export class AttendanceService {
         "Статус занятия и посещаемость может изменять только администратор и выше.",
       );
     }
+    const items = dto.items ?? [];
+    if (items.length === 0) {
+      throw new BadRequestException(
+        "Нельзя завершить занятие без отметок посещаемости.",
+      );
+    }
     const lesson = await this.findLessonForAttendance(actor, lessonId);
     const students = await this.listAttendanceStudents(lesson);
     const allowedStudentIds = new Set(students.map((row) => row.student_id));
-    const items = dto.items ?? [];
+    const submittedStudentIds = new Set(items.map((item) => item.studentId));
+    if (
+      submittedStudentIds.size !== items.length ||
+      submittedStudentIds.size !== allowedStudentIds.size
+    ) {
+      throw new BadRequestException(
+        "Перед завершением занятия отметьте посещаемость всех участников.",
+      );
+    }
+    await this.database.transaction(async (client) => {
     for (const item of items) {
       if (!allowedStudentIds.has(item.studentId)) {
         throw new BadRequestException("Ученик не относится к этому уроку.");
@@ -135,15 +152,15 @@ export class AttendanceService {
       // for someone outside their family); null → it falls back to the
       // student's own subscription, then a family member's.
       if (item.subscriptionId) {
-        const exists = await this.database.query<{ id: string }>(
-          `select id from app.subscriptions where id = $1 and deleted_at is null`,
+        const exists = await client.query<{ id: string }>(
+          `select id from app.subscriptions where id = $1`,
           [item.subscriptionId],
         );
         if (!exists.rows[0]) {
           throw new NotFoundException("Абонемент не найден.");
         }
       }
-      await this.database.query(
+      const participation = await client.query<{ id: string }>(
         `
           insert into app.lesson_participation (
             lesson_id, student_id, status, pass_reason, attendance_kind,
@@ -161,6 +178,10 @@ export class AttendanceService {
             subscription_id = coalesce(
               excluded.subscription_id, app.lesson_participation.subscription_id
             )
+          where excluded.subscription_id is null
+            or app.lesson_participation.subscription_id is not distinct from excluded.subscription_id
+            or app.lesson_participation.charged_hours = 0
+          returning id
         `,
         [
           lessonId,
@@ -172,21 +193,22 @@ export class AttendanceService {
           item.subscriptionId ?? null,
         ],
       );
+      if (item.subscriptionId && !participation.rows[0]) {
+        throw new BadRequestException(
+          "Нельзя сменить абонемент после списания занятия.",
+        );
+      }
     }
 
     // KVA-237: списание с абонемента по таблице правил (доля от типа
     // посещения), идемпотентно по дельте — смена статуса задним числом
     // пересчитывает уже списанные часы.
     for (const item of items) {
-      await this.reconcileSubscriptionUsage(lessonId, item.studentId);
+      await this.reconcileSubscriptionUsage(client, lessonId, item.studentId);
     }
 
     // «Уведомить об изменениях» (модалка HolliHop): in-app+push клиенту.
-    if (dto.notifyClient) {
-      await this.notifyAttendanceChanged(lessonId, items.map((i) => i.studentId));
-    }
-
-    await this.database.query(
+    await client.query(
       `
         update app.lessons
         set status = 'completed', updated_at = now()
@@ -194,6 +216,11 @@ export class AttendanceService {
       `,
       [lessonId],
     );
+    });
+
+    if (dto.notifyClient) {
+      await this.notifyAttendanceChanged(lessonId, items.map((i) => i.studentId));
+    }
     await this.audit.record({
       actor,
       action: "crm.lesson_attendance_updated",
@@ -223,12 +250,15 @@ export class AttendanceService {
    * смена статуса задним числом дописывает/возвращает ровно разницу.
    * Выбор абонемента: свой активный, иначе — члена семьи (KVA-235).
    */
-  private async reconcileSubscriptionUsage(lessonId: string, studentId: string) {
+  private async reconcileSubscriptionUsage(
+    client: PoolClient,
+    lessonId: string,
+    studentId: string,
+  ) {
     // Read-compute-write on charged_hours/lessons_used: runs inside one
     // transaction serialized by a per-participation advisory lock, otherwise a
     // double-submit (teacher retry) reads charged=0 twice and decrements the
     // subscription twice for one attended lesson.
-    await this.database.transaction(async (client) => {
       await client.query(
         `select pg_advisory_xact_lock(hashtext('attendance:' || $1 || ':' || $2))`,
         [lessonId, studentId],
@@ -239,11 +269,13 @@ export class AttendanceService {
         charged_hours: string | number;
         subscription_id: string | null;
         hours: string | number;
+        is_trial: boolean;
       }>(
         `
         select lp.attendance_kind, lp.charge_share, lp.charged_hours,
           lp.subscription_id,
-          coalesce(l.duration_minutes, 60)::numeric / 60 as hours
+          coalesce(l.duration_minutes, 60)::numeric / 60 as hours,
+          l.is_trial
         from app.lesson_participation lp
         join app.lessons l on l.id = lp.lesson_id
         where lp.lesson_id = $1 and lp.student_id = $2
@@ -253,15 +285,18 @@ export class AttendanceService {
       const row = state.rows[0];
       if (!row) return;
       const hours = Number(row.hours);
-      const target =
-        Math.round(
-          hours *
-            AttendanceService.chargeShareForKind(
-              row.attendance_kind,
-              Number(row.charge_share),
-            ) *
-            100,
-        ) / 100;
+      // Trial attendance is historical evidence only. Even after conversion
+      // rebinds the trial to a student, it must never consume their subscription.
+      const target = row.is_trial
+        ? 0
+        : Math.round(
+            hours *
+              AttendanceService.chargeShareForKind(
+                row.attendance_kind,
+                Number(row.charge_share),
+              ) *
+              100,
+          ) / 100;
       const charged = Number(row.charged_hours);
       const delta = Math.round((target - charged) * 100) / 100;
       if (delta === 0) return;
@@ -269,19 +304,25 @@ export class AttendanceService {
       if (delta > 0) {
         // Дописываем: на уже привязанный абонемент, иначе подбираем (свой →
         // семейный). Если абонемента нет — списывать не с чего, charged не растёт.
-        await client.query(
+        const chargeResult = await client.query<{ id: string }>(
           `
           with pick as (
             select s.id
             from app.subscriptions s
             where s.id = $3::uuid
+              and s.status = 'active'
+              and (s.starts_at is null or s.starts_at <= current_date)
+              and (s.expires_at is null or s.expires_at >= current_date)
+              and s.lessons_used + $4::numeric <= s.lessons_total
             union all
             (
               select s.id
               from app.subscriptions s
               where $3::uuid is null
                 and s.status = 'active'
-                and s.lessons_used < s.lessons_total
+                and (s.starts_at is null or s.starts_at <= current_date)
+                and (s.expires_at is null or s.expires_at >= current_date)
+                and s.lessons_used + $4::numeric <= s.lessons_total
                 and (
                   s.student_id = $2
                   or s.student_id in (
@@ -305,7 +346,9 @@ export class AttendanceService {
           dec as (
             update app.subscriptions s
             set lessons_used = lessons_used + $4::numeric, updated_at = now()
-            from pick where s.id = pick.id
+            from pick
+            where s.id = pick.id
+              and s.lessons_used + $4::numeric <= s.lessons_total
             returning s.id
           )
           update app.lesson_participation lp
@@ -313,9 +356,15 @@ export class AttendanceService {
             charged_hours = $5::numeric
           where lp.lesson_id = $1 and lp.student_id = $2
             and exists (select 1 from dec)
+          returning lp.id
         `,
           [lessonId, studentId, row.subscription_id, delta, target],
         );
+        if (row.subscription_id && !chargeResult.rows[0]) {
+          throw new BadRequestException(
+            "Выбранный абонемент неактивен или в нём недостаточно занятий.",
+          );
+        }
         return;
       }
 
@@ -345,34 +394,38 @@ export class AttendanceService {
       `,
         [lessonId, studentId, row.subscription_id, delta, target],
       );
-    });
   }
 
   /** KVA-237: пуш/in-app «изменение по занятию» клиентам с аккаунтами. */
   private async notifyAttendanceChanged(lessonId: string, studentIds: string[]) {
     if (!studentIds.length) return;
-    const users = await this.database.query<{
-      user_id: string;
+    const lesson = await this.database.query<{
       scheduled_at: Date | string;
     }>(
       `
-        select p.user_id, l.scheduled_at
-        from app.students s
-        join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-        join app.lessons l on l.id = $1
-        where s.id = any($2::uuid[]) and s.deleted_at is null
-          and p.user_id is not null
+        select scheduled_at
+        from app.lessons
+        where id = $1 and deleted_at is null
+        limit 1
       `,
-      [lessonId, studentIds],
+      [lessonId],
     );
-    for (const row of users.rows) {
-      const when = new Date(String(row.scheduled_at));
-      const dateLabel = Number.isNaN(when.getTime())
-        ? ""
-        : ` ${when.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "Europe/Moscow" })}`;
+    const scheduledAt = lesson.rows[0]?.scheduled_at;
+    if (!scheduledAt) return;
+    const audience = new Set<string>();
+    for (const studentId of studentIds) {
+      for (const userId of await audienceForStudent(this.database, studentId)) {
+        audience.add(userId);
+      }
+    }
+    const when = new Date(String(scheduledAt));
+    const dateLabel = Number.isNaN(when.getTime())
+      ? ""
+      : ` ${when.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "Europe/Moscow" })}`;
+    for (const userId of audience) {
       await this.notifications
         .notifyUser({
-          userId: row.user_id,
+          userId,
           title: "Изменение по занятию",
           body: `Статус вашего занятия${dateLabel} обновлён. Подробности в приложении.`,
           data: { lessonId },

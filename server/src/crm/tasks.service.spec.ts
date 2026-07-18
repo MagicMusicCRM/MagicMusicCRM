@@ -323,6 +323,37 @@ describe("TasksService", () => {
     ]);
   });
 
+  it("links the immediate assignee notification to the created task", async () => {
+    const { service, query, notifications } = createService();
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          taskRow({
+            entity_type: "lesson",
+            entity_id: "lesson-a",
+            assigned_to: "admin-b",
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await service.createTask(actor, {
+      entityType: "lesson",
+      entityId: "lesson-a",
+      assignedTo: "admin-b",
+      title: "Собрать обратную связь",
+      dueAt: "2026-06-13T10:00:00.000Z",
+    } as never);
+
+    expect(notifications.notifyUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "admin-b",
+        data: { entityType: "task", entityId: "task-a" },
+        channels: ["in_app", "push"],
+      }),
+    );
+  });
+
   it("defaults the supervisor feed to due-date moves", async () => {
     const { service, query, policy } = createService([]);
 

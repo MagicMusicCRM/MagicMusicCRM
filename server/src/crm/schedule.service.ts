@@ -455,34 +455,7 @@ export class ScheduleService {
           and (
             ${managerAdminRolesSql("$1")}
             or ($1::text = 'teacher' and tp.user_id = $2)
-            or ($1::text = 'client' and sp.user_id = $2)
-            or (
-              $1::text = 'client'
-              and exists (
-                select 1
-                from app.user_crm_links lead_link
-                where lead_link.user_id = $2
-                  and lead_link.entity_type = 'lead'
-                  and lead_link.entity_id = l.lead_id
-                  and lead_link.deleted_at is null
-              )
-            )
-            or (
-              $1::text = 'client'
-              and exists (
-                select 1
-                from app.group_students actor_gs
-                join app.students actor_student
-                  on actor_student.id = actor_gs.student_id
-                 and actor_student.deleted_at is null
-                join app.profiles actor_profile
-                  on actor_profile.id = actor_student.profile_id
-                 and actor_profile.deleted_at is null
-                where actor_gs.group_id = l.group_id
-                  and actor_gs.left_at is null
-                  and actor_profile.user_id = $2
-              )
-            )
+            or ($1::text = 'client' and ${this.clientLessonAccessSql("$2")})
           )
         order by l.scheduled_at ${sortDir}, l.id ${sortDir}
         limit $8
@@ -705,6 +678,130 @@ export class ScheduleService {
    * Contract 7: map the pinned clientRef {type, id} onto the legacy
    * studentId/leadId fields. An explicit clientRef wins over both.
    */
+  private clientLessonAccessSql(userIdExpression: string): string {
+    return `(
+      sp.user_id = ${userIdExpression}
+      or exists (
+        select 1
+        from app.user_crm_links student_link
+        where student_link.user_id = ${userIdExpression}
+          and student_link.entity_type = 'student'
+          and student_link.entity_id = l.student_id
+          and student_link.deleted_at is null
+      )
+      or exists (
+        select 1
+        from app.profiles account_profile
+        join app.family_members account_member
+          on account_member.entity_type = 'profile'
+         and account_member.entity_id = account_profile.id
+         and account_member.role in ('parent', 'payer')
+         and account_member.deleted_at is null
+        join app.families family
+          on family.id = account_member.family_id and family.deleted_at is null
+        join app.family_members student_member
+          on student_member.family_id = family.id
+         and student_member.entity_type = 'student'
+         and student_member.entity_id = l.student_id
+         and student_member.deleted_at is null
+        where account_profile.user_id = ${userIdExpression}
+          and account_profile.deleted_at is null
+      )
+      or exists (
+        select 1
+        from app.user_crm_links lead_link
+        where lead_link.user_id = ${userIdExpression}
+          and lead_link.entity_type = 'lead'
+          and lead_link.entity_id = l.lead_id
+          and lead_link.deleted_at is null
+      )
+      or exists (
+        select 1
+        from app.profiles account_profile
+        join app.family_members account_member
+          on account_member.entity_type = 'profile'
+         and account_member.entity_id = account_profile.id
+         and account_member.role in ('parent', 'payer')
+         and account_member.deleted_at is null
+        join app.families family
+          on family.id = account_member.family_id and family.deleted_at is null
+        join app.family_members lead_member
+          on lead_member.family_id = family.id
+         and lead_member.entity_type = 'lead'
+         and lead_member.entity_id = l.lead_id
+         and lead_member.deleted_at is null
+        where account_profile.user_id = ${userIdExpression}
+          and account_profile.deleted_at is null
+      )
+      or exists (
+        select 1
+        from app.group_students actor_group_student
+        join app.students actor_student
+          on actor_student.id = actor_group_student.student_id
+         and actor_student.deleted_at is null
+        join app.profiles actor_profile
+          on actor_profile.id = actor_student.profile_id
+         and actor_profile.deleted_at is null
+        where actor_group_student.group_id = l.group_id
+          and actor_group_student.left_at is null
+          and actor_profile.user_id = ${userIdExpression}
+      )
+      or exists (
+        select 1
+        from app.group_students actor_group_student
+        join app.user_crm_links group_student_link
+          on group_student_link.entity_type = 'student'
+         and group_student_link.entity_id = actor_group_student.student_id
+         and group_student_link.deleted_at is null
+        where actor_group_student.group_id = l.group_id
+          and actor_group_student.left_at is null
+          and group_student_link.user_id = ${userIdExpression}
+      )
+      or exists (
+        select 1
+        from app.group_students actor_group_student
+        join app.family_members group_student_member
+          on group_student_member.entity_type = 'student'
+         and group_student_member.entity_id = actor_group_student.student_id
+         and group_student_member.deleted_at is null
+        join app.families family
+          on family.id = group_student_member.family_id and family.deleted_at is null
+        join app.family_members account_member
+          on account_member.family_id = family.id
+         and account_member.entity_type = 'profile'
+         and account_member.role in ('parent', 'payer')
+         and account_member.deleted_at is null
+        join app.profiles account_profile
+          on account_profile.id = account_member.entity_id
+         and account_profile.deleted_at is null
+        where actor_group_student.group_id = l.group_id
+          and actor_group_student.left_at is null
+          and account_profile.user_id = ${userIdExpression}
+      )
+    )`;
+  }
+
+  private async notifyTrialBooked(
+    lesson: LessonRow,
+    affectedUserIds: string[],
+  ): Promise<void> {
+    if (!affectedUserIds.length) return;
+    const whenLocal = formatLessonTimeMoscow(lesson.scheduled_at);
+    await Promise.all(
+      affectedUserIds.map((userId) =>
+        this.notifications
+          .notifyUser({
+            userId,
+            title: "Пробное занятие назначено",
+            body: `Пробное занятие назначено на ${whenLocal} (по Москве). Подробности в приложении.`,
+            data: { type: "trial_lesson_booked", lessonId: lesson.id },
+            channels: ["in_app", "push"],
+          })
+          .catch(() => undefined),
+      ),
+    );
+  }
+
   private applyClientRef(dto: UpsertLessonDto): UpsertLessonDto {
     if (!dto.clientRef) return dto;
     const mapped: UpsertLessonDto = {
@@ -773,6 +870,30 @@ export class ScheduleService {
     this.assertLeadLessonIsTrial(dto.leadId, dto.isTrial);
     // Resource locks, conflict check and insert share one transaction.
     const result = await this.database.transaction(async (client) => {
+      if (dto.leadId) {
+        const conversion = await client.query<{ converted: boolean }>(
+          `
+            with locked_lead as (
+              select pg_advisory_xact_lock(
+                hashtextextended($1::uuid::text, 0)
+              )
+            )
+            select exists (
+              select 1
+              from app.students student
+              where student.lead_id = $1
+                and student.deleted_at is null
+            ) as converted
+            from locked_lead
+          `,
+          [dto.leadId],
+        );
+        if (conversion.rows[0]?.converted) {
+          throw new ConflictException(
+            "Лид уже стал учеником; назначьте обычное занятие ученику.",
+          );
+        }
+      }
       await this.assertNoScheduleConflicts(
         {
           teacherId: dto.teacherId ?? null,
@@ -819,7 +940,17 @@ export class ScheduleService {
       entityType: "lesson",
       entityId: lesson.id,
     });
-    const affectedUserIds = await audienceForLesson(this.database, lesson);
+    let affectedUserIds: string[] = [];
+    try {
+      affectedUserIds = await audienceForLesson(this.database, lesson);
+    } catch (error) {
+      // The lesson insert has already committed. Audience resolution is a
+      // best-effort side effect; surfacing its failure as 500 would invite a
+      // retry that creates a duplicate trial lesson.
+      this.logger.warn(
+        `Lesson ${lesson.id} created but audience resolution failed: ${String(error)}`,
+      );
+    }
     this.realtime.emitCrmChanged({
       entity: "lesson",
       action: "created",
@@ -827,6 +958,9 @@ export class ScheduleService {
       branchId: lesson.branch_id ?? null,
       affectedUserIds,
     });
+    if (lesson.is_trial) {
+      await this.notifyTrialBooked(lesson, affectedUserIds);
+    }
     return toLessonDto(lesson);
   }
 
@@ -1394,6 +1528,30 @@ export class ScheduleService {
     // teacher's user_id for the reschedule notification (KVA-158).
     const { previous, result } = await this.database.transaction(
       async (client) => {
+        if (replacesSubject && dto.leadId) {
+          const conversion = await client.query<{ converted: boolean }>(
+            `
+              with locked_lead as (
+                select pg_advisory_xact_lock(
+                  hashtextextended($1::uuid::text, 0)
+                )
+              )
+              select exists (
+                select 1
+                from app.students student
+                where student.lead_id = $1
+                  and student.deleted_at is null
+              ) as converted
+              from locked_lead
+            `,
+            [dto.leadId],
+          );
+          if (conversion.rows[0]?.converted) {
+            throw new ConflictException(
+              "Лид уже стал учеником; назначьте обычное занятие ученику.",
+            );
+          }
+        }
         const before = await client.query<RescheduleSnapshotRow>(
       `
         select l.student_id, l.group_id, l.lead_id, l.teacher_id,
@@ -1410,6 +1568,11 @@ export class ScheduleService {
         );
         const previous = before.rows[0] ?? null;
         await this.assertCanUpdateLesson(actor, lessonId, dto, previous);
+        if (previous && dto.status === "completed" && !previous.is_trial) {
+          throw new BadRequestException(
+            "Обычное занятие завершайте через посещаемость, чтобы корректно списать абонемент.",
+          );
+        }
     const effectiveLeadId = replacesSubject
       ? (dto.leadId ?? null)
       : previous?.lead_id;

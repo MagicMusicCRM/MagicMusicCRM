@@ -285,6 +285,31 @@ describe("ScheduleService", () => {
     ]);
   });
 
+  it("keeps post-conversion lessons visible to manual-link and family clients", async () => {
+    const { service, query } = createService([]);
+
+    await service.listLessons(
+      { userId: "client-parent", role: "client" },
+      { studentId: "student-a", limit: 10 },
+    );
+
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("app.user_crm_links student_link");
+    expect(sql).toContain("student_member.entity_id = l.student_id");
+    expect(sql).toContain("account_member.role in ('parent', 'payer')");
+    expect(sql).toContain("app.user_crm_links group_student_link");
+    expect(query.mock.calls[0][1]).toEqual([
+      "client",
+      "client-parent",
+      "student-a",
+      null,
+      null,
+      null,
+      null,
+      10,
+    ]);
+  });
+
   it("returns schedule matrix grouped by room with conflicts", async () => {
     const { service, query, policy } = createService([
       {
@@ -810,7 +835,7 @@ describe("ScheduleService", () => {
     );
   });
 
-  it("allows teachers to update only status and notes on their own lessons", async () => {
+  it("allows teachers to update notes and complete their own trial lessons", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       {
         rows: [
@@ -822,7 +847,7 @@ describe("ScheduleService", () => {
             room_id: null,
             scheduled_at: "2026-06-12T12:00:00.000Z",
             duration_minutes: 60,
-            is_trial: false,
+            is_trial: true,
             teacher_user_id: "teacher-user-a",
           },
         ],
@@ -840,7 +865,7 @@ describe("ScheduleService", () => {
             scheduled_at: "2026-06-12T12:00:00.000Z",
             duration_minutes: 60,
             status: "completed",
-            is_trial: false,
+            is_trial: true,
             notes: "План занятия",
             student_user_id: null,
             teacher_user_id: null,
@@ -886,6 +911,33 @@ describe("ScheduleService", () => {
       null,
       false,
     ]);
+  });
+
+  it("requires attendance when completing an ordinary lesson", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [{
+          student_id: "student-a",
+          group_id: null,
+          lead_id: null,
+          teacher_id: "teacher-a",
+          room_id: null,
+          scheduled_at: "2026-07-21T09:00:00.000Z",
+          duration_minutes: 60,
+          is_trial: false,
+          teacher_user_id: "teacher-user-a",
+        }],
+      },
+    ]);
+
+    await expect(
+      service.updateLesson(actor, "lesson-a", { status: "completed" }),
+    ).rejects.toThrow("через посещаемость");
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("update app.lessons"),
+      ),
+    ).toBe(false);
   });
 
   it("soft-deletes a lesson and clears its reminder markers", async () => {
@@ -1161,7 +1213,7 @@ describe("ScheduleService", () => {
   });
 
   it("creates trial lessons linked to leads", async () => {
-    const { service, query, audit, policy } = createServiceWithQueryResults([
+    const { service, query, audit, policy, notifications } = createServiceWithQueryResults([
       { rows: [] }, // conflict pre-check — свободно
       { rows: [
       {
@@ -1187,6 +1239,7 @@ describe("ScheduleService", () => {
         group_price_per_lesson: null,
       },
     ] },
+      { rows: [{ user_id: "client-linked" }] },
     ]);
 
     await expect(
@@ -1205,6 +1258,11 @@ describe("ScheduleService", () => {
     });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    const leadLock = query.mock.calls.find((call) =>
+      String(call[0]).includes("locked_lead as"),
+    );
+    expect(String(leadLock?.[0])).toContain("pg_advisory_xact_lock");
+    expect(String(leadLock?.[0])).toContain("student.lead_id = $1");
     const insertCall = query.mock.calls.find((call) =>
       String(call[0]).includes("insert into app.lessons"),
     );
@@ -1228,6 +1286,127 @@ describe("ScheduleService", () => {
         entityId: "lesson-lead-a",
       }),
     );
+    expect(notifications.notifyUser).toHaveBeenCalledWith({
+      userId: "client-linked",
+      title: "Пробное занятие назначено",
+      body: expect.stringContaining("по Москве"),
+      data: {
+        type: "trial_lesson_booked",
+        lessonId: "lesson-lead-a",
+      },
+      channels: ["in_app", "push"],
+    });
+  });
+
+  it("rejects a stale trial create after subscription conversion wins the lead lock", async () => {
+    const query = jest.fn().mockImplementation((sql: unknown) => {
+      if (String(sql).includes("locked_lead as")) {
+        return Promise.resolve({ rows: [{ converted: true }] });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+    const deps = buildDeps();
+    const service = construct(query, deps);
+
+    await expect(
+      service.createLesson(actor, {
+        leadId: "lead-a",
+        teacherId: "teacher-a",
+        scheduledAt: "2026-07-18T10:00:00.000Z",
+        isTrial: true,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("insert into app.lessons"),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a stale trial reassignment after subscription conversion wins the lead lock", async () => {
+    const query = jest.fn().mockImplementation((sql: unknown) => {
+      if (String(sql).includes("locked_lead as")) {
+        return Promise.resolve({ rows: [{ converted: true }] });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+    const deps = buildDeps();
+    const service = construct(query, deps);
+
+    await expect(
+      service.updateLesson(actor, "lesson-a", {
+        leadId: "lead-a",
+        isTrial: true,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("select l.student_id"),
+      ),
+    ).toBe(false);
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("update app.lessons"),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not turn a committed trial into a retryable 500 when audience lookup fails", async () => {
+    const queued: Array<{ rows: Record<string, unknown>[] } | Error> = [
+      { rows: [] },
+      {
+        rows: [
+          {
+            id: "lesson-committed",
+            student_id: null,
+            group_id: null,
+            lead_id: "lead-a",
+            teacher_id: "teacher-a",
+            branch_id: null,
+            room_id: "room-a",
+            scheduled_at: "2026-07-18T10:00:00.000Z",
+            duration_minutes: 60,
+            status: "scheduled",
+            is_trial: true,
+            notes: null,
+            teacher_rate: null,
+            student_user_id: null,
+            teacher_user_id: null,
+            student_name: null,
+            lead_name: null,
+            teacher_name: null,
+            branch_name: null,
+            room_name: null,
+            group_name: null,
+            group_price_per_lesson: null,
+          },
+        ],
+      },
+      new Error("audience unavailable"),
+    ];
+    const query = jest.fn().mockImplementation((sql: unknown) => {
+      if (String(sql).includes("pg_advisory_xact_lock")) {
+        return Promise.resolve({ rows: [] });
+      }
+      const result = queued.shift();
+      return result instanceof Error
+        ? Promise.reject(result)
+        : Promise.resolve(result);
+    });
+    const deps = buildDeps();
+    const service = construct(query, deps);
+
+    await expect(
+      service.createLesson(actor, {
+        leadId: "lead-a",
+        teacherId: "teacher-a",
+        roomId: "room-a",
+        scheduledAt: "2026-07-18T10:00:00.000Z",
+        isTrial: true,
+      }),
+    ).resolves.toMatchObject({ id: "lesson-committed" });
+    expect(deps.audit.record).toHaveBeenCalled();
+    expect(deps.notifications.notifyUser).not.toHaveBeenCalled();
   });
 
   describe("bulk teacher rate", () => {
@@ -1432,7 +1611,7 @@ describe("ScheduleService", () => {
       );
     });
 
-    it("a status-only PATCH never runs the conflict check (attendance stays 409-free)", async () => {
+    it("a cancel-only PATCH never runs the conflict check", async () => {
       const { service, query } = createServiceWithQueryResults([
         {
           rows: [
@@ -1458,7 +1637,7 @@ describe("ScheduleService", () => {
               room_id: "room-a",
               scheduled_at: "2026-07-20T10:00:00.000Z",
               duration_minutes: 60,
-              status: "completed",
+              status: "cancelled",
               is_trial: false,
               notes: null,
               student_user_id: null,
@@ -1474,7 +1653,7 @@ describe("ScheduleService", () => {
         }, // UPDATE ... RETURNING
       ]);
 
-      await service.updateLesson(actor, "lesson-a", { status: "completed" });
+      await service.updateLesson(actor, "lesson-a", { status: "cancelled" });
 
       const sqls = query.mock.calls.map((c) => String(c[0]));
       expect(sqls.some((sql) => sql.includes("tstzrange"))).toBe(false);

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -67,6 +68,11 @@ export class CrmStudentsController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreateStudentDto,
   ) {
+    if (dto.leadId) {
+      throw new BadRequestException(
+        "Лид становится учеником только при выдаче абонемента через /crm/leads/:leadId/subscriptions/issue.",
+      );
+    }
     return this.crm.createStudent(actor, dto);
   }
 

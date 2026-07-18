@@ -19,6 +19,7 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'create_lesson_dialog.dart';
 import 'schedule_day_canvas.dart';
 import 'lesson_details_sheet.dart';
+import 'lesson_attendance_dialog.dart';
 import 'schedule_legends.dart';
 import 'schedule_shared.dart';
 import 'schedule_year_view.dart';
@@ -50,9 +51,7 @@ const List<Color> _roomColors = [
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 
-
 // ── Russian month names ─────────────────────────────────────────────────────
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Main Widget
@@ -177,6 +176,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   void _emitState(void Function() fn) {
     if (mounted) setState(fn);
   }
+
   //  BUILD
   // ═══════════════════════════════════════════════════════════════════════════
   @override
@@ -254,6 +254,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       floatingActionButton: firstLoad
           ? null
           : FloatingActionButton(
+              tooltip: 'Новое занятие',
               onPressed: () => _showAddLessonDialog(
                 _currentView == ScheduleView.day
                     ? _selectedDate
