@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card_sheets.dart';
 import 'package:intl/intl.dart';
 
@@ -45,8 +46,16 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
     setState(() => _isLoading = true);
     try {
       final crm = ref.read(magicCrmServiceProvider);
-      final teachers = await crm.listTeachers(limit: 1);
-      final teacher = teachers.firstOrNull;
+      final profile = await ref.read(magicAuthServiceProvider).currentProfile();
+      // The teachers catalogue is ordered by name, so its first row is not the
+      // signed-in teacher. Narrow by the current profile's email and still
+      // require an exact user-id match before loading lessons.
+      final teachers = await crm.listTeachers(q: profile.email, limit: 100);
+      final teacher = teachers
+          .where(
+            (item) => item['profile_user_id']?.toString() == profile.userId,
+          )
+          .firstOrNull;
 
       if (teacher == null) {
         setState(() => _isLoading = false);

@@ -126,6 +126,13 @@ describe("DashboardService", () => {
     expect(String(query.mock.calls[0][0])).toContain(
       "lp.attendance_kind = 'partially_paid'",
     );
+    const overviewSql = String(query.mock.calls[0][0]);
+    expect(overviewSql).toContain("coalesce(sub_pay.amount, pkg.price)");
+    expect(overviewSql).toContain("/ nullif(sub.lessons_total, 0)");
+    expect(overviewSql).toContain("* lp.charged_hours");
+    expect(overviewSql).toContain(
+      "group by coalesce(sub.student_id, l.student_id, lp.student_id)",
+    );
   });
 
   it("returns finance report aggregates through CRM write policy", async () => {

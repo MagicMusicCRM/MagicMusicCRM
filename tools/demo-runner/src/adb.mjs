@@ -107,6 +107,11 @@ export class AdbClient {
     await this.shell(serial, ['cmd', 'statusbar', 'collapse']);
   }
 
+  async keyboardShown(serial) {
+    const { stdout } = await this.shell(serial, ['dumpsys', 'input_method']);
+    return /\bmInputShown=true\b/.test(stdout);
+  }
+
   async hasNotification(serial, packageName, marker) {
     const { stdout } = await this.shell(serial, ['dumpsys', 'notification', '--noredact']);
     if (!stdout.includes(packageName)) return false;

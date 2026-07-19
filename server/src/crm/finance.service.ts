@@ -296,37 +296,54 @@ export class FinanceService {
       `
         with lesson_costs as (
           select
-            coalesce(l.student_id, lp.student_id) as student_id,
+            -- A charged subscription can belong to a family member (or an
+            -- explicitly selected third-party payer). Attribute the expense to
+            -- the same personal account that received the subscription payment.
+            coalesce(sub.student_id, l.student_id, lp.student_id) as student_id,
             sum(
               coalesce(
-                g.price_per_lesson,
-                case
-                  when s.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
-                    then (s.custom_data->>'individualPrice')::numeric
-                  when s.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
-                    then (s.custom_data->>'individual_price')::numeric
-                  else null
-                end,
-                0
+                -- The issuance payment is the immutable sale-price snapshot.
+                -- Package price is a fallback for imported/voided payments.
+                -- charged_hours is the exact amount reconciled against this
+                -- subscription, including duration and partial attendance.
+                coalesce(sub_pay.amount, pkg.price)
+                  / nullif(sub.lessons_total, 0)
+                  * lp.charged_hours,
+                -- Legacy completed lessons may have no linked subscription.
+                -- Preserve their established group/custom-price behaviour.
+                coalesce(
+                  g.price_per_lesson,
+                  case
+                    when s.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
+                      then (s.custom_data->>'individualPrice')::numeric
+                    when s.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
+                      then (s.custom_data->>'individual_price')::numeric
+                    else null
+                  end,
+                  0
+                )
+                * case
+                    when lp.id is null then 1
+                    when lp.attendance_kind in ('attended', 'paid_miss') then 1
+                    when lp.attendance_kind = 'partially_paid'
+                      then lp.charge_share
+                    else 0
+                  end
               )
-              * case
-                  when lp.id is null then 1
-                  when lp.attendance_kind in ('attended', 'paid_miss') then 1
-                  when lp.attendance_kind = 'partially_paid'
-                    then lp.charge_share
-                  else 0
-                end
             ) as total_cost,
             max(l.updated_at) as updated_at
           from app.lessons l
           left join app.lesson_participation lp on lp.lesson_id = l.id
           join app.students s on s.id = coalesce(l.student_id, lp.student_id)
           left join app.groups g on g.id = l.group_id and g.deleted_at is null
+          left join app.subscriptions sub on sub.id = lp.subscription_id
+          left join app.subscription_packages pkg on pkg.id = sub.package_id
+          left join app.payments sub_pay on sub_pay.id = sub.payment_id
           where l.deleted_at is null
             and l.status in ('completed', 'done')
             and l.is_trial = false
             and coalesce(l.student_id, lp.student_id) is not null
-          group by coalesce(l.student_id, lp.student_id)
+          group by coalesce(sub.student_id, l.student_id, lp.student_id)
         ),
         payment_totals as (
           select
@@ -427,23 +444,28 @@ export class FinanceService {
           select l.id, 'lesson_charge' as kind,
             -(
               coalesce(
-              g.price_per_lesson,
-              case
-                when s.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
-                  then (s.custom_data->>'individualPrice')::numeric
-                when s.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
-                  then (s.custom_data->>'individual_price')::numeric
-                else null
-              end,
-              0
+                coalesce(sub_pay.amount, pkg.price)
+                  / nullif(sub.lessons_total, 0)
+                  * lp.charged_hours,
+                coalesce(
+                  g.price_per_lesson,
+                  case
+                    when s.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
+                      then (s.custom_data->>'individualPrice')::numeric
+                    when s.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
+                      then (s.custom_data->>'individual_price')::numeric
+                    else null
+                  end,
+                  0
+                )
+                * case
+                    when lp.id is null then 1
+                    when lp.attendance_kind in ('attended', 'paid_miss') then 1
+                    when lp.attendance_kind = 'partially_paid'
+                      then lp.charge_share
+                    else 0
+                  end
               )
-              * case
-                  when lp.id is null then 1
-                  when lp.attendance_kind in ('attended', 'paid_miss') then 1
-                  when lp.attendance_kind = 'partially_paid'
-                    then lp.charge_share
-                  else 0
-                end
             ) as amount,
             trim(concat('Занятие', ' ', coalesce(g.name, 'индивидуально'))) as description,
             null as method,
@@ -457,14 +479,17 @@ export class FinanceService {
             'paid'::text as status,
             false as editable
           from app.lessons l
-          left join app.lesson_participation lp on lp.lesson_id = l.id and lp.student_id = $1
+          left join app.lesson_participation lp on lp.lesson_id = l.id
           join app.students s on s.id = coalesce(l.student_id, lp.student_id)
           left join app.groups g on g.id = l.group_id and g.deleted_at is null
+          left join app.subscriptions sub on sub.id = lp.subscription_id
+          left join app.subscription_packages pkg on pkg.id = sub.package_id
+          left join app.payments sub_pay on sub_pay.id = sub.payment_id
           left join app.branches b on b.id = l.branch_id
           where l.deleted_at is null
             and l.status in ('completed', 'done')
             and l.is_trial = false
-            and coalesce(l.student_id, lp.student_id) = $1
+            and coalesce(sub.student_id, l.student_id, lp.student_id) = $1
 
           union all
 

@@ -18,7 +18,7 @@ test('role mapping has exact unique AVD, serial, and system-port guards', () => 
   );
   assert.equal(new Set(Object.values(ROLE_CONFIG).map((item) => item.serial)).size, 4);
   assert.equal(new Set(Object.values(ROLE_CONFIG).map((item) => item.systemPort)).size, 4);
-  assert.deepEqual(EXPECTED_APP_VERSION, { name: '1.2.2', code: '145' });
+  assert.deepEqual(EXPECTED_APP_VERSION, { name: '1.2.2', code: '146' });
 });
 
 test('package dump parsing reads version and notification grant', () => {
@@ -168,11 +168,11 @@ test('scrollUntilVisible uses a bounded native scroll container', async () => {
 test('Flutter login targets native EditText controls and submits after hiding the keyboard', async () => {
   assert.equal(
     LOGIN_LOCATORS.identity.value,
-    'new UiSelector().className("android.widget.EditText").instance(0)',
+    '//android.widget.EditText[@hint="user@example.com"]',
   );
   assert.equal(
     LOGIN_LOCATORS.password.value,
-    'new UiSelector().className("android.widget.EditText").instance(1)',
+    '//android.widget.EditText[@password="true"]',
   );
 
   const calls = [];
@@ -188,10 +188,14 @@ test('Flutter login targets native EditText controls and submits after hiding th
   const identity = element('identity');
   const password = element('password');
   const submit = element('submit');
-  let successChecks = 0;
+  let submitted = false;
+  submit.click = async () => {
+    calls.push('submit.click');
+    submitted = true;
+  };
   const success = {
     async waitForDisplayed() { calls.push('success.wait'); },
-    async isDisplayed() { successChecks += 1; return successChecks > 1; },
+    async isDisplayed() { return submitted; },
   };
   const selectors = new Map([
     [locatorSelector(LOGIN_LOCATORS.identity), identity],
@@ -214,7 +218,7 @@ test('Flutter login targets native EditText controls and submits after hiding th
   const executor = new ActionExecutor({
     sessions: { get() { return driver; } },
     roles: ROLE_CONFIG,
-    adb: {},
+    adb: { async keyboardShown() { return true; } },
     credentials,
     vault: new SecretVault(),
     logger: { info() {} },

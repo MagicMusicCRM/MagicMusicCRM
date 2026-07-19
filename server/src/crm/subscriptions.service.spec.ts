@@ -291,6 +291,7 @@ describe("SubscriptionsService", () => {
         { rows: [{ profile_id: "profile-client" }] },
         { rows: [{ id: "student-a" }] },
         { rows: [] }, // copy user_crm_link
+        { rows: [] }, // rebind administration chat
         { rows: [] }, // copy family membership
         { rows: [] }, // retire lead family membership
         {
@@ -390,6 +391,20 @@ describe("SubscriptionsService", () => {
         ),
       ),
     ).toBe(true);
+    const chatRebind = query.mock.calls.find((call) =>
+      String(call[0]).includes("update app.chats chat"),
+    );
+    expect(chatRebind).toBeDefined();
+    expect(chatRebind?.[1]).toEqual(["lead-a", "student-a"]);
+    const chatRebindSql = String(chatRebind?.[0]);
+    expect(chatRebindSql).toContain("chat.lead_id = $1");
+    expect(chatRebindSql).toContain("chat.type = 'administration'");
+    expect(chatRebindSql).toContain("link.user_id = chat.owner_user_id");
+    expect(chatRebindSql).toContain("link.entity_type = 'lead'");
+    expect(chatRebindSql).toContain("link.entity_id = $1");
+    expect(chatRebindSql).toContain(
+      "chat.slug is distinct from 'announcements'",
+    );
     expect(
       query.mock.calls.some((call) =>
         String(call[0]).includes("conversion_lead_id"),

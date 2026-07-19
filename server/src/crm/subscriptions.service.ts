@@ -671,6 +671,33 @@ export class SubscriptionsService {
         [leadId, studentId, actor.userId],
       );
 
+      // Keep the client's administration conversation attached to the CRM
+      // entity after lead conversion. Some imported chats have no direct
+      // lead_id and can only be resolved through their owner user's CRM link.
+      await client.query(
+        `
+          update app.chats chat
+          set student_id = $2, lead_id = null, updated_at = now()
+          where chat.deleted_at is null
+            and chat.slug is distinct from 'announcements'
+            and (
+              chat.lead_id = $1
+              or (
+                chat.type = 'administration'
+                and exists (
+                  select 1
+                  from app.user_crm_links link
+                  where link.user_id = chat.owner_user_id
+                    and link.entity_type = 'lead'
+                    and link.entity_id = $1
+                    and link.deleted_at is null
+                )
+              )
+            )
+        `,
+        [leadId, studentId],
+      );
+
       // Preserve household access: the student replaces the lead as the child
       // member while parent/payer profile members remain unchanged.
       await client.query(

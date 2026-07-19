@@ -106,7 +106,10 @@ export class ActionExecutor {
   }
 
   async executeStepActions(step) {
-    for (const action of actionList(step)) {
+    const actions = actionList(step);
+    for (const [index, action] of actions.entries()) {
+      const role = roleFor(action, step.role);
+      this.logger.info(`[action] ${step.id} ${index + 1}/${actions.length}: ${role}.${action.type}`);
       await this.execute(action, step.role);
     }
   }
@@ -121,10 +124,35 @@ export class ActionExecutor {
         await element.click();
         return;
       }
+      case 'tapCoordinates':
+        await driver.execute('mobile: clickGesture', {
+          x: Number(action.x),
+          y: Number(action.y),
+        });
+        return;
+      case 'swipeCoordinates':
+        await driver.execute('mobile: swipeGesture', {
+          left: Number(action.x),
+          top: Number(action.y),
+          width: Number(action.width),
+          height: Number(action.height),
+          direction: action.direction,
+          percent: Number(action.percent ?? 0.75),
+        });
+        return;
       case 'tapIfVisible': {
+        if (action.unlessLocator
+          && await isDisplayed(driver, resolvedLocator(action.unlessLocator))) return;
         const locator = resolvedLocator(action.locator);
         if (await isDisplayed(driver, locator)) {
-          await (await driver.$(locatorSelector(locator))).click();
+          if (Number.isFinite(Number(action.x)) && Number.isFinite(Number(action.y))) {
+            await driver.execute('mobile: clickGesture', {
+              x: Number(action.x),
+              y: Number(action.y),
+            });
+          } else {
+            await (await driver.$(locatorSelector(locator))).click();
+          }
         }
         return;
       }
@@ -136,8 +164,13 @@ export class ActionExecutor {
         }
         if (action.sensitive) this.vault.add(value);
         try {
+          // Flutter can expose an EditText to UiAutomator before its controller
+          // receives focus. Focus explicitly so setValue dispatches the same
+          // change path as real typing (for example, chat send/mic switching).
+          await element.click();
           if (action.clear !== false) await element.clearValue();
-          await element.setValue(value);
+          if (action.inputMode === 'type') await element.addValue(value);
+          else await element.setValue(value);
         } catch (error) {
           if (action.sensitive) await clearQuietly(element);
           throw error;
@@ -184,7 +217,12 @@ export class ActionExecutor {
         return;
       case 'hideKeyboard':
         try {
-          await driver.hideKeyboard();
+          // UiAutomator2 may implement hideKeyboard as Android BACK. Calling
+          // it when no IME is shown navigates out of the current Flutter
+          // screen, so guard it with the native keyboard state first.
+          if (await this.adb.keyboardShown(this.roles[role].serial)) {
+            await driver.hideKeyboard();
+          }
         } catch {
           // UiAutomator2 reports an error when the IME is already hidden.
         }
@@ -256,9 +294,18 @@ export class ActionExecutor {
   async #login(role, driver, action, timeoutMs) {
     await driver.activateApp(APP_PACKAGE);
     const successLocator = action.successLocator;
-    if (successLocator && await isDisplayed(driver, successLocator)) {
-      this.logger.info(`[login] ${role} already has the expected authenticated screen`);
-      return;
+    if (successLocator) {
+      try {
+        await poll(() => isDisplayed(driver, successLocator), {
+          timeoutMs: 6_000,
+          intervalMs: 250,
+          description: `authenticated shell for ${role}`,
+        });
+        this.logger.info(`[login] ${role} already has the expected authenticated screen`);
+        return;
+      } catch {
+        // The authenticated shell did not appear; continue with real login.
+      }
     }
 
     const identityLocator = action.identityLocator ?? LOGIN_LOCATORS.identity;
@@ -281,7 +328,9 @@ export class ActionExecutor {
       // explicit tap above makes the framework controller receive the text;
       // hide the IME so it cannot intercept the submit tap on small screens.
       try {
-        await driver.hideKeyboard();
+        if (await this.adb.keyboardShown(this.roles[role].serial)) {
+          await driver.hideKeyboard();
+        }
       } catch {
         // Some Android images report no soft keyboard even though it already
         // collapsed after the password action.

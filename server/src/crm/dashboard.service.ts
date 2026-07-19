@@ -189,36 +189,44 @@ export class DashboardService {
                 group by p.student_id
               ) pay on pay.student_id = st.id
               left join (
-                select coalesce(l.student_id, lp.student_id) as student_id,
+                select coalesce(sub.student_id, l.student_id, lp.student_id) as student_id,
                   sum(
                     coalesce(
-                      g.price_per_lesson,
-                      case
-                        when s2.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
-                          then (s2.custom_data->>'individualPrice')::numeric
-                        when s2.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
-                          then (s2.custom_data->>'individual_price')::numeric
-                        else null
-                      end,
-                      0
+                      coalesce(sub_pay.amount, pkg.price)
+                        / nullif(sub.lessons_total, 0)
+                        * lp.charged_hours,
+                      coalesce(
+                        g.price_per_lesson,
+                        case
+                          when s2.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
+                            then (s2.custom_data->>'individualPrice')::numeric
+                          when s2.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
+                            then (s2.custom_data->>'individual_price')::numeric
+                          else null
+                        end,
+                        0
+                      )
+                      * case
+                          when lp.id is null then 1
+                          when lp.attendance_kind in ('attended', 'paid_miss') then 1
+                          when lp.attendance_kind = 'partially_paid'
+                            then lp.charge_share
+                          else 0
+                        end
                     )
-                    * case
-                        when lp.id is null then 1
-                        when lp.attendance_kind in ('attended', 'paid_miss') then 1
-                        when lp.attendance_kind = 'partially_paid'
-                          then lp.charge_share
-                        else 0
-                      end
                   ) as total_cost
                 from app.lessons l
                 left join app.lesson_participation lp on lp.lesson_id = l.id
                 join app.students s2 on s2.id = coalesce(l.student_id, lp.student_id)
                 left join app.groups g on g.id = l.group_id and g.deleted_at is null
+                left join app.subscriptions sub on sub.id = lp.subscription_id
+                left join app.subscription_packages pkg on pkg.id = sub.package_id
+                left join app.payments sub_pay on sub_pay.id = sub.payment_id
                 where l.deleted_at is null
                   and l.status in ('completed', 'done')
                   and l.is_trial = false
                   and coalesce(l.student_id, lp.student_id) is not null
-                group by coalesce(l.student_id, lp.student_id)
+                group by coalesce(sub.student_id, l.student_id, lp.student_id)
               ) cost on cost.student_id = st.id
               left join (
                 select adj.student_id, sum(adj.amount) as total_adjustments

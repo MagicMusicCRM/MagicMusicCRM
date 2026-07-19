@@ -9,7 +9,7 @@ export const APP_ACTIVITY = 'com.magicmusiccrm.magic_music_crm.MainActivity';
 
 export const EXPECTED_APP_VERSION = Object.freeze({
   name: process.env.DEMO_EXPECTED_VERSION_NAME ?? '1.2.2',
-  code: process.env.DEMO_EXPECTED_VERSION_CODE ?? '145',
+  code: process.env.DEMO_EXPECTED_VERSION_CODE ?? '146',
 });
 
 export const ROLE_CONFIG = Object.freeze({
@@ -54,15 +54,16 @@ export const DEFAULTS = Object.freeze({
 
 export const LOGIN_LOCATORS = Object.freeze({
   // Flutter exposes the field labels as separate semantic Views, so locating
-  // by their text selects a non-editable node. Target the two native edit
-  // controls explicitly; this remains stable across role-specific shells.
+  // by their text selects a non-editable node. Match the login-only hint and
+  // password attribute so an authenticated screen's search box is never
+  // mistaken for the identity field while the shell is still settling.
   identity: Object.freeze({
-    using: 'android uiautomator',
-    value: 'new UiSelector().className("android.widget.EditText").instance(0)',
+    using: 'xpath',
+    value: '//android.widget.EditText[@hint="user@example.com"]',
   }),
   password: Object.freeze({
-    using: 'android uiautomator',
-    value: 'new UiSelector().className("android.widget.EditText").instance(1)',
+    using: 'xpath',
+    value: '//android.widget.EditText[@password="true"]',
   }),
   submit: Object.freeze({ using: 'accessibility id', value: 'Войти' }),
 });

@@ -114,6 +114,52 @@ describe("FinanceService", () => {
     expect(String(query.mock.calls[0][0])).toContain("then lp.charge_share");
   });
 
+  it("shows a linked 24000/8 subscription charge as one 3000 ledger expense", async () => {
+    const { service, query } = createService([
+      {
+        id: "lesson-a",
+        kind: "lesson_charge",
+        amount: "-3000",
+        description: "Занятие индивидуально",
+        method: null,
+        branch_name: "Сокол",
+        author_first_name: null,
+        author_last_name: null,
+        occurred_at: "2026-07-21T09:00:00.000Z",
+        invoice_number: null,
+        status: "paid",
+        editable: false,
+        income_total: "24000",
+        outcome_total: "3000",
+      },
+    ]);
+
+    await expect(
+      service.listStudentLedger(actor, "student-a", { limit: 50 }),
+    ).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          id: "lesson-a",
+          kind: "lesson_charge",
+          amount: -3000,
+        }),
+      ],
+      incomeTotal: 24000,
+      outcomeTotal: 3000,
+    });
+
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("left join app.subscriptions sub on sub.id = lp.subscription_id");
+    expect(sql).toContain("left join app.subscription_packages pkg on pkg.id = sub.package_id");
+    expect(sql).toContain("left join app.payments sub_pay on sub_pay.id = sub.payment_id");
+    expect(sql).toContain("coalesce(sub_pay.amount, pkg.price)");
+    expect(sql).toContain("/ nullif(sub.lessons_total, 0)");
+    expect(sql).toContain("* lp.charged_hours");
+    expect(sql).toContain(
+      "coalesce(sub.student_id, l.student_id, lp.student_id) = $1",
+    );
+  });
+
   it("creates a refund adjustment as a negative amount and audits it", async () => {
     const { service, query, audit, policy } = createServiceWithQueryResults([
       { rows: [{ id: "student-a", profile_user_id: "client-a" }] }, // findStudent
@@ -407,6 +453,19 @@ describe("FinanceService", () => {
 
     expect(policy.assertCanReadStudentFinance).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual(["student-a", true, 20]);
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("coalesce(sub_pay.amount, pkg.price)");
+    expect(sql).toContain("/ nullif(sub.lessons_total, 0)");
+    expect(sql).toContain("* lp.charged_hours");
+    expect(sql).toContain(
+      "group by coalesce(sub.student_id, l.student_id, lp.student_id)",
+    );
+    // Legacy/imported lessons without a subscription keep their established
+    // group/custom-data fallback instead of silently becoming free.
+    expect(sql).toContain("g.price_per_lesson");
+    expect(sql).toContain("s.custom_data->>'individualPrice'");
+    expect(sql).toContain("then lp.charge_share");
+    expect(sql).toContain("l.is_trial = false");
   });
 
   it("lists expected payments after student read authorization", async () => {
