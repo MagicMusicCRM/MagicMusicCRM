@@ -392,6 +392,10 @@ extension _ClientCardStudent on _ClientCardState {
     if (issuingForLead) _emitState(() => _converting = true);
     try {
       if (issuingForLead) {
+        // The package endpoint atomically copies the persisted lead record.
+        // Save the in-memory draft first; otherwise choosing a package closes
+        // the card and silently drops fields typed since the last Save action.
+        if (_edited && !await _persistEdits()) return;
         await crm.issueLeadSubscription(_leadId, packageId);
       } else {
         await crm.issueSubscription(_studentId, packageId);

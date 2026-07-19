@@ -28,3 +28,9 @@
 - [RULE] Зафиксирована бизнес-последовательность владельца: пробное занятие, ДЗ и сбор обратной связи выполняются, пока клиент остаётся лидом; конверсия в ученика происходит только при выдаче абонемента, после чего назначается обычное постоянное расписание.
 - [ADD] В scope включены безопасный точечный reset `magic1@gmail.com`, немедленный PUSH о пробном при свёрнутом приложении, пятисекундные визуальные паузы, строгая привязка ролей к именам AVD и возобновляемый Appium-runner без сохранения паролей.
 - [NOTE] Изменение классифицировано как controlled expansion: системные границы, ADR и публичная v3-топология не меняются; задачи уточняют уже существующие CRM, schedule, homework, notification и Android smoke contracts.
+
+## 2026-07-19 - Conversion draft and release-manifest hotfix
+
+- [ADD] Added owner-approved `T9.5` to persist pending lead-card edits before subscription-triggered conversion.
+- [CHANGE] The rejected `workplace`, `position` and `individualPrice` fields must be removed from default and persisted CRM field schemas without deleting historical values.
+- [OPS] The corrected release must publish Setup, Windows ZIP, APK and AAB and atomically update both Windows update manifests.

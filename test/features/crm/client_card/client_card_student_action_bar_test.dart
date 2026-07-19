@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:magic_music_crm/core/models/types.dart';
 
 import 'card_fake_api.dart';
 
@@ -94,5 +95,56 @@ void main() {
 
     expect(find.text('Выдать абонемент'), findsOneWidget);
     expect(find.text('Создать ученика'), findsNothing);
+  });
+
+  testWidgets('pending lead edits are saved before subscription conversion', (
+    tester,
+  ) async {
+    const statusId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    final api = FakeCardApiClient(
+      lead: {
+        'id': 'lead-1',
+        'firstName': 'Анна',
+        'lastName': 'Смирнова',
+        'phone': '+79990000000',
+        'statusId': null,
+        'customData': <String, dynamic>{},
+      },
+      subscriptionPackages: const [
+        {
+          'id': 'package-1',
+          'name': 'Демо — Фортепиано, 8 часов',
+          'lessonsTotal': 8,
+          'price': 24000,
+        },
+      ],
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: {'id': 'lead-1', 'name': 'Анна', 'custom_data': {}},
+      statuses: const <StatusRecord>[(statusId, 'В работе', Colors.blue)],
+    );
+
+    final status = find.byType(DropdownButtonFormField<String>).first;
+    await tester.ensureVisible(status);
+    await tester.tap(status);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('В работе').last);
+    await tester.pumpAndSettle();
+
+    final issue = find.text('Выдать абонемент');
+    await tester.ensureVisible(issue);
+    await tester.tap(issue);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Демо — Фортепиано, 8 часов'));
+    await tester.pumpAndSettle();
+
+    expect(api.updateLeadBody?['statusId'], statusId);
+    expect(api.requests, [
+      'PATCH /crm/leads/lead-1',
+      'POST /crm/leads/lead-1/subscriptions/issue',
+    ]);
+    await tester.pump(const Duration(seconds: 4));
   });
 }

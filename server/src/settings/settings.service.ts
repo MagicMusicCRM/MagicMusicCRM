@@ -37,6 +37,11 @@ type CrmCustomFieldDefinition = Required<
 
 const ADMIN_CHAT_AVATAR_KEY = "admin_chat_avatar_url";
 const CRM_CUSTOM_FIELDS_KEY = "crm_custom_fields";
+const REJECTED_CRM_CUSTOM_FIELD_KEYS = new Set([
+  "workplace",
+  "position",
+  "individualPrice",
+]);
 
 const HOLLIHOP_SOURCE_OPTIONS = [
   "* брат нашего ученика",
@@ -561,6 +566,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
 const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   ...LEGACY_DEFAULT_CRM_CUSTOM_FIELDS.filter(
     (field) =>
+      !REJECTED_CRM_CUSTOM_FIELD_KEYS.has(field.key) &&
       !(
         field.key === "source" &&
         (field.entity === "students" || field.entity === "leads")
@@ -769,7 +775,7 @@ export class SettingsService {
         normalized.options = this.normalizeOptions(raw.options);
       }
       return normalized;
-    });
+    }).filter((field) => !REJECTED_CRM_CUSTOM_FIELD_KEYS.has(field.key));
   }
 
   private normalizeFieldKey(value: unknown): string {

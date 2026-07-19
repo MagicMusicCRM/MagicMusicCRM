@@ -310,12 +310,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // список баном — у него автор, причина и последствие (клиенту закрыты чаты),
   // ставится он своим эндпоинтом и живёт в колонке, а не в custom_data.
   static const Set<String> _studentOnlyCustomFieldKeys = {
-    'workplace',
-    'position',
     'contractStatus',
     'cabinetStatus',
     'noEmail',
-    'individualPrice',
   };
 
   static const List<String> _studentStatusOptions = [

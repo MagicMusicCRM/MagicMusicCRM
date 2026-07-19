@@ -350,6 +350,12 @@ graph TD
   - **Estimate**: 8 h.
   - **Status**: Accepted as recording-ready on 2026-07-18. Production deployment/health, real PUSH delivery, guarded reset with verified backup/post-check, signed APK/AAB, exact AVD uninstall/install/version checks, exact account-to-role login rehearsal, runner `14/14` tests and the `44`-step full-scenario dry-run are complete. The only operator checkpoint is the guarded production reset; the remaining `43` steps are automated with five-second holds and mutation reconciliation. The mutating end-to-end run is deliberately reserved for the OBS take so `magic1@gmail.com` starts from the verified clean fixture rather than from demo-complete data.
 
+- [ ] **T9.5** [REQ-V3-DATA-001, REQ-V3-OPS-001]: Preserve pending lead edits during subscription conversion and publish the corrected release
+  - **Description**: Before issuing the first subscription from an editable lead card, persist pending lead edits so the atomic server conversion copies the latest card data into the new student. Remove the owner-rejected `workplace`, `position` and `individualPrice` fields from both default and persisted CRM field schemas without deleting historical custom-data values used by legacy calculations. Publish the corrected Windows and Android release through both update manifests.
+  - **Verification**: Flutter regression coverage proves save-before-convert ordering; backend tests and migration `0073` prove the rejected schema keys are absent while historical values remain untouched; production backup/migration/health checks pass; Setup, Windows ZIP, APK and AAB are published with matching SHA-256 and both manifests resolve to the corrected build.
+  - **Estimate**: 8 h.
+  - **Status**: Approved by the owner on 2026-07-19 after production evidence showed all `72/72` migrations applied, persisted conversion data copied correctly, pending card edits discarded by the pre-fix client flow, and the three rejected fields present in `app.system_settings.crm_custom_fields`.
+
 ## User Story Overlay
 
 | Story | Critical path | Coverage |

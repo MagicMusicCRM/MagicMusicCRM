@@ -127,6 +127,51 @@ describe("SettingsService", () => {
           (field.entity === "students" || field.entity === "leads"),
       ),
     ).toEqual([]);
+    expect(
+      result.fields.filter((field) =>
+        ["workplace", "position", "individualPrice"].includes(field.key),
+      ),
+    ).toEqual([]);
+  });
+
+  it("filters owner-rejected fields from a persisted CRM schema", async () => {
+    const persistedFields = [
+      {
+        entity: "students",
+        key: "workplace",
+        label: "Место работы/учёбы",
+        type: "text",
+      },
+      {
+        entity: "students",
+        key: "position",
+        label: "Должность/класс",
+        type: "text",
+      },
+      {
+        entity: "students",
+        key: "individualPrice",
+        label: "Индивидуальная цена",
+        type: "number",
+      },
+      {
+        entity: "students",
+        key: "learningGoal",
+        label: "Цель обучения",
+        type: "text",
+      },
+    ];
+    const { service } = createService([
+      {
+        key: "crm_custom_fields",
+        value: persistedFields,
+        updated_at: "2026-07-19T00:00:00.000Z",
+      },
+    ]);
+
+    const result = await service.getCrmCustomFields(admin);
+
+    expect(result.fields.map((field) => field.key)).toEqual(["learningGoal"]);
   });
 
   it("updates CRM custom field schema only for admins and records audit", async () => {

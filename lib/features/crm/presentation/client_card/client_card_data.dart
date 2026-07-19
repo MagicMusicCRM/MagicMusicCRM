@@ -410,6 +410,13 @@ extension _ClientCardData on _ClientCardState {
   }
 
   Future<void> _save() async {
+    await _persistEdits(closeOnSuccess: true);
+  }
+
+  /// Persists the current card draft without necessarily closing the card.
+  /// Subscription conversion uses the non-closing form so the server receives
+  /// the latest lead fields before it snapshots them into the new student.
+  Future<bool> _persistEdits({bool closeOnSuccess = false}) async {
     _emitState(() => _saving = true);
     try {
       final service = ref.read(magicCrmServiceProvider);
@@ -469,14 +476,22 @@ extension _ClientCardData on _ClientCardState {
         );
       }
       if (mounted) {
+        _emitState(() {
+          _edited = false;
+          _dirty = true;
+        });
+      }
+      if (mounted && closeOnSuccess) {
         Navigator.pop(context, true);
       }
+      return true;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e')));
       }
+      return false;
     } finally {
       if (mounted) {
         _emitState(() => _saving = false);

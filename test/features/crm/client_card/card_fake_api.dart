@@ -13,8 +13,12 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/client_car
 /// вызван вовсе). Отдаёт минимальные ответы всем эндпоинтам карточки и
 /// перехватывает PATCH-тела сохранения.
 class FakeCardApiClient extends MagicApiClient {
-  FakeCardApiClient({this.lead, this.student, this.leadTasks = const []})
-    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+  FakeCardApiClient({
+    this.lead,
+    this.student,
+    this.leadTasks = const [],
+    this.subscriptionPackages = const [],
+  }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   /// Сырой (camelCase, как с сервера) лид для GET /crm/leads/:id/card.
   final Map<String, dynamic>? lead;
@@ -25,8 +29,11 @@ class FakeCardApiClient extends MagicApiClient {
   /// Сырые задачи лид-карточки (camelCase, как toTaskDto).
   final List<Map<String, dynamic>> leadTasks;
 
+  final List<Map<String, dynamic>> subscriptionPackages;
+
   Map<String, dynamic>? updateLeadBody;
   Map<String, dynamic>? updateStudentBody;
+  final List<String> requests = [];
 
   @override
   Future<T> get<T>(
@@ -55,6 +62,9 @@ class FakeCardApiClient extends MagicApiClient {
             },
           ]
           as T;
+    }
+    if (path == '/crm/subscription-packages') {
+      return <String, dynamic>{'items': subscriptionPackages} as T;
     }
     if (lead != null && path == '/crm/leads/${lead!['id']}/card') {
       return <String, dynamic>{
@@ -96,6 +106,7 @@ class FakeCardApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     if (lead != null && path == '/crm/leads/${lead!['id']}') {
+      requests.add('PATCH $path');
       updateLeadBody = Map<String, dynamic>.from(data as Map);
       return <String, dynamic>{'id': lead!['id']} as T;
     }
@@ -113,6 +124,14 @@ class FakeCardApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    requests.add('POST $path');
+    if (lead != null &&
+        path == '/crm/leads/${lead!['id']}/subscriptions/issue') {
+      return <String, dynamic>{
+            'student': {'id': 'student-from-${lead!['id']}'},
+          }
+          as T;
+    }
     return <String, dynamic>{} as T;
   }
 }

@@ -1,15 +1,13 @@
 <#
 .SYNOPSIS
-  Publishes a Windows self-update: writes downloads/latest-v2.json and uploads
-  it plus the build zip to the prod server (served by Caddy at /downloads/).
+  Publishes a release: writes both Windows update manifests and uploads them
+  together with the Windows ZIP, Setup EXE, Android APK and Android AAB.
 
 .DESCRIPTION
   Run AFTER building + zipping a release into dist\. Clients on an older build
-  Build 144+ clients poll
-  https://api.magicmusiccrm.ru/downloads/latest-v2.json on launch and offer the
-  update. The legacy latest.json channel is intentionally left untouched so a
-  build with the old broken helper cannot receive another update. Build the
-  release with the build number baked in:
+  Build 144+ clients poll latest-v2.json while older clients poll latest.json.
+  Both channels are updated atomically to the same verified Windows ZIP. Build
+  the release with the build number baked in:
 
     flutter build windows --release `
       --dart-define=MAGIC_API_BASE_URL=https://api.magicmusiccrm.ru/api `
@@ -54,20 +52,47 @@ $manifest = [ordered]@{
 }
 # UTF-8 without BOM so Cyrillic notes render correctly in the app.
 $json = $manifest | ConvertTo-Json -Depth 4
-$manifestName = 'latest-v2.json'
-$manifestPath = Join-Path $Dist $manifestName
-[System.IO.File]::WriteAllText($manifestPath, $json, (New-Object System.Text.UTF8Encoding($false)))
-$remoteZipTemp = "$zipName.tmp-$([Guid]::NewGuid().ToString('N'))"
-$remoteManifestTemp = "$manifestName.tmp-$([Guid]::NewGuid().ToString('N'))"
+$manifestNames = @('latest.json', 'latest-v2.json')
+$releaseArtifactNames = @(
+  $zipName,
+  "MagicMusicCRM-$verDash-Setup.exe",
+  "MagicMusicCRM-$verDash.apk",
+  "MagicMusicCRM-$verDash.aab"
+)
+
+foreach ($artifactName in $releaseArtifactNames) {
+  $artifactPath = Join-Path $Dist $artifactName
+  if (-not (Test-Path -LiteralPath $artifactPath)) {
+    throw "Release artifact not found: $artifactPath"
+  }
+}
+
+foreach ($manifestName in $manifestNames) {
+  $manifestPath = Join-Path $Dist $manifestName
+  [System.IO.File]::WriteAllText(
+    $manifestPath,
+    $json,
+    (New-Object System.Text.UTF8Encoding($false))
+  )
+}
 
 Write-Host "SHA256: $hash"
-Write-Host "Uploading $zipName + $manifestName to $Remote ..."
-& scp -i $SshKey $zipPath "$Remote`:$RemoteDir/$remoteZipTemp"
-Assert-NativeSuccess "Temporary ZIP upload"
-& ssh -i $SshKey $Remote "mv -- '$RemoteDir/$remoteZipTemp' '$RemoteDir/$zipName'"
-Assert-NativeSuccess "Atomic ZIP publish"
-& scp -i $SshKey $manifestPath "$Remote`:$RemoteDir/$remoteManifestTemp"
-Assert-NativeSuccess "Temporary manifest upload"
-& ssh -i $SshKey $Remote "mv -- '$RemoteDir/$remoteManifestTemp' '$RemoteDir/$manifestName'"
-Assert-NativeSuccess "Atomic manifest publish"
+Write-Host "Uploading release artifacts to $Remote ..."
+foreach ($artifactName in $releaseArtifactNames) {
+  $artifactPath = Join-Path $Dist $artifactName
+  $remoteTemp = "$artifactName.tmp-$([Guid]::NewGuid().ToString('N'))"
+  & scp -i $SshKey $artifactPath "$Remote`:$RemoteDir/$remoteTemp"
+  Assert-NativeSuccess "Temporary artifact upload: $artifactName"
+  & ssh -i $SshKey $Remote "mv -- '$RemoteDir/$remoteTemp' '$RemoteDir/$artifactName'"
+  Assert-NativeSuccess "Atomic artifact publish: $artifactName"
+}
+
+foreach ($manifestName in $manifestNames) {
+  $manifestPath = Join-Path $Dist $manifestName
+  $remoteTemp = "$manifestName.tmp-$([Guid]::NewGuid().ToString('N'))"
+  & scp -i $SshKey $manifestPath "$Remote`:$RemoteDir/$remoteTemp"
+  Assert-NativeSuccess "Temporary manifest upload: $manifestName"
+  & ssh -i $SshKey $Remote "mv -- '$RemoteDir/$remoteTemp' '$RemoteDir/$manifestName'"
+  Assert-NativeSuccess "Atomic manifest publish: $manifestName"
+}
 Write-Host "Done. Clients below build $BuildNumber will be offered $Version on next launch."

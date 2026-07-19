@@ -150,7 +150,7 @@ void main() {
     });
   });
 
-  test('build 144+ uses an atomically published v2 manifest channel', () {
+  test('release publisher atomically updates both manifest channels', () {
     expect(windowsUpdateManifestPath, '/downloads/latest-v2.json');
 
     final mainSource = File('lib/main.dart').readAsStringSync();
@@ -160,30 +160,36 @@ void main() {
     final publisher = File(
       'scripts/publish-windows-update.ps1',
     ).readAsStringSync();
-    final temporaryUpload = publisher.indexOf(
-      r'& scp -i $SshKey $manifestPath "$Remote`:$RemoteDir/$remoteManifestTemp"',
-    );
-    final temporaryZipUpload = publisher.indexOf(
-      r'& scp -i $SshKey $zipPath "$Remote`:$RemoteDir/$remoteZipTemp"',
-    );
-    final atomicZipMove = publisher.indexOf(
-      r'''& ssh -i $SshKey $Remote "mv -- '$RemoteDir/$remoteZipTemp' '$RemoteDir/$zipName'"''',
-    );
-    final atomicMove = publisher.indexOf(
-      r'''& ssh -i $SshKey $Remote "mv -- '$RemoteDir/$remoteManifestTemp' '$RemoteDir/$manifestName'"''',
-    );
-
-    expect(publisher, contains(r"$manifestName = 'latest-v2.json'"));
-    expect(temporaryZipUpload, greaterThanOrEqualTo(0));
-    expect(atomicZipMove, greaterThan(temporaryZipUpload));
-    expect(temporaryUpload, greaterThanOrEqualTo(0));
-    expect(atomicMove, greaterThan(temporaryUpload));
     expect(
-      RegExp(
-        r'^\s*& scp .*latest\.json\s*$',
-        multiLine: true,
-      ).hasMatch(publisher),
-      isFalse,
+      publisher,
+      contains(r"$manifestNames = @('latest.json', 'latest-v2.json')"),
+    );
+    expect(publisher, contains('MagicMusicCRM-\$verDash-Setup.exe'));
+    expect(publisher, contains('MagicMusicCRM-\$verDash.apk'));
+    expect(publisher, contains('MagicMusicCRM-\$verDash.aab'));
+    expect(
+      publisher,
+      contains(
+        r'& scp -i $SshKey $artifactPath "$Remote`:$RemoteDir/$remoteTemp"',
+      ),
+    );
+    expect(
+      publisher,
+      contains(
+        r'''& ssh -i $SshKey $Remote "mv -- '$RemoteDir/$remoteTemp' '$RemoteDir/$artifactName'"''',
+      ),
+    );
+    expect(
+      publisher,
+      contains(
+        r'& scp -i $SshKey $manifestPath "$Remote`:$RemoteDir/$remoteTemp"',
+      ),
+    );
+    expect(
+      publisher,
+      contains(
+        r'''& ssh -i $SshKey $Remote "mv -- '$RemoteDir/$remoteTemp' '$RemoteDir/$manifestName'"''',
+      ),
     );
   });
 
