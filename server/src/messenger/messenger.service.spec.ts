@@ -1120,6 +1120,52 @@ describe("MessengerService", () => {
     expect(insert![1]).toContain("user-a");
   });
 
+  it("binds the target user when creating a direct chat", async () => {
+    type MockClient = { query: jest.Mock };
+    const targetUserId = "00000000-0000-4000-8000-000000000002";
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "chat-direct",
+              type: "direct",
+              title: null,
+              created_by: "user-a",
+              last_message_id: null,
+              last_message_content: null,
+              last_message_created_at: null,
+              partner_user_id: targetUserId,
+              unread_count: "0",
+              created_at: new Date(),
+              updated_at: new Date(),
+            },
+          ],
+        })
+        .mockResolvedValue({ rows: [] }),
+    };
+    const { service } = createService({
+      database: {
+        transaction: jest.fn(async (w: (c: MockClient) => Promise<unknown>) =>
+          w(client),
+        ) as never,
+      },
+      policy: { canCreateDirectChat: jest.fn().mockResolvedValue(undefined) },
+    });
+
+    await service.createDirectChat(
+      { userId: "user-a", role: "teacher" },
+      { type: "direct", targetUserId },
+    );
+
+    const insert = client.query.mock.calls.find((call) =>
+      String(call[0]).includes("values ('direct', $1)"),
+    );
+    expect(insert?.[1]).toEqual(["user-a", targetUserId]);
+  });
+
   describe("client-side staff-identity masking in administration chats", () => {
     const adminChatId = "chat-admin-mask";
     const staffMessageRow = {

@@ -662,7 +662,7 @@ export class MessengerService implements OnModuleInit {
             $2::uuid as partner_user_id,
             '0'::text as unread_count, created_at, updated_at
         `,
-        [actor.userId],
+        [actor.userId, dto.targetUserId],
       );
       const row = inserted.rows[0];
       await this.insertMembers(client, row.id, [
