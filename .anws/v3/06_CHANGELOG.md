@@ -41,3 +41,5 @@
 - [CHANGE] Registration must identify the phone field before input; attachment confirmation must remain usable with the Android keyboard and report upload/send failures; image attachments must pass the authenticated private-file/message contract.
 - [CHANGE] Client administration chats retain the system identity `Администрация`; password login must not publish an intermediate signed-out state before the server response.
 - [OPS] OTP bypass is restricted to the exact five demo accounts `magic1@gmail.com` through `magic5@gmail.com`; the corrected release is build `1.2.2+148` across Windows and Android channels.
+- [FIX] Production smoke exposed and closed two additional end-to-end blockers: direct-chat insertion now binds its `$2` target parameter, and migration `0074_image_message_type` aligns the PostgreSQL constraint with the API `image` message contract.
+- [RELEASE] Build `1.2.2+148` was deployed and published as Setup, Windows ZIP, APK and AAB; both update manifests and all public artifact URLs were verified.
