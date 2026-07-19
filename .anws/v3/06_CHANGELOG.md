@@ -34,3 +34,10 @@
 - [ADD] Added owner-approved `T9.5` to persist pending lead-card edits before subscription-triggered conversion.
 - [CHANGE] The rejected `workplace`, `position` and `individualPrice` fields must be removed from default and persisted CRM field schemas without deleting historical values.
 - [OPS] The corrected release must publish Setup, Windows ZIP, APK and AAB and atomically update both Windows update manifests.
+
+## 2026-07-19 - Auth and mobile messenger stabilization
+
+- [ADD] Added owner-approved `T9.6` for the reported registration, repeated-login, attachment and administration-chat defects.
+- [CHANGE] Registration must identify the phone field before input; attachment confirmation must remain usable with the Android keyboard and report upload/send failures; image attachments must pass the authenticated private-file/message contract.
+- [CHANGE] Client administration chats retain the system identity `Администрация`; password login must not publish an intermediate signed-out state before the server response.
+- [OPS] OTP bypass is restricted to the exact five demo accounts `magic1@gmail.com` through `magic5@gmail.com`; the corrected release is build `1.2.2+148` across Windows and Android channels.

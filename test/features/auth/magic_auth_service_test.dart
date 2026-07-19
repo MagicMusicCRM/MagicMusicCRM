@@ -50,6 +50,55 @@ void main() {
       await subscription.cancel();
     });
 
+    test(
+      'successful login replaces a stale session without emitting null',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/auth/login',
+            statusCode: 200,
+            body: {
+              'user': {
+                'id': 'user-b',
+                'email': 'user@example.com',
+                'role': 'client',
+                'emailVerified': true,
+              },
+              'session': {
+                'accessToken': 'new-access-token',
+                'refreshToken': 'new-refresh-token',
+                'tokenType': 'Bearer',
+                'expiresIn': 900,
+              },
+            },
+          ),
+        ]);
+        final store = MemoryMagicTokenStore(
+          const MagicApiTokens(
+            accessToken: 'old-access-token',
+            refreshToken: 'old-refresh-token',
+            tokenType: 'Bearer',
+            expiresIn: 900,
+          ),
+        );
+        final service = MagicAuthService(_client(adapter, store));
+        final states = <MagicAuthSession?>[];
+        final subscription = service.watchSession().listen(states.add);
+        await Future<void>.delayed(Duration.zero);
+
+        final response = await service.signInWithPassword(
+          email: 'user@example.com',
+          password: 'password-123',
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(response.hasSession, isTrue);
+        expect(states.where((state) => state == null), isEmpty);
+        expect(states.last?.accessToken, 'new-access-token');
+        await subscription.cancel();
+      },
+    );
+
     test('signup keeps session empty until email verification/login', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

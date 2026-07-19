@@ -137,7 +137,6 @@ class MagicAuthService {
     required String email,
     required String password,
   }) async {
-    await _clearLocalSession();
     _addAuthBreadcrumb('password_login');
     try {
       final response = await _api.post<Map<String, dynamic>>(
@@ -145,7 +144,13 @@ class MagicAuthService {
         data: {'email': email.trim(), 'password': password},
         authenticated: false,
       );
-      return _handleAuthResponse(response);
+      final result = await _handleAuthResponse(response);
+      // Do not publish a signed-out state before the server answers: doing so
+      // rebuilds the router/login form and races a subsequent session event.
+      // An OTP challenge is the only successful password response without a
+      // session, and must still fail closed by removing any stale tokens.
+      if (!result.hasSession) await _clearLocalSession();
+      return result;
     } catch (error, stackTrace) {
       await _captureAuthException(error, stackTrace, 'password_login');
       rethrow;

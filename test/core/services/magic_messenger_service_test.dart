@@ -92,6 +92,38 @@ void main() {
     );
 
     test(
+      'keeps staff identity hidden behind Administration for clients',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/messenger/chats/direct',
+            statusCode: 201,
+            body: {
+              'id': 'admin-chat-a',
+              'type': 'administration',
+              'title': 'Administration',
+              'partnerId': 'manager-a',
+              'partner': {
+                'id': 'manager-a',
+                'firstName': 'Управляющий',
+                'lastName': 'Тестов',
+                'email': 'manager@example.com',
+                'role': 'manager',
+              },
+              'unreadCount': 0,
+            },
+          ),
+        ]);
+        final service = MagicMessengerService(_client(adapter));
+
+        final chat = await service.ensureAdministrationChat();
+
+        expect(chat['title'], 'Администрация');
+        expect(chat['_display_name'], 'Администрация');
+      },
+    );
+
+    test(
       'lists messages and maps sender profile fields to legacy shape',
       () async {
         final adapter = _FakeAdapter([

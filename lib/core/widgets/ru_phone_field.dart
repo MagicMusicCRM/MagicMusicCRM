@@ -52,16 +52,19 @@ class _RuPhoneFieldState extends State<RuPhoneField> {
 
   @override
   Widget build(BuildContext context) {
-    final decoration =
-        widget.decoration ?? InputDecoration(labelText: widget.labelText);
+    final baseDecoration = widget.decoration ?? const InputDecoration();
+    final decoration = baseDecoration.copyWith(
+      labelText: baseDecoration.labelText ?? widget.labelText,
+      hintText:
+          baseDecoration.hintText ??
+          (widget.international ? '+CC ...' : '+7 (___) ___ __ __'),
+    );
 
     if (widget.international) {
       return TextField(
         controller: _controller,
         keyboardType: TextInputType.phone,
-        decoration: decoration.copyWith(
-          hintText: decoration.hintText ?? '+CC ...',
-        ),
+        decoration: decoration,
         onChanged: (text) => widget.onCanonicalChanged(text.trim()),
       );
     }

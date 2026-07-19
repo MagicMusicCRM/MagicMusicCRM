@@ -370,11 +370,24 @@ class MagicMessengerService {
     final hasPartnerName =
         partnerDisplayName.isNotEmpty ||
         partnerEmail?.trim().isNotEmpty == true;
-    final title = rawType == 'administration' && !hasPartnerName
+    final partnerRole = partnerMap['role']?.toString();
+    final administrationPartnerIsStaff =
+        rawType == 'administration' &&
+        const {
+          'admin',
+          'manager',
+          'director',
+          'system_admin',
+        }.contains(partnerRole);
+    final title =
+        rawType == 'administration' &&
+            (!hasPartnerName || administrationPartnerIsStaff)
         ? 'Администрация'
         : rawTitle;
     final displayName = type == 'group'
         ? (title?.trim().isNotEmpty == true ? title! : 'Группа')
+        : administrationPartnerIsStaff
+        ? 'Администрация'
         : hasPartnerName
         ? (partnerDisplayName.isNotEmpty ? partnerDisplayName : partnerEmail!)
         : rawType == 'administration'
