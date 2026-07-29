@@ -21,6 +21,36 @@ values
     '{"studentId":"student-1","status":"active","snapshotHash":"snapshot-1"}'
   ),
   (
+    'commerce.installment-facts',
+    'installment-1',
+    '{"issuedSubscriptionId":"subscription-1","amountMinor":"50000","status":"pending"}'
+  ),
+  (
+    'commerce.obligation-facts',
+    'obligation-1',
+    '{"issuedSubscriptionId":"subscription-1","direction":"debit","amountMinor":"100000"}'
+  ),
+  (
+    'commerce.lifecycle-facts',
+    'lifecycle-1',
+    '{"issuedSubscriptionId":"subscription-1","eventType":"issue","aggregateVersion":"1"}'
+  ),
+  (
+    'commerce.lesson-charge-facts',
+    'lesson-charge-1',
+    '{"lessonId":"lesson-1","chargeType":"subscription","units":"1"}'
+  ),
+  (
+    'commerce.teacher-compensation-facts',
+    'teacher-compensation-1',
+    '{"lessonId":"lesson-1","compensationType":"hourly","amountMinor":"90000"}'
+  ),
+  (
+    'commerce.reservation-facts',
+    'reservation-1',
+    '{"lessonId":"lesson-1","subscriptionId":"subscription-1","state":"reserved"}'
+  ),
+  (
     'schedule.lesson-facts',
     'lesson-1',
     '{"status":"scheduled","teacherId":"teacher-1","branchId":"branch-1","roomId":"room-1"}'

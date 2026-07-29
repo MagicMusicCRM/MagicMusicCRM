@@ -165,6 +165,8 @@ _Актуализация 2026-07-29: `T5.3.1` закрыта: отдельны�
 
 _Актуализация 2026-07-29: `T5.3.2` закрыта: Lesson create/series/reschedule теперь атомарно выделяют capacity-checked reservation; replace/cancel и completion сериализуются блокировками issued/reservation aggregate. Settlement использует реально перенесённое покрытие, не создаёт post-cancel subscription write-off, терминализирует reservation вместе с Lesson/facts и после commit инвалидирует schedule/client-finance projections менее чем за 2 s; future Lessons сохраняются. Exact PostgreSQL race 2/2, targeted commerce/schedule regression 19/19, typecheck clean (`docs/audits/v4-subscription-lesson-reservations.md`). Следующий шаг `/forge`: `T5.4.1` commerce actor/concurrency/reconciliation suite._
 
+_Актуализация 2026-07-29: `T5.4.1` закрыта: единый `test:commerce-v4` gate покрывает catalog/schema/issue/payment/replace/cancel/reservation race/settlement/projections; Actor Matrix и payload scan подтверждают права и отсутствие утечек. Commerce-scoped signed reconciliation сравнивает 10 named payment/balance/snapshot/installment/obligation/lifecycle/Lesson/reservation invariants: clean 10=10, unexplained drift=0; negative fixture обнаруживает 1/1 injected drift. Commerce regression 8/8 suites и 35/35 tests, Actor Matrix/leak 2/2 suites и 9/9 tests, typecheck clean (`docs/audits/v4-commerce-concurrency-reconciliation.md`). `INT-S3` ждёт `INT-S2`; следующий доступный шаг `/forge`: `T6.1.1` SharedTask schema._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 

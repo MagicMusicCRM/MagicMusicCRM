@@ -18,6 +18,7 @@ type V4System =
   | "SYS-SCHEDULE"
   | "SYS-COMMERCE"
   | "SYS-WORKFLOW";
+type ReconciliationScope = "all" | "commerce";
 
 interface InvariantDefinition {
   id: string;
@@ -134,7 +135,11 @@ const invariants: InvariantDefinition[] = [
         'externalId', external_id,
         'branchId', branch_id::text,
         'invoiceNumber', invoice_number,
-        'lessonId', lesson_id::text
+        'lessonId', lesson_id::text,
+        'amountMinor', amount_minor::text,
+        'issuedSubscriptionId', issued_subscription_id::text,
+        'idempotencyRef', idempotency_ref,
+        'requestFingerprint', request_fingerprint
       `,
       "where deleted_at is null",
     ),
@@ -186,7 +191,134 @@ const invariants: InvariantDefinition[] = [
         'expiresAt', expires_at::text,
         'status', status,
         'packageId', package_id::text,
-        'paymentId', payment_id::text
+        'paymentId', payment_id::text,
+        'snapshotVersion', snapshot_version,
+        'packageVersion', package_version,
+        'basePriceMinor', base_price_minor::text,
+        'currencyCode', currency_code,
+        'discountType', discount_type,
+        'discountPercentBasisPoints', discount_percent_basis_points,
+        'discountFixedMinor', discount_fixed_minor::text,
+        'discountReason', discount_reason,
+        'finalPriceMinor', final_price_minor::text,
+        'commercialSnapshot', commercial_snapshot,
+        'version', version::text
+      `,
+    ),
+  },
+  {
+    id: "commerce.installment-facts",
+    owner: "SYS-COMMERCE",
+    economic: true,
+    description: "Issued installment schedule and lifecycle remain identical.",
+    sourceSql: sourceSql(
+      "subscription_installments",
+      `
+        'issuedSubscriptionId', issued_subscription_id::text,
+        'installmentNumber', installment_number,
+        'dueAt', due_at::text,
+        'amountMinor', amount_minor::text,
+        'currencyCode', currency_code,
+        'status', status,
+        'version', version::text
+      `,
+    ),
+  },
+  {
+    id: "commerce.obligation-facts",
+    owner: "SYS-COMMERCE",
+    economic: true,
+    description: "Append-only subscription obligations remain identical.",
+    sourceSql: sourceSql(
+      "subscription_obligation_facts",
+      `
+        'studentId', student_id::text,
+        'issuedSubscriptionId', issued_subscription_id::text,
+        'factType', fact_type,
+        'direction', direction,
+        'amountMinor', amount_minor::text,
+        'currencyCode', currency_code,
+        'sourceType', source_type,
+        'sourceRef', source_ref,
+        'occurredAt', occurred_at::text
+      `,
+    ),
+  },
+  {
+    id: "commerce.lifecycle-facts",
+    owner: "SYS-COMMERCE",
+    economic: false,
+    description: "Subscription issue/replace/cancel history remains identical.",
+    sourceSql: sourceSql(
+      "subscription_lifecycle_events",
+      `
+        'issuedSubscriptionId', issued_subscription_id::text,
+        'eventType', event_type,
+        'beforeId', before_issued_subscription_id::text,
+        'afterId', after_issued_subscription_id::text,
+        'actorUserId', actor_user_id::text,
+        'reason', reason,
+        'aggregateVersion', aggregate_version::text,
+        'occurredAt', occurred_at::text
+      `,
+    ),
+  },
+  {
+    id: "commerce.lesson-charge-facts",
+    owner: "SYS-COMMERCE",
+    economic: true,
+    description: "Immutable Lesson client charge facts remain identical.",
+    sourceSql: sourceSql(
+      "lesson_client_charge_facts",
+      `
+        'lessonId', lesson_id::text,
+        'clientType', client_type,
+        'clientId', client_id::text,
+        'chargeType', charge_type,
+        'snapshotValue', snapshot_value::text,
+        'subscriptionId', subscription_id::text,
+        'amountMinor', amount_minor::text,
+        'units', units::text,
+        'currencyCode', currency_code,
+        'createdAt', created_at::text
+      `,
+    ),
+  },
+  {
+    id: "commerce.teacher-compensation-facts",
+    owner: "SYS-COMMERCE",
+    economic: true,
+    description: "Immutable Lesson teacher compensation facts remain identical.",
+    sourceSql: sourceSql(
+      "lesson_teacher_compensation_facts",
+      `
+        'lessonId', lesson_id::text,
+        'teacherId', teacher_id::text,
+        'compensationType', compensation_type,
+        'snapshotRate', snapshot_rate::text,
+        'rateMinor', rate_minor::text,
+        'durationMinutes', duration_minutes,
+        'amountMinor', amount_minor::text,
+        'currencyCode', currency_code,
+        'createdAt', created_at::text
+      `,
+    ),
+  },
+  {
+    id: "commerce.reservation-facts",
+    owner: "SYS-COMMERCE",
+    economic: false,
+    description: "Lesson coverage allocation and terminal state remain identical.",
+    sourceSql: sourceSql(
+      "lesson_reservations",
+      `
+        'lessonId', lesson_id::text,
+        'subscriptionId', subscription_id::text,
+        'units', units::text,
+        'state', state,
+        'version', version::text,
+        'financialFactId', financial_fact_id::text,
+        'terminalAt', terminal_at::text
       `,
     ),
   },
@@ -372,8 +504,9 @@ async function populateSchemaFacts(
   client: PoolClient,
   side: "source" | "target",
   schema: string,
+  definitions: readonly InvariantDefinition[],
 ): Promise<void> {
-  for (const invariant of invariants) {
+  for (const invariant of definitions) {
     await client.query(
       `
         insert into v4_reconcile_${side}_facts (
@@ -503,9 +636,12 @@ async function compareInvariant(
   };
 }
 
-async function reconcile(client: PoolClient): Promise<InvariantResult[]> {
+async function reconcile(
+  client: PoolClient,
+  definitions: readonly InvariantDefinition[],
+): Promise<InvariantResult[]> {
   const results: InvariantResult[] = [];
-  for (const invariant of invariants) {
+  for (const invariant of definitions) {
     results.push(await compareInvariant(client, invariant));
   }
   return results;
@@ -532,6 +668,15 @@ async function run(): Promise<{
   }
   const sourceSchema = argumentValue("--source-schema") ?? "app";
   const targetSchema = argumentValue("--target-schema") ?? "app";
+  const rawScope = argumentValue("--scope") ?? "all";
+  if (!["all", "commerce"].includes(rawScope)) {
+    throw new Error("--scope must be all or commerce.");
+  }
+  const scope = rawScope as ReconciliationScope;
+  const definitions =
+    scope === "commerce"
+      ? invariants.filter((invariant) => invariant.owner === "SYS-COMMERCE")
+      : invariants;
   const pool = new Pool({
     connectionString: loadDatabaseUrl(),
     max: 1,
@@ -551,10 +696,10 @@ async function run(): Promise<{
         await client.query(readFileSync(driftFixturePath, "utf8"));
       }
     } else {
-      await populateSchemaFacts(client, "source", sourceSchema);
-      await populateSchemaFacts(client, "target", targetSchema);
+      await populateSchemaFacts(client, "source", sourceSchema, definitions);
+      await populateSchemaFacts(client, "target", targetSchema, definitions);
     }
-    const results = await reconcile(client);
+    const results = await reconcile(client, definitions);
     const summary = results.reduce(
       (value, invariant) => {
         value.sourceFacts += invariant.sourceCount;
@@ -593,7 +738,8 @@ async function run(): Promise<{
       invariants: results,
     };
     const report = signReport(unsigned);
-    const label = fixture ?? `${sourceSchema}-to-${targetSchema}`;
+    const baseLabel = fixture ?? `${sourceSchema}-to-${targetSchema}`;
+    const label = scope === "all" ? baseLabel : `${scope}-${baseLabel}`;
     return { report, reportPath: writeReport(report, label) };
   } finally {
     try {

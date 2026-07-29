@@ -778,12 +778,12 @@ flowchart TD
 
 ## Phase 4 — Verification (S3)
 
-- [ ] **T5.4.1** [REQ-SUB-001, REQ-SUB-002, REQ-SUB-003, REQ-SUB-004, REQ-SUB-005]: Закрыть commerce actor/concurrency/reconciliation suite
+- [x] **T5.4.1** [REQ-SUB-001, REQ-SUB-002, REQ-SUB-003, REQ-SUB-004, REQ-SUB-005]: Закрыть commerce actor/concurrency/reconciliation suite
   - **Описание:** доказать права, append-only semantics, money calculations и zero drift.
   - **Подпункты:**
-    - [ ] Прогнать catalog/issue/replace/cancel/payment actor matrix.
-    - [ ] Прогнать concurrent retry/race fixtures.
-    - [ ] Сравнить payments/revenue/debt/balance/lesson facts baseline.
+    - [x] Прогнать catalog/issue/replace/cancel/payment actor matrix.
+    - [x] Прогнать concurrent retry/race fixtures.
+    - [x] Сравнить payments/revenue/debt/balance/lesson facts baseline.
   - **Вход:** T5.2.1…T5.3.2, T8.1.5.
   - **Выход:** commerce regression/reconciliation report.
   - **📎 Ссылка:** ADR-009, ADR-012.

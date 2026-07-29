@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "task": "T8.1.5",
+  "generatedAt": "2026-07-29T19:08:36.994Z",
+  "mode": "fixture",
+  "source": "clean:source",
+  "target": "clean:target",
+  "status": "clean",
+  "tolerancePolicy": {
+    "economicFacts": 0,
+    "unexplainedFacts": 0
+  },
+  "summary": {
+    "invariants": 10,
+    "sourceFacts": 10,
+    "targetFacts": 10,
+    "invariantsWithDrift": 0,
+    "unexplainedDiff": 0
+  },
+  "invariants": [
+    {
+      "id": "finance.payment-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Append-only active payment facts remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "8bdb9427d753c5b8464f8a059463711084e1ae3d2198209b0576f87fef298c80",
+      "targetDigestSha256": "8bdb9427d753c5b8464f8a059463711084e1ae3d2198209b0576f87fef298c80",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "finance.adjustment-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Account adjustment facts and lifecycle remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "ee4290a1d2e5b4e5f0ecb54b4d8c84afdbf18cd373c53dd02ea8c68c964f842f",
+      "targetDigestSha256": "ee4290a1d2e5b4e5f0ecb54b4d8c84afdbf18cd373c53dd02ea8c68c964f842f",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "finance.balance-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Materialized student balances remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "c9c2934e1a4486ab70bcf58976ab7055d059b4a7d370e2d382050c7b3f0ff6a8",
+      "targetDigestSha256": "c9c2934e1a4486ab70bcf58976ab7055d059b4a7d370e2d382050c7b3f0ff6a8",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.subscription-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Issued subscription ownership, usage, and links remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "2b259409b313c88a7844cdae8ecdfd28ecf04459dd9f99c7105ee568e22877b0",
+      "targetDigestSha256": "2b259409b313c88a7844cdae8ecdfd28ecf04459dd9f99c7105ee568e22877b0",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.installment-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Issued installment schedule and lifecycle remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "02870e2f8fcc3c337b6a0da718561abfaaf0de5eeaf65c8c23429698de7b7395",
+      "targetDigestSha256": "02870e2f8fcc3c337b6a0da718561abfaaf0de5eeaf65c8c23429698de7b7395",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.obligation-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Append-only subscription obligations remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "b5d255b884d225b65870fb9d7ea2effca9b8b90332c0279db3e1f050369c76f7",
+      "targetDigestSha256": "b5d255b884d225b65870fb9d7ea2effca9b8b90332c0279db3e1f050369c76f7",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.lifecycle-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Subscription issue/replace/cancel history remains identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "f9e49ffea089ca1cb7d964b5c04daddb04fe0f90906add0141fce67f59c4f2a3",
+      "targetDigestSha256": "f9e49ffea089ca1cb7d964b5c04daddb04fe0f90906add0141fce67f59c4f2a3",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.lesson-charge-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Immutable Lesson client charge facts remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "1f5ae1b6f6adf6b28d59acc64360973c5e858414768b3dfb116c607ba503a4f6",
+      "targetDigestSha256": "1f5ae1b6f6adf6b28d59acc64360973c5e858414768b3dfb116c607ba503a4f6",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.teacher-compensation-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Immutable Lesson teacher compensation facts remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "7c1245bcdc6c2cb8245ac6403a3c1c3e3439e8320fc2d7e8dead304756802bbd",
+      "targetDigestSha256": "7c1245bcdc6c2cb8245ac6403a3c1c3e3439e8320fc2d7e8dead304756802bbd",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.reservation-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Lesson coverage allocation and terminal state remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "e193431a27da4ee1a728fb708a886c821d895fa691522b3efdd1ebe86e4877bc",
+      "targetDigestSha256": "e193431a27da4ee1a728fb708a886c821d895fa691522b3efdd1ebe86e4877bc",
+      "unexplainedDiff": []
+    }
+  ],
+  "signature": {
+    "algorithm": "Ed25519",
+    "contentSha256": "a61ef2720401aadf3eb3ac074d54c57af0d28fe463f9e1575304f1e114aeeb08",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAraVKr+YdoU9Ey1e2yCsIzwgVj80CTVnuGkhCMkgLJ4Y=\n-----END PUBLIC KEY-----\n",
+    "valueBase64": "6pLKOQe0MXJbEsR6ViOo6XrdjlQw3risIPmjquAvT2W3QUGX4x3QOs54A/gvM7o2+1aiy+Nz+XWDVDgRtsyuCA==",
+    "verified": true
+  }
+}

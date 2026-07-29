@@ -15,15 +15,19 @@ describe("v4 reconciliation report", () => {
         "finance.adjustment-facts",
         "finance.balance-facts",
         "commerce.subscription-facts",
+        "commerce.installment-facts",
+        "commerce.obligation-facts",
+        "commerce.lifecycle-facts",
+        "commerce.lesson-charge-facts",
+        "commerce.teacher-compensation-facts",
+        "commerce.reservation-facts",
         "schedule.lesson-facts",
         "schedule.participation-facts",
         "workflow.task-facts",
         "access.role-mappings",
       ]),
     );
-    expect(invariants.filter((invariant) => invariant.economic)).toHaveLength(
-      5,
-    );
+    expect(invariants.filter((invariant) => invariant.economic)).toHaveLength(9);
   });
 
   it("signs canonical report content and detects tampering", () => {
