@@ -113,7 +113,7 @@ describe("v4 six-actor route matrix (PostgreSQL)", () => {
       unmappedPrivateRoutes: 0,
       missingResourceScopes: 0,
     });
-    expect(routes).toHaveLength(254);
+    expect(routes).toHaveLength(255);
 
     const deviations: string[] = [];
     let allowed = 0;
@@ -163,7 +163,7 @@ describe("v4 six-actor route matrix (PostgreSQL)", () => {
 
     expect(deviations).toEqual([]);
     expect(allowed + denied).toBe(routes.length * USER_ROLES.length);
-    expect(allowed).toBe(1_234);
-    expect(denied).toBe(290);
+    expect(allowed).toBe(1_236);
+    expect(denied).toBe(294);
   });
 });

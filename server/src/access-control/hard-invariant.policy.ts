@@ -64,6 +64,7 @@ const TEACHER_HARD_DENIES = new Set<CapabilityKey>([
   "schedule.attendance.write",
   "schedule.lesson.complete",
   "commerce.client_finance.read",
+  "commerce.package.read",
   "commerce.subscription.issue",
 ]);
 

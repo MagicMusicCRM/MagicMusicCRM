@@ -33,6 +33,26 @@ void main() {
     });
   });
 
+  group('subscription package catalog RBAC (v4 T5.2.1)', () {
+    test('active read is available only to issuing staff', () {
+      for (final role in ['admin', 'manager', 'director', 'system_admin']) {
+        expect(crmCanReadSubscriptionPackages(role), isTrue, reason: role);
+      }
+      for (final role in ['client', 'teacher']) {
+        expect(crmCanReadSubscriptionPackages(role), isFalse, reason: role);
+      }
+    });
+
+    test('catalog mutation is Director/system_admin only', () {
+      for (final role in ['director', 'system_admin']) {
+        expect(crmCanManageSubscriptionPackages(role), isTrue, reason: role);
+      }
+      for (final role in ['client', 'teacher', 'admin', 'manager']) {
+        expect(crmCanManageSubscriptionPackages(role), isFalse, reason: role);
+      }
+    });
+  });
+
   group('crmHasTeacherRatesAccess — поразрезные финансы (решение 16.07)', () {
     test('ставки педагогов видят и админ, и управляющий', () {
       // Ставка за занятие — не обще-суммарная сводка, поэтому граница шире,

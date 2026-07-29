@@ -29,6 +29,7 @@ Future<Map<String, dynamic>?> showIssueSubscriptionSheet(
         children: [
           for (final pkg in packages) ...[
             SubscriptionPackageTile(
+              key: Key('issue-subscription-package-${pkg['id']}'),
               package: pkg,
               onTap: () => Navigator.pop(sheetContext, pkg),
             ),
@@ -54,8 +55,17 @@ class SubscriptionPackageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = package['name']?.toString() ?? 'Абонемент';
-    final lessons = package['lessons_total'] ?? package['lessonsTotal'];
-    final price = package['price'];
+    final lessons =
+        package['unitCount'] ??
+        package['lessons_total'] ??
+        package['lessonsTotal'];
+    final minor = BigInt.tryParse(
+      (package['basePriceMinor'] ?? package['base_price_minor'])?.toString() ??
+          '',
+    );
+    final price = minor == null
+        ? package['price']
+        : NumberFormat('#,##0.##', 'ru').format(minor.toInt() / 100);
     final validity = package['validity_days'] ?? package['validityDays'];
     final meta = [
       if (lessons != null) '$lessons ч.',

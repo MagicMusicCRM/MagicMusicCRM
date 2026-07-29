@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "T8.1.2",
-  "source_digest_sha256": "a841f850292328f508cc76f167445a8e483cdd37e33a7b8385263c521cfa762a",
-  "source_file_count": 633,
+  "source_digest_sha256": "cdbeb392dab26484f658de71bfb6db3afca5545559f3ebdd7a2b049bf9cd0e15",
+  "source_file_count": 637,
   "systems": [
     "SYS-APP",
     "SYS-ACCESS",
@@ -14,15 +14,15 @@
     "SYS-PLATFORM"
   ],
   "summary": {
-    "backend_routes": 266,
+    "backend_routes": 267,
     "role_guards": 17,
-    "policy_calls": 211,
-    "dto_fields": 591,
-    "flutter_role_checks": 104,
-    "flutter_navigation_sources": 302,
+    "policy_calls": 213,
+    "dto_fields": 600,
+    "flutter_role_checks": 108,
+    "flutter_navigation_sources": 303,
     "schedule_entry_points": 36,
     "attendance_mutations": 0,
-    "finance_writes": 32,
+    "finance_writes": 33,
     "schema_tables": 5,
     "unowned_items": 0,
     "missing_status_items": 0
@@ -370,17 +370,6 @@
       "line": 129
     },
     {
-      "id": "PUT /crm/schedule-reference/teachers/:teacherId/branches",
-      "verb": "PUT",
-      "route": "/crm/schedule-reference/teachers/:teacherId/branches",
-      "controller": "replaceTeacherBranches",
-      "roles": [],
-      "owner": "SYS-SCHEDULE",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 44
-    },
-    {
       "id": "GET /crm/schedule/conflicts",
       "verb": "GET",
       "route": "/crm/schedule/conflicts",
@@ -392,6 +381,17 @@
       "line": 121
     },
     {
+      "id": "GET /crm/schedule/month-summary",
+      "verb": "GET",
+      "route": "/crm/schedule/month-summary",
+      "controller": "getScheduleMonthSummary",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 112
+    },
+    {
       "id": "GET /crm/schedule/matrix",
       "verb": "GET",
       "route": "/crm/schedule/matrix",
@@ -401,6 +401,17 @@
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
       "line": 104
+    },
+    {
+      "id": "PATCH /crm/teachers/:id",
+      "verb": "PATCH",
+      "route": "/crm/teachers/:id",
+      "controller": "updateTeacher",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-people.controller.ts",
+      "line": 64
     },
     {
       "id": "GET /crm/teachers/:id/payroll",
@@ -546,6 +557,17 @@
       "line": 55
     },
     {
+      "id": "PUT /crm/schedule-reference/teachers/:teacherId/branches",
+      "verb": "PUT",
+      "route": "/crm/schedule-reference/teachers/:teacherId/branches",
+      "controller": "replaceTeacherBranches",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/schedule/availability.controller.ts",
+      "line": 44
+    },
+    {
       "id": "POST /crm/disciplines",
       "verb": "POST",
       "route": "/crm/disciplines",
@@ -555,17 +577,6 @@
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-reference-data.controller.ts",
       "line": 63
-    },
-    {
-      "id": "POST /crm/loss-reasons",
-      "verb": "POST",
-      "route": "/crm/loss-reasons",
-      "controller": "createLossReason",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-reference-data.controller.ts",
-      "line": 71
     },
     {
       "id": "POST /crm/branches/:branchId/disciplines",
@@ -722,15 +733,26 @@
       "line": 96
     },
     {
-      "id": "GET /crm/schedule/month-summary",
-      "verb": "GET",
-      "route": "/crm/schedule/month-summary",
-      "controller": "getScheduleMonthSummary",
+      "id": "POST /crm/loss-reasons",
+      "verb": "POST",
+      "route": "/crm/loss-reasons",
+      "controller": "createLossReason",
       "roles": [],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 112
+      "file": "server/src/crm/crm-reference-data.controller.ts",
+      "line": 71
+    },
+    {
+      "id": "GET /crm/teachers/:id",
+      "verb": "GET",
+      "route": "/crm/teachers/:id",
+      "controller": "getTeacher",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-people.controller.ts",
+      "line": 56
     },
     {
       "id": "PUT /crm/schedule-reference/teachers/:teacherId/availability",
@@ -742,17 +764,6 @@
       "status": "compatibility-facade",
       "file": "server/src/crm/schedule/availability.controller.ts",
       "line": 53
-    },
-    {
-      "id": "POST /files",
-      "verb": "POST",
-      "route": "/files",
-      "controller": "FileInterceptor",
-      "roles": [],
-      "owner": "SYS-PLATFORM",
-      "status": "compatibility-facade",
-      "file": "server/src/files/files.controller.ts",
-      "line": 30
     },
     {
       "id": "GET /files/download/:token",
@@ -1349,15 +1360,15 @@
       "line": 26
     },
     {
-      "id": "PATCH /crm/teachers/:id",
-      "verb": "PATCH",
-      "route": "/crm/teachers/:id",
-      "controller": "updateTeacher",
+      "id": "POST /files",
+      "verb": "POST",
+      "route": "/files",
+      "controller": "FileInterceptor",
       "roles": [],
-      "owner": "SYS-CRM",
+      "owner": "SYS-PLATFORM",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-people.controller.ts",
-      "line": 64
+      "file": "server/src/files/files.controller.ts",
+      "line": 30
     },
     {
       "id": "GET /messenger/chats",
@@ -1536,15 +1547,17 @@
       "line": 54
     },
     {
-      "id": "GET /crm/teachers/:id",
-      "verb": "GET",
-      "route": "/crm/teachers/:id",
-      "controller": "getTeacher",
-      "roles": [],
+      "id": "PATCH /settings/admin-chat-avatar",
+      "verb": "PATCH",
+      "route": "/settings/admin-chat-avatar",
+      "controller": "updateAdminChatAvatar",
+      "roles": [
+        "admin"
+      ],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-people.controller.ts",
-      "line": 56
+      "file": "server/src/settings/settings.controller.ts",
+      "line": 32
     },
     {
       "id": "POST /crm/teachers",
@@ -1558,15 +1571,15 @@
       "line": 48
     },
     {
-      "id": "GET /crm/teachers",
-      "verb": "GET",
-      "route": "/crm/teachers",
-      "controller": "listTeachers",
+      "id": "POST /crm/merges/:mergeLogId/undo",
+      "verb": "POST",
+      "route": "/crm/merges/:mergeLogId/undo",
+      "controller": "undoMerge",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-people.controller.ts",
-      "line": 40
+      "file": "server/src/crm/crm-leads.controller.ts",
+      "line": 181
     },
     {
       "id": "POST /auth/refresh",
@@ -2273,17 +2286,15 @@
       "line": 76
     },
     {
-      "id": "PATCH /settings/admin-chat-avatar",
-      "verb": "PATCH",
-      "route": "/settings/admin-chat-avatar",
-      "controller": "updateAdminChatAvatar",
-      "roles": [
-        "admin"
-      ],
+      "id": "GET /crm/teachers",
+      "verb": "GET",
+      "route": "/crm/teachers",
+      "controller": "listTeachers",
+      "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
-      "file": "server/src/settings/settings.controller.ts",
-      "line": 32
+      "file": "server/src/crm/crm-people.controller.ts",
+      "line": 40
     },
     {
       "id": "GET /crm/dashboard/manager",
@@ -2316,7 +2327,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 43
+      "line": 50
     },
     {
       "id": "GET /crm/subscriptions",
@@ -2327,7 +2338,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 51
+      "line": 58
     },
     {
       "id": "POST /crm/payments",
@@ -2338,7 +2349,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 59
+      "line": 66
     },
     {
       "id": "GET /crm/expenses",
@@ -2349,7 +2360,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 67
+      "line": 74
     },
     {
       "id": "POST /crm/expenses",
@@ -2360,7 +2371,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 75
+      "line": 82
     },
     {
       "id": "PATCH /crm/expenses/:id",
@@ -2371,7 +2382,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 83
+      "line": 90
     },
     {
       "id": "DELETE /crm/expenses/:id",
@@ -2382,7 +2393,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 92
+      "line": 99
     },
     {
       "id": "GET /crm/subscription-packages",
@@ -2393,7 +2404,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 100
+      "line": 107
     },
     {
       "id": "POST /crm/subscription-packages",
@@ -2404,7 +2415,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 108
+      "line": 115
     },
     {
       "id": "PATCH /crm/subscription-packages/:id",
@@ -2415,18 +2426,29 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 116
+      "line": 128
     },
     {
       "id": "DELETE /crm/subscription-packages/:id",
       "verb": "DELETE",
       "route": "/crm/subscription-packages/:id",
-      "controller": "deleteSubscriptionPackage",
+      "controller": "archiveSubscriptionPackage",
       "roles": [],
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 125
+      "line": 142
+    },
+    {
+      "id": "POST /crm/subscription-packages/:id/restore",
+      "verb": "POST",
+      "route": "/crm/subscription-packages/:id/restore",
+      "controller": "restoreSubscriptionPackage",
+      "roles": [],
+      "owner": "SYS-COMMERCE",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-finance.controller.ts",
+      "line": 156
     },
     {
       "id": "GET /crm/duplicates",
@@ -2616,17 +2638,6 @@
       "line": 172
     },
     {
-      "id": "POST /crm/merges/:mergeLogId/undo",
-      "verb": "POST",
-      "route": "/crm/merges/:mergeLogId/undo",
-      "controller": "undoMerge",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 181
-    },
-    {
       "id": "GET /crm/payments",
       "verb": "GET",
       "route": "/crm/payments",
@@ -2635,7 +2646,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 35
+      "line": 42
     },
     {
       "id": "DELETE /crm/groups/:id/students/:studentId",
@@ -3266,51 +3277,6 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertManagerOnly",
-      "owner": "SYS-WORKFLOW",
-      "status": "policy-protected",
-      "file": "server/src/crm/tasks.service.ts",
-      "line": 253
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertManagerOnly",
-      "owner": "SYS-WORKFLOW",
-      "status": "policy-protected",
-      "file": "server/src/crm/tasks.service.ts",
-      "line": 373
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertManagerOnly",
-      "owner": "SYS-WORKFLOW",
-      "status": "policy-protected",
-      "file": "server/src/crm/tasks.service.ts",
-      "line": 482
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanReadOperationalData",
-      "owner": "SYS-WORKFLOW",
-      "status": "policy-protected",
-      "file": "server/src/crm/tasks.service.ts",
-      "line": 513
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertManagerOnly",
-      "owner": "SYS-WORKFLOW",
-      "status": "policy-protected",
-      "file": "server/src/crm/tasks.service.ts",
-      "line": 552
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
       "call": "assertCanWriteCrm",
       "owner": "SYS-CRM",
       "status": "policy-protected",
@@ -3356,20 +3322,20 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanReadOperationalData",
-      "owner": "SYS-WORKFLOW",
-      "status": "policy-protected",
-      "file": "server/src/crm/tasks.service.ts",
-      "line": 234
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
       "call": "assertCanWriteCrm",
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/timeline.service.ts",
       "line": 388
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanArchiveClient",
+      "owner": "SYS-CRM",
+      "status": "policy-protected",
+      "file": "server/src/crm/clients/client-archive.service.ts",
+      "line": 83
     },
     {
       "kind": "policy-call",
@@ -3401,20 +3367,20 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
+      "call": "assertManagerOnly",
+      "owner": "SYS-WORKFLOW",
+      "status": "policy-protected",
+      "file": "server/src/crm/tasks.service.ts",
+      "line": 552
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
       "call": "assertCanManageClientConfiguration",
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/clients/client-config.service.ts",
       "line": 84
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanReadOperationalData",
-      "owner": "SYS-CRM",
-      "status": "policy-protected",
-      "file": "server/src/crm/clients/client-config.service.ts",
-      "line": 139
     },
     {
       "kind": "policy-call",
@@ -3446,6 +3412,60 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
+      "call": "assertCanReadSubscriptionPackages",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/commerce/package-catalog.service.ts",
+      "line": 79
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanManageSubscriptionPackages",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/commerce/package-catalog.service.ts",
+      "line": 82
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanManageSubscriptionPackages",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/commerce/package-catalog.service.ts",
+      "line": 97
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanManageSubscriptionPackages",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/commerce/package-catalog.service.ts",
+      "line": 156
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanManageSubscriptionPackages",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/commerce/package-catalog.service.ts",
+      "line": 233
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanManageSubscriptionPackages",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/commerce/package-catalog.service.ts",
+      "line": 298
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
       "call": "assertCanReadOperationalData",
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
@@ -3455,20 +3475,11 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertManagerOnly",
-      "owner": "SYS-SCHEDULE",
-      "status": "policy-protected",
-      "file": "server/src/crm/schedule/availability.service.ts",
-      "line": 55
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanArchiveClient",
+      "call": "assertCanReadOperationalData",
       "owner": "SYS-CRM",
       "status": "policy-protected",
-      "file": "server/src/crm/clients/client-archive.service.ts",
-      "line": 83
+      "file": "server/src/crm/clients/client-config.service.ts",
+      "line": 139
     },
     {
       "kind": "policy-call",
@@ -3477,34 +3488,25 @@
       "owner": "SYS-WORKFLOW",
       "status": "policy-protected",
       "file": "server/src/crm/tasks.service.ts",
-      "line": 191
+      "line": 513
     },
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-COMMERCE",
+      "call": "assertManagerOnly",
+      "owner": "SYS-WORKFLOW",
       "status": "policy-protected",
-      "file": "server/src/crm/subscriptions.service.ts",
-      "line": 489
+      "file": "server/src/crm/tasks.service.ts",
+      "line": 482
     },
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-COMMERCE",
+      "call": "assertManagerOnly",
+      "owner": "SYS-WORKFLOW",
       "status": "policy-protected",
-      "file": "server/src/crm/subscriptions.service.ts",
-      "line": 393
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-SCHEDULE",
-      "status": "policy-protected",
-      "file": "server/src/crm/rooms.service.ts",
-      "line": 248
+      "file": "server/src/crm/tasks.service.ts",
+      "line": 373
     },
     {
       "kind": "policy-call",
@@ -3671,38 +3673,56 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanReadOperationalData",
+      "call": "assertCanWriteCrm",
       "owner": "SYS-COMMERCE",
       "status": "policy-protected",
       "file": "server/src/crm/subscriptions.service.ts",
+      "line": 257
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/subscriptions.service.ts",
+      "line": 373
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanReadOperationalData",
+      "owner": "SYS-WORKFLOW",
+      "status": "policy-protected",
+      "file": "server/src/crm/tasks.service.ts",
+      "line": 191
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanReadOperationalData",
+      "owner": "SYS-WORKFLOW",
+      "status": "policy-protected",
+      "file": "server/src/crm/tasks.service.ts",
+      "line": 234
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertManagerOnly",
+      "owner": "SYS-WORKFLOW",
+      "status": "policy-protected",
+      "file": "server/src/crm/tasks.service.ts",
       "line": 253
     },
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanManageSubscriptionPackages",
-      "owner": "SYS-COMMERCE",
+      "call": "assertManagerOnly",
+      "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
-      "file": "server/src/crm/subscriptions.service.ts",
-      "line": 283
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanManageSubscriptionPackages",
-      "owner": "SYS-COMMERCE",
-      "status": "policy-protected",
-      "file": "server/src/crm/subscriptions.service.ts",
-      "line": 319
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanManageSubscriptionPackages",
-      "owner": "SYS-COMMERCE",
-      "status": "policy-protected",
-      "file": "server/src/crm/subscriptions.service.ts",
-      "line": 360
+      "file": "server/src/crm/schedule/availability.service.ts",
+      "line": 55
     },
     {
       "kind": "policy-call",
@@ -3712,15 +3732,6 @@
       "status": "policy-protected",
       "file": "server/src/crm/schedule/availability.service.ts",
       "line": 90
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanReadOperationalData",
-      "owner": "SYS-SCHEDULE",
-      "status": "policy-protected",
-      "file": "server/src/crm/rooms.service.ts",
-      "line": 130
     },
     {
       "kind": "policy-call",
@@ -3738,7 +3749,16 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule/lesson-command.service.ts",
-      "line": 158
+      "line": 74
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanReadChat",
+      "owner": "SYS-PLATFORM",
+      "status": "policy-protected",
+      "file": "server/src/messenger/messenger.service.ts",
+      "line": 478
     },
     {
       "kind": "policy-call",
@@ -3833,20 +3853,20 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanReadChat",
-      "owner": "SYS-PLATFORM",
-      "status": "policy-protected",
-      "file": "server/src/messenger/messenger.service.ts",
-      "line": 478
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
       "call": "canJoinRealtimeRoom",
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/messenger/realtime.gateway.ts",
       "line": 225
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanManagePreferences",
+      "owner": "SYS-WORKFLOW",
+      "status": "policy-protected",
+      "file": "server/src/notifications/notifications.service.ts",
+      "line": 441
     },
     {
       "kind": "policy-call",
@@ -3941,20 +3961,20 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanManagePreferences",
-      "owner": "SYS-WORKFLOW",
-      "status": "policy-protected",
-      "file": "server/src/notifications/notifications.service.ts",
-      "line": 441
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
       "call": "assertCanReadChat",
       "owner": "SYS-PLATFORM",
       "status": "policy-protected",
       "file": "server/src/messenger/messenger.service.ts",
       "line": 402
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-SCHEDULE",
+      "status": "policy-protected",
+      "file": "server/src/crm/rooms.service.ts",
+      "line": 248
     },
     {
       "kind": "policy-call",
@@ -3968,11 +3988,20 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertNotBlacklisted",
+      "call": "assertCanModerateMessage",
       "owner": "SYS-PLATFORM",
       "status": "policy-protected",
       "file": "server/src/messenger/message.service.ts",
-      "line": 242
+      "line": 176
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-SCHEDULE",
+      "status": "policy-protected",
+      "file": "server/src/crm/schedule/lesson-command.service.ts",
+      "line": 158
     },
     {
       "kind": "policy-call",
@@ -4175,20 +4204,11 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanModerateMessage",
+      "call": "assertNotBlacklisted",
       "owner": "SYS-PLATFORM",
       "status": "policy-protected",
       "file": "server/src/messenger/message.service.ts",
-      "line": 176
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-SCHEDULE",
-      "status": "policy-protected",
-      "file": "server/src/crm/schedule/lesson-command.service.ts",
-      "line": 74
+      "line": 242
     },
     {
       "kind": "policy-call",
@@ -4206,7 +4226,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/rooms.service.ts",
-      "line": 106
+      "line": 130
     },
     {
       "kind": "policy-call",
@@ -4215,7 +4235,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/reference-data.service.ts",
-      "line": 310
+      "line": 337
     },
     {
       "kind": "policy-call",
@@ -4670,11 +4690,11 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-CRM",
+      "call": "assertManagerOnly",
+      "owner": "SYS-COMMERCE",
       "status": "policy-protected",
-      "file": "server/src/crm/reference-data.service.ts",
-      "line": 337
+      "file": "server/src/crm/finance.service.ts",
+      "line": 688
     },
     {
       "kind": "policy-call",
@@ -4683,7 +4703,7 @@
       "owner": "SYS-COMMERCE",
       "status": "policy-protected",
       "file": "server/src/crm/finance.service.ts",
-      "line": 688
+      "line": 724
     },
     {
       "kind": "policy-call",
@@ -4790,8 +4810,8 @@
       "call": "assertCanReadOperationalData",
       "owner": "SYS-CRM",
       "status": "policy-protected",
-      "file": "server/src/crm/merge.service.ts",
-      "line": 25
+      "file": "server/src/crm/reference-data.service.ts",
+      "line": 97
     },
     {
       "kind": "policy-call",
@@ -4800,7 +4820,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/reference-data.service.ts",
-      "line": 97
+      "line": 118
     },
     {
       "kind": "policy-call",
@@ -4895,11 +4915,29 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanReadOperationalData",
+      "call": "assertCanWriteCrm",
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/reference-data.service.ts",
-      "line": 118
+      "line": 310
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanReadOperationalData",
+      "owner": "SYS-CRM",
+      "status": "policy-protected",
+      "file": "server/src/crm/merge.service.ts",
+      "line": 25
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanReadOperationalData",
+      "owner": "SYS-SCHEDULE",
+      "status": "policy-protected",
+      "file": "server/src/crm/rooms.service.ts",
+      "line": 106
     },
     {
       "kind": "policy-call",
@@ -4909,15 +4947,6 @@
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
       "line": 898
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-CRM",
-      "status": "policy-protected",
-      "file": "server/src/crm/leads.service.ts",
-      "line": 759
     },
     {
       "kind": "policy-call",
@@ -5138,11 +5167,11 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertManagerOnly",
-      "owner": "SYS-COMMERCE",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-CRM",
       "status": "policy-protected",
-      "file": "server/src/crm/finance.service.ts",
-      "line": 724
+      "file": "server/src/crm/leads.service.ts",
+      "line": 759
     },
     {
       "kind": "policy-call",
@@ -5166,35 +5195,6 @@
       "status": "current-contract",
       "file": "server/src/access-control/dto/access-mutation.dto.ts",
       "line": 30
-    },
-    {
-      "dto": "UpdateExpenseDto",
-      "field": "amount",
-      "type": "number",
-      "decorators": [
-        "IsNumber",
-        "IsOptional",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-expense.dto.ts",
-      "line": 16
-    },
-    {
-      "dto": "UpdateExpenseDto",
-      "field": "category",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-expense.dto.ts",
-      "line": 21
     },
     {
       "dto": "UpdateExpenseDto",
@@ -5251,20 +5251,6 @@
       "line": 24
     },
     {
-      "dto": "UpdateBranchDto",
-      "field": "timezone",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-branch.dto.ts",
-      "line": 25
-    },
-    {
       "dto": "UpdateGroupDto",
       "field": "branchId",
       "type": "string",
@@ -5276,6 +5262,33 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/update-group.dto.ts",
       "line": 28
+    },
+    {
+      "dto": "UpdateGroupDto",
+      "field": "roomId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-group.dto.ts",
+      "line": 32
+    },
+    {
+      "dto": "UpdateExpenseDto",
+      "field": "category",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-expense.dto.ts",
+      "line": 21
     },
     {
       "dto": "UpdateGroupDto",
@@ -5292,22 +5305,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/update-group.dto.ts",
       "line": 39
-    },
-    {
-      "dto": "UpdateGroupDto",
-      "field": "teacherRate",
-      "type": "number | null",
-      "decorators": [
-        "IsNumber",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-group.dto.ts",
-      "line": 46
     },
     {
       "dto": "UpdateHomeworkDto",
@@ -5364,17 +5361,77 @@
       "line": 26
     },
     {
-      "dto": "UpdateGroupDto",
-      "field": "roomId",
+      "dto": "UpdateStaffDto",
+      "field": "firstName",
       "type": "string",
       "decorators": [
         "IsOptional",
-        "IsUUID"
+        "IsString",
+        "MaxLength"
       ],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-staff.dto.ts",
+      "line": 13
+    },
+    {
+      "dto": "UpdateStaffDto",
+      "field": "lastName",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-staff.dto.ts",
+      "line": 18
+    },
+    {
+      "dto": "UpdateGroupDto",
+      "field": "teacherRate",
+      "type": "number | null",
+      "decorators": [
+        "IsNumber",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-CRM",
       "status": "current-contract",
       "file": "server/src/crm/dto/update-group.dto.ts",
-      "line": 32
+      "line": 46
+    },
+    {
+      "dto": "UpdateExpenseDto",
+      "field": "amount",
+      "type": "number",
+      "decorators": [
+        "IsNumber",
+        "IsOptional",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-expense.dto.ts",
+      "line": 16
+    },
+    {
+      "dto": "UpdateBranchDto",
+      "field": "timezone",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-branch.dto.ts",
+      "line": 25
     },
     {
       "dto": "UpdateBranchDto",
@@ -5390,66 +5447,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/update-branch.dto.ts",
       "line": 20
-    },
-    {
-      "dto": "UpdateBranchDto",
-      "field": "address",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-branch.dto.ts",
-      "line": 12
-    },
-    {
-      "dto": "UpdateBranchDto",
-      "field": "name",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-branch.dto.ts",
-      "line": 7
-    },
-    {
-      "dto": "TeacherListQuery",
-      "field": "birthdayMonth",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/teacher-list.query.ts",
-      "line": 72
-    },
-    {
-      "dto": "TeacherListQuery",
-      "field": "limit",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/teacher-list.query.ts",
-      "line": 79
     },
     {
       "dto": "TeacherStatsQuery",
@@ -5626,8 +5623,36 @@
       "line": 40
     },
     {
+      "dto": "UpdateBranchDto",
+      "field": "name",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-branch.dto.ts",
+      "line": 7
+    },
+    {
+      "dto": "UpdateBranchDto",
+      "field": "address",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-branch.dto.ts",
+      "line": 12
+    },
+    {
       "dto": "UpdateStaffDto",
-      "field": "firstName",
+      "field": "phone",
       "type": "string",
       "decorators": [
         "IsOptional",
@@ -5637,37 +5662,7 @@
       "owner": "SYS-CRM",
       "status": "current-contract",
       "file": "server/src/crm/dto/update-staff.dto.ts",
-      "line": 13
-    },
-    {
-      "dto": "TeacherListQuery",
-      "field": "ratingTo",
-      "type": "number",
-      "decorators": [
-        "IsNumber",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/teacher-list.query.ts",
-      "line": 65
-    },
-    {
-      "dto": "UpdateStaffDto",
-      "field": "lastName",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-staff.dto.ts",
-      "line": 18
+      "line": 23
     },
     {
       "dto": "UpdateStaffDto",
@@ -5682,6 +5677,48 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/update-staff.dto.ts",
       "line": 28
+    },
+    {
+      "dto": "UpdateStaffDto",
+      "field": "role",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-ACCESS",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-staff.dto.ts",
+      "line": 33
+    },
+    {
+      "dto": "UpdateStaffDto",
+      "field": "position",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-staff.dto.ts",
+      "line": 38
+    },
+    {
+      "dto": "UpdateSubscriptionPackageDto",
+      "field": "sortOrder",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Type"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-subscription-package.dto.ts",
+      "line": 71
     },
     {
       "dto": "UpdateTeacherDto",
@@ -5768,20 +5805,6 @@
       "line": 43
     },
     {
-      "dto": "UpdateSubscriptionPackageDto",
-      "field": "sortOrder",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Type"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-subscription-package.dto.ts",
-      "line": 52
-    },
-    {
       "dto": "UpdateTeacherDto",
       "field": "customDataPatch",
       "type": "Record<string, unknown>",
@@ -5793,6 +5816,21 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/update-teacher.dto.ts",
       "line": 50
+    },
+    {
+      "dto": "UpdateTeacherDto",
+      "field": "salary",
+      "type": "number",
+      "decorators": [
+        "IsNumber",
+        "IsOptional",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-teacher.dto.ts",
+      "line": 58
     },
     {
       "dto": "UpdateTeacherDto",
@@ -5876,37 +5914,9 @@
       "line": 31
     },
     {
-      "dto": "UpdateTeacherDto",
-      "field": "salary",
-      "type": "number",
-      "decorators": [
-        "IsNumber",
-        "IsOptional",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-teacher.dto.ts",
-      "line": 58
-    },
-    {
-      "dto": "UpdateSubscriptionPackageDto",
-      "field": "isActive",
-      "type": "boolean",
-      "decorators": [
-        "IsBoolean",
-        "IsOptional"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-subscription-package.dto.ts",
-      "line": 47
-    },
-    {
       "dto": "UpdateSubscriptionPackageDto",
       "field": "validityDays",
-      "type": "number",
+      "type": "number | null",
       "decorators": [
         "IsInt",
         "IsOptional",
@@ -5916,7 +5926,37 @@
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/update-subscription-package.dto.ts",
-      "line": 43
+      "line": 66
+    },
+    {
+      "dto": "TeacherListQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/teacher-list.query.ts",
+      "line": 79
+    },
+    {
+      "dto": "UpdateSubscriptionPackageDto",
+      "field": "currencyCode",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "Matches"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-subscription-package.dto.ts",
+      "line": 60
     },
     {
       "dto": "UpdateSubscriptionPackageDto",
@@ -5931,35 +5971,7 @@
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/update-subscription-package.dto.ts",
-      "line": 37
-    },
-    {
-      "dto": "UpdateStaffDto",
-      "field": "role",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-ACCESS",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-staff.dto.ts",
-      "line": 33
-    },
-    {
-      "dto": "UpdateStaffDto",
-      "field": "position",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-staff.dto.ts",
-      "line": 38
+      "line": 50
     },
     {
       "dto": "UpdateStaffDto",
@@ -6086,6 +6098,21 @@
     },
     {
       "dto": "UpdateSubscriptionPackageDto",
+      "field": "expectedVersion",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-subscription-package.dto.ts",
+      "line": 19
+    },
+    {
+      "dto": "UpdateSubscriptionPackageDto",
       "field": "name",
       "type": "string",
       "decorators": [
@@ -6096,12 +6123,12 @@
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/update-subscription-package.dto.ts",
-      "line": 17
+      "line": 24
     },
     {
       "dto": "UpdateSubscriptionPackageDto",
       "field": "disciplineId",
-      "type": "string",
+      "type": "string | null",
       "decorators": [
         "IsOptional",
         "IsUUID"
@@ -6109,12 +6136,12 @@
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/update-subscription-package.dto.ts",
-      "line": 21
+      "line": 28
     },
     {
       "dto": "UpdateSubscriptionPackageDto",
       "field": "branchId",
-      "type": "string",
+      "type": "string | null",
       "decorators": [
         "IsOptional",
         "IsUUID"
@@ -6122,14 +6149,14 @@
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/update-subscription-package.dto.ts",
-      "line": 25
+      "line": 32
     },
     {
       "dto": "UpdateSubscriptionPackageDto",
       "field": "lessonsTotal",
       "type": "number",
       "decorators": [
-        "IsInt",
+        "IsNumber",
         "IsOptional",
         "Min",
         "Type"
@@ -6137,21 +6164,36 @@
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
       "file": "server/src/crm/dto/update-subscription-package.dto.ts",
-      "line": 31
+      "line": 38
     },
     {
-      "dto": "UpdateStaffDto",
-      "field": "phone",
+      "dto": "UpdateSubscriptionPackageDto",
+      "field": "unitCount",
+      "type": "number",
+      "decorators": [
+        "IsNumber",
+        "IsOptional",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-subscription-package.dto.ts",
+      "line": 44
+    },
+    {
+      "dto": "UpdateSubscriptionPackageDto",
+      "field": "basePriceMinor",
       "type": "string",
       "decorators": [
         "IsOptional",
         "IsString",
-        "MaxLength"
+        "Matches"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-COMMERCE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/update-staff.dto.ts",
-      "line": 23
+      "file": "server/src/crm/dto/update-subscription-package.dto.ts",
+      "line": 55
     },
     {
       "dto": "UpsertExpenseDto",
@@ -6169,6 +6211,22 @@
     },
     {
       "dto": "TeacherListQuery",
+      "field": "birthdayMonth",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/teacher-list.query.ts",
+      "line": 72
+    },
+    {
+      "dto": "TeacherListQuery",
       "field": "ratingFrom",
       "type": "number",
       "decorators": [
@@ -6182,88 +6240,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/teacher-list.query.ts",
       "line": 58
-    },
-    {
-      "dto": "TeacherListQuery",
-      "field": "appRole",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-ACCESS",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/teacher-list.query.ts",
-      "line": 47
-    },
-    {
-      "dto": "StaffListQuery",
-      "field": "branchId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/staff-list.query.ts",
-      "line": 21
-    },
-    {
-      "dto": "StaffListQuery",
-      "field": "role",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-ACCESS",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/staff-list.query.ts",
-      "line": 26
-    },
-    {
-      "dto": "StaffListQuery",
-      "field": "status",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/staff-list.query.ts",
-      "line": 31
-    },
-    {
-      "dto": "StaffListQuery",
-      "field": "appRole",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-ACCESS",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/staff-list.query.ts",
-      "line": 36
-    },
-    {
-      "dto": "StaffListQuery",
-      "field": "authorization",
-      "type": "\"app\" | \"technical\" | \"linked\" | \"unlinked\"",
-      "decorators": [
-        "IsIn",
-        "IsOptional"
-      ],
-      "owner": "SYS-ACCESS",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/staff-list.query.ts",
-      "line": 40
     },
     {
       "dto": "StaffListQuery",
@@ -6283,20 +6259,6 @@
     },
     {
       "dto": "StaffListQuery",
-      "field": "q",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/staff-list.query.ts",
-      "line": 17
-    },
-    {
-      "dto": "StaffListQuery",
       "field": "limit",
       "type": "number",
       "decorators": [
@@ -6310,6 +6272,19 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/staff-list.query.ts",
       "line": 54
+    },
+    {
+      "dto": "StudentBalanceQuery",
+      "field": "studentId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/student-balance.query.ts",
+      "line": 7
     },
     {
       "dto": "StudentBalanceQuery",
@@ -6355,6 +6330,19 @@
       "line": 11
     },
     {
+      "dto": "StaffListQuery",
+      "field": "authorization",
+      "type": "\"app\" | \"technical\" | \"linked\" | \"unlinked\"",
+      "decorators": [
+        "IsIn",
+        "IsOptional"
+      ],
+      "owner": "SYS-ACCESS",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/staff-list.query.ts",
+      "line": 40
+    },
+    {
       "dto": "StudentLedgerQuery",
       "field": "limit",
       "type": "number",
@@ -6372,20 +6360,6 @@
     },
     {
       "dto": "StudentSearchQuery",
-      "field": "q",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 18
-    },
-    {
-      "dto": "StudentSearchQuery",
       "field": "status",
       "type": "string",
       "decorators": [
@@ -6399,8 +6373,8 @@
       "line": 23
     },
     {
-      "dto": "StudentBalanceQuery",
-      "field": "studentId",
+      "dto": "StudentSearchQuery",
+      "field": "branchId",
       "type": "string",
       "decorators": [
         "IsOptional",
@@ -6408,119 +6382,119 @@
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/student-balance.query.ts",
-      "line": 7
-    },
-    {
-      "dto": "SetTeacherRateDto",
-      "field": "effectiveFrom",
-      "type": "string",
-      "decorators": [
-        "IsDateString",
-        "IsOptional"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/set-teacher-rate.dto.ts",
-      "line": 17
-    },
-    {
-      "dto": "SetTeacherRateDto",
-      "field": "rate",
-      "type": "number",
-      "decorators": [
-        "IsNumber",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/set-teacher-rate.dto.ts",
-      "line": 13
-    },
-    {
-      "dto": "SetCommentVisibilityDto",
-      "field": "reasonCode",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "Matches"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/set-comment-visibility.dto.ts",
+      "file": "server/src/crm/dto/student-search.query.ts",
       "line": 27
     },
     {
-      "dto": "UpdateScheduleSeriesDto",
-      "field": "durationMinutes",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 140
-    },
-    {
-      "dto": "UpdateScheduleSeriesDto",
-      "field": "validUntil",
-      "type": "string | null",
-      "decorators": [
-        "IsDateString",
-        "IsOptional"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 144
-    },
-    {
-      "dto": "UpdateScheduleSeriesDto",
-      "field": "effectiveFrom",
+      "dto": "StudentSearchQuery",
+      "field": "groupId",
       "type": "string",
       "decorators": [
-        "IsDateString",
-        "IsOptional"
+        "IsOptional",
+        "IsUUID"
       ],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 149
+      "file": "server/src/crm/dto/student-search.query.ts",
+      "line": 31
     },
     {
-      "dto": "UpdateScheduleSeriesDto",
-      "field": "notes",
+      "dto": "StudentSearchQuery",
+      "field": "discipline",
       "type": "string",
       "decorators": [
         "IsOptional",
         "IsString",
         "MaxLength"
       ],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 154
+      "file": "server/src/crm/dto/student-search.query.ts",
+      "line": 36
     },
     {
-      "dto": "ScheduleSeriesQuery",
-      "field": "clientType",
-      "type": "\"lead\" | \"student\"",
+      "dto": "StudentSearchQuery",
+      "field": "level",
+      "type": "string",
       "decorators": [
-        "IsIn",
-        "IsOptional"
+        "IsOptional",
+        "IsString",
+        "MaxLength"
       ],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.query.ts",
-      "line": 15
+      "file": "server/src/crm/dto/student-search.query.ts",
+      "line": 41
+    },
+    {
+      "dto": "StudentSearchQuery",
+      "field": "category",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/student-search.query.ts",
+      "line": 46
+    },
+    {
+      "dto": "StudentSearchQuery",
+      "field": "q",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/student-search.query.ts",
+      "line": 18
+    },
+    {
+      "dto": "StaffListQuery",
+      "field": "appRole",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-ACCESS",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/staff-list.query.ts",
+      "line": 36
+    },
+    {
+      "dto": "StaffListQuery",
+      "field": "status",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/staff-list.query.ts",
+      "line": 31
+    },
+    {
+      "dto": "StaffListQuery",
+      "field": "role",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-ACCESS",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/staff-list.query.ts",
+      "line": 26
     },
     {
       "dto": "ScheduleSeriesQuery",
@@ -6655,47 +6629,50 @@
       "line": 22
     },
     {
-      "dto": "StudentSearchQuery",
-      "field": "branchId",
+      "dto": "SetCommentVisibilityDto",
+      "field": "reasonCode",
       "type": "string",
       "decorators": [
         "IsOptional",
-        "IsUUID"
+        "IsString",
+        "Matches"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
+      "file": "server/src/crm/dto/set-comment-visibility.dto.ts",
       "line": 27
     },
     {
-      "dto": "TeacherListQuery",
-      "field": "authorization",
-      "type": "\"app\" | \"technical\" | \"linked\" | \"unlinked\"",
+      "dto": "SetTeacherRateDto",
+      "field": "rate",
+      "type": "number",
       "decorators": [
-        "IsIn",
-        "IsOptional"
+        "IsNumber",
+        "Max",
+        "Min",
+        "Type"
       ],
-      "owner": "SYS-ACCESS",
+      "owner": "SYS-COMMERCE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/teacher-list.query.ts",
-      "line": 51
+      "file": "server/src/crm/dto/set-teacher-rate.dto.ts",
+      "line": 13
     },
     {
-      "dto": "StudentSearchQuery",
-      "field": "groupId",
+      "dto": "SetTeacherRateDto",
+      "field": "effectiveFrom",
       "type": "string",
       "decorators": [
-        "IsOptional",
-        "IsUUID"
+        "IsDateString",
+        "IsOptional"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-COMMERCE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 31
+      "file": "server/src/crm/dto/set-teacher-rate.dto.ts",
+      "line": 17
     },
     {
-      "dto": "StudentSearchQuery",
-      "field": "level",
+      "dto": "StaffListQuery",
+      "field": "q",
       "type": "string",
       "decorators": [
         "IsOptional",
@@ -6704,20 +6681,74 @@
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 41
+      "file": "server/src/crm/dto/staff-list.query.ts",
+      "line": 17
     },
     {
-      "dto": "TaskBoardQuery",
+      "dto": "StaffListQuery",
+      "field": "branchId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/staff-list.query.ts",
+      "line": 21
+    },
+    {
+      "dto": "StudentSearchQuery",
       "field": "from",
       "type": "string",
       "decorators": [
         "IsDateString",
         "IsOptional"
       ],
-      "owner": "SYS-WORKFLOW",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/task-board.query.ts",
+      "file": "server/src/crm/dto/student-search.query.ts",
+      "line": 50
+    },
+    {
+      "dto": "StudentSearchQuery",
+      "field": "to",
+      "type": "string",
+      "decorators": [
+        "IsDateString",
+        "IsOptional"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/student-search.query.ts",
+      "line": 54
+    },
+    {
+      "dto": "StudentSearchQuery",
+      "field": "linkedUser",
+      "type": "boolean",
+      "decorators": [
+        "IsBoolean",
+        "IsOptional",
+        "Transform"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/student-search.query.ts",
+      "line": 59
+    },
+    {
+      "dto": "StudentSearchQuery",
+      "field": "noEmail",
+      "type": "boolean",
+      "decorators": [
+        "IsBoolean",
+        "IsOptional",
+        "Transform"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/student-search.query.ts",
       "line": 64
     },
     {
@@ -6788,20 +6819,6 @@
       "line": 19
     },
     {
-      "dto": "TaskBoardQuery",
-      "field": "communicationMethod",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-WORKFLOW",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/task-board.query.ts",
-      "line": 60
-    },
-    {
       "dto": "TaskHistoryQuery",
       "field": "to",
       "type": "string",
@@ -6812,6 +6829,22 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/task-history.query.ts",
       "line": 22
+    },
+    {
+      "dto": "TaskHistoryQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/task-history.query.ts",
+      "line": 29
     },
     {
       "dto": "TeacherListQuery",
@@ -6897,24 +6930,64 @@
       "line": 42
     },
     {
-      "dto": "TaskHistoryQuery",
-      "field": "limit",
+      "dto": "TeacherListQuery",
+      "field": "appRole",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-ACCESS",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/teacher-list.query.ts",
+      "line": 47
+    },
+    {
+      "dto": "TeacherListQuery",
+      "field": "authorization",
+      "type": "\"app\" | \"technical\" | \"linked\" | \"unlinked\"",
+      "decorators": [
+        "IsIn",
+        "IsOptional"
+      ],
+      "owner": "SYS-ACCESS",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/teacher-list.query.ts",
+      "line": 51
+    },
+    {
+      "dto": "TaskBoardQuery",
+      "field": "from",
+      "type": "string",
+      "decorators": [
+        "IsDateString",
+        "IsOptional"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/task-board.query.ts",
+      "line": 64
+    },
+    {
+      "dto": "TeacherListQuery",
+      "field": "ratingTo",
       "type": "number",
       "decorators": [
-        "IsInt",
+        "IsNumber",
         "IsOptional",
         "Max",
         "Min",
         "Type"
       ],
-      "owner": "SYS-WORKFLOW",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/task-history.query.ts",
-      "line": 29
+      "file": "server/src/crm/dto/teacher-list.query.ts",
+      "line": 65
     },
     {
       "dto": "TaskBoardQuery",
-      "field": "taskType",
+      "field": "communicationMethod",
       "type": "string",
       "decorators": [
         "IsOptional",
@@ -6924,7 +6997,7 @@
       "owner": "SYS-WORKFLOW",
       "status": "current-contract",
       "file": "server/src/crm/dto/task-board.query.ts",
-      "line": 55
+      "line": 60
     },
     {
       "dto": "TaskBoardQuery",
@@ -6938,87 +7011,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/task-board.query.ts",
       "line": 50
-    },
-    {
-      "dto": "TaskBoardQuery",
-      "field": "status",
-      "type": "string",
-      "decorators": [
-        "IsIn",
-        "IsOptional"
-      ],
-      "owner": "SYS-WORKFLOW",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/task-board.query.ts",
-      "line": 46
-    },
-    {
-      "dto": "StudentSearchQuery",
-      "field": "category",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 46
-    },
-    {
-      "dto": "StudentSearchQuery",
-      "field": "from",
-      "type": "string",
-      "decorators": [
-        "IsDateString",
-        "IsOptional"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 50
-    },
-    {
-      "dto": "StudentSearchQuery",
-      "field": "to",
-      "type": "string",
-      "decorators": [
-        "IsDateString",
-        "IsOptional"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 54
-    },
-    {
-      "dto": "StudentSearchQuery",
-      "field": "linkedUser",
-      "type": "boolean",
-      "decorators": [
-        "IsBoolean",
-        "IsOptional",
-        "Transform"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 59
-    },
-    {
-      "dto": "StudentSearchQuery",
-      "field": "noEmail",
-      "type": "boolean",
-      "decorators": [
-        "IsBoolean",
-        "IsOptional",
-        "Transform"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 64
     },
     {
       "dto": "StudentSearchQuery",
@@ -7063,6 +7055,65 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/student-search.query.ts",
       "line": 83
+    },
+    {
+      "dto": "SubscriptionPackageListQuery",
+      "field": "q",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/subscription-package.query.ts",
+      "line": 16
+    },
+    {
+      "dto": "SubscriptionPackageListQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/subscription-package.query.ts",
+      "line": 23
+    },
+    {
+      "dto": "SubscriptionPackageListQuery",
+      "field": "includeArchived",
+      "type": "boolean",
+      "decorators": [
+        "IsBoolean",
+        "IsOptional",
+        "Transform"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/subscription-package.query.ts",
+      "line": 28
+    },
+    {
+      "dto": "SubscriptionPackageVersionQuery",
+      "field": "expectedVersion",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/subscription-package.query.ts",
+      "line": 36
     },
     {
       "dto": "TaskBoardQuery",
@@ -7157,31 +7208,44 @@
       "line": 42
     },
     {
-      "dto": "StudentSearchQuery",
-      "field": "discipline",
+      "dto": "TaskBoardQuery",
+      "field": "status",
+      "type": "string",
+      "decorators": [
+        "IsIn",
+        "IsOptional"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/task-board.query.ts",
+      "line": 46
+    },
+    {
+      "dto": "TaskBoardQuery",
+      "field": "taskType",
       "type": "string",
       "decorators": [
         "IsOptional",
         "IsString",
         "MaxLength"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-WORKFLOW",
       "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 36
+      "file": "server/src/crm/dto/task-board.query.ts",
+      "line": 55
     },
     {
-      "dto": "UpdateScheduleSeriesDto",
-      "field": "beginTime",
-      "type": "string",
+      "dto": "ScheduleSeriesQuery",
+      "field": "clientType",
+      "type": "\"lead\" | \"student\"",
       "decorators": [
-        "IsOptional",
-        "Matches"
+        "IsIn",
+        "IsOptional"
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 133
+      "file": "server/src/crm/dto/schedule-series.query.ts",
+      "line": 15
     },
     {
       "dto": "UpsertExpenseDto",
@@ -7208,6 +7272,20 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/upsert-group.dto.ts",
       "line": 19
+    },
+    {
+      "dto": "MessengerListQuery",
+      "field": "archived",
+      "type": "boolean",
+      "decorators": [
+        "IsBoolean",
+        "IsOptional",
+        "Transform"
+      ],
+      "owner": "SYS-PLATFORM",
+      "status": "current-contract",
+      "file": "server/src/messenger/dto/messenger-list.query.ts",
+      "line": 38
     },
     {
       "dto": "MessengerListQuery",
@@ -7274,6 +7352,19 @@
       "line": 14
     },
     {
+      "dto": "MessengerListQuery",
+      "field": "branchId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/messenger/dto/messenger-list.query.ts",
+      "line": 31
+    },
+    {
       "dto": "PresencePayload",
       "field": "status",
       "type": "string",
@@ -7287,31 +7378,18 @@
       "line": 20
     },
     {
-      "dto": "MessengerListQuery",
-      "field": "archived",
-      "type": "boolean",
-      "decorators": [
-        "IsBoolean",
-        "IsOptional",
-        "Transform"
-      ],
-      "owner": "SYS-PLATFORM",
-      "status": "current-contract",
-      "file": "server/src/messenger/dto/messenger-list.query.ts",
-      "line": 38
-    },
-    {
       "dto": "SendMessageDto",
-      "field": "messageType",
+      "field": "content",
       "type": "string",
       "decorators": [
-        "IsIn",
-        "IsOptional"
+        "IsString",
+        "MaxLength",
+        "ValidateIf"
       ],
       "owner": "SYS-PLATFORM",
       "status": "current-contract",
       "file": "server/src/messenger/dto/send-message.dto.ts",
-      "line": 13
+      "line": 18
     },
     {
       "dto": "SendMessageDto",
@@ -7381,47 +7459,17 @@
       "line": 9
     },
     {
-      "dto": "UpdateGroupMembersDto",
-      "field": "removeUserIds",
-      "type": "string[]",
-      "decorators": [
-        "ArrayMaxSize",
-        "ArrayUnique",
-        "IsArray",
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/messenger/dto/update-group-members.dto.ts",
-      "line": 16
-    },
-    {
       "dto": "SendMessageDto",
-      "field": "content",
+      "field": "messageType",
       "type": "string",
       "decorators": [
-        "IsString",
-        "MaxLength",
-        "ValidateIf"
+        "IsIn",
+        "IsOptional"
       ],
       "owner": "SYS-PLATFORM",
       "status": "current-contract",
       "file": "server/src/messenger/dto/send-message.dto.ts",
-      "line": 18
-    },
-    {
-      "dto": "MessengerListQuery",
-      "field": "branchId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/messenger/dto/messenger-list.query.ts",
-      "line": 31
+      "line": 13
     },
     {
       "dto": "MessengerListQuery",
@@ -7451,6 +7499,32 @@
       "status": "current-contract",
       "file": "server/src/messenger/dto/messenger-list.query.ts",
       "line": 18
+    },
+    {
+      "dto": "MarkReadDto",
+      "field": "lastReadMessageId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-PLATFORM",
+      "status": "current-contract",
+      "file": "server/src/messenger/dto/mark-read.dto.ts",
+      "line": 6
+    },
+    {
+      "dto": "AssignChatDto",
+      "field": "userId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-PLATFORM",
+      "status": "current-contract",
+      "file": "server/src/messenger/dto/assign-chat.dto.ts",
+      "line": 6
     },
     {
       "dto": "ChannelPermissionDto",
@@ -7640,17 +7714,20 @@
       "line": 6
     },
     {
-      "dto": "MarkReadDto",
-      "field": "lastReadMessageId",
-      "type": "string",
+      "dto": "UpdateGroupMembersDto",
+      "field": "removeUserIds",
+      "type": "string[]",
       "decorators": [
+        "ArrayMaxSize",
+        "ArrayUnique",
+        "IsArray",
         "IsOptional",
         "IsUUID"
       ],
-      "owner": "SYS-PLATFORM",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/messenger/dto/mark-read.dto.ts",
-      "line": 6
+      "file": "server/src/messenger/dto/update-group-members.dto.ts",
+      "line": 16
     },
     {
       "dto": "UpdateMessageDto",
@@ -7663,19 +7740,6 @@
       "owner": "SYS-PLATFORM",
       "status": "current-contract",
       "file": "server/src/messenger/dto/update-message.dto.ts",
-      "line": 6
-    },
-    {
-      "dto": "AssignChatDto",
-      "field": "userId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-PLATFORM",
-      "status": "current-contract",
-      "file": "server/src/messenger/dto/assign-chat.dto.ts",
       "line": 6
     },
     {
@@ -7692,16 +7756,35 @@
     },
     {
       "dto": "AdminSendNotificationDto",
-      "field": "role",
-      "type": "UserRole",
+      "field": "userIds",
+      "type": "string[]",
       "decorators": [
-        "IsIn",
+        "ArrayMaxSize",
+        "ArrayNotEmpty",
+        "IsArray",
+        "IsUUID",
         "ValidateIf"
       ],
       "owner": "SYS-WORKFLOW",
       "status": "current-contract",
       "file": "server/src/notifications/dto/admin-send-notification.dto.ts",
-      "line": 29
+      "line": 25
+    },
+    {
+      "dto": "ListProfilesQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-ACCESS",
+      "status": "current-contract",
+      "file": "server/src/profile/dto/list-profiles.query.ts",
+      "line": 20
     },
     {
       "dto": "UpdateProfileDto",
@@ -7785,22 +7868,6 @@
       "line": 36
     },
     {
-      "dto": "ListProfilesQuery",
-      "field": "limit",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-ACCESS",
-      "status": "current-contract",
-      "file": "server/src/profile/dto/list-profiles.query.ts",
-      "line": 20
-    },
-    {
       "dto": "UpdateRoleDto",
       "field": "role",
       "type": "UserRole",
@@ -7811,6 +7878,20 @@
       "status": "current-contract",
       "file": "server/src/profile/dto/update-role.dto.ts",
       "line": 6
+    },
+    {
+      "dto": "UpdateAdminChatAvatarDto",
+      "field": "url",
+      "type": "string | null",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/settings/dto/update-admin-chat-avatar.dto.ts",
+      "line": 7
     },
     {
       "dto": "CrmCustomFieldDefinitionDto",
@@ -7891,20 +7972,6 @@
       "line": 54
     },
     {
-      "dto": "UpdateAdminChatAvatarDto",
-      "field": "url",
-      "type": "string | null",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/settings/dto/update-admin-chat-avatar.dto.ts",
-      "line": 7
-    },
-    {
       "dto": "ListProfilesQuery",
       "field": "q",
       "type": "string",
@@ -7917,6 +7984,18 @@
       "status": "current-contract",
       "file": "server/src/profile/dto/list-profiles.query.ts",
       "line": 13
+    },
+    {
+      "dto": "ArchiveChatDto",
+      "field": "archived",
+      "type": "boolean",
+      "decorators": [
+        "IsBoolean"
+      ],
+      "owner": "SYS-PLATFORM",
+      "status": "current-contract",
+      "file": "server/src/messenger/dto/archive-chat.dto.ts",
+      "line": 6
     },
     {
       "dto": "ListProfilesQuery",
@@ -7933,15 +8012,28 @@
     },
     {
       "dto": "LinkProfileCrmDto",
-      "field": "entityId",
-      "type": "string",
+      "field": "entityType",
+      "type": "'student' | 'lead' | 'teacher' | 'staff'",
       "decorators": [
-        "IsUUID"
+        "IsIn"
       ],
       "owner": "SYS-ACCESS",
       "status": "current-contract",
       "file": "server/src/profile/dto/link-profile-crm.dto.ts",
-      "line": 8
+      "line": 5
+    },
+    {
+      "dto": "AdminSendNotificationDto",
+      "field": "role",
+      "type": "UserRole",
+      "decorators": [
+        "IsIn",
+        "ValidateIf"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/notifications/dto/admin-send-notification.dto.ts",
+      "line": 29
     },
     {
       "dto": "AdminSendNotificationDto",
@@ -8131,31 +8223,15 @@
     },
     {
       "dto": "LinkProfileCrmDto",
-      "field": "entityType",
-      "type": "'student' | 'lead' | 'teacher' | 'staff'",
+      "field": "entityId",
+      "type": "string",
       "decorators": [
-        "IsIn"
+        "IsUUID"
       ],
       "owner": "SYS-ACCESS",
       "status": "current-contract",
       "file": "server/src/profile/dto/link-profile-crm.dto.ts",
-      "line": 5
-    },
-    {
-      "dto": "AdminSendNotificationDto",
-      "field": "userIds",
-      "type": "string[]",
-      "decorators": [
-        "ArrayMaxSize",
-        "ArrayNotEmpty",
-        "IsArray",
-        "IsUUID",
-        "ValidateIf"
-      ],
-      "owner": "SYS-WORKFLOW",
-      "status": "current-contract",
-      "file": "server/src/notifications/dto/admin-send-notification.dto.ts",
-      "line": 25
+      "line": 8
     },
     {
       "dto": "UpsertGroupDto",
@@ -8171,28 +8247,33 @@
       "line": 15
     },
     {
-      "dto": "ArchiveChatDto",
-      "field": "archived",
-      "type": "boolean",
-      "decorators": [
-        "IsBoolean"
-      ],
-      "owner": "SYS-PLATFORM",
-      "status": "current-contract",
-      "file": "server/src/messenger/dto/archive-chat.dto.ts",
-      "line": 6
-    },
-    {
       "dto": "UpdateDeletionRequestDto",
-      "field": "status",
-      "type": "Exclude<AccountDeletionStatus, 'pending'>",
+      "field": "resolutionNote",
+      "type": "string",
       "decorators": [
-        "IsIn"
+        "IsOptional",
+        "IsString",
+        "MaxLength"
       ],
       "owner": "SYS-ACCESS",
       "status": "current-contract",
       "file": "server/src/legal/dto/update-deletion-request.dto.ts",
-      "line": 6
+      "line": 11
+    },
+    {
+      "dto": "ListDeletionRequestsQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Min",
+        "Transform"
+      ],
+      "owner": "SYS-ACCESS",
+      "status": "current-contract",
+      "file": "server/src/legal/dto/list-deletion-requests.query.ts",
+      "line": 14
     },
     {
       "dto": "UpsertLeadDto",
@@ -8657,20 +8738,6 @@
       "line": 82
     },
     {
-      "dto": "UpdateDeletionRequestDto",
-      "field": "resolutionNote",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-ACCESS",
-      "status": "current-contract",
-      "file": "server/src/legal/dto/update-deletion-request.dto.ts",
-      "line": 11
-    },
-    {
       "dto": "UpsertLessonDto",
       "field": "clientChargeValue",
       "type": "number",
@@ -8686,6 +8753,19 @@
     },
     {
       "dto": "UpsertLessonDto",
+      "field": "teacherCompensationType",
+      "type": "\"fixed\" | \"hourly\" | \"none\"",
+      "decorators": [
+        "IsIn",
+        "IsOptional"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/upsert-lesson.dto.ts",
+      "line": 91
+    },
+    {
+      "dto": "UpsertLessonDto",
       "field": "teacherCompensationValue",
       "type": "number",
       "decorators": [
@@ -8697,6 +8777,32 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/upsert-lesson.dto.ts",
       "line": 96
+    },
+    {
+      "dto": "UpsertTaskDto",
+      "field": "entityId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/upsert-task.dto.ts",
+      "line": 18
+    },
+    {
+      "dto": "UpsertTaskDto",
+      "field": "assignedTo",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/upsert-task.dto.ts",
+      "line": 22
     },
     {
       "dto": "UpsertTaskDto",
@@ -8779,19 +8885,6 @@
       "line": 49
     },
     {
-      "dto": "UpsertTaskDto",
-      "field": "assignedTo",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-WORKFLOW",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/upsert-task.dto.ts",
-      "line": 22
-    },
-    {
       "dto": "UploadFileDto",
       "field": "purpose",
       "type": "FilePurpose",
@@ -8802,6 +8895,19 @@
       "status": "current-contract",
       "file": "server/src/files/dto/upload-file.dto.ts",
       "line": 13
+    },
+    {
+      "dto": "UploadFileDto",
+      "field": "ownerType",
+      "type": "string",
+      "decorators": [
+        "IsIn",
+        "IsOptional"
+      ],
+      "owner": "SYS-PLATFORM",
+      "status": "current-contract",
+      "file": "server/src/files/dto/upload-file.dto.ts",
+      "line": 17
     },
     {
       "dto": "UploadFileDto",
@@ -8871,47 +8977,6 @@
       "line": 8
     },
     {
-      "dto": "ListDeletionRequestsQuery",
-      "field": "limit",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Min",
-        "Transform"
-      ],
-      "owner": "SYS-ACCESS",
-      "status": "current-contract",
-      "file": "server/src/legal/dto/list-deletion-requests.query.ts",
-      "line": 14
-    },
-    {
-      "dto": "UploadFileDto",
-      "field": "ownerType",
-      "type": "string",
-      "decorators": [
-        "IsIn",
-        "IsOptional"
-      ],
-      "owner": "SYS-PLATFORM",
-      "status": "current-contract",
-      "file": "server/src/files/dto/upload-file.dto.ts",
-      "line": 17
-    },
-    {
-      "dto": "UpsertTaskDto",
-      "field": "entityId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-WORKFLOW",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/upsert-task.dto.ts",
-      "line": 18
-    },
-    {
       "dto": "UpsertTaskDto",
       "field": "entityType",
       "type": "string",
@@ -8925,6 +8990,18 @@
       "line": 14
     },
     {
+      "dto": "UpdateDeletionRequestDto",
+      "field": "status",
+      "type": "Exclude<AccountDeletionStatus, 'pending'>",
+      "decorators": [
+        "IsIn"
+      ],
+      "owner": "SYS-ACCESS",
+      "status": "current-contract",
+      "file": "server/src/legal/dto/update-deletion-request.dto.ts",
+      "line": 6
+    },
+    {
       "dto": "UpsertSubscriptionPackageDto",
       "field": "sortOrder",
       "type": "number",
@@ -8936,7 +9013,21 @@
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
-      "line": 51
+      "line": 71
+    },
+    {
+      "dto": "UpsertSubscriptionPackageDto",
+      "field": "currencyCode",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "Matches"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
+      "line": 60
     },
     {
       "dto": "UpsertLessonDto",
@@ -9054,18 +9145,19 @@
       "field": "name",
       "type": "string",
       "decorators": [
+        "IsNotEmpty",
         "IsString",
         "MaxLength"
       ],
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
-      "line": 16
+      "line": 18
     },
     {
       "dto": "UpsertSubscriptionPackageDto",
       "field": "disciplineId",
-      "type": "string",
+      "type": "string | null",
       "decorators": [
         "IsOptional",
         "IsUUID"
@@ -9073,12 +9165,12 @@
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
-      "line": 20
+      "line": 22
     },
     {
       "dto": "UpsertSubscriptionPackageDto",
       "field": "branchId",
-      "type": "string",
+      "type": "string | null",
       "decorators": [
         "IsOptional",
         "IsUUID"
@@ -9086,7 +9178,7 @@
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
-      "line": 24
+      "line": 26
     },
     {
       "dto": "UpsertSubscriptionPackageDto",
@@ -9094,13 +9186,29 @@
       "type": "number",
       "decorators": [
         "IsNumber",
+        "IsOptional",
         "Min",
         "Type"
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
       "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
-      "line": 31
+      "line": 34
+    },
+    {
+      "dto": "UpsertSubscriptionPackageDto",
+      "field": "unitCount",
+      "type": "number",
+      "decorators": [
+        "IsNumber",
+        "IsOptional",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
+      "line": 40
     },
     {
       "dto": "UpsertSubscriptionPackageDto",
@@ -9108,18 +9216,33 @@
       "type": "number",
       "decorators": [
         "IsNumber",
+        "IsOptional",
         "Min",
         "Type"
       ],
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
-      "line": 36
+      "line": 50
+    },
+    {
+      "dto": "UpsertSubscriptionPackageDto",
+      "field": "basePriceMinor",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "Matches"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
+      "line": 55
     },
     {
       "dto": "UpsertSubscriptionPackageDto",
       "field": "validityDays",
-      "type": "number",
+      "type": "number | null",
       "decorators": [
         "IsInt",
         "IsOptional",
@@ -9129,92 +9252,47 @@
       "owner": "SYS-COMMERCE",
       "status": "current-contract",
       "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
-      "line": 42
-    },
-    {
-      "dto": "UpsertSubscriptionPackageDto",
-      "field": "isActive",
-      "type": "boolean",
-      "decorators": [
-        "IsBoolean",
-        "IsOptional"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/upsert-subscription-package.dto.ts",
-      "line": 46
-    },
-    {
-      "dto": "UpsertLessonDto",
-      "field": "teacherCompensationType",
-      "type": "\"fixed\" | \"hourly\" | \"none\"",
-      "decorators": [
-        "IsIn",
-        "IsOptional"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/upsert-lesson.dto.ts",
-      "line": 91
-    },
-    {
-      "dto": "CrmCustomFieldDefinitionDto",
-      "field": "options",
-      "type": "string[]",
-      "decorators": [
-        "ArrayMaxSize",
-        "IsArray",
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/settings/dto/update-crm-custom-fields.dto.ts",
-      "line": 61
+      "line": 66
     },
     {
       "dto": "UpdateScheduleSeriesDto",
-      "field": "weekday",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 129
-    },
-    {
-      "dto": "UpdateScheduleSeriesDto",
-      "field": "teacherId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 118
-    },
-    {
-      "dto": "ClientRefSearchQuery",
-      "field": "q",
+      "field": "notes",
       "type": "string",
       "decorators": [
         "IsOptional",
         "IsString",
         "MaxLength"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/client-ref.dto.ts",
-      "line": 33
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 154
+    },
+    {
+      "dto": "UpdateScheduleSeriesDto",
+      "field": "effectiveFrom",
+      "type": "string",
+      "decorators": [
+        "IsDateString",
+        "IsOptional"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 149
+    },
+    {
+      "dto": "UpdateScheduleSeriesDto",
+      "field": "validUntil",
+      "type": "string | null",
+      "decorators": [
+        "IsDateString",
+        "IsOptional"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 144
     },
     {
       "dto": "ClientRefSearchQuery",
@@ -9286,18 +9364,6 @@
       "line": 19
     },
     {
-      "dto": "ClientRefDto",
-      "field": "id",
-      "type": "string",
-      "decorators": [
-        "IsUUID"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/client-ref.dto.ts",
-      "line": 26
-    },
-    {
       "dto": "CommentQuery",
       "field": "progressOnly",
       "type": "boolean",
@@ -9312,18 +9378,31 @@
       "line": 24
     },
     {
-      "dto": "CommentQuery",
-      "field": "includeLessonComments",
-      "type": "boolean",
+      "dto": "ClientRefSearchQuery",
+      "field": "q",
+      "type": "string",
       "decorators": [
-        "IsBoolean",
         "IsOptional",
-        "Transform"
+        "IsString",
+        "MaxLength"
       ],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/client-ref.dto.ts",
+      "line": 33
+    },
+    {
+      "dto": "CommentQuery",
+      "field": "kind",
+      "type": "string",
+      "decorators": [
+        "IsIn",
+        "IsOptional"
+      ],
+      "owner": "SYS-CRM",
       "status": "current-contract",
       "file": "server/src/crm/dto/comment.query.ts",
-      "line": 49
+      "line": 30
     },
     {
       "dto": "CommentQuery",
@@ -9395,17 +9474,44 @@
       "line": 31
     },
     {
-      "dto": "CommentQuery",
-      "field": "kind",
+      "dto": "CreateAdjustmentDto",
+      "field": "method",
       "type": "string",
       "decorators": [
-        "IsIn",
-        "IsOptional"
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-adjustment.dto.ts",
+      "line": 36
+    },
+    {
+      "dto": "CommentQuery",
+      "field": "includeLessonComments",
+      "type": "boolean",
+      "decorators": [
+        "IsBoolean",
+        "IsOptional",
+        "Transform"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/comment.query.ts",
+      "line": 49
+    },
+    {
+      "dto": "ClientRefDto",
+      "field": "id",
+      "type": "string",
+      "decorators": [
+        "IsUUID"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/comment.query.ts",
-      "line": 30
+      "file": "server/src/crm/dto/client-ref.dto.ts",
+      "line": 26
     },
     {
       "dto": "ClientRefDto",
@@ -9434,32 +9540,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/client-config.dto.ts",
       "line": 199
-    },
-    {
-      "dto": "StrictCreateStudentDto",
-      "field": "status",
-      "type": "string",
-      "decorators": [
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/client-config.dto.ts",
-      "line": 192
-    },
-    {
-      "dto": "UpdateClientCustomFieldDto",
-      "field": "valueType",
-      "type": "ClientCustomValueType",
-      "decorators": [
-        "IsIn",
-        "IsOptional"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/client-config.dto.ts",
-      "line": 124
     },
     {
       "dto": "UpdateClientCustomFieldDto",
@@ -9646,32 +9726,17 @@
       "line": 188
     },
     {
-      "dto": "CreateAdjustmentDto",
-      "field": "method",
+      "dto": "StrictCreateStudentDto",
+      "field": "status",
       "type": "string",
       "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-adjustment.dto.ts",
-      "line": 36
-    },
-    {
-      "dto": "UpdateClientCustomFieldDto",
-      "field": "label",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
         "IsString",
         "MaxLength"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
       "file": "server/src/crm/dto/client-config.dto.ts",
-      "line": 120
+      "line": 192
     },
     {
       "dto": "CreateAdjustmentDto",
@@ -9688,6 +9753,20 @@
     },
     {
       "dto": "CreateAdjustmentDto",
+      "field": "invoiceNumber",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-adjustment.dto.ts",
+      "line": 46
+    },
+    {
+      "dto": "CreateAdjustmentDto",
       "field": "status",
       "type": "'paid' | 'pending'",
       "decorators": [
@@ -9700,17 +9779,19 @@
       "line": 53
     },
     {
-      "dto": "CreateHomeworkDto",
-      "field": "studentId",
-      "type": "string",
+      "dto": "UpdateAdjustmentDto",
+      "field": "amount",
+      "type": "number",
       "decorators": [
+        "IsNumber",
         "IsOptional",
-        "IsUUID"
+        "IsPositive",
+        "Type"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-COMMERCE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/create-homework.dto.ts",
-      "line": 12
+      "file": "server/src/crm/dto/create-adjustment.dto.ts",
+      "line": 66
     },
     {
       "dto": "CreateHomeworkDto",
@@ -9779,19 +9860,6 @@
       "line": 33
     },
     {
-      "dto": "CreateFamilyDto",
-      "field": "branchId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-family.dto.ts",
-      "line": 11
-    },
-    {
       "dto": "CreateLossReasonDto",
       "field": "name",
       "type": "string",
@@ -9803,6 +9871,19 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/create-loss-reason.dto.ts",
       "line": 6
+    },
+    {
+      "dto": "CreateLossReasonDto",
+      "field": "kind",
+      "type": "\"lost\" | \"paused\"",
+      "decorators": [
+        "IsIn",
+        "IsOptional"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-loss-reason.dto.ts",
+      "line": 10
     },
     {
       "dto": "CreateLossReasonDto",
@@ -9884,31 +9965,71 @@
       "line": 23
     },
     {
-      "dto": "CreateLossReasonDto",
-      "field": "kind",
-      "type": "\"lost\" | \"paused\"",
-      "decorators": [
-        "IsIn",
-        "IsOptional"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-loss-reason.dto.ts",
-      "line": 10
-    },
-    {
-      "dto": "CreateFamilyDto",
-      "field": "name",
+      "dto": "CreatePaymentDto",
+      "field": "externalId",
       "type": "string",
       "decorators": [
         "IsOptional",
         "IsString",
         "MaxLength"
       ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-payment.dto.ts",
+      "line": 28
+    },
+    {
+      "dto": "CreatePaymentDto",
+      "field": "notes",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-payment.dto.ts",
+      "line": 33
+    },
+    {
+      "dto": "CreateHomeworkDto",
+      "field": "studentId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-homework.dto.ts",
+      "line": 12
+    },
+    {
+      "dto": "UpdateClientCustomFieldDto",
+      "field": "valueType",
+      "type": "ClientCustomValueType",
+      "decorators": [
+        "IsIn",
+        "IsOptional"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/client-config.dto.ts",
+      "line": 124
+    },
+    {
+      "dto": "CreateFamilyDto",
+      "field": "branchId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
       "owner": "SYS-CRM",
       "status": "current-contract",
       "file": "server/src/crm/dto/create-family.dto.ts",
-      "line": 7
+      "line": 11
     },
     {
       "dto": "CreateDisciplineDto",
@@ -9922,34 +10043,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/create-discipline.dto.ts",
       "line": 6
-    },
-    {
-      "dto": "CreateCommentDto",
-      "field": "progress",
-      "type": "boolean",
-      "decorators": [
-        "IsBoolean",
-        "IsOptional"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-comment.dto.ts",
-      "line": 23
-    },
-    {
-      "dto": "UpdateAdjustmentDto",
-      "field": "amount",
-      "type": "number",
-      "decorators": [
-        "IsNumber",
-        "IsOptional",
-        "IsPositive",
-        "Type"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-adjustment.dto.ts",
-      "line": 66
     },
     {
       "dto": "UpdateAdjustmentDto",
@@ -10139,50 +10232,8 @@
       "line": 18
     },
     {
-      "dto": "CreateAdjustmentDto",
-      "field": "invoiceNumber",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-adjustment.dto.ts",
-      "line": 46
-    },
-    {
-      "dto": "CreatePaymentDto",
-      "field": "externalId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-payment.dto.ts",
-      "line": 28
-    },
-    {
-      "dto": "UpdateClientCustomFieldDto",
-      "field": "expectedVersion",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/client-config.dto.ts",
-      "line": 115
-    },
-    {
-      "dto": "CreateClientCustomFieldDto",
-      "field": "required",
+      "dto": "CreateCommentDto",
+      "field": "progress",
       "type": "boolean",
       "decorators": [
         "IsBoolean",
@@ -10190,8 +10241,65 @@
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
+      "file": "server/src/crm/dto/create-comment.dto.ts",
+      "line": 23
+    },
+    {
+      "dto": "CreateFamilyDto",
+      "field": "name",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-family.dto.ts",
+      "line": 7
+    },
+    {
+      "dto": "CreatePaymentDto",
+      "field": "lessonId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-payment.dto.ts",
+      "line": 42
+    },
+    {
+      "dto": "UpdateClientCustomFieldDto",
+      "field": "label",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
       "file": "server/src/crm/dto/client-config.dto.ts",
-      "line": 101
+      "line": 120
+    },
+    {
+      "dto": "CreateClientCustomFieldDto",
+      "field": "options",
+      "type": "string[]",
+      "decorators": [
+        "ArrayMaxSize",
+        "IsArray",
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/client-config.dto.ts",
+      "line": 108
     },
     {
       "dto": "LoginDto",
@@ -10640,22 +10748,6 @@
       "line": 17
     },
     {
-      "dto": "CreateClientCustomFieldDto",
-      "field": "options",
-      "type": "string[]",
-      "decorators": [
-        "ArrayMaxSize",
-        "IsArray",
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/client-config.dto.ts",
-      "line": 108
-    },
-    {
       "dto": "ActivityLogQuery",
       "field": "actorUserId",
       "type": "string",
@@ -10667,6 +10759,20 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/activity-log.query.ts",
       "line": 21
+    },
+    {
+      "dto": "ActivityLogQuery",
+      "field": "entityType",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/activity-log.query.ts",
+      "line": 26
     },
     {
       "dto": "ActivityLogQuery",
@@ -10765,18 +10871,6 @@
       "line": 60
     },
     {
-      "dto": "ArchiveConvertedLeadDto",
-      "field": "confirm",
-      "type": "true",
-      "decorators": [
-        "Equals"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/client-archive.dto.ts",
-      "line": 36
-    },
-    {
       "dto": "UpdateLeadSourceDto",
       "field": "expectedVersion",
       "type": "number",
@@ -10789,6 +10883,20 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/client-config.dto.ts",
       "line": 67
+    },
+    {
+      "dto": "UpdateLeadSourceDto",
+      "field": "canonicalName",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "Matches"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/client-config.dto.ts",
+      "line": 72
     },
     {
       "dto": "UpdateLeadSourceDto",
@@ -10868,18 +10976,43 @@
       "line": 97
     },
     {
-      "dto": "UpdateLeadSourceDto",
-      "field": "canonicalName",
-      "type": "string",
+      "dto": "CreateClientCustomFieldDto",
+      "field": "required",
+      "type": "boolean",
       "decorators": [
-        "IsOptional",
-        "IsString",
-        "Matches"
+        "IsBoolean",
+        "IsOptional"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
       "file": "server/src/crm/dto/client-config.dto.ts",
-      "line": 72
+      "line": 101
+    },
+    {
+      "dto": "ArchiveConvertedLeadDto",
+      "field": "confirm",
+      "type": "true",
+      "decorators": [
+        "Equals"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/client-archive.dto.ts",
+      "line": 36
+    },
+    {
+      "dto": "UpdateClientCustomFieldDto",
+      "field": "expectedVersion",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/client-config.dto.ts",
+      "line": 115
     },
     {
       "dto": "ArchiveConvertedLeadDto",
@@ -10894,20 +11027,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/client-archive.dto.ts",
       "line": 33
-    },
-    {
-      "dto": "ArchiveClientCommandDto",
-      "field": "reason",
-      "type": "string",
-      "decorators": [
-        "IsString",
-        "Matches",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/client-archive.dto.ts",
-      "line": 26
     },
     {
       "dto": "ArchiveClientCommandDto",
@@ -11123,45 +11242,18 @@
       "line": 18
     },
     {
-      "dto": "ActivityLogQuery",
-      "field": "entityType",
+      "dto": "ArchiveClientCommandDto",
+      "field": "reason",
       "type": "string",
       "decorators": [
-        "IsOptional",
         "IsString",
+        "Matches",
         "MaxLength"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/activity-log.query.ts",
+      "file": "server/src/crm/dto/client-archive.dto.ts",
       "line": 26
-    },
-    {
-      "dto": "UpdateScheduleSeriesDto",
-      "field": "roomId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 122
-    },
-    {
-      "dto": "CreatePaymentDto",
-      "field": "notes",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-payment.dto.ts",
-      "line": 33
     },
     {
       "dto": "CreateStaffDto",
@@ -11177,62 +11269,30 @@
       "line": 12
     },
     {
-      "dto": "PaymentQuery",
-      "field": "from",
+      "dto": "CreateStaffDto",
+      "field": "lastName",
       "type": "string",
       "decorators": [
-        "IsDateString",
-        "IsOptional"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/payment.query.ts",
-      "line": 18
-    },
-    {
-      "dto": "PaymentQuery",
-      "field": "to",
-      "type": "string",
-      "decorators": [
-        "IsDateString",
-        "IsOptional"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/payment.query.ts",
-      "line": 22
-    },
-    {
-      "dto": "PaymentQuery",
-      "field": "limit",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/payment.query.ts",
-      "line": 29
-    },
-    {
-      "dto": "QueueLimitQuery",
-      "field": "limit",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
+        "IsString",
+        "MaxLength"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/queue-limit.query.ts",
-      "line": 12
+      "file": "server/src/crm/dto/create-staff.dto.ts",
+      "line": 16
+    },
+    {
+      "dto": "CreateStaffDto",
+      "field": "email",
+      "type": "string",
+      "decorators": [
+        "IsEmail",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-staff.dto.ts",
+      "line": 20
     },
     {
       "dto": "ReorderBranchDisciplinesDto",
@@ -11263,19 +11323,6 @@
       "line": 15
     },
     {
-      "dto": "PaymentQuery",
-      "field": "studentId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/payment.query.ts",
-      "line": 14
-    },
-    {
       "dto": "ReportQuery",
       "field": "from",
       "type": "string",
@@ -11287,6 +11334,19 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/report.query.ts",
       "line": 6
+    },
+    {
+      "dto": "ReportQuery",
+      "field": "to",
+      "type": "string",
+      "decorators": [
+        "IsDateString",
+        "IsOptional"
+      ],
+      "owner": "SYS-REPORTING",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/report.query.ts",
+      "line": 10
     },
     {
       "dto": "RoomAvailabilityQuery",
@@ -11315,6 +11375,22 @@
       "line": 18
     },
     {
+      "dto": "QueueLimitQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/queue-limit.query.ts",
+      "line": 12
+    },
+    {
       "dto": "RoomAvailabilityQuery",
       "field": "teacherId",
       "type": "string",
@@ -11326,19 +11402,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/room-availability.query.ts",
       "line": 22
-    },
-    {
-      "dto": "RoomAvailabilityQuery",
-      "field": "date",
-      "type": "string",
-      "decorators": [
-        "IsDateString",
-        "IsOptional"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/room-availability.query.ts",
-      "line": 26
     },
     {
       "dto": "RoomAvailabilityQuery",
@@ -11367,107 +11430,115 @@
       "line": 34
     },
     {
-      "dto": "ReportQuery",
-      "field": "to",
-      "type": "string",
+      "dto": "RoomAvailabilityQuery",
+      "field": "durationMinutes",
+      "type": "number",
       "decorators": [
-        "IsDateString",
-        "IsOptional"
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
       ],
-      "owner": "SYS-REPORTING",
+      "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/report.query.ts",
-      "line": 10
+      "file": "server/src/crm/dto/room-availability.query.ts",
+      "line": 41
     },
     {
-      "dto": "MarkSectionSeenDto",
-      "field": "section",
+      "dto": "RoomAvailabilityQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/room-availability.query.ts",
+      "line": 48
+    },
+    {
+      "dto": "SaveContactFromChatDto",
+      "field": "userId",
       "type": "string",
+      "decorators": [
+        "IsUUID"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/save-contact-from-chat.dto.ts",
+      "line": 5
+    },
+    {
+      "dto": "SaveContactFromChatDto",
+      "field": "as",
+      "type": "\"lead\" | \"student\"",
       "decorators": [
         "IsIn"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/mark-section-seen.dto.ts",
-      "line": 10
+      "file": "server/src/crm/dto/save-contact-from-chat.dto.ts",
+      "line": 8
     },
     {
-      "dto": "ManagerDashboardQuery",
-      "field": "branchId",
+      "dto": "RoomAvailabilityQuery",
+      "field": "date",
       "type": "string",
       "decorators": [
-        "IsOptional",
-        "IsUUID"
+        "IsDateString",
+        "IsOptional"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/manager-dashboard.query.ts",
-      "line": 14
+      "file": "server/src/crm/dto/room-availability.query.ts",
+      "line": 26
     },
     {
-      "dto": "ManagerDashboardQuery",
+      "dto": "PaymentQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/payment.query.ts",
+      "line": 29
+    },
+    {
+      "dto": "PaymentQuery",
       "field": "to",
       "type": "string",
       "decorators": [
         "IsDateString",
         "IsOptional"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-COMMERCE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/manager-dashboard.query.ts",
-      "line": 10
+      "file": "server/src/crm/dto/payment.query.ts",
+      "line": 22
     },
     {
-      "dto": "LessonCancelPreviewDto",
-      "field": "reasonCode",
+      "dto": "PaymentQuery",
+      "field": "from",
       "type": "string",
       "decorators": [
-        "IsString",
-        "Matches"
+        "IsDateString",
+        "IsOptional"
       ],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-COMMERCE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/lesson-transition.dto.ts",
-      "line": 31
-    },
-    {
-      "dto": "LessonCancelPreviewDto",
-      "field": "reasonText",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lesson-transition.dto.ts",
-      "line": 36
-    },
-    {
-      "dto": "LessonCancelPreviewDto",
-      "field": "financialDecision",
-      "type": "LessonFinancialDecisionDto",
-      "decorators": [
-        "Type",
-        "ValidateNested"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lesson-transition.dto.ts",
-      "line": 40
-    },
-    {
-      "dto": "LessonCancelCommandDto",
-      "field": "confirm",
-      "type": "true",
-      "decorators": [
-        "Equals"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lesson-transition.dto.ts",
-      "line": 45
+      "file": "server/src/crm/dto/payment.query.ts",
+      "line": 18
     },
     {
       "dto": "LessonReschedulePreviewDto",
@@ -11615,66 +11686,59 @@
       "line": 6
     },
     {
-      "dto": "RoomAvailabilityQuery",
-      "field": "durationMinutes",
-      "type": "number",
+      "dto": "ManagerDashboardQuery",
+      "field": "to",
+      "type": "string",
       "decorators": [
-        "IsInt",
+        "IsDateString",
+        "IsOptional"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/manager-dashboard.query.ts",
+      "line": 10
+    },
+    {
+      "dto": "ManagerDashboardQuery",
+      "field": "branchId",
+      "type": "string",
+      "decorators": [
         "IsOptional",
-        "Max",
-        "Min",
-        "Type"
+        "IsUUID"
       ],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/room-availability.query.ts",
-      "line": 41
+      "file": "server/src/crm/dto/manager-dashboard.query.ts",
+      "line": 14
     },
     {
-      "dto": "LessonCancelPreviewDto",
-      "field": "expectedVersion",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lesson-transition.dto.ts",
-      "line": 27
-    },
-    {
-      "dto": "RoomAvailabilityQuery",
-      "field": "limit",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/room-availability.query.ts",
-      "line": 48
-    },
-    {
-      "dto": "SaveContactFromChatDto",
-      "field": "as",
-      "type": "\"lead\" | \"student\"",
+      "dto": "MarkSectionSeenDto",
+      "field": "section",
+      "type": "string",
       "decorators": [
         "IsIn"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/save-contact-from-chat.dto.ts",
-      "line": 8
+      "file": "server/src/crm/dto/mark-section-seen.dto.ts",
+      "line": 10
     },
     {
-      "dto": "CreateScheduleSeriesDto",
-      "field": "branchId",
+      "dto": "PaymentQuery",
+      "field": "studentId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/payment.query.ts",
+      "line": 14
+    },
+    {
+      "dto": "ScheduleConflictsQuery",
+      "field": "teacherId",
       "type": "string",
       "decorators": [
         "IsOptional",
@@ -11682,51 +11746,45 @@
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 49
+      "file": "server/src/crm/dto/schedule-conflicts.query.ts",
+      "line": 12
     },
     {
-      "dto": "CreateScheduleSeriesDto",
-      "field": "weekday",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 56
-    },
-    {
-      "dto": "CreateScheduleSeriesDto",
-      "field": "beginTime",
+      "dto": "ScheduleConflictsQuery",
+      "field": "roomId",
       "type": "string",
       "decorators": [
-        "Matches"
+        "IsOptional",
+        "IsUUID"
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 59
+      "file": "server/src/crm/dto/schedule-conflicts.query.ts",
+      "line": 16
     },
     {
-      "dto": "CreateScheduleSeriesDto",
-      "field": "durationMinutes",
-      "type": "number",
+      "dto": "ScheduleConflictsQuery",
+      "field": "startsAt",
+      "type": "string",
       "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
+        "IsDateString"
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 66
+      "file": "server/src/crm/dto/schedule-conflicts.query.ts",
+      "line": 19
+    },
+    {
+      "dto": "ScheduleConflictsQuery",
+      "field": "endsAt",
+      "type": "string",
+      "decorators": [
+        "IsDateString"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-conflicts.query.ts",
+      "line": 22
     },
     {
       "dto": "CreateScheduleSeriesDto",
@@ -11755,19 +11813,6 @@
     },
     {
       "dto": "CreateScheduleSeriesDto",
-      "field": "roomId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 45
-    },
-    {
-      "dto": "CreateScheduleSeriesDto",
       "field": "isTrial",
       "type": "boolean",
       "decorators": [
@@ -11778,6 +11823,20 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/schedule-series.dto.ts",
       "line": 78
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "completionType",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 83
     },
     {
       "dto": "CreateScheduleSeriesDto",
@@ -11861,21 +11920,7 @@
       "line": 110
     },
     {
-      "dto": "CreateScheduleSeriesDto",
-      "field": "completionType",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 83
-    },
-    {
-      "dto": "CreateScheduleSeriesDto",
+      "dto": "UpdateScheduleSeriesDto",
       "field": "teacherId",
       "type": "string",
       "decorators": [
@@ -11885,49 +11930,10 @@
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
       "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 41
+      "line": 118
     },
     {
-      "dto": "CreateScheduleSeriesDto",
-      "field": "groupId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 37
-    },
-    {
-      "dto": "CreateScheduleSeriesDto",
-      "field": "leadId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 33
-    },
-    {
-      "dto": "ScheduleConflictsQuery",
-      "field": "teacherId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-conflicts.query.ts",
-      "line": 12
-    },
-    {
-      "dto": "ScheduleConflictsQuery",
+      "dto": "UpdateScheduleSeriesDto",
       "field": "roomId",
       "type": "string",
       "decorators": [
@@ -11936,32 +11942,106 @@
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-conflicts.query.ts",
-      "line": 16
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 122
     },
     {
-      "dto": "ScheduleConflictsQuery",
-      "field": "startsAt",
-      "type": "string",
+      "dto": "UpdateScheduleSeriesDto",
+      "field": "weekday",
+      "type": "number",
       "decorators": [
-        "IsDateString"
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-conflicts.query.ts",
-      "line": 19
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 129
     },
     {
-      "dto": "ScheduleConflictsQuery",
-      "field": "endsAt",
+      "dto": "UpdateScheduleSeriesDto",
+      "field": "beginTime",
       "type": "string",
       "decorators": [
-        "IsDateString"
+        "IsOptional",
+        "Matches"
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-conflicts.query.ts",
-      "line": 22
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 133
+    },
+    {
+      "dto": "UpdateScheduleSeriesDto",
+      "field": "durationMinutes",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 140
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "durationMinutes",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 66
+    },
+    {
+      "dto": "LessonCancelCommandDto",
+      "field": "confirm",
+      "type": "true",
+      "decorators": [
+        "Equals"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lesson-transition.dto.ts",
+      "line": 45
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "beginTime",
+      "type": "string",
+      "decorators": [
+        "Matches"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 59
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "branchId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 49
     },
     {
       "dto": "ScheduleConflictsQuery",
@@ -12112,20 +12192,8 @@
       "line": 29
     },
     {
-      "dto": "SaveContactFromChatDto",
-      "field": "userId",
-      "type": "string",
-      "decorators": [
-        "IsUUID"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/save-contact-from-chat.dto.ts",
-      "line": 5
-    },
-    {
-      "dto": "CreatePaymentDto",
-      "field": "lessonId",
+      "dto": "CreateScheduleSeriesDto",
+      "field": "leadId",
       "type": "string",
       "decorators": [
         "IsOptional",
@@ -12133,61 +12201,101 @@
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/create-payment.dto.ts",
-      "line": 42
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 33
     },
     {
-      "dto": "LessonFinancialDecisionDto",
-      "field": "compensateTeacher",
-      "type": "boolean",
+      "dto": "CreateScheduleSeriesDto",
+      "field": "groupId",
+      "type": "string",
       "decorators": [
-        "IsBoolean"
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 37
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "teacherId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 41
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "roomId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 45
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "weekday",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 56
+    },
+    {
+      "dto": "LessonCancelPreviewDto",
+      "field": "financialDecision",
+      "type": "LessonFinancialDecisionDto",
+      "decorators": [
+        "Type",
+        "ValidateNested"
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
       "file": "server/src/crm/dto/lesson-transition.dto.ts",
-      "line": 20
+      "line": 40
     },
     {
-      "dto": "LeadWebhookDto",
-      "field": "comment",
+      "dto": "LessonCancelPreviewDto",
+      "field": "reasonText",
       "type": "string",
       "decorators": [
         "IsOptional",
         "IsString",
         "MaxLength"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/lead-webhook.dto.ts",
-      "line": 17
+      "file": "server/src/crm/dto/lesson-transition.dto.ts",
+      "line": 36
     },
     {
-      "dto": "CreateTeacherDto",
-      "field": "specialization",
+      "dto": "LessonCancelPreviewDto",
+      "field": "reasonCode",
       "type": "string",
       "decorators": [
-        "IsOptional",
         "IsString",
-        "MaxLength"
+        "Matches"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/create-teacher.dto.ts",
-      "line": 26
-    },
-    {
-      "dto": "CreateTeacherDto",
-      "field": "status",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-teacher.dto.ts",
+      "file": "server/src/crm/dto/lesson-transition.dto.ts",
       "line": 31
     },
     {
@@ -12244,20 +12352,6 @@
       "line": 37
     },
     {
-      "dto": "CreateTeacherDto",
-      "field": "email",
-      "type": "string",
-      "decorators": [
-        "IsEmail",
-        "IsOptional",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-teacher.dto.ts",
-      "line": 21
-    },
-    {
       "dto": "CrmListQuery",
       "field": "q",
       "type": "string",
@@ -12270,6 +12364,19 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/crm-list.query.ts",
       "line": 17
+    },
+    {
+      "dto": "CrmListQuery",
+      "field": "studentId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/crm-list.query.ts",
+      "line": 21
     },
     {
       "dto": "CrmListQuery",
@@ -12353,17 +12460,87 @@
       "line": 11
     },
     {
-      "dto": "CrmListQuery",
-      "field": "studentId",
+      "dto": "DuplicateCandidatesQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/duplicate-candidates.query.ts",
+      "line": 18
+    },
+    {
+      "dto": "DuplicateDecisionDto",
+      "field": "status",
+      "type": "\"not_duplicate\" | \"attached\" | \"merged\" | \"ignored\"",
+      "decorators": [
+        "IsIn"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/duplicate-decision.dto.ts",
+      "line": 5
+    },
+    {
+      "dto": "DuplicateDecisionDto",
+      "field": "notes",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/duplicate-decision.dto.ts",
+      "line": 10
+    },
+    {
+      "dto": "CreateTeacherDto",
+      "field": "status",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-teacher.dto.ts",
+      "line": 31
+    },
+    {
+      "dto": "ExpenseQuery",
+      "field": "branchId",
       "type": "string",
       "decorators": [
         "IsOptional",
         "IsUUID"
       ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/expense.query.ts",
+      "line": 16
+    },
+    {
+      "dto": "CreateTeacherDto",
+      "field": "specialization",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/crm-list.query.ts",
-      "line": 21
+      "file": "server/src/crm/dto/create-teacher.dto.ts",
+      "line": 26
     },
     {
       "dto": "CreateTeacherDto",
@@ -12378,59 +12555,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/create-teacher.dto.ts",
       "line": 16
-    },
-    {
-      "dto": "CreateTeacherDto",
-      "field": "lastName",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-teacher.dto.ts",
-      "line": 11
-    },
-    {
-      "dto": "CreateTeacherDto",
-      "field": "firstName",
-      "type": "string",
-      "decorators": [
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-teacher.dto.ts",
-      "line": 6
-    },
-    {
-      "dto": "CreateStaffDto",
-      "field": "lastName",
-      "type": "string",
-      "decorators": [
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-staff.dto.ts",
-      "line": 16
-    },
-    {
-      "dto": "CreateStaffDto",
-      "field": "email",
-      "type": "string",
-      "decorators": [
-        "IsEmail",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/create-staff.dto.ts",
-      "line": 20
     },
     {
       "dto": "CreateStaffDto",
@@ -12607,60 +12731,64 @@
       "line": 30
     },
     {
-      "dto": "DuplicateCandidatesQuery",
-      "field": "limit",
-      "type": "number",
+      "dto": "CreateTeacherDto",
+      "field": "firstName",
+      "type": "string",
       "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
+        "IsString",
+        "MaxLength"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/duplicate-candidates.query.ts",
-      "line": 18
+      "file": "server/src/crm/dto/create-teacher.dto.ts",
+      "line": 6
     },
     {
-      "dto": "LessonFinancialDecisionDto",
-      "field": "chargeClient",
-      "type": "boolean",
-      "decorators": [
-        "IsBoolean"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lesson-transition.dto.ts",
-      "line": 17
-    },
-    {
-      "dto": "DuplicateDecisionDto",
-      "field": "status",
-      "type": "\"not_duplicate\" | \"attached\" | \"merged\" | \"ignored\"",
-      "decorators": [
-        "IsIn"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/duplicate-decision.dto.ts",
-      "line": 5
-    },
-    {
-      "dto": "ExpenseQuery",
-      "field": "branchId",
+      "dto": "CreateTeacherDto",
+      "field": "lastName",
       "type": "string",
       "decorators": [
         "IsOptional",
-        "IsUUID"
+        "IsString",
+        "MaxLength"
       ],
-      "owner": "SYS-COMMERCE",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/expense.query.ts",
-      "line": 16
+      "file": "server/src/crm/dto/create-teacher.dto.ts",
+      "line": 11
     },
     {
-      "dto": "LeadBoardQuery",
+      "dto": "CreateTeacherDto",
+      "field": "email",
+      "type": "string",
+      "decorators": [
+        "IsEmail",
+        "IsOptional",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-teacher.dto.ts",
+      "line": 21
+    },
+    {
+      "dto": "CrmCustomFieldDefinitionDto",
+      "field": "options",
+      "type": "string[]",
+      "decorators": [
+        "ArrayMaxSize",
+        "IsArray",
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/settings/dto/update-crm-custom-fields.dto.ts",
+      "line": 61
+    },
+    {
+      "dto": "ExpenseQuery",
       "field": "category",
       "type": "string",
       "decorators": [
@@ -12668,38 +12796,23 @@
         "IsString",
         "MaxLength"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-COMMERCE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/lead-board.query.ts",
-      "line": 82
+      "file": "server/src/crm/dto/expense.query.ts",
+      "line": 21
     },
     {
-      "dto": "LeadBoardQuery",
-      "field": "requestType",
+      "dto": "ExpenseQuery",
+      "field": "to",
       "type": "string",
       "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
+        "IsISO8601",
+        "IsOptional"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-COMMERCE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/lead-board.query.ts",
-      "line": 87
-    },
-    {
-      "dto": "LeadBoardQuery",
-      "field": "goal",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lead-board.query.ts",
-      "line": 92
+      "file": "server/src/crm/dto/expense.query.ts",
+      "line": 29
     },
     {
       "dto": "LeadBoardQuery",
@@ -12744,20 +12857,6 @@
     },
     {
       "dto": "LeadBoardQuery",
-      "field": "level",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lead-board.query.ts",
-      "line": 77
-    },
-    {
-      "dto": "LeadBoardQuery",
       "field": "to",
       "type": "string",
       "decorators": [
@@ -12768,6 +12867,19 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/lead-board.query.ts",
       "line": 110
+    },
+    {
+      "dto": "LeadBoardQuery",
+      "field": "quick",
+      "type": "\"all\" | \"active\" | \"processed\" | \"deferred\" | \"new\"",
+      "decorators": [
+        "IsIn",
+        "IsOptional"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lead-board.query.ts",
+      "line": 114
     },
     {
       "dto": "LeadBoardQuery",
@@ -12856,21 +12968,60 @@
       "line": 12
     },
     {
-      "dto": "LeadBoardQuery",
-      "field": "quick",
-      "type": "\"all\" | \"active\" | \"processed\" | \"deferred\" | \"new\"",
+      "dto": "LeadWebhookDto",
+      "field": "comment",
+      "type": "string",
       "decorators": [
-        "IsIn",
-        "IsOptional"
+        "IsOptional",
+        "IsString",
+        "MaxLength"
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/lead-board.query.ts",
-      "line": 114
+      "file": "server/src/crm/dto/lead-webhook.dto.ts",
+      "line": 17
+    },
+    {
+      "dto": "LessonFinancialDecisionDto",
+      "field": "chargeClient",
+      "type": "boolean",
+      "decorators": [
+        "IsBoolean"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lesson-transition.dto.ts",
+      "line": 17
+    },
+    {
+      "dto": "LessonFinancialDecisionDto",
+      "field": "compensateTeacher",
+      "type": "boolean",
+      "decorators": [
+        "IsBoolean"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lesson-transition.dto.ts",
+      "line": 20
+    },
+    {
+      "dto": "LessonCancelPreviewDto",
+      "field": "expectedVersion",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lesson-transition.dto.ts",
+      "line": 27
     },
     {
       "dto": "LeadBoardQuery",
-      "field": "discipline",
+      "field": "goal",
       "type": "string",
       "decorators": [
         "IsOptional",
@@ -12880,48 +13031,7 @@
       "owner": "SYS-CRM",
       "status": "current-contract",
       "file": "server/src/crm/dto/lead-board.query.ts",
-      "line": 72
-    },
-    {
-      "dto": "LeadBoardQuery",
-      "field": "source",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lead-board.query.ts",
-      "line": 67
-    },
-    {
-      "dto": "LeadBoardQuery",
-      "field": "assignedTo",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lead-board.query.ts",
-      "line": 62
-    },
-    {
-      "dto": "ExpenseQuery",
-      "field": "category",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/expense.query.ts",
-      "line": 21
+      "line": 92
     },
     {
       "dto": "ExpenseQuery",
@@ -12937,17 +13047,32 @@
       "line": 25
     },
     {
-      "dto": "ExpenseQuery",
-      "field": "to",
+      "dto": "LeadBoardQuery",
+      "field": "requestType",
       "type": "string",
       "decorators": [
-        "IsISO8601",
-        "IsOptional"
+        "IsOptional",
+        "IsString",
+        "MaxLength"
       ],
-      "owner": "SYS-COMMERCE",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/expense.query.ts",
-      "line": 29
+      "file": "server/src/crm/dto/lead-board.query.ts",
+      "line": 87
+    },
+    {
+      "dto": "LeadBoardQuery",
+      "field": "level",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lead-board.query.ts",
+      "line": 77
     },
     {
       "dto": "ExpenseQuery",
@@ -13113,8 +13238,21 @@
       "line": 58
     },
     {
-      "dto": "DuplicateDecisionDto",
-      "field": "notes",
+      "dto": "LeadBoardQuery",
+      "field": "assignedTo",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lead-board.query.ts",
+      "line": 62
+    },
+    {
+      "dto": "LeadBoardQuery",
+      "field": "source",
       "type": "string",
       "decorators": [
         "IsOptional",
@@ -13123,8 +13261,36 @@
       ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/duplicate-decision.dto.ts",
-      "line": 10
+      "file": "server/src/crm/dto/lead-board.query.ts",
+      "line": 67
+    },
+    {
+      "dto": "LeadBoardQuery",
+      "field": "discipline",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lead-board.query.ts",
+      "line": 72
+    },
+    {
+      "dto": "LeadBoardQuery",
+      "field": "category",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lead-board.query.ts",
+      "line": 82
     },
     {
       "dto": "UpdateCrmCustomFieldsDto",
@@ -13150,14 +13316,6 @@
       "status": "legacy-review-required",
       "file": "lib/core/router/app_router.dart",
       "line": 203
-    },
-    {
-      "kind": "role-check",
-      "expression": "6 when _hasManagerAccess => const TasksWidget(),",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 270
     },
     {
       "kind": "role-check",
@@ -13233,99 +13391,11 @@
     },
     {
       "kind": "role-check",
-      "expression": "7 when isDesktop && _hasManagerAccess => ReportsWidget(",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 271
-    },
-    {
-      "kind": "role-check",
       "expression": "profile['role'] == 'manager' ||",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
       "line": 468
-    },
-    {
-      "kind": "role-check",
-      "expression": "return visibleTabs.first;",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 83
-    },
-    {
-      "kind": "role-check",
-      "expression": "if (visibleTabs.contains(currentTab)) return currentTab;",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 82
-    },
-    {
-      "kind": "role-check",
-      "expression": "if (visibleTabs.contains(requestedTab)) return requestedTab;",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 81
-    },
-    {
-      "kind": "role-check",
-      "expression": "throw ArgumentError.value(visibleTabs, 'visibleTabs', 'must not be empty');",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 79
-    },
-    {
-      "kind": "role-check",
-      "expression": "if (visibleTabs.isEmpty) {",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 78
-    },
-    {
-      "kind": "role-check",
-      "expression": "required List<int> visibleTabs,",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 74
-    },
-    {
-      "kind": "role-check",
-      "expression": "return crmHasSchoolFinanceAccess(role)",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 65
-    },
-    {
-      "kind": "role-check",
-      "expression": "if (role == 'admin') {",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 56
-    },
-    {
-      "kind": "role-check",
-      "expression": "if (role == 'teacher') return const [0, 1, 2];",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 51
-    },
-    {
-      "kind": "role-check",
-      "expression": "List<int> crmVisibleTabs(String role, {required bool isDesktop}) {",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 50
     },
     {
       "kind": "role-check",
@@ -13337,27 +13407,131 @@
     },
     {
       "kind": "role-check",
+      "expression": "return visibleTabs.first;",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 94
+    },
+    {
+      "kind": "role-check",
+      "expression": "if (visibleTabs.contains(currentTab)) return currentTab;",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 93
+    },
+    {
+      "kind": "role-check",
+      "expression": "if (visibleTabs.contains(requestedTab)) return requestedTab;",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 92
+    },
+    {
+      "kind": "role-check",
+      "expression": "throw ArgumentError.value(visibleTabs, 'visibleTabs', 'must not be empty');",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 90
+    },
+    {
+      "kind": "role-check",
+      "expression": "if (visibleTabs.isEmpty) {",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 89
+    },
+    {
+      "kind": "role-check",
+      "expression": "required List<int> visibleTabs,",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 85
+    },
+    {
+      "kind": "role-check",
+      "expression": "return crmHasSchoolFinanceAccess(role)",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 76
+    },
+    {
+      "kind": "role-check",
+      "expression": "if (role == 'admin') {",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 67
+    },
+    {
+      "kind": "role-check",
+      "expression": "if (role == 'teacher') return const [0, 1, 2];",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 62
+    },
+    {
+      "kind": "role-check",
+      "expression": "List<int> crmVisibleTabs(String role, {required bool isDesktop}) {",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 61
+    },
+    {
+      "kind": "role-check",
       "expression": "bool crmHasTeacherRatesAccess(String role) => crmHasManagerAccess(role);",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 47
+      "line": 58
     },
     {
       "kind": "role-check",
-      "expression": "if (widget.role == 'teacher') {",
+      "expression": "role == 'director' || role == 'system_admin';",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 282
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 48
     },
     {
       "kind": "role-check",
-      "expression": "if (showInboxFolders(widget.role))",
+      "expression": "6 when _hasManagerAccess => const TasksWidget(),",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 503
+      "line": 270
+    },
+    {
+      "kind": "role-check",
+      "expression": "role == 'system_admin';",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 45
+    },
+    {
+      "kind": "role-check",
+      "expression": "7 when isDesktop && _hasManagerAccess => ReportsWidget(",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "line": 271
+    },
+    {
+      "kind": "role-check",
+      "expression": "if (widget.role == 'client')",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "line": 471
     },
     {
       "kind": "role-check",
@@ -13441,19 +13615,19 @@
     },
     {
       "kind": "role-check",
-      "expression": "if (widget.role == 'client')",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 471
-    },
-    {
-      "kind": "role-check",
       "expression": "widget.role == 'admin' ||",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_widgets.dart",
       "line": 266
+    },
+    {
+      "kind": "role-check",
+      "expression": "widget.role == 'system_admin';",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_widgets.dart",
+      "line": 222
     },
     {
       "kind": "role-check",
@@ -13537,35 +13711,51 @@
     },
     {
       "kind": "role-check",
-      "expression": "widget.role == 'system_admin';",
+      "expression": "if (showInboxFolders(widget.role))",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_widgets.dart",
-      "line": 222
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "line": 503
     },
     {
       "kind": "role-check",
-      "expression": "role == 'director' || role == 'system_admin';",
+      "expression": "if (widget.role == 'teacher') {",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 37
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "line": 282
     },
     {
       "kind": "role-check",
-      "expression": "bool crmHasSchoolFinanceAccess(String role) =>",
+      "expression": "role == 'director' ||",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 36
+      "line": 44
+    },
+    {
+      "kind": "role-check",
+      "expression": "role == 'manager' ||",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 43
+    },
+    {
+      "kind": "role-check",
+      "expression": "role == 'admin' ||",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 42
     },
     {
       "kind": "role-check",
       "expression": "role == 'system_admin';",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 30
+      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
+      "line": 833
     },
     {
       "kind": "role-check",
@@ -13649,19 +13839,19 @@
     },
     {
       "kind": "role-check",
-      "expression": "role == 'system_admin';",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
-      "line": 833
-    },
-    {
-      "kind": "role-check",
       "expression": ": role == 'teacher'",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/core/services/magic_messenger_service.dart",
       "line": 592
+    },
+    {
+      "kind": "role-check",
+      "expression": ": role == 'director'",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 590
     },
     {
       "kind": "role-check",
@@ -13745,14 +13935,6 @@
     },
     {
       "kind": "role-check",
-      "expression": ": role == 'director'",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/core/services/magic_messenger_service.dart",
-      "line": 590
-    },
-    {
-      "kind": "role-check",
       "expression": ": role == 'teacher'",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
@@ -13774,6 +13956,38 @@
       "status": "legacy-review-required",
       "file": "lib/features/crm/presentation/client_card/client_card_widgets.dart",
       "line": 150
+    },
+    {
+      "kind": "role-check",
+      "expression": "role == 'director' ||",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/crm/presentation/client_card/client_card_widgets.dart",
+      "line": 151
+    },
+    {
+      "kind": "role-check",
+      "expression": "role == 'director' || role == 'system_admin';",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 37
+    },
+    {
+      "kind": "role-check",
+      "expression": "bool crmHasSchoolFinanceAccess(String role) =>",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 36
+    },
+    {
+      "kind": "role-check",
+      "expression": "role == 'system_admin';",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 30
     },
     {
       "kind": "role-check",
@@ -13841,19 +14055,19 @@
     },
     {
       "kind": "role-check",
+      "expression": "bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
+      "line": 202
+    },
+    {
+      "kind": "role-check",
       "expression": "bool showInboxFolders(String role) =>",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/inbox_logic.dart",
       "line": 3
-    },
-    {
-      "kind": "role-check",
-      "expression": "role: _selectedRole == 'all' ? null : _selectedRole,",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/manager/presentation/widgets/user_roles_actions.dart",
-      "line": 18
     },
     {
       "kind": "role-check",
@@ -13878,14 +14092,6 @@
       "status": "legacy-review-required",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_sheets.dart",
       "line": 690
-    },
-    {
-      "kind": "role-check",
-      "expression": "bool get _canManage => crmHasSchoolFinanceAccess(role);",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/manager/presentation/widgets/subscription_catalog_widget.dart",
-      "line": 25
     },
     {
       "kind": "role-check",
@@ -13953,19 +14159,11 @@
     },
     {
       "kind": "role-check",
-      "expression": "role == 'director' ||",
+      "expression": "role: _selectedRole == 'all' ? null : _selectedRole,",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
-      "file": "lib/features/crm/presentation/client_card/client_card_widgets.dart",
-      "line": 151
-    },
-    {
-      "kind": "role-check",
-      "expression": "bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 202
+      "file": "lib/features/manager/presentation/widgets/user_roles_actions.dart",
+      "line": 18
     },
     {
       "kind": "role-check",
@@ -14035,19 +14233,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": ".read(messengerNavigationProvider.notifier)",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
-      "line": 73
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
       "line": 225
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context, _dirty ? true : null);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card.dart",
+      "line": 213
     },
     {
       "kind": "navigation-source",
@@ -14099,11 +14297,27 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context, _dirty ? true : null);",
+      "expression": "Navigator.pop(context, true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 213
+      "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
+      "line": 420
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ".read(messengerNavigationProvider.notifier)",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
+      "line": 73
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "context.go('/admin');",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
+      "line": 169
     },
     {
       "kind": "navigation-source",
@@ -14112,14 +14326,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
       "line": 74
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "context.go('/');",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
-      "line": 78
     },
     {
       "kind": "navigation-source",
@@ -14251,19 +14457,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context, true);",
+      "expression": "context.go('/');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
-      "line": 416
+      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
+      "line": 78
     },
     {
       "kind": "navigation-source",
-      "expression": "context.go('/admin');",
+      "expression": "Navigator.pop(context, {",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
-      "line": 169
+      "file": "lib/features/manager/presentation/widgets/lead_dialog.dart",
+      "line": 66
     },
     {
       "kind": "navigation-source",
@@ -14275,19 +14481,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "if (Navigator.of(context).canPop()) {",
+      "expression": ".navigateTo(const CrmNavigationRequest(tabIndex: 2));",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
-      "line": 165
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_data.dart",
-      "line": 606
+      "line": 163
     },
     {
       "kind": "navigation-source",
@@ -14403,6 +14601,30 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "onPressed: () => context.go('/login'),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/auth/presentation/screens/email_otp_screen.dart",
+      "line": 222
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_data.dart",
+      "line": 606
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "if (Navigator.of(context).canPop()) {",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
+      "line": 165
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -14411,35 +14633,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context, {",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_dialog.dart",
-      "line": 66
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "expression": "onPressed: () => Navigator.pop(ctx, controller.text),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
-      "line": 43
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
-      "line": 137
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ".navigateTo(const CrmNavigationRequest(tabIndex: 2));",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
-      "line": 163
+      "line": 47
     },
     {
       "kind": "navigation-source",
@@ -14463,7 +14661,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 450
+      "line": 460
     },
     {
       "kind": "navigation-source",
@@ -14471,7 +14669,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 440
+      "line": 450
     },
     {
       "kind": "navigation-source",
@@ -14479,7 +14677,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 287
+      "line": 297
     },
     {
       "kind": "navigation-source",
@@ -14487,7 +14685,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 282
+      "line": 292
     },
     {
       "kind": "navigation-source",
@@ -14495,7 +14693,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 33
+      "line": 34
     },
     {
       "kind": "navigation-source",
@@ -14555,11 +14753,27 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, controller.text),",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
-      "line": 47
+      "line": 137
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
+      "line": 43
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "context.go('/');",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/auth/presentation/screens/email_otp_screen.dart",
+      "line": 113
     },
     {
       "kind": "navigation-source",
@@ -14568,14 +14782,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
       "line": 89
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(sheetContext).pop(true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
-      "line": 102
     },
     {
       "kind": "navigation-source",
@@ -14867,11 +15073,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => context.go('/login'),",
+      "expression": "onPressed: () => Navigator.of(sheetContext).pop(true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/email_otp_screen.dart",
-      "line": 222
+      "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
+      "line": 102
     },
     {
       "kind": "navigation-source",
@@ -14931,19 +15137,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "expression": "onPressed: () => Navigator.pop(context, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/subscription_catalog_widget.dart",
-      "line": 140
+      "line": 171
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "expression": "onPressed: () => Navigator.pop(context, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/subscription_catalog_widget.dart",
-      "line": 136
+      "line": 167
     },
     {
       "kind": "navigation-source",
@@ -15171,11 +15377,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "context.go('/');",
+      "expression": "onPressed: () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/email_otp_screen.dart",
-      "line": 113
+      "file": "lib/features/teacher/presentation/widgets/teacher_schedule_widget.dart",
+      "line": 313
     },
     {
       "kind": "navigation-source",
@@ -15187,11 +15393,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
+      "expression": "if (mounted) Navigator.pop(context, true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/top_up_dialog.dart",
-      "line": 124
+      "line": 72
     },
     {
       "kind": "navigation-source",
@@ -15782,8 +15988,8 @@
       "expression": "onPressed: () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/teacher/presentation/widgets/teacher_schedule_widget.dart",
-      "line": 313
+      "file": "lib/features/admin/presentation/widgets/top_up_dialog.dart",
+      "line": 124
     },
     {
       "kind": "navigation-source",
@@ -15800,14 +16006,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
       "line": 563
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(ctx).pop(controller.text),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
-      "line": 26
     },
     {
       "kind": "navigation-source",
@@ -15839,7 +16037,15 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 574
+      "line": 671
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context, false);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 515
     },
     {
       "kind": "navigation-source",
@@ -15847,7 +16053,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 460
+      "line": 469
     },
     {
       "kind": "navigation-source",
@@ -15855,7 +16061,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 308
+      "line": 312
     },
     {
       "kind": "navigation-source",
@@ -15863,7 +16069,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 304
+      "line": 308
     },
     {
       "kind": "navigation-source",
@@ -15923,11 +16129,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "expression": "onPressed: () => Navigator.of(ctx).pop(controller.text),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_timezone_dialog.dart",
-      "line": 53
+      "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
+      "line": 26
     },
     {
       "kind": "navigation-source",
@@ -15939,27 +16145,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, selected),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_timezone_dialog.dart",
-      "line": 57
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 252
+      "file": "lib/features/admin/presentation/widgets/schedule_timezone_dialog.dart",
+      "line": 53
     },
     {
       "kind": "navigation-source",
-      "expression": "if (mounted) Navigator.pop(context, true);",
+      "expression": "ref.read(scheduleNavigationProvider.notifier).clear();",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/top_up_dialog.dart",
-      "line": 72
+      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
+      "line": 20
     },
     {
       "kind": "navigation-source",
@@ -16075,11 +16273,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "ref.read(scheduleNavigationProvider.notifier).clear();",
+      "expression": "onPressed: () => Navigator.pop(ctx),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 20
+      "line": 252
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, selected),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_timezone_dialog.dart",
+      "line": 57
     },
     {
       "kind": "navigation-source",
@@ -16692,7 +16898,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 59
+      "line": 66
     },
     {
       "kind": "sql-mutation",
@@ -16700,7 +16906,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/subscriptions.service.ts",
-      "line": 781
+      "line": 681
     },
     {
       "kind": "sql-mutation",
@@ -16708,7 +16914,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/subscriptions.service.ts",
-      "line": 765
+      "line": 663
     },
     {
       "kind": "sql-mutation",
@@ -16716,7 +16922,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/subscriptions.service.ts",
-      "line": 421
+      "line": 289
     },
     {
       "kind": "sql-mutation",
@@ -16724,7 +16930,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/subscriptions.service.ts",
-      "line": 414
+      "line": 280
     },
     {
       "kind": "sql-mutation",
@@ -16807,20 +17013,20 @@
       "line": 572
     },
     {
+      "kind": "sql-mutation",
+      "expression": "insert into app.subscriptions",
+      "owner": "SYS-COMMERCE",
+      "status": "commerce-migration-pending",
+      "file": "server/src/crm/commerce/commerce-schema.repository.ts",
+      "line": 185
+    },
+    {
       "kind": "backend-route",
       "expression": "POST /crm/students/:id/subscriptions/issue",
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-students.controller.ts",
       "line": 208
-    },
-    {
-      "kind": "backend-route",
-      "expression": "POST /crm/students/:id/transfer",
-      "owner": "SYS-COMMERCE",
-      "status": "commerce-migration-pending",
-      "file": "server/src/crm/crm-students.controller.ts",
-      "line": 146
     },
     {
       "kind": "backend-route",
@@ -16880,11 +17086,19 @@
     },
     {
       "kind": "backend-route",
+      "expression": "POST /crm/subscription-packages/:id/restore",
+      "owner": "SYS-COMMERCE",
+      "status": "commerce-migration-pending",
+      "file": "server/src/crm/crm-finance.controller.ts",
+      "line": 156
+    },
+    {
+      "kind": "backend-route",
       "expression": "DELETE /crm/subscription-packages/:id",
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 125
+      "line": 142
     },
     {
       "kind": "backend-route",
@@ -16892,7 +17106,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 116
+      "line": 128
     },
     {
       "kind": "backend-route",
@@ -16900,7 +17114,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 108
+      "line": 115
     },
     {
       "kind": "backend-route",
@@ -16908,7 +17122,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 92
+      "line": 99
     },
     {
       "kind": "backend-route",
@@ -16916,7 +17130,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 83
+      "line": 90
     },
     {
       "kind": "backend-route",
@@ -16924,15 +17138,15 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 75
+      "line": 82
     },
     {
-      "kind": "sql-mutation",
-      "expression": "insert into app.subscriptions",
+      "kind": "backend-route",
+      "expression": "POST /crm/students/:id/transfer",
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
-      "file": "server/src/crm/commerce/commerce-schema.repository.ts",
-      "line": 185
+      "file": "server/src/crm/crm-students.controller.ts",
+      "line": 146
     },
     {
       "kind": "sql-mutation",

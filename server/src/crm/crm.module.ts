@@ -73,6 +73,8 @@ import { LessonSettlementService } from './commerce/lesson-settlement.service';
 import { LessonCompletionWorkerRepository } from './schedule/completion-worker.repository';
 import { LessonCompletionService } from './schedule/lesson-completion.service';
 import { LessonCompletionWorker } from './schedule/lesson-completion.worker';
+import { PackageCatalogRepository } from './commerce/package-catalog.repository';
+import { PackageCatalogService } from './commerce/package-catalog.service';
 
 @Module({
   imports: [
@@ -151,6 +153,8 @@ import { LessonCompletionWorker } from './schedule/lesson-completion.worker';
     LessonCompletionWorkerRepository,
     LessonCompletionService,
     LessonCompletionWorker,
+    PackageCatalogRepository,
+    PackageCatalogService,
     {
       provide: LESSON_SETTLEMENT_PORT,
       useExisting: LessonSettlementService,

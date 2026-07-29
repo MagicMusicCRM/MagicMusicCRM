@@ -164,6 +164,7 @@ describe("EffectiveAccessEvaluator", () => {
     "schedule.attendance.write",
     "schedule.lesson.complete",
     "commerce.client_finance.read",
+    "commerce.package.read",
     "commerce.subscription.issue",
   ] as const)(
     "keeps Teacher hard deny above an incompatible personal allow for %s",
@@ -390,6 +391,12 @@ describe("HardInvariantPolicy access mutations", () => {
 
     expect(
       hardInvariants.overrideMutationDecision(overrideInput).reason,
+    ).toBe("hard_deny_cannot_be_overridden");
+    expect(
+      hardInvariants.overrideMutationDecision({
+        ...overrideInput,
+        capabilityKey: "commerce.package.read",
+      }).reason,
     ).toBe("hard_deny_cannot_be_overridden");
     expect(
       hardInvariants.overrideMutationDecision({

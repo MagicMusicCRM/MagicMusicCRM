@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -23,6 +24,11 @@ import { UpsertSubscriptionPackageDto } from "./dto/upsert-subscription-package.
 import { UpdateSubscriptionPackageDto } from "./dto/update-subscription-package.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { PaymentQuery } from "./dto/payment.query";
+import {
+  SubscriptionPackageListQuery,
+  SubscriptionPackageVersionQuery,
+} from "./dto/subscription-package.query";
+import { PackageCatalogService } from "./commerce/package-catalog.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -30,6 +36,7 @@ export class CrmFinanceController {
   constructor(
     private readonly finance: FinanceService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly packageCatalog: PackageCatalogService,
   ) {}
 
   @Get("payments")
@@ -100,33 +107,63 @@ export class CrmFinanceController {
   @Get("subscription-packages")
   listSubscriptionPackages(
     @CurrentActor() actor: ActorContext,
-    @Query() query: CrmListQuery,
+    @Query() query: SubscriptionPackageListQuery,
   ) {
-    return this.subscriptions.listSubscriptionPackages(actor, query);
+    return this.packageCatalog.list(actor, query);
   }
 
   @Post("subscription-packages")
   createSubscriptionPackage(
     @CurrentActor() actor: ActorContext,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: UpsertSubscriptionPackageDto,
   ) {
-    return this.subscriptions.createSubscriptionPackage(actor, dto);
+    return this.packageCatalog.create(actor, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Patch("subscription-packages/:id")
   updateSubscriptionPackage(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: UpdateSubscriptionPackageDto,
   ) {
-    return this.subscriptions.updateSubscriptionPackage(actor, id, dto);
+    return this.packageCatalog.update(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Delete("subscription-packages/:id")
-  deleteSubscriptionPackage(
+  archiveSubscriptionPackage(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Query() query: SubscriptionPackageVersionQuery,
   ) {
-    return this.subscriptions.deleteSubscriptionPackage(actor, id);
+    return this.packageCatalog.archive(actor, id, query.expectedVersion, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post("subscription-packages/:id/restore")
+  restoreSubscriptionPackage(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Query() query: SubscriptionPackageVersionQuery,
+  ) {
+    return this.packageCatalog.restore(actor, id, query.expectedVersion, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 }

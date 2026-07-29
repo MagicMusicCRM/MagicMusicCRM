@@ -1,16 +1,23 @@
 import { Type } from "class-transformer";
 import {
-  IsBoolean,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
+  Max,
   MaxLength,
   Min,
 } from "class-validator";
 
 export class UpdateSubscriptionPackageDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
+  expectedVersion: number;
+
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -18,17 +25,23 @@ export class UpdateSubscriptionPackageDto {
 
   @IsOptional()
   @IsUUID()
-  disciplineId?: string;
+  disciplineId?: string | null;
 
   @IsOptional()
   @IsUUID()
-  branchId?: string;
+  branchId?: string | null;
 
   @IsOptional()
   @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.5)
   lessonsTotal?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.5)
+  unitCount?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -37,14 +50,20 @@ export class UpdateSubscriptionPackageDto {
   price?: number;
 
   @IsOptional()
+  @IsString()
+  @Matches(/^\d+$/)
+  basePriceMinor?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z]{3}$/)
+  currencyCode?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  validityDays?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  validityDays?: number | null;
 
   @IsOptional()
   @Type(() => Number)

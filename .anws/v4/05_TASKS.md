@@ -690,12 +690,12 @@ flowchart TD
 
 ## Phase 2 — Core (S3)
 
-- [ ] **T5.2.1** [REQ-SUB-001]: Реализовать Subscription Package catalog
+- [x] **T5.2.1** [REQ-SUB-001]: Реализовать Subscription Package catalog
   - **Описание:** дать Director/sysadmin versioned CRUD/archive/restore, остальным issuing roles — active read.
   - **Подпункты:**
-    - [ ] Реализовать API/policies/audit.
-    - [ ] Архивировать используемый package без разрыва historical refs.
-    - [ ] Добавить Flutter catalog/editor и package selector.
+    - [x] Реализовать API/policies/audit.
+    - [x] Архивировать используемый package без разрыва historical refs.
+    - [x] Добавить Flutter catalog/editor и package selector.
   - **Вход:** T5.1.2, T2.3.1, `commerce.md §5/§9`.
   - **Выход:** catalog API/UI/tests.
   - **📎 Ссылка:** ADR-007, ADR-009.

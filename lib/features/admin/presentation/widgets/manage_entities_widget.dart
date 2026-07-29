@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -52,12 +53,21 @@ final entitiesProvider =
         return crm.listStaff(limit: 100);
       } else if (table == 'branches') {
         return crm.listBranches(limit: 100);
-      } else if (table == 'subscription_packages') {
-        return crm.listSubscriptionPackages(limit: 100);
+      } else if (table == 'subscription_packages' ||
+          table == 'subscription_packages:all') {
+        return crm.listSubscriptionPackages(
+          limit: 100,
+          includeArchived: table.endsWith(':all'),
+        );
       }
 
       return const <Map<String, dynamic>>[];
     });
+
+void invalidateSubscriptionPackageCatalog(WidgetRef ref) {
+  ref.invalidate(entitiesProvider('subscription_packages'));
+  ref.invalidate(entitiesProvider('subscription_packages:all'));
+}
 
 final studentSearchProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((
@@ -236,7 +246,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
     if (_tabController.index == 7) {
       final saved = await showPackageSheet(context, ref);
       if (saved == true) {
-        ref.invalidate(entitiesProvider('subscription_packages'));
+        invalidateSubscriptionPackageCatalog(ref);
       }
       return;
     }

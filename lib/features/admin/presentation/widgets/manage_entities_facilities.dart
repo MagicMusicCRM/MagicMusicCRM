@@ -194,7 +194,7 @@ class _PackageCard extends ConsumerWidget {
         onTap: () async {
           final saved = await showPackageSheet(context, ref, existing: item);
           if (saved == true) {
-            ref.invalidate(entitiesProvider('subscription_packages'));
+            invalidateSubscriptionPackageCatalog(ref);
           }
         },
         leading: CircleAvatar(
@@ -244,9 +244,9 @@ class _PackageCard extends ConsumerWidget {
           ),
         ),
         trailing: IconButton(
-          icon: Icon(Icons.delete_outline_rounded, color: AppColor.danger),
-          tooltip: 'Удалить',
-          onPressed: () => _confirmDeletePackage(context, ref, item),
+          icon: Icon(Icons.archive_outlined, color: AppColor.danger),
+          tooltip: 'Архивировать',
+          onPressed: () => _confirmArchivePackage(context, ref, item),
         ),
       ),
     );
@@ -285,20 +285,24 @@ class _PackagesSkeleton extends StatelessWidget {
   }
 }
 
-Future<void> _confirmDeletePackage(
+Future<void> _confirmArchivePackage(
   BuildContext context,
   WidgetRef ref,
   Map<String, dynamic> item,
 ) async {
   final id = item['id']?.toString();
   if (id == null || id.isEmpty) return;
+  final version = _asInt(item['version']);
   final name = item['name'] as String? ?? 'абонемент';
 
   final confirm = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Удалить абонемент?'),
-      content: Text('«$name» будет удалён из каталога. Действие необратимо.'),
+      title: const Text('Архивировать абонемент?'),
+      content: Text(
+        '«$name» исчезнет из новой выдачи. Исторические абонементы '
+        'сохранятся, а пакет можно будет восстановить.',
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),
@@ -306,7 +310,7 @@ Future<void> _confirmDeletePackage(
         ),
         TextButton(
           onPressed: () => Navigator.pop(ctx, true),
-          child: Text('Удалить', style: TextStyle(color: AppColor.danger)),
+          child: Text('Архивировать', style: TextStyle(color: AppColor.danger)),
         ),
       ],
     ),
@@ -314,12 +318,14 @@ Future<void> _confirmDeletePackage(
   if (confirm != true || !context.mounted) return;
 
   try {
-    await ref.read(magicCrmServiceProvider).deleteSubscriptionPackage(id);
-    ref.invalidate(entitiesProvider('subscription_packages'));
+    await ref
+        .read(magicCrmServiceProvider)
+        .archiveSubscriptionPackage(id, expectedVersion: version);
+    invalidateSubscriptionPackageCatalog(ref);
     if (context.mounted) {
       MagicToast.show(
         context,
-        'Абонемент удалён',
+        'Абонемент перемещён в архив',
         type: MagicToastType.success,
       );
     }
@@ -327,7 +333,7 @@ Future<void> _confirmDeletePackage(
     if (context.mounted) {
       MagicToast.show(
         context,
-        'Не удалось удалить',
+        'Не удалось архивировать',
         detail: '$e',
         type: MagicToastType.danger,
       );
@@ -368,8 +374,10 @@ class _PackageFormState extends State<_PackageForm> {
   late final TextEditingController _price;
   late final TextEditingController _validity;
   late final TextEditingController _branchId;
-  late bool _isActive;
+  late int _expectedVersion;
   bool _saving = false;
+  bool _stale = false;
+  bool _loadingLatest = false;
 
   bool get _isEdit => widget.existing != null;
 
@@ -379,17 +387,19 @@ class _PackageFormState extends State<_PackageForm> {
     final e = widget.existing;
     _name = TextEditingController(text: e?['name']?.toString() ?? '');
     _lessons = TextEditingController(
-      text: (e?['lessons_total'] ?? e?['lessonsTotal'])?.toString() ?? '',
+      text:
+          (e?['unitCount'] ?? e?['lessons_total'] ?? e?['lessonsTotal'])
+              ?.toString() ??
+          '',
     );
-    _price = TextEditingController(text: e?['price']?.toString() ?? '');
+    _price = TextEditingController(text: _packagePriceText(e));
     _validity = TextEditingController(
       text: (e?['validity_days'] ?? e?['validityDays'])?.toString() ?? '',
     );
     _branchId = TextEditingController(
       text: (e?['branch_id'] ?? e?['branchId'])?.toString() ?? '',
     );
-    final active = e?['is_active'] ?? e?['isActive'];
-    _isActive = active is bool ? active : true;
+    _expectedVersion = _asInt(e?['version']);
   }
 
   @override
@@ -440,12 +450,12 @@ class _PackageFormState extends State<_PackageForm> {
         final id = widget.existing!['id'].toString();
         await crm.updateSubscriptionPackage(id, {
           'name': name,
-          'lessonsTotal': lessonsTotal,
-          'price': price,
+          'unitCount': lessonsTotal,
+          'basePriceMinor': subscriptionPriceMinor(price),
+          'currencyCode': 'RUB',
           'validityDays': validityDays,
           'branchId': branchId,
-          'isActive': _isActive,
-        });
+        }, expectedVersion: _expectedVersion);
       } else {
         await crm.createSubscriptionPackage(
           name: name,
@@ -453,7 +463,6 @@ class _PackageFormState extends State<_PackageForm> {
           price: price,
           validityDays: validityDays,
           branchId: branchId,
-          isActive: _isActive,
         );
       }
       if (!mounted) return;
@@ -466,10 +475,84 @@ class _PackageFormState extends State<_PackageForm> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
+      final stale = _isEdit && e is MagicApiException && e.statusCode == 409;
+      if (stale) {
+        invalidateSubscriptionPackageCatalog(widget.ref);
+        setState(() => _stale = true);
+      }
       MagicToast.show(
         context,
-        'Не удалось сохранить',
-        detail: '$e',
+        stale ? 'Каталог уже изменён' : 'Не удалось сохранить',
+        detail: stale
+            ? 'Сохранение остановлено. Загрузите актуальную версию и '
+                  'проверьте поля.'
+            : '$e',
+        type: MagicToastType.danger,
+      );
+    }
+  }
+
+  Future<void> _reloadLatest() async {
+    if (!_isEdit || _loadingLatest) return;
+    setState(() => _loadingLatest = true);
+    try {
+      final id = widget.existing!['id'].toString();
+      final items = await widget.ref
+          .read(magicCrmServiceProvider)
+          .listSubscriptionPackages(limit: 200, includeArchived: true);
+      final latest = items.cast<Map<String, dynamic>?>().firstWhere(
+        (item) => item?['id']?.toString() == id,
+        orElse: () => null,
+      );
+      if (!mounted) return;
+      if (latest == null) {
+        throw StateError('Пакет больше не доступен.');
+      }
+      final archivedAt = latest['archivedAt'] ?? latest['archived_at'];
+      final active =
+          latest['active'] ?? latest['isActive'] ?? latest['is_active'] ?? true;
+      if (archivedAt != null || active != true) {
+        Navigator.pop(context, false);
+        MagicToast.show(
+          context,
+          'Пакет уже архивирован',
+          detail: 'Редактор закрыт, каталог обновлён.',
+          type: MagicToastType.info,
+        );
+        return;
+      }
+
+      _name.text = latest['name']?.toString() ?? '';
+      _lessons.text =
+          (latest['unitCount'] ??
+                  latest['lessons_total'] ??
+                  latest['lessonsTotal'])
+              ?.toString() ??
+          '';
+      _price.text = _packagePriceText(latest);
+      _validity.text =
+          (latest['validity_days'] ?? latest['validityDays'])?.toString() ?? '';
+      _branchId.text =
+          (latest['branch_id'] ?? latest['branchId'])?.toString() ?? '';
+      setState(() {
+        _expectedVersion = _asInt(latest['version']);
+        _stale = false;
+        _loadingLatest = false;
+      });
+      invalidateSubscriptionPackageCatalog(widget.ref);
+      MagicToast.show(
+        context,
+        'Загружена актуальная версия',
+        detail: 'Черновик сброшен. Проверьте поля перед сохранением.',
+        type: MagicToastType.info,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingLatest = false);
+      MagicToast.show(
+        context,
+        'Не удалось обновить редактор',
+        detail: '$error',
         type: MagicToastType.danger,
       );
     }
@@ -538,34 +621,48 @@ class _PackageFormState extends State<_PackageForm> {
             decoration: _dec('ID филиала', hint: 'Необязательно'),
             textInputAction: TextInputAction.done,
           ),
-          const SizedBox(height: AppSpace.md),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Активен',
+          if (_stale) ...[
+            const SizedBox(height: AppSpace.md),
+            Container(
+              key: const Key('subscription-package-stale-banner'),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColor.warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Эта версия устарела. Ваш черновик не отправлен.',
                     style: TextStyle(
                       color: cs.onSurface,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                ),
-                Switch(
-                  value: _isActive,
-                  activeThumbColor: AppColor.gold,
-                  onChanged: _saving
-                      ? null
-                      : (v) => setState(() => _isActive = v),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    'Загрузите актуальные данные: текущие поля формы будут '
+                    'заменены данными сервера.',
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    key: const Key('subscription-package-reload-latest'),
+                    onPressed: _loadingLatest ? null : _reloadLatest,
+                    icon: _loadingLatest
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh_rounded),
+                    label: const Text('Загрузить актуальную версию'),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: AppSpace.lg),
           Row(
             children: [
@@ -586,7 +683,7 @@ class _PackageFormState extends State<_PackageForm> {
               const SizedBox(width: 10),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _saving ? null : _save,
+                  onPressed: _saving || _stale ? null : _save,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColor.gold,
                     foregroundColor: AppColor.onGold,
@@ -619,4 +716,20 @@ class _PackageFormState extends State<_PackageForm> {
       ),
     );
   }
+}
+
+String _packagePriceText(Map<String, dynamic>? package) {
+  if (package == null) return '';
+  final legacy = package['price'];
+  if (legacy != null) return legacy.toString();
+  final minor = BigInt.tryParse(
+    (package['basePriceMinor'] ?? package['base_price_minor'])?.toString() ??
+        '',
+  );
+  if (minor == null) return '';
+  final whole = minor ~/ BigInt.from(100);
+  final fraction = (minor % BigInt.from(100)).toInt();
+  return fraction == 0
+      ? whole.toString()
+      : '$whole.${fraction.toString().padLeft(2, '0')}';
 }

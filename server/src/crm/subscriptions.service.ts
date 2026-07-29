@@ -11,8 +11,6 @@ import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
-import { UpdateSubscriptionPackageDto } from "./dto/update-subscription-package.dto";
-import { UpsertSubscriptionPackageDto } from "./dto/upsert-subscription-package.dto";
 import { CrmPolicy } from "./crm.policy";
 import {
   audienceForHomework,
@@ -43,8 +41,11 @@ interface SubscriptionPackageRow {
   name: string;
   discipline_id: string | null;
   branch_id: string | null;
-  lessons_total: number;
+  lessons_total: string | number;
   price: string | number;
+  base_price_minor: string;
+  currency_code: string;
+  version: number | string;
   validity_days: number | null;
   is_active: boolean;
   sort_order: number;
@@ -172,21 +173,6 @@ export class SubscriptionsService {
     };
   }
 
-  private toSubscriptionPackageDto(row: SubscriptionPackageRow) {
-    return {
-      id: row.id,
-      name: row.name,
-      disciplineId: row.discipline_id,
-      branchId: row.branch_id,
-      lessonsTotal: Number(row.lessons_total),
-      price: Number(row.price),
-      validityDays: row.validity_days,
-      isActive: row.is_active,
-      sortOrder: row.sort_order,
-      createdAt: row.created_at,
-    };
-  }
-
   async listSubscriptions(actor: ActorContext, query: CrmListQuery) {
     const limit = Math.min(query.limit ?? 20, 100);
     const result = await this.database.query<SubscriptionRow>(
@@ -194,7 +180,14 @@ export class SubscriptionsService {
         select sub.id, sub.student_id, p.user_id as student_user_id,
           sub.lessons_total, sub.lessons_used, sub.starts_at, sub.expires_at,
           sub.status, sub.created_at, sub.updated_at,
-          pkg.name as package_name, pkg.price as package_price,
+          coalesce(
+            sub.commercial_snapshot ->> 'displayName',
+            pkg.name
+          ) as package_name,
+          coalesce(
+            sub.final_price_minor::numeric / 100,
+            pkg.price
+          ) as package_price,
           -- «Оплачено»: приход личного счёта, которым закрыт абонемент.
           -- Отменённый платёж не считается оплатой.
           pay.amount as paid_amount
@@ -249,135 +242,6 @@ export class SubscriptionsService {
     return { items: result.rows.map((row) => this.toSubscriptionDto(row)) };
   }
 
-  async listSubscriptionPackages(actor: ActorContext, query: CrmListQuery) {
-    this.policy.assertCanReadOperationalData(actor);
-    const conditions: string[] = ["deleted_at is null"];
-    const params: unknown[] = [];
-    const q = query.q?.trim();
-    if (q) {
-      params.push(`%${q}%`);
-      conditions.push(`name ilike $${params.length}`);
-    }
-    const limit = Math.min(query.limit ?? 100, 200);
-    params.push(limit);
-    const result = await this.database.query<SubscriptionPackageRow>(
-      `
-        select id, name, discipline_id, branch_id, lessons_total, price,
-          validity_days, is_active, sort_order, created_at
-        from app.subscription_packages
-        where ${conditions.join(" and ")}
-        order by sort_order asc, name asc
-        limit $${params.length}
-      `,
-      params,
-    );
-    return {
-      items: result.rows.map((row) => this.toSubscriptionPackageDto(row)),
-    };
-  }
-
-  async createSubscriptionPackage(
-    actor: ActorContext,
-    dto: UpsertSubscriptionPackageDto,
-  ) {
-    this.policy.assertCanManageSubscriptionPackages(actor);
-    const result = await this.database.query<SubscriptionPackageRow>(
-      `
-        insert into app.subscription_packages
-          (name, discipline_id, branch_id, lessons_total, price,
-           validity_days, is_active, sort_order)
-        values ($1, $2, $3, $4, $5, $6, coalesce($7, true), coalesce($8, 0))
-        returning id, name, discipline_id, branch_id, lessons_total, price,
-          validity_days, is_active, sort_order, created_at
-      `,
-      [
-        dto.name.trim(),
-        dto.disciplineId ?? null,
-        dto.branchId ?? null,
-        dto.lessonsTotal,
-        dto.price,
-        dto.validityDays ?? null,
-        dto.isActive ?? null,
-        dto.sortOrder ?? null,
-      ],
-    );
-    const pkg = result.rows[0];
-    await this.audit.record({
-      actor,
-      action: "crm.subscription_package_created",
-      entityType: "subscription_package",
-      entityId: pkg.id,
-    });
-    return this.toSubscriptionPackageDto(pkg);
-  }
-
-  async updateSubscriptionPackage(
-    actor: ActorContext,
-    packageId: string,
-    dto: UpdateSubscriptionPackageDto,
-  ) {
-    this.policy.assertCanManageSubscriptionPackages(actor);
-    const result = await this.database.query<SubscriptionPackageRow>(
-      `
-        update app.subscription_packages
-        set name = coalesce($2, name),
-            discipline_id = coalesce($3, discipline_id),
-            branch_id = coalesce($4, branch_id),
-            lessons_total = coalesce($5, lessons_total),
-            price = coalesce($6, price),
-            validity_days = coalesce($7, validity_days),
-            is_active = coalesce($8, is_active),
-            sort_order = coalesce($9, sort_order),
-            updated_at = now()
-        where id = $1 and deleted_at is null
-        returning id, name, discipline_id, branch_id, lessons_total, price,
-          validity_days, is_active, sort_order, created_at
-      `,
-      [
-        packageId,
-        dto.name?.trim() ?? null,
-        dto.disciplineId ?? null,
-        dto.branchId ?? null,
-        dto.lessonsTotal ?? null,
-        dto.price ?? null,
-        dto.validityDays ?? null,
-        dto.isActive ?? null,
-        dto.sortOrder ?? null,
-      ],
-    );
-    const pkg = result.rows[0];
-    if (!pkg) throw new NotFoundException("Абонемент не найден.");
-    await this.audit.record({
-      actor,
-      action: "crm.subscription_package_updated",
-      entityType: "subscription_package",
-      entityId: pkg.id,
-    });
-    return this.toSubscriptionPackageDto(pkg);
-  }
-
-  async deleteSubscriptionPackage(actor: ActorContext, packageId: string) {
-    this.policy.assertCanManageSubscriptionPackages(actor);
-    const result = await this.database.query<{ id: string }>(
-      `
-        update app.subscription_packages
-        set deleted_at = now(), updated_at = now()
-        where id = $1 and deleted_at is null
-        returning id
-      `,
-      [packageId],
-    );
-    const pkg = result.rows[0];
-    if (!pkg) throw new NotFoundException("Абонемент не найден.");
-    await this.audit.record({
-      actor,
-      action: "crm.subscription_package_deleted",
-      entityType: "subscription_package",
-      entityId: pkg.id,
-    });
-    return { success: true };
-  }
-
   /**
    * Issue a subscription for an existing student: payment + subscription,
    * atomically. Imported students may legitimately retain lead_id without the
@@ -406,26 +270,46 @@ export class SubscriptionsService {
       return client.query<IssuedSubscriptionRow>(
       `
         with pkg as (
-          select id, branch_id, lessons_total, price, validity_days
+          select id, name, branch_id, lessons_total, base_price_minor,
+            currency_code, validity_days, version
           from app.subscription_packages
           where id = $2 and deleted_at is null and is_active = true
+          for share
         ),
         pay as (
           insert into app.payments
-            (student_id, amount, currency, payment_date, branch_id, notes, created_by)
-          select $1, pkg.price, 'RUB', now(), pkg.branch_id, 'Покупка абонемента', $3
+            (student_id, amount_minor, currency, payment_date, branch_id,
+             notes, created_by)
+          select $1, pkg.base_price_minor, pkg.currency_code, now(),
+            pkg.branch_id, 'Покупка абонемента', $3
           from pkg
           returning id
         ),
         sub as (
           insert into app.subscriptions
             (student_id, lessons_total, lessons_used, starts_at, expires_at,
-             status, package_id, payment_id)
+             status, package_id, payment_id, commercial_snapshot,
+             snapshot_version, package_version, base_price_minor,
+             currency_code, final_price_minor)
           select $1, pkg.lessons_total, 0, current_date,
             case when pkg.validity_days is not null
               then (current_date + (pkg.validity_days || ' days')::interval)::date
               else null end,
-            'active', pkg.id, pay.id
+            'active', pkg.id, pay.id,
+            jsonb_build_object(
+              'snapshotVersion', 1,
+              'packageVersion', pkg.version,
+              'displayName', pkg.name,
+              'unitCount', pkg.lessons_total::text,
+              'validityDays', pkg.validity_days,
+              'basePriceMinor', pkg.base_price_minor::text,
+              'currencyCode', pkg.currency_code,
+              'discount', jsonb_build_object('type', 'none'),
+              'finalPriceMinor', pkg.base_price_minor::text,
+              'commercialRules', '{}'::jsonb
+            ),
+            1, pkg.version, pkg.base_price_minor, pkg.currency_code,
+            pkg.base_price_minor
           from pkg, pay
           returning id, lessons_total, lessons_used, starts_at, expires_at,
             status, package_id, payment_id
@@ -519,7 +403,8 @@ export class SubscriptionsService {
       const packageResult = await client.query<SubscriptionPackageRow>(
         `
           select id, name, discipline_id, branch_id, lessons_total, price,
-            validity_days, is_active, sort_order, created_at
+            base_price_minor, currency_code, validity_days, is_active,
+            sort_order, version, created_at
           from app.subscription_packages
           where id = $1 and deleted_at is null and is_active = true
           for share
@@ -654,6 +539,19 @@ export class SubscriptionsService {
       }
       if (!studentId) throw new NotFoundException("Ученик не найден.");
 
+      const commercialSnapshot = {
+        snapshotVersion: 1,
+        packageVersion: Number(subscriptionPackage.version),
+        displayName: subscriptionPackage.name,
+        unitCount: String(subscriptionPackage.lessons_total),
+        validityDays: subscriptionPackage.validity_days,
+        basePriceMinor: subscriptionPackage.base_price_minor,
+        currencyCode: subscriptionPackage.currency_code,
+        discount: { type: "none" },
+        finalPriceMinor: subscriptionPackage.base_price_minor,
+        commercialRules: {},
+      };
+
       await client.query(
         `
           insert into app.client_conversion_links (
@@ -763,13 +661,15 @@ export class SubscriptionsService {
       const paymentResult = await client.query<LeadConversionPaymentRow>(
         `
           insert into app.payments
-            (student_id, amount, currency, payment_date, branch_id, notes, created_by)
-          values ($1, $2, 'RUB', now(), $3, 'Покупка абонемента', $4)
+            (student_id, amount_minor, currency, payment_date, branch_id,
+             notes, created_by)
+          values ($1, $2::bigint, $3, now(), $4, 'Покупка абонемента', $5)
           returning id, student_id, amount, currency, payment_date, method, notes
         `,
         [
           studentId,
-          subscriptionPackage.price,
+          subscriptionPackage.base_price_minor,
+          subscriptionPackage.currency_code,
           subscriptionPackage.branch_id ?? lead.branch_id,
           actor.userId,
         ],
@@ -780,14 +680,17 @@ export class SubscriptionsService {
           `
             insert into app.subscriptions (
               student_id, lessons_total, lessons_used, starts_at, expires_at,
-              status, package_id, payment_id, conversion_lead_id
+              status, package_id, payment_id, conversion_lead_id,
+              commercial_snapshot, snapshot_version, package_version,
+              base_price_minor, currency_code, final_price_minor
             )
             values (
               $1, $2, 0, current_date,
               case when $3::integer is not null
                 then (current_date + ($3::text || ' days')::interval)::date
                 else null end,
-              'active', $4, $5, $6
+              'active', $4, $5, $6, $7::jsonb, 1, $8, $9::bigint, $10,
+              $9::bigint
             )
             returning id, student_id, lessons_total, lessons_used, starts_at,
               expires_at, status, package_id, payment_id
@@ -799,6 +702,10 @@ export class SubscriptionsService {
             subscriptionPackage.id,
             payment.id,
             leadId,
+            JSON.stringify(commercialSnapshot),
+            Number(subscriptionPackage.version),
+            subscriptionPackage.base_price_minor,
+            subscriptionPackage.currency_code,
           ],
         );
       const student = await this.loadConversionStudent(client, studentId);

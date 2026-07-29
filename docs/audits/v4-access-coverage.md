@@ -7,9 +7,9 @@
 
 | Metric | Value |
 |---|---:|
-| inventory routes | 266 |
-| JWT private routes | 254 |
-| capability + resource-scope mapped | 254 |
+| inventory routes | 267 |
+| JWT private routes | 255 |
+| capability + resource-scope mapped | 255 |
 | public/external routes | 12 |
 | unmapped private routes | 0 |
 | missing resource scopes | 0 |
@@ -27,7 +27,7 @@ expand legacy access.
 | `access.user.override.manage` | 1 |
 | `access.user.role.assign` | 5 |
 | `commerce.client_finance.read` | 4 |
-| `commerce.package.manage` | 3 |
+| `commerce.package.manage` | 4 |
 | `commerce.package.read` | 1 |
 | `commerce.school_finance.read` | 8 |
 | `commerce.subscription.issue` | 3 |
@@ -66,10 +66,10 @@ pwsh -File scripts/v4_inventory.ps1 -Check
 
 | Gate | Result |
 |---|---:|
-| Exact access coverage | 254/254 private routes |
+| Exact access coverage | 255/255 private routes |
 | Registry/resource-scope mapping | 100% / 100% |
 | Unmapped / unexplained allow | 0 / 0 |
 | Targeted capability/JWT/repository tests | 4/4 suites, 56/56 tests |
 | Backend typecheck/build | PASS / PASS |
 | Full backend regression | 110/110 suites, 1026/1026 tests |
-| Current-state inventory | 266 routes, 591 DTO fields, 0 unowned |
+| Current-state inventory | 267 routes, 600 DTO fields, 0 unowned |

@@ -93,6 +93,20 @@ export class CrmPolicy {
     );
   }
 
+  assertCanReadSubscriptionPackages(actor: ActorContext): void {
+    if (
+      actor.role === "admin" ||
+      actor.role === "manager" ||
+      actor.role === "director" ||
+      actor.role === "system_admin"
+    ) {
+      return;
+    }
+    throw new ForbiddenException(
+      "Каталог абонементов доступен только сотрудникам, выдающим абонементы.",
+    );
+  }
+
   /**
    * Системные настройки (конфигурация воронки лидов: колонки/их порядок и т.п.).
    * ✔ Владелец: «любые настройки системы может вносить только сис-админ,

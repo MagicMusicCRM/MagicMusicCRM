@@ -357,7 +357,11 @@ extension _ClientCardStudent on _ClientCardState {
     final issuingForLead = !_isStudent;
     List<Map<String, dynamic>> packages;
     try {
-      packages = await crm.listSubscriptionPackages(limit: 100);
+      final response = await crm.listSubscriptionPackages(limit: 100);
+      // The server returns the active projection. Keep this defensive filter
+      // so a stale/mixed cache can never offer an archived template for a new
+      // issued subscription.
+      packages = activeSubscriptionPackages(response);
     } catch (e) {
       if (!mounted) return;
       MagicToast.show(

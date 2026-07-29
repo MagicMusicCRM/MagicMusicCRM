@@ -238,10 +238,12 @@ extension MagicCrmFinance on MagicCrmService {
   Future<List<Map<String, dynamic>>> listSubscriptionPackages({
     String? q,
     int? limit,
+    bool includeArchived = false,
   }) async {
     final query = <String, dynamic>{};
     if (q != null && q.isNotEmpty) query['q'] = q;
     if (limit != null) query['limit'] = limit;
+    if (includeArchived) query['includeArchived'] = true;
     final res = await _api.get<Map<String, dynamic>>(
       '/crm/subscription-packages',
       queryParameters: query,
@@ -259,18 +261,17 @@ extension MagicCrmFinance on MagicCrmService {
     String? disciplineId,
     String? branchId,
     int? validityDays,
-    bool? isActive,
     int? sortOrder,
   }) async {
     final data = <String, dynamic>{
       'name': name,
-      'lessonsTotal': lessonsTotal,
-      'price': price,
+      'unitCount': lessonsTotal,
+      'basePriceMinor': subscriptionPriceMinor(price),
+      'currencyCode': 'RUB',
     };
     if (disciplineId != null) data['disciplineId'] = disciplineId;
     if (branchId != null) data['branchId'] = branchId;
     if (validityDays != null) data['validityDays'] = validityDays;
-    if (isActive != null) data['isActive'] = isActive;
     if (sortOrder != null) data['sortOrder'] = sortOrder;
     return _api.post<Map<String, dynamic>>(
       '/crm/subscription-packages',
@@ -280,16 +281,38 @@ extension MagicCrmFinance on MagicCrmService {
 
   Future<Map<String, dynamic>> updateSubscriptionPackage(
     String id,
-    Map<String, dynamic> patch,
-  ) async {
+    Map<String, dynamic> patch, {
+    required int expectedVersion,
+  }) async {
+    final data = <String, dynamic>{
+      ...patch,
+      'expectedVersion': expectedVersion,
+    };
     return _api.patch<Map<String, dynamic>>(
       '/crm/subscription-packages/$id',
-      data: patch,
+      data: data,
     );
   }
 
-  Future<void> deleteSubscriptionPackage(String id) async {
-    await _api.delete<Map<String, dynamic>>('/crm/subscription-packages/$id');
+  Future<Map<String, dynamic>> archiveSubscriptionPackage(
+    String id, {
+    required int expectedVersion,
+  }) {
+    return _api.delete<Map<String, dynamic>>(
+      '/crm/subscription-packages/$id',
+      queryParameters: {'expectedVersion': expectedVersion},
+    );
+  }
+
+  Future<Map<String, dynamic>> restoreSubscriptionPackage(
+    String id, {
+    required int expectedVersion,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/subscription-packages/$id/restore',
+      queryParameters: {'expectedVersion': expectedVersion},
+      data: const <String, dynamic>{},
+    );
   }
 
   Future<Map<String, dynamic>> issueSubscription(
@@ -530,4 +553,22 @@ extension MagicCrmFinance on MagicCrmService {
       queryParameters: q,
     );
   }
+}
+
+String subscriptionPriceMinor(num rubles) {
+  final fixed = rubles.toStringAsFixed(2);
+  return fixed.replaceAll('.', '');
+}
+
+List<Map<String, dynamic>> activeSubscriptionPackages(
+  Iterable<Map<String, dynamic>> packages,
+) {
+  return packages
+      .where((item) {
+        final archivedAt = item['archivedAt'] ?? item['archived_at'];
+        final active =
+            item['active'] ?? item['isActive'] ?? item['is_active'] ?? true;
+        return archivedAt == null && active == true;
+      })
+      .toList(growable: false);
 }

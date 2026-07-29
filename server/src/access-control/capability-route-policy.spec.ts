@@ -32,6 +32,13 @@ describe("capability route policy", () => {
     ["POST", "/crm/subscriptions", "commerce.subscription.issue"],
     ["GET", "/crm/subscription-packages", "commerce.package.read"],
     ["POST", "/crm/subscription-packages", "commerce.package.manage"],
+    ["PATCH", "/crm/subscription-packages/id", "commerce.package.manage"],
+    ["DELETE", "/crm/subscription-packages/id", "commerce.package.manage"],
+    [
+      "POST",
+      "/crm/subscription-packages/id/restore",
+      "commerce.package.manage",
+    ],
     ["GET", "/crm/reports/finance", "commerce.school_finance.read"],
     ["GET", "/analytics/status", "report.status.read"],
     ["GET", "/analytics/export", "report.export.xlsx"],

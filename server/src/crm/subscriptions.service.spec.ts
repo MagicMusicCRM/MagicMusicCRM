@@ -146,66 +146,6 @@ describe("SubscriptionsService", () => {
     expect(sql).toContain("link.entity_type = 'student'");
   });
 
-  it("creates subscription packages through CRM write policy and audit (P5b)", async () => {
-    const { service, query, audit, policy } = createService([
-      {
-        id: "pkg-a",
-        name: "8 уроков",
-        discipline_id: null,
-        branch_id: "branch-a",
-        lessons_total: 8,
-        price: "8000.00",
-        validity_days: 60,
-        is_active: true,
-        sort_order: 0,
-        created_at: "2026-06-22T00:00:00.000Z",
-      },
-    ]);
-
-    await expect(
-      service.createSubscriptionPackage(actor, {
-        name: " 8 уроков ",
-        branchId: "branch-a",
-        lessonsTotal: 8,
-        price: 8000,
-        validityDays: 60,
-      }),
-    ).resolves.toEqual({
-      id: "pkg-a",
-      name: "8 уроков",
-      disciplineId: null,
-      branchId: "branch-a",
-      lessonsTotal: 8,
-      price: 8000,
-      validityDays: 60,
-      isActive: true,
-      sortOrder: 0,
-      createdAt: "2026-06-22T00:00:00.000Z",
-    });
-
-    // Package catalog edits are a school-finance concern → director-level.
-    expect(policy.assertCanManageSubscriptionPackages).toHaveBeenCalledWith(
-      actor,
-    );
-    expect(query.mock.calls[0][1]).toEqual([
-      "8 уроков",
-      null,
-      "branch-a",
-      8,
-      8000,
-      60,
-      null,
-      null,
-    ]);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.subscription_package_created",
-        entityType: "subscription_package",
-        entityId: "pkg-a",
-      }),
-    );
-  });
-
   it("issues a subscription from a package atomically with audit (P5b)", async () => {
     const { service, query, transaction, audit, policy } =
       createServiceWithQueryResults([
@@ -278,8 +218,11 @@ describe("SubscriptionsService", () => {
               name: "8 занятий",
               discipline_id: "discipline-a",
               branch_id: "branch-a",
-              lessons_total: "8",
-              price: "8000.00",
+               lessons_total: "8",
+               price: "8000.00",
+               base_price_minor: "800000",
+               currency_code: "RUB",
+               version: "1",
               validity_days: 60,
               is_active: true,
               sort_order: 0,

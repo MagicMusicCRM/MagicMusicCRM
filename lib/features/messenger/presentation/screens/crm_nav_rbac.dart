@@ -36,6 +36,17 @@ bool crmHasManagerAccess(String role) =>
 bool crmHasSchoolFinanceAccess(String role) =>
     role == 'director' || role == 'system_admin';
 
+/// Active commercial templates are needed by every role that can issue a
+/// subscription. Catalog lifecycle changes remain a Director/root concern.
+bool crmCanReadSubscriptionPackages(String role) =>
+    role == 'admin' ||
+    role == 'manager' ||
+    role == 'director' ||
+    role == 'system_admin';
+
+bool crmCanManageSubscriptionPackages(String role) =>
+    role == 'director' || role == 'system_admin';
+
 /// ПОРАЗРЕЗНЫЕ финансы: ставка педагога за занятие, зарплатный раздел, отчёт
 /// «Статистика преподавателей».
 ///

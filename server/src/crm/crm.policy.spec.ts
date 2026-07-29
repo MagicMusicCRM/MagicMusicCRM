@@ -133,6 +133,24 @@ describe("CrmPolicy", () => {
 
   // KVA-239: общешкольные финансы — только director/system_admin.
   describe("assertCanManageSubscriptionPackages — каталог абонементов", () => {
+    it("allows the active catalog only to issuing staff", () => {
+      for (const role of [
+        "admin",
+        "manager",
+        "director",
+        "system_admin",
+      ] as const) {
+        expect(() =>
+          policy.assertCanReadSubscriptionPackages({ userId: "u", role }),
+        ).not.toThrow();
+      }
+      for (const role of ["teacher", "client"] as const) {
+        expect(() =>
+          policy.assertCanReadSubscriptionPackages({ userId: "u", role }),
+        ).toThrow(ForbiddenException);
+      }
+    });
+
     it("allows director and system_admin (pricing = school finance)", () => {
       for (const role of ["director", "system_admin"] as const) {
         expect(() =>
