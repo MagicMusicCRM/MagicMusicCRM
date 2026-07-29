@@ -20,3 +20,12 @@
 - Duplicate close/audit/outbox: 0.
 - Unauthorized close после permission loss: 0.
 - Reminder blocking failures: 0.
+
+## Full batch regression
+
+- Backend: 140/140 suites, 1126/1126 tests.
+- Flutter: 434/434 tests.
+- Backend typecheck/build: clean.
+- Flutter analyze: clean.
+- Review-проход устранил N+1 в audience/reminder projection и сохранил существующий reminder при edit.
+- Regression-проход исправил только две устаревшие совместимости тестов/UI: rollback gate теперь допускает более новые migrations, компактный legacy task layout не переполняется.
