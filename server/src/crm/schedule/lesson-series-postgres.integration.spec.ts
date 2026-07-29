@@ -219,7 +219,76 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
       await cleanupFixture(pool, fixture, createdSeriesId);
     }
   });
+
+  it("keeps randomized weekly series on the requested wall clock across DST", async () => {
+    const random = seededRandom(0x44_04_01);
+    const zones = [
+      "America/New_York",
+      "Europe/Berlin",
+      "Europe/Moscow",
+      "Australia/Sydney",
+    ];
+    for (let sample = 0; sample < 64; sample += 1) {
+      const timezone = zones[Math.floor(random() * zones.length)]!;
+      const month = 1 + Math.floor(random() * 11);
+      const day = 1 + Math.floor(random() * 20);
+      const weekday = 1 + Math.floor(random() * 7);
+      const hour = 8 + Math.floor(random() * 10);
+      const minute = Math.floor(random() * 4) * 15;
+      const validFrom = `2026-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const beginTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+      const occurrences = await pool.query<{
+        local_date: string;
+        local_time: string;
+        starts_at: Date;
+      }>(
+        `
+          select
+            generated.local_date::text as local_date,
+            to_char(
+              timezone($1, generated.starts_at),
+              'HH24:MI'
+            ) as local_time,
+            generated.starts_at
+          from (
+            select
+              day::date as local_date,
+              (day::date + $5::time) at time zone $1 as starts_at
+            from generate_series(
+              $2::date,
+              $2::date + interval '70 days',
+              interval '1 day'
+            ) day
+            where extract(isodow from day) = $3::int
+          ) generated
+          order by generated.local_date
+          limit $4
+        `,
+        [timezone, validFrom, weekday, 10, beginTime],
+      );
+      expect(occurrences.rows).toHaveLength(10);
+      expect(
+        occurrences.rows.every((row) => row.local_time === beginTime),
+      ).toBe(true);
+      for (let index = 1; index < occurrences.rows.length; index += 1) {
+        const previous = new Date(
+          occurrences.rows[index - 1]!.starts_at,
+        ).getTime();
+        const current = new Date(occurrences.rows[index]!.starts_at).getTime();
+        const elapsedHours = (current - previous) / 3_600_000;
+        expect([167, 168, 169]).toContain(elapsedHours);
+      }
+    }
+  });
 });
+
+function seededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1_103_515_245) + 12_345) >>> 0;
+    return state / 0x1_0000_0000;
+  };
+}
 
 async function errorResponse(work: () => Promise<unknown>) {
   try {

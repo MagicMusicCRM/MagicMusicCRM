@@ -640,12 +640,12 @@ flowchart TD
 
 ## Phase 4 — Verification (S2)
 
-- [ ] **T4.4.1** [REQ-SCHED-001, REQ-LESSON-002]: Закрыть schedule concurrency/property suite
+- [x] **T4.4.1** [REQ-SCHED-001, REQ-LESSON-002]: Закрыть schedule concurrency/property suite
   - **Описание:** доказать parity всех write-paths, worker atomicity, timezone boundaries и отсутствие attendance.
   - **Подпункты:**
-    - [ ] Добавить randomized interval/DST/series cases.
-    - [ ] Выполнить parallel create/drag/reschedule/worker scenarios.
-    - [ ] Добавить route/UI inventory assertion attendance=0.
+    - [x] Добавить randomized interval/DST/series cases.
+    - [x] Выполнить parallel create/drag/reschedule/worker scenarios.
+    - [x] Добавить route/UI inventory assertion attendance=0.
   - **Вход:** T4.2.1…T4.3.3, T8.2.1.
   - **Выход:** v4 schedule regression suite/report.
   - **📎 Ссылка:** ADR-008, ADR-012.

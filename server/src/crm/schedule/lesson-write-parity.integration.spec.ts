@@ -270,6 +270,129 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
       });
     }
   });
+
+  it("serializes parallel create and drag races into one accepted interval", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const lessonIds: string[] = [];
+    const metadata = (name: string) => ({
+      idempotencyKey: `schedule-race-${name}-${randomUUID()}`,
+      requestId: `schedule-race-request-${name}-${randomUUID()}`,
+    });
+    const base = {
+      clientRef: { type: "student" as const, id: fixture.studentId },
+      teacherId: fixture.teacherId,
+      branchId: fixture.branchId,
+      roomId: fixture.roomId,
+      durationMinutes: 60,
+      isTrial: false,
+      completionType: "standard.success",
+      clientChargeType: "none" as const,
+      clientChargeValue: 0,
+      teacherCompensationType: "fixed" as const,
+      teacherCompensationValue: 700,
+    };
+    try {
+      const concurrentCreates = await Promise.allSettled([
+        commands.create(
+          actor,
+          { ...base, scheduledAt: "2026-07-27T07:00:00.000Z" },
+          metadata("create-left"),
+        ),
+        commands.create(
+          actor,
+          { ...base, scheduledAt: "2026-07-27T07:00:00.000Z" },
+          metadata("create-right"),
+        ),
+      ]);
+      const acceptedCreate = concurrentCreates.filter(
+        (result): result is PromiseFulfilledResult<
+          Awaited<ReturnType<LessonCommandService["create"]>>
+        > => result.status === "fulfilled",
+      );
+      const rejectedCreate = concurrentCreates.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      expect(acceptedCreate).toHaveLength(1);
+      expect(rejectedCreate).toHaveLength(1);
+      expect(rejectedCreate[0]!.reason).toMatchObject({ status: 422 });
+      lessonIds.push(acceptedCreate[0]!.value.id);
+
+      const left = await commands.create(
+        actor,
+        { ...base, scheduledAt: "2026-07-27T09:00:00.000Z" },
+        metadata("drag-source-left"),
+      );
+      const right = await commands.create(
+        actor,
+        { ...base, scheduledAt: "2026-07-27T11:00:00.000Z" },
+        metadata("drag-source-right"),
+      );
+      lessonIds.push(left.id, right.id);
+
+      const concurrentDrags = await Promise.allSettled([
+        commands.update(
+          actor,
+          left.id,
+          {
+            expectedVersion: left.version,
+            scheduledAt: "2026-07-27T13:00:00.000Z",
+          },
+          metadata("drag-left"),
+        ),
+        commands.update(
+          actor,
+          right.id,
+          {
+            expectedVersion: right.version,
+            scheduledAt: "2026-07-27T13:00:00.000Z",
+          },
+          metadata("drag-right"),
+        ),
+      ]);
+      expect(
+        concurrentDrags.filter((result) => result.status === "fulfilled"),
+      ).toHaveLength(1);
+      const rejectedDrag = concurrentDrags.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      expect(rejectedDrag).toHaveLength(1);
+      expect(rejectedDrag[0]!.reason).toMatchObject({ status: 422 });
+
+      const persisted = await pool.query<{
+        at_target: string;
+        at_sources: string;
+      }>(
+        `
+          select
+            count(*) filter (
+              where scheduled_at = '2026-07-27T13:00:00.000Z'
+            )::text as at_target,
+            count(*) filter (
+              where scheduled_at in (
+                '2026-07-27T09:00:00.000Z',
+                '2026-07-27T11:00:00.000Z'
+              )
+            )::text as at_sources
+          from app.lessons
+          where id = any($1::uuid[])
+        `,
+        [[left.id, right.id]],
+      );
+      expect(persisted.rows[0]).toEqual({
+        at_target: "1",
+        at_sources: "1",
+      });
+    } finally {
+      await cleanupFixture(pool, {
+        ...fixture,
+        actorKey: `user:${fixture.managerId}`,
+        lessonIds,
+      });
+    }
+  });
 });
 
 async function violationResponse(work: () => Promise<unknown>) {

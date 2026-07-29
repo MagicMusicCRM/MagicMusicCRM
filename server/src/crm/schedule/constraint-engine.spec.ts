@@ -31,6 +31,42 @@ describe("schedule constraint engine rules", () => {
     }
   });
 
+  it("preserves half-open overlap invariants for deterministic randomized intervals", () => {
+    const random = seededRandom(0x44_04_01);
+    const epoch = Date.UTC(2026, 0, 1);
+    for (let sample = 0; sample < 2_000; sample += 1) {
+      const leftStart = Math.floor(random() * 365 * 24 * 60);
+      const rightStart = Math.floor(random() * 365 * 24 * 60);
+      const leftDuration = 1 + Math.floor(random() * 12 * 60);
+      const rightDuration = 1 + Math.floor(random() * 12 * 60);
+      const shift = Math.floor(random() * 10_000) - 5_000;
+      const interval = (start: number, duration: number) => ({
+        startAt: new Date(epoch + start * 60_000),
+        endAt: new Date(epoch + (start + duration) * 60_000),
+      });
+      const left = interval(leftStart, leftDuration);
+      const right = interval(rightStart, rightDuration);
+      const expected =
+        leftStart < rightStart + rightDuration &&
+        rightStart < leftStart + leftDuration;
+
+      expect(halfOpenIntervalsOverlap(left, right)).toBe(expected);
+      expect(halfOpenIntervalsOverlap(right, left)).toBe(expected);
+      expect(
+        halfOpenIntervalsOverlap(
+          interval(leftStart + shift, leftDuration),
+          interval(rightStart + shift, rightDuration),
+        ),
+      ).toBe(expected);
+      expect(
+        halfOpenIntervalsOverlap(
+          left,
+          interval(leftStart + leftDuration, rightDuration),
+        ),
+      ).toBe(false);
+    }
+  });
+
   it("rejects invalid instants and non-positive intervals", () => {
     expect(parseConstraintInterval("invalid", at(30))).toBeNull();
     expect(parseConstraintInterval(at(30), at(30))).toBeNull();
@@ -140,3 +176,11 @@ describe("schedule constraint engine rules", () => {
     ]);
   });
 });
+
+function seededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+    return state / 0x1_0000_0000;
+  };
+}

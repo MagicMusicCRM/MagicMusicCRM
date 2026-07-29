@@ -194,6 +194,98 @@ describe("Atomic lesson reschedule/cancel (PostgreSQL)", () => {
       await cleanup(pool, fixture);
     }
   });
+
+  it("allows exactly one winner in a parallel reschedule race", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const command = (scheduledAt: string) => ({
+      expectedVersion: 1,
+      reasonCode: "schedule.concurrent",
+      financialDecision: {
+        chargeClient: false,
+        compensateTeacher: false,
+      },
+      successor: { scheduledAt },
+      confirm: true as const,
+    });
+    const metadata = (label: string) => ({
+      idempotencyKey: `reschedule-race-${label}-${randomUUID()}`,
+      requestId: `reschedule-race-request-${label}-${randomUUID()}`,
+    });
+    try {
+      const results = await Promise.allSettled([
+        service.reschedule(
+          actor,
+          fixture.sourceId,
+          command("2026-07-27T11:00:00.000Z"),
+          metadata("left"),
+        ),
+        service.reschedule(
+          actor,
+          fixture.sourceId,
+          command("2026-07-27T12:00:00.000Z"),
+          metadata("right"),
+        ),
+      ]);
+      expect(
+        results.filter((result) => result.status === "fulfilled"),
+      ).toHaveLength(1);
+      const rejected = results.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]!.reason).toMatchObject({ status: 409 });
+
+      const persisted = await pool.query<{
+        source_state: string;
+        source_version: number | string;
+        successors: number;
+        transitions: number;
+        audits: number;
+      }>(
+        `
+          select
+            source.lifecycle_state as source_state,
+            source.version as source_version,
+            (
+              select count(*)::int
+              from app.lessons
+              where predecessor_id = source.id
+            ) as successors,
+            (
+              select count(*)::int
+              from app.lesson_transitions
+              where lesson_id = source.id
+            ) as transitions,
+            (
+              select count(*)::int
+              from app.audit_events
+              where action = 'crm.lesson_rescheduled'
+                and entity_id = source.id::text
+            ) as audits
+          from app.lessons source
+          where source.id = $1
+        `,
+        [fixture.sourceId],
+      );
+      expect({
+        ...persisted.rows[0],
+        source_version: Number(persisted.rows[0]!.source_version),
+      }).toEqual({
+        source_state: "rescheduled",
+        source_version: 2,
+        successors: 1,
+        transitions: 1,
+        audits: 1,
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
 });
 
 async function expectSourceUnchanged(pool: Pool, lessonId: string) {

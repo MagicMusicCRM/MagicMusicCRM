@@ -21,6 +21,7 @@
     "start:dev": "nest start --watch",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
     "test:actor-matrix:v4": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/access-control/actor-matrix-postgres.integration.spec.ts src/access-control/actor-matrix-payload-leak.spec.ts",
+    "test:schedule-v4": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/crm/schedule/availability.spec.ts src/crm/schedule/constraint-engine.spec.ts src/crm/schedule/availability-postgres.integration.spec.ts src/crm/schedule/constraint-engine-postgres.integration.spec.ts src/crm/schedule/lesson-write-parity.integration.spec.ts src/crm/schedule/lesson-series-postgres.integration.spec.ts src/crm/schedule/reschedule-postgres.integration.spec.ts src/crm/schedule/completion-worker-postgres.integration.spec.ts src/crm/schedule/no-attendance-mutations.contract.spec.ts",
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch",
     "typecheck": "tsc --noEmit"
   },
