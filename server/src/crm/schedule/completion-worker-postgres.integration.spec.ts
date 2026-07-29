@@ -7,6 +7,8 @@ import { PlatformIntegrityRepository } from "../../platform/platform-integrity.r
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { LessonSettlementRepository } from "../commerce/lesson-settlement.repository";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
+import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { RealtimeBus } from "../../realtime/realtime-bus";
 import {
   computeCompletionBackoffSeconds,
   LessonCompletionWorkerRepository,
@@ -55,6 +57,13 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
       database,
       new LessonSettlementRepository(),
     );
+    const reservations = new SubscriptionReservationService(
+      database,
+      {
+        emitCrmChanged: jest.fn(),
+        emitFinanceChanged: jest.fn(),
+      } as unknown as RealtimeBus,
+    );
     completion = new LessonCompletionService(
       new PlatformIntegrityService(
         database,
@@ -63,6 +72,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
       repository,
       new LessonLifecycleRepository(database),
       settlement,
+      reservations,
     );
   });
 

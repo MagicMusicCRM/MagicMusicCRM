@@ -17,6 +17,8 @@ interface SettlementSourceRow {
   teacher_compensation_type: TeacherCompensationFactType | null;
   teacher_compensation_value: string | null;
   subscription_id: string | null;
+  reservation_subscription_id: string | null;
+  reservation_state: string | null;
   duration_minutes: number | null;
   validation_state: string | null;
 }
@@ -48,11 +50,20 @@ export class LessonSettlementRepository {
           snapshot.teacher_compensation_type,
           snapshot.teacher_compensation_value,
           snapshot.subscription_id,
+          reservation.subscription_id as reservation_subscription_id,
+          reservation.state as reservation_state,
           snapshot.duration_minutes,
           snapshot.validation_state
         from app.lessons lesson
         left join app.lesson_snapshots snapshot
           on snapshot.lesson_id = lesson.id
+        left join lateral (
+          select subscription_id, state
+          from app.lesson_reservations
+          where lesson_id = lesson.id
+          order by created_at desc, id desc
+          limit 1
+        ) reservation on true
         where lesson.id = $1
           and lesson.deleted_at is null
         for update of lesson
@@ -62,6 +73,18 @@ export class LessonSettlementRepository {
     const source = sourceResult.rows[0];
     if (!source) throw new NotFoundException("Урок не найден.");
     this.assertSettleable(source);
+
+    const effectiveChargeType =
+      source.client_charge_type === "subscription" &&
+      source.reservation_state !== "reserved"
+        ? "none"
+        : source.client_charge_type;
+    const effectiveChargeValue =
+      effectiveChargeType === "none" ? "0" : source.client_charge_value;
+    const effectiveSubscriptionId =
+      effectiveChargeType === "subscription"
+        ? source.reservation_subscription_id
+        : null;
 
     await client.query(
       `
@@ -94,9 +117,9 @@ export class LessonSettlementRepository {
         lessonId,
         source.client_type,
         source.client_id,
-        source.client_charge_type,
-        source.client_charge_value,
-        source.subscription_id,
+        effectiveChargeType,
+        effectiveChargeValue,
+        effectiveSubscriptionId,
       ],
     );
 

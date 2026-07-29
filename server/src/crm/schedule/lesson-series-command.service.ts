@@ -18,6 +18,7 @@ import {
   CompleteLessonDraft,
   LessonRequiredFieldValidator,
 } from "./lesson-required-field.validator";
+import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 
 interface SeriesOccurrenceRow {
   local_date: string;
@@ -45,6 +46,7 @@ export class LessonSeriesCommandService {
     private readonly validator: LessonRequiredFieldValidator,
     private readonly constraints: ScheduleConstraintEngine,
     private readonly lifecycle: LessonLifecycleRepository,
+    private readonly reservations: SubscriptionReservationService,
   ) {}
 
   async create(
@@ -427,6 +429,14 @@ export class LessonSeriesCommandService {
       teacherCompensationValue: draft.teacherCompensationValue,
       subscriptionId: draft.subscriptionId ?? undefined,
       trial: draft.isTrial,
+    });
+    await this.reservations.allocate(client, {
+      lessonId,
+      clientType: draft.clientRef.type,
+      clientId: draft.clientRef.id,
+      chargeType: draft.clientChargeType,
+      subscriptionId: draft.subscriptionId,
+      units: draft.clientChargeValue,
     });
   }
 

@@ -762,12 +762,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/crm/commerce/commerce-projections.contract.spec.ts && flutter test test/features/v4/client_finance_roles_test.dart`
   - **Оценка:** 8 ч. · **Зависимости:** T2.2.2, T5.2.4 · **Приоритет:** P0 · **Sprint:** S3
 
-- [ ] **T5.3.2** [REQ-SUB-004, REQ-LESSON-003]: Интегрировать reservations с Lesson colors/settlement
+- [x] **T5.3.2** [REQ-SUB-004, REQ-LESSON-003]: Интегрировать reservations с Lesson colors/settlement
   - **Описание:** после issue/replace/cancel детерминированно обновлять future coverage, не удаляя lessons.
   - **Подпункты:**
-    - [ ] Реализовать reservation allocation/release в transaction boundaries.
-    - [ ] Обновлять schedule/client projections post-commit.
-    - [ ] Сериализовать cancel/replace vs completion race.
+    - [x] Реализовать reservation allocation/release в transaction boundaries.
+    - [x] Обновлять schedule/client projections post-commit.
+    - [x] Сериализовать cancel/replace vs completion race.
   - **Вход:** T4.3.2, T5.1.1, T5.2.3, T5.2.4.
   - **Выход:** reservation service/events/race tests.
   - **📎 Ссылка:** `commerce.md §8/§10`, `schedule_lifecycle.md §9`.

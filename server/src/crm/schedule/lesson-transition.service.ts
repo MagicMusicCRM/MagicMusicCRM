@@ -25,6 +25,7 @@ import {
   LessonRequiredFieldValidator,
 } from "./lesson-required-field.validator";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
+import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 
 interface TransitionLessonRow {
   id: string;
@@ -61,6 +62,7 @@ export class LessonTransitionService {
     private readonly constraints: ScheduleConstraintEngine,
     private readonly lifecycle: LessonLifecycleRepository,
     private readonly financial: LessonTransitionFinancialService,
+    private readonly reservations: SubscriptionReservationService,
   ) {}
 
   async previewReschedule(
@@ -225,6 +227,16 @@ export class LessonTransitionService {
           lessonId,
           decision: dto.financialDecision,
         });
+        if (successor && successorId) {
+          await this.reservations.allocate(client, {
+            lessonId: successorId,
+            clientType: successor.clientRef.type,
+            clientId: successor.clientRef.id,
+            chargeType: successor.clientChargeType,
+            subscriptionId: successor.subscriptionId,
+            units: successor.clientChargeValue,
+          });
+        }
         const updated = await client.query<{ version: number | string }>(
           `
             update app.lessons

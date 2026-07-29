@@ -20,6 +20,7 @@ import {
   LessonRequiredFieldValidator,
 } from "./lesson-required-field.validator";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
+import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 
 export interface LessonCommandMetadata {
   idempotencyKey: string;
@@ -64,6 +65,7 @@ export class LessonCommandService {
     private readonly validator: LessonRequiredFieldValidator,
     private readonly constraints: ScheduleConstraintEngine,
     private readonly lifecycle: LessonLifecycleRepository,
+    private readonly reservations: SubscriptionReservationService,
   ) {}
 
   async create(
@@ -142,6 +144,14 @@ export class LessonCommandService {
           teacherCompensationValue: draft.teacherCompensationValue,
           subscriptionId: draft.subscriptionId ?? undefined,
           trial: draft.isTrial,
+        });
+        await this.reservations.allocate(client, {
+          lessonId,
+          clientType: draft.clientRef.type,
+          clientId: draft.clientRef.id,
+          chargeType: draft.clientChargeType,
+          subscriptionId: draft.subscriptionId,
+          units: draft.clientChargeValue,
         });
         return { lessonId };
       },

@@ -30,6 +30,7 @@ import {
   SubscriptionReplacePreviewTokenPayload,
 } from "./subscription-preview-token";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
+import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 export interface SubscriptionLifecycleMutationMetadata {
   idempotencyKey: string;
@@ -84,6 +85,7 @@ export class SubscriptionLifecycleService {
     private readonly policy: CrmPolicy,
     private readonly integrity: PlatformIntegrityService,
     private readonly previewTokens: SubscriptionPreviewTokenService,
+    private readonly reservations: SubscriptionReservationService,
   ) {}
 
   async previewReplacement(
@@ -359,7 +361,7 @@ export class SubscriptionLifecycleService {
           return resultRef;
         },
       });
-    return {
+    const response = {
       replacement: {
         oldSubscriptionId: result.resultRef.sourceId,
         oldSubscriptionVersion: result.resultRef.sourceVersion,
@@ -386,6 +388,13 @@ export class SubscriptionLifecycleService {
       auditId: result.auditId,
       eventId: result.eventId,
     };
+    if (!result.replayed) {
+      await this.reservations.publishPostCommit({
+        studentId,
+        subscriptionId: result.resultRef.resultId,
+      });
+    }
+    return response;
   }
 
   async previewCancellation(
@@ -591,7 +600,7 @@ export class SubscriptionLifecycleService {
           };
         },
       });
-    return {
+    const response = {
       cancellation: {
         issuedSubscriptionId: result.resultRef.sourceId,
         version: result.resultRef.resultVersion,
@@ -604,6 +613,13 @@ export class SubscriptionLifecycleService {
       auditId: result.auditId,
       eventId: result.eventId,
     };
+    if (!result.replayed) {
+      await this.reservations.publishPostCommit({
+        studentId,
+        subscriptionId: result.resultRef.sourceId,
+      });
+    }
+    return response;
   }
 
   private createTokenPayload(

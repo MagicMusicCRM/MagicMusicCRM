@@ -14,6 +14,8 @@ import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
+import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { RealtimeBus } from "../../realtime/realtime-bus";
 
 const defaultTestDatabaseUrl =
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
@@ -53,6 +55,13 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
         new ConstraintEngineRepository(database, availability),
       ),
       new LessonLifecycleRepository(database),
+      new SubscriptionReservationService(
+        database,
+        {
+          emitCrmChanged: jest.fn(),
+          emitFinanceChanged: jest.fn(),
+        } as unknown as RealtimeBus,
+      ),
     );
   });
 

@@ -10,6 +10,7 @@ import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import { ActualPaymentService } from "./actual-payment.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
@@ -17,6 +18,7 @@ import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
 import { SubscriptionLifecycleService } from "./subscription-lifecycle.service";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
+import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
@@ -55,10 +57,18 @@ describe("Subscription cancellation preview/confirm", () => {
       database,
       new PlatformIntegrityRepository(),
     );
+    const reservations = new SubscriptionReservationService(
+      database,
+      {
+        emitCrmChanged: jest.fn(),
+        emitFinanceChanged: jest.fn(),
+      } as unknown as RealtimeBus,
+    );
     issueService = new SubscriptionIssueService(
       issueRepository,
       policy,
       integrity,
+      reservations,
     );
     paymentService = new ActualPaymentService(
       issueRepository,
@@ -73,6 +83,7 @@ describe("Subscription cancellation preview/confirm", () => {
         get: (key: string, fallback?: string) =>
           key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
       } as unknown as ConfigService),
+      reservations,
     );
     fixture = await createFixture(pool);
     actor = fixture.actor;

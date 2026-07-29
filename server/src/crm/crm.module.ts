@@ -87,6 +87,7 @@ import { CommerceProjectionController } from './commerce/commerce-projection.con
 import { CommerceProjectionFactory } from './commerce/commerce-projection.factory';
 import { CommerceProjectionRepository } from './commerce/commerce-projection.repository';
 import { CommerceProjectionService } from './commerce/commerce-projection.service';
+import { SubscriptionReservationService } from './commerce/subscription-reservation.service';
 
 @Module({
   imports: [
@@ -179,6 +180,7 @@ import { CommerceProjectionService } from './commerce/commerce-projection.servic
     CommerceProjectionFactory,
     CommerceProjectionRepository,
     CommerceProjectionService,
+    SubscriptionReservationService,
     {
       provide: LESSON_SETTLEMENT_PORT,
       useExisting: LessonSettlementService,

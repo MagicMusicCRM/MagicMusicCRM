@@ -25,6 +25,7 @@ import {
   PlannedInstallment,
   SubscriptionIssueRepository,
 } from "./subscription-issue.repository";
+import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 export interface CommerceMutationMetadata {
   idempotencyKey: string;
@@ -48,6 +49,7 @@ export class SubscriptionIssueService {
     private readonly repository: SubscriptionIssueRepository,
     private readonly policy: CrmPolicy,
     private readonly integrity: PlatformIntegrityService,
+    private readonly reservations: SubscriptionReservationService,
   ) {}
 
   async issue(
@@ -161,10 +163,17 @@ export class SubscriptionIssueService {
           };
         },
       });
-    return this.loadStableIssueResult(
+    const response = await this.loadStableIssueResult(
       result.resultRef.entityId,
       result.resultRef.version,
     );
+    if (!result.replayed) {
+      await this.reservations.publishPostCommit({
+        studentId,
+        subscriptionId: result.resultRef.entityId,
+      });
+    }
+    return response;
   }
 
   private normalizeDiscount(
