@@ -67,6 +67,30 @@ export class SharedTaskRepository {
     );
   }
 
+  audienceProjection(taskId: string) {
+    return this.database.query<TaskAudienceRow>(
+      `
+        select *
+        from app.task_audiences
+        where task_id = $1
+        order by audience_type, target_id nulls first, id
+      `,
+      [taskId],
+    );
+  }
+
+  reminderProjection(taskId: string) {
+    return this.database.query<SharedTaskReminderRow>(
+      `
+        select *
+        from app.shared_task_reminders
+        where task_id = $1 and status in ('pending', 'claimed')
+        order by due_at, channel, id
+      `,
+      [taskId],
+    );
+  }
+
   create(
     client: PoolClient,
     input: {

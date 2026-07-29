@@ -174,6 +174,8 @@ _Актуализация 2026-07-29: `T6.2.1` закрыта: versioned/idempot
 
 _Актуализация 2026-07-29: `T6.2.2` закрыта: persisted reminder worker использует SKIP LOCKED claim, lease/reclaim, dedupe, bounded retry/poison и current audience recipients; email/push имеют in-app fallback. Close атомарно отменяет pending reminders и после commit посылает body-free invalidation в CRM/user rooms менее чем за 2 s; list возвращает open/overdue counters. Exact reminder 1/1, targeted SharedTask 3/3, typecheck clean (`docs/audits/v4-task-reminders-realtime.md`). Следующий шаг `/forge`: `T6.3.1` desktop/mobile Task UX._
 
+_Актуализация 2026-07-29: `T6.3.1` закрыта: Flutter экран общих задач подключён к текущему Task-разделу, использует v4 create/update/list/close, поддерживает audience user/branch/allBranches, all-day/interval, reminder badge/panel и явный close pending/error/retry. Mobile collapsed filter ровно 56 px, advanced filters scrollable; desktop filters inline. Exact widget 4/4, Flutter analyze clean, backend targeted 3/3 и typecheck clean (`docs/audits/v4-shared-tasks-ui.md`). Следующий шаг `/forge`: `T6.4.1` task audience/concurrency/device suite._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 

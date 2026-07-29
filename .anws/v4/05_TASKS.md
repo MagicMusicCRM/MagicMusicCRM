@@ -844,7 +844,7 @@ flowchart TD
 
 ## Phase 3 — Flutter integration (S4)
 
-- [ ] **T6.3.1** [REQ-TASK-001, REQ-TASK-002, REQ-NAV-003]: Перешить desktop/mobile Task UX
+- [x] **T6.3.1** [REQ-TASK-001, REQ-TASK-002, REQ-NAV-003]: Перешить desktop/mobile Task UX
   - **Описание:** поддержать все audience/time modes, явный close, non-modal reminder и компактный mobile filter.
   - **Подпункты:**
     - [ ] Реализовать create/edit/close pending/error/retry states.

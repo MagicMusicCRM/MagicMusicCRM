@@ -17,6 +17,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 
 part 'tasks_widget_cards.dart';
 part 'tasks_widget_sheets.dart';
@@ -776,6 +777,18 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
           ),
           // Год / Месяц / День — opens on «День» = today (owner rule).
           _TaskViewSwitcher(view: _calView, onChanged: _setCalView),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                key: const Key('open-shared-tasks-v4'),
+                onPressed: _openSharedTasks,
+                icon: const Icon(Icons.groups_2_outlined, size: 18),
+                label: const Text('Общие задачи'),
+              ),
+            ),
+          ),
           if (canControl)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
@@ -896,6 +909,12 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     if (picked == null || !mounted) return;
     _setDropdownFilter(
       () => _selectedDay = DateTime(picked.year, picked.month, picked.day),
+    );
+  }
+
+  Future<void> _openSharedTasks() {
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const SharedTasksV4Panel()),
     );
   }
 

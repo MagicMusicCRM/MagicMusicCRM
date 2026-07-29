@@ -193,7 +193,9 @@ export class SharedTaskService {
       limit: query.limit ?? 100,
     });
     await this.repository.recordListResolutions(result.rows, actor.userId);
-    const items = result.rows.map((row) => this.toDto(row));
+    const items = await Promise.all(
+      result.rows.map((row) => this.toDto(row)),
+    );
     return {
       items,
       counters: await this.repository.counters(actor.userId, actor.role),
@@ -371,7 +373,11 @@ export class SharedTaskService {
     return row;
   }
 
-  private toDto(row: SharedTaskRow | ResolvedSharedTaskRow) {
+  private async toDto(row: SharedTaskRow | ResolvedSharedTaskRow) {
+    const [audiences, reminders] = await Promise.all([
+      this.repository.audienceProjection(row.id),
+      this.repository.reminderProjection(row.id),
+    ]);
     return {
       id: row.id,
       title: row.title,
@@ -388,6 +394,16 @@ export class SharedTaskService {
       createdBy: row.created_by,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      audiences: audiences.rows.map((audience) => ({
+        type: audience.audience_type,
+        ...(audience.target_id ? { targetId: audience.target_id } : {}),
+      })),
+      reminders: reminders.rows.map((reminder) => ({
+        dueAt: reminder.due_at,
+        channel: reminder.channel,
+        status: reminder.status,
+      })),
+      hasReminder: reminders.rows.length > 0,
     };
   }
 

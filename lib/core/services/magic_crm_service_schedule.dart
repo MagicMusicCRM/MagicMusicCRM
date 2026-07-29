@@ -3,6 +3,64 @@ part of 'magic_crm_service.dart';
 /// Schedule & lessons: matrix, lessons, tasks, comments,
 /// timeline, progress notes, subscriptions, ledger, schedule series.
 extension MagicCrmSchedule on MagicCrmService {
+  Future<Map<String, dynamic>> listSharedTasks({
+    String? state,
+    int limit = 100,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/shared-tasks',
+      queryParameters: {
+        'limit': limit,
+        if (state != null && state.isNotEmpty) 'state': state,
+      },
+    );
+    final items = response['items'];
+    return {
+      'items': items is List
+          ? items.whereType<Map<String, dynamic>>().toList()
+          : <Map<String, dynamic>>[],
+      'counters': response['counters'] is Map<String, dynamic>
+          ? response['counters']
+          : <String, dynamic>{'open': 0, 'overdue': 0},
+    };
+  }
+
+  Future<Map<String, dynamic>> createSharedTask({
+    required Map<String, dynamic> data,
+    required MagicMutationIdentity identity,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/shared-tasks',
+      identity: identity,
+      data: data,
+    );
+  }
+
+  Future<Map<String, dynamic>> updateSharedTask({
+    required String taskId,
+    required Map<String, dynamic> data,
+    required MagicMutationIdentity identity,
+  }) {
+    return _api.request<Map<String, dynamic>>(
+      'PATCH',
+      '/crm/shared-tasks/$taskId',
+      data: data,
+      mutationIdentity: identity,
+    );
+  }
+
+  Future<Map<String, dynamic>> closeSharedTask({
+    required String taskId,
+    required int expectedVersion,
+    required MagicMutationIdentity identity,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/shared-tasks/$taskId/close',
+      identity: identity,
+      data: {'expectedVersion': expectedVersion},
+    );
+  }
+
   Future<Map<String, dynamic>> getScheduleMatrix({
     String? from,
     String? to,
