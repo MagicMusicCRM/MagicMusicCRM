@@ -34,6 +34,14 @@ export class SharedTaskEntityLinkDto {
   id!: string;
 }
 
+export class SharedTaskReminderDto {
+  @IsDateString()
+  dueAt!: string;
+
+  @IsIn(["in_app", "push", "email"])
+  channel!: "in_app" | "push" | "email";
+}
+
 export class CreateSharedTaskDto {
   @IsString()
   @MaxLength(240)
@@ -64,6 +72,12 @@ export class CreateSharedTaskDto {
   @ValidateNested()
   @Type(() => SharedTaskEntityLinkDto)
   linkedEntity?: SharedTaskEntityLinkDto;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SharedTaskReminderDto)
+  reminders?: SharedTaskReminderDto[];
 }
 
 export class UpdateSharedTaskDto extends CreateSharedTaskDto {

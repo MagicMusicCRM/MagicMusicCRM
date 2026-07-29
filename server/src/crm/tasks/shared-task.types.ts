@@ -44,6 +44,21 @@ export interface SharedTaskMigrationEvidenceRow {
   source_fingerprint: string;
 }
 
+export interface SharedTaskReminderRow {
+  id: string;
+  task_id: string;
+  due_at: Date | string;
+  channel: "in_app" | "push" | "email";
+  status: "pending" | "claimed" | "delivered" | "cancelled" | "poison";
+  dedupe_key: string;
+  attempts: number | string;
+  next_attempt_at: Date | string | null;
+  claimed_at: Date | string | null;
+  claimed_by: string | null;
+  delivered_at: Date | string | null;
+  last_error: string | null;
+}
+
 export interface ResolvedSharedTaskRow extends SharedTaskRow {
   matched_audience_id: string;
   matched_audience_type: SharedTaskAudienceType;

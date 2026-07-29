@@ -828,7 +828,7 @@ flowchart TD
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/crm/tasks/shared-task-postgres.integration.spec.ts`
   - **Оценка:** 8 ч. · **Зависимости:** T6.1.1, T2.3.1 · **Приоритет:** P1 · **Sprint:** S4
 
-- [ ] **T6.2.2** [REQ-TASK-002]: Реализовать non-blocking reminders и realtime close
+- [x] **T6.2.2** [REQ-TASK-002]: Реализовать non-blocking reminders и realtime close
   - **Описание:** напоминать через persisted outbox, не блокировать source action и очищать reminders ≤2 s после close.
   - **Подпункты:**
     - [ ] Реализовать due claim/dedupe/retry и provider fallback.

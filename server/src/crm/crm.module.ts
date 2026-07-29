@@ -91,6 +91,7 @@ import { SubscriptionReservationService } from './commerce/subscription-reservat
 import { SharedTaskController } from './shared-task.controller';
 import { SharedTaskRepository } from './tasks/shared-task.repository';
 import { SharedTaskService } from './tasks/shared-task.service';
+import { SharedTaskReminderWorker } from './tasks/shared-task-reminder.worker';
 
 @Module({
   imports: [
@@ -187,6 +188,7 @@ import { SharedTaskService } from './tasks/shared-task.service';
     SubscriptionReservationService,
     SharedTaskRepository,
     SharedTaskService,
+    SharedTaskReminderWorker,
     {
       provide: LESSON_SETTLEMENT_PORT,
       useExisting: LessonSettlementService,

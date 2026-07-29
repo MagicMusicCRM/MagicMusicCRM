@@ -8,6 +8,7 @@ import {
 import { createHash } from "crypto";
 import { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import {
   CloseSharedTaskDto,
@@ -47,6 +48,7 @@ export class SharedTaskService {
     private readonly repository: SharedTaskRepository,
     private readonly policy: CrmPolicy,
     private readonly integrity: PlatformIntegrityService,
+    private readonly realtime: RealtimeBus,
   ) {}
 
   async create(
@@ -92,8 +94,18 @@ export class SharedTaskService {
           taskId,
           values.audiences,
         );
+        await this.repository.replaceReminders(
+          client,
+          taskId,
+          values.reminders,
+        );
         return { taskId, taskVersion: version };
       },
+    });
+    this.realtime.emitCrmChanged({
+      entity: "task",
+      action: "created",
+      id: taskId,
     });
     return this.load(taskId);
   }
@@ -158,8 +170,18 @@ export class SharedTaskService {
           taskId,
           values.audiences,
         );
+        await this.repository.replaceReminders(
+          client,
+          taskId,
+          values.reminders,
+        );
         return { taskId, taskVersion: version };
       },
+    });
+    this.realtime.emitCrmChanged({
+      entity: "task",
+      action: "updated",
+      id: taskId,
     });
     return this.load(taskId);
   }
@@ -171,19 +193,10 @@ export class SharedTaskService {
       limit: query.limit ?? 100,
     });
     await this.repository.recordListResolutions(result.rows, actor.userId);
-    const now = Date.now();
     const items = result.rows.map((row) => this.toDto(row));
     return {
       items,
-      counters: {
-        open: result.rows.filter((row) => row.state === "open").length,
-        overdue: result.rows.filter(
-          (row) =>
-            row.state === "open" &&
-            row.start_at !== null &&
-            new Date(row.start_at).getTime() < now,
-        ).length,
-      },
+      counters: await this.repository.counters(actor.userId, actor.role),
     };
   }
 
@@ -197,6 +210,9 @@ export class SharedTaskService {
     this.assertMetadata(metadata);
     const scoped = await this.resolve(actor, taskId);
     if (scoped.closed_at) return this.closeDto(scoped);
+    const affectedUserIds = (
+      await this.repository.reminderRecipients(taskId)
+    ).rows.map((row) => row.user_id);
 
     try {
       const result =
@@ -246,9 +262,16 @@ export class SharedTaskService {
               actor.userId,
               metadata.requestId,
             );
+            await this.repository.cancelPendingReminders(client, taskId);
             return this.closeRef(taskId, version, close);
           },
         });
+      this.realtime.emitCrmChanged({
+        entity: "task",
+        action: "deleted",
+        id: taskId,
+        affectedUserIds,
+      });
       return result.resultRef;
     } catch (error) {
       if (!this.isStaleVersion(error)) throw error;
@@ -298,6 +321,19 @@ export class SharedTaskService {
     ) {
       this.invalid("linkedEntity", "Связанная запись не найдена.");
     }
+    const reminders = dto.reminders ?? [];
+    const reminderKeys = new Set<string>();
+    for (const reminder of reminders) {
+      const dueAt = new Date(reminder.dueAt);
+      if (Number.isNaN(dueAt.getTime())) {
+        this.invalid("reminders", "Некорректное время напоминания.");
+      }
+      const key = `${dueAt.toISOString()}:${reminder.channel}`;
+      if (reminderKeys.has(key)) {
+        this.invalid("reminders", "Напоминание не должно повторяться.");
+      }
+      reminderKeys.add(key);
+    }
     return {
       title,
       body: dto.body?.trim() || null,
@@ -309,6 +345,10 @@ export class SharedTaskService {
       audiences: dto.audiences.map((audience) => ({
         type: audience.type,
         ...(audience.targetId ? { targetId: audience.targetId } : {}),
+      })),
+      reminders: reminders.map((reminder) => ({
+        dueAt: new Date(reminder.dueAt).toISOString(),
+        channel: reminder.channel,
       })),
     };
   }

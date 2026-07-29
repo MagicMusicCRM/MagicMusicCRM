@@ -172,6 +172,8 @@ _Актуализация 2026-07-29: `T6.1.1` закрыта: migration `0092` 
 
 _Актуализация 2026-07-29: `T6.2.1` закрыта: versioned/idempotent SharedTask API валидирует schedule/audience/EntityLink и вычисляет current user/branch/allBranches membership. Concurrent two-close даёт state/audit/close/outbox=1 и один stable result; потеря branch membership сразу убирает доступ. Exact PostgreSQL 2/2, typecheck clean (`docs/audits/v4-shared-task-api.md`). Следующий шаг `/forge`: `T6.2.2` non-blocking reminders/realtime close._
 
+_Актуализация 2026-07-29: `T6.2.2` закрыта: persisted reminder worker использует SKIP LOCKED claim, lease/reclaim, dedupe, bounded retry/poison и current audience recipients; email/push имеют in-app fallback. Close атомарно отменяет pending reminders и после commit посылает body-free invalidation в CRM/user rooms менее чем за 2 s; list возвращает open/overdue counters. Exact reminder 1/1, targeted SharedTask 3/3, typecheck clean (`docs/audits/v4-task-reminders-realtime.md`). Следующий шаг `/forge`: `T6.3.1` desktop/mobile Task UX._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 

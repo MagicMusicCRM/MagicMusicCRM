@@ -6,6 +6,7 @@ import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import { SharedTaskRepository } from "./shared-task.repository";
 import { SharedTaskService } from "./shared-task.service";
@@ -42,6 +43,7 @@ describe("SharedTask API domain (PostgreSQL)", () => {
         database,
         new PlatformIntegrityRepository(),
       ),
+      new RealtimeBus(),
     );
     fixture = await createFixture(pool);
   });
