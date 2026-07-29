@@ -43,3 +43,14 @@ export interface SharedTaskMigrationEvidenceRow {
   merge_proof: "exact_common_origin" | "separate_ambiguous";
   source_fingerprint: string;
 }
+
+export interface ResolvedSharedTaskRow extends SharedTaskRow {
+  matched_audience_id: string;
+  matched_audience_type: SharedTaskAudienceType;
+  matched_target_id: string | null;
+  membership_version: string;
+  close_id: string | null;
+  closed_at: Date | string | null;
+  closed_by: string | null;
+  close_request_id: string | null;
+}

@@ -814,7 +814,7 @@ flowchart TD
 
 ## Phase 2 — Core (S4)
 
-- [ ] **T6.2.1** [REQ-TASK-001]: Реализовать task create/update/list/close API
+- [x] **T6.2.1** [REQ-TASK-001]: Реализовать task create/update/list/close API
   - **Описание:** валидировать all-day/interval, динамический audience и atomic first-close-wins.
   - **Подпункты:**
     - [ ] Реализовать time/audience/entity-link validation.

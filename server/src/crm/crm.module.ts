@@ -88,6 +88,9 @@ import { CommerceProjectionFactory } from './commerce/commerce-projection.factor
 import { CommerceProjectionRepository } from './commerce/commerce-projection.repository';
 import { CommerceProjectionService } from './commerce/commerce-projection.service';
 import { SubscriptionReservationService } from './commerce/subscription-reservation.service';
+import { SharedTaskController } from './shared-task.controller';
+import { SharedTaskRepository } from './tasks/shared-task.repository';
+import { SharedTaskService } from './tasks/shared-task.service';
 
 @Module({
   imports: [
@@ -117,6 +120,7 @@ import { SubscriptionReservationService } from './commerce/subscription-reservat
     LeadWebhookController,
     SubscriptionCommerceController,
     CommerceProjectionController,
+    SharedTaskController,
   ],
   providers: [
     CrmService,
@@ -181,6 +185,8 @@ import { SubscriptionReservationService } from './commerce/subscription-reservat
     CommerceProjectionRepository,
     CommerceProjectionService,
     SubscriptionReservationService,
+    SharedTaskRepository,
+    SharedTaskService,
     {
       provide: LESSON_SETTLEMENT_PORT,
       useExisting: LessonSettlementService,

@@ -181,12 +181,16 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
-  if (path.includes("/tasks")) {
+  if (path.includes("/shared-tasks") || path.includes("/tasks")) {
+    const sharedTaskClose =
+      path.includes("/shared-tasks/") && path.endsWith("/close");
     return policy(
-      read ? "workflow.task.read" : "workflow.task.write",
+      read || sharedTaskClose ? "workflow.task.read" : "workflow.task.write",
       "resource",
-      read ? teacherAndStaffRoles : staffRoles,
-      "TasksService actor/assignee scope",
+      read || sharedTaskClose ? teacherAndStaffRoles : staffRoles,
+      path.includes("/shared-tasks")
+        ? "SharedTaskService dynamic audience scope"
+        : "TasksService actor/assignee scope",
     );
   }
 
