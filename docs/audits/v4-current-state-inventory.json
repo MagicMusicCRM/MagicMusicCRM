@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "T8.1.2",
-  "source_digest_sha256": "a1e63109210f22400afa616b56cfd01fd1f4af1e03fe93c3d7124e25fdb28054",
-  "source_file_count": 630,
+  "source_digest_sha256": "a841f850292328f508cc76f167445a8e483cdd37e33a7b8385263c521cfa762a",
+  "source_file_count": 633,
   "systems": [
     "SYS-APP",
     "SYS-ACCESS",
@@ -22,7 +22,7 @@
     "flutter_navigation_sources": 302,
     "schedule_entry_points": 36,
     "attendance_mutations": 0,
-    "finance_writes": 30,
+    "finance_writes": 32,
     "schema_tables": 5,
     "unowned_items": 0,
     "missing_status_items": 0
@@ -16700,6 +16700,22 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/subscriptions.service.ts",
+      "line": 781
+    },
+    {
+      "kind": "sql-mutation",
+      "expression": "insert into app.payments",
+      "owner": "SYS-COMMERCE",
+      "status": "commerce-migration-pending",
+      "file": "server/src/crm/subscriptions.service.ts",
+      "line": 765
+    },
+    {
+      "kind": "sql-mutation",
+      "expression": "insert into app.subscriptions",
+      "owner": "SYS-COMMERCE",
+      "status": "commerce-migration-pending",
+      "file": "server/src/crm/subscriptions.service.ts",
       "line": 421
     },
     {
@@ -16912,19 +16928,19 @@
     },
     {
       "kind": "sql-mutation",
-      "expression": "insert into app.payments",
-      "owner": "SYS-COMMERCE",
-      "status": "commerce-migration-pending",
-      "file": "server/src/crm/subscriptions.service.ts",
-      "line": 765
-    },
-    {
-      "kind": "sql-mutation",
       "expression": "insert into app.subscriptions",
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
-      "file": "server/src/crm/subscriptions.service.ts",
-      "line": 781
+      "file": "server/src/crm/commerce/commerce-schema.repository.ts",
+      "line": 185
+    },
+    {
+      "kind": "sql-mutation",
+      "expression": "insert into app.payments",
+      "owner": "SYS-COMMERCE",
+      "status": "commerce-migration-pending",
+      "file": "server/src/crm/commerce/commerce-schema.repository.ts",
+      "line": 333
     }
   ],
   "database_schema": [
@@ -17304,6 +17320,16 @@
       "status": "current-schema",
       "columns": [
         {
+          "name": "base_price_minor",
+          "definition": "bigint",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
+          "name": "commercial_snapshot",
+          "definition": "jsonb",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
           "name": "conversion_lead_id",
           "definition": "uuid references app.leads(id) on delete set null",
           "source": "server/db/migrations/0072_demo_workflow_invariants.up.sql"
@@ -17314,9 +17340,39 @@
           "source": "server/db/migrations/0002_profile_crm.up.sql"
         },
         {
+          "name": "currency_code",
+          "definition": "text",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
+          "name": "discount_fixed_minor",
+          "definition": "bigint",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
+          "name": "discount_percent_basis_points",
+          "definition": "integer",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
+          "name": "discount_reason",
+          "definition": "text",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
+          "name": "discount_type",
+          "definition": "text",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
           "name": "expires_at",
           "definition": "date",
           "source": "server/db/migrations/0002_profile_crm.up.sql"
+        },
+        {
+          "name": "final_price_minor",
+          "definition": "bigint",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
         },
         {
           "name": "id",
@@ -17339,9 +17395,19 @@
           "source": "server/db/migrations/0033_subscription_packages.up.sql"
         },
         {
+          "name": "package_version",
+          "definition": "bigint",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
           "name": "payment_id",
           "definition": "uuid references app.payments(id)",
           "source": "server/db/migrations/0033_subscription_packages.up.sql"
+        },
+        {
+          "name": "snapshot_version",
+          "definition": "integer",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
         },
         {
           "name": "starts_at",
@@ -17362,6 +17428,11 @@
           "name": "updated_at",
           "definition": "timestamptz not null default now()",
           "source": "server/db/migrations/0002_profile_crm.up.sql"
+        },
+        {
+          "name": "version",
+          "definition": "bigint not null default 1",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
         }
       ],
       "indexes": [
@@ -17376,6 +17447,18 @@
           "unique": false,
           "definition": "create index if not exists subscriptions_student_expires_idx on app.subscriptions (student_id, expires_at desc, created_at desc, id desc);",
           "source": "server/db/migrations/0012_readiness_performance_indexes.up.sql"
+        },
+        {
+          "name": "subscriptions_v4_client_status_idx",
+          "unique": false,
+          "definition": "create index if not exists subscriptions_v4_client_status_idx on app.subscriptions (student_id, status, created_at desc, id) where commercial_snapshot is not null;",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
+          "name": "subscriptions_v4_package_idx",
+          "unique": false,
+          "definition": "create index if not exists subscriptions_v4_package_idx on app.subscriptions (package_id, created_at desc, id) where commercial_snapshot is not null;",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
         }
       ],
       "events": [
@@ -17413,6 +17496,84 @@
           "index": "subscriptions_conversion_lead_unique_idx",
           "source": "server/db/migrations/0072_demo_workflow_invariants.up.sql",
           "line": 28
+        },
+        {
+          "action": "add-column",
+          "column": "commercial_snapshot",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "snapshot_version",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "package_version",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "base_price_minor",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "currency_code",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "discount_type",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "discount_percent_basis_points",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "discount_fixed_minor",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "discount_reason",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "final_price_minor",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "add-column",
+          "column": "version",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 75
+        },
+        {
+          "action": "create-index",
+          "index": "subscriptions_v4_client_status_idx",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 192
+        },
+        {
+          "action": "create-index",
+          "index": "subscriptions_v4_package_idx",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 195
         }
       ]
     },
@@ -17425,6 +17586,11 @@
           "name": "amount",
           "definition": "numeric(12,2) not null",
           "source": "server/db/migrations/0002_profile_crm.up.sql"
+        },
+        {
+          "name": "amount_minor",
+          "definition": "bigint",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
         },
         {
           "name": "branch_id",
@@ -17462,9 +17628,19 @@
           "source": "server/db/migrations/0002_profile_crm.up.sql"
         },
         {
+          "name": "idempotency_ref",
+          "definition": "text",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
           "name": "invoice_number",
           "definition": "text",
           "source": "server/db/migrations/0063_ledger_invoice_status.up.sql"
+        },
+        {
+          "name": "issued_subscription_id",
+          "definition": "uuid references app.subscriptions(id) on delete restrict",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
         },
         {
           "name": "lesson_id",
@@ -17485,6 +17661,11 @@
           "name": "payment_date",
           "definition": "timestamptz not null default now()",
           "source": "server/db/migrations/0002_profile_crm.up.sql"
+        },
+        {
+          "name": "request_fingerprint",
+          "definition": "text",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
         },
         {
           "name": "student_id",
@@ -17516,6 +17697,18 @@
           "unique": false,
           "definition": "create index if not exists payments_student_date_idx on app.payments (student_id, payment_date desc) where deleted_at is null;",
           "source": "server/db/migrations/0002_profile_crm.up.sql"
+        },
+        {
+          "name": "payments_v4_idempotency_idx",
+          "unique": true,
+          "definition": "create unique index if not exists payments_v4_idempotency_idx on app.payments (student_id, idempotency_ref) where idempotency_ref is not null;",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
+        },
+        {
+          "name": "payments_v4_issued_idx",
+          "unique": false,
+          "definition": "create index if not exists payments_v4_issued_idx on app.payments (issued_subscription_id, payment_date, id) where issued_subscription_id is not null;",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql"
         }
       ],
       "events": [
@@ -17565,6 +17758,42 @@
           "index": "payments_lesson_idx",
           "source": "server/db/migrations/0065_payment_lesson_link.up.sql",
           "line": 22
+        },
+        {
+          "action": "add-column",
+          "column": "amount_minor",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 228
+        },
+        {
+          "action": "add-column",
+          "column": "issued_subscription_id",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 228
+        },
+        {
+          "action": "add-column",
+          "column": "idempotency_ref",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 228
+        },
+        {
+          "action": "add-column",
+          "column": "request_fingerprint",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 228
+        },
+        {
+          "action": "create-index",
+          "index": "payments_v4_idempotency_idx",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 295
+        },
+        {
+          "action": "create-index",
+          "index": "payments_v4_issued_idx",
+          "source": "server/db/migrations/0089_commerce_catalog_snapshot_ledger.up.sql",
+          "line": 298
         }
       ]
     },

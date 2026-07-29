@@ -1,7 +1,7 @@
 # MagicMusicCRM v4 — Current-State Inventory
 
 **Task:** T8.1.2
-**Source digest:** `a1e63109210f22400afa616b56cfd01fd1f4af1e03fe93c3d7124e25fdb28054`
+**Source digest:** `a841f850292328f508cc76f167445a8e483cdd37e33a7b8385263c521cfa762a`
 **Validation:** PASS
 
 ## Coverage
@@ -16,7 +16,7 @@
 | flutter navigation sources | 302 |
 | schedule entry points | 36 |
 | attendance mutations | 0 |
-| finance writes | 30 |
+| finance writes | 32 |
 | schema tables | 5 |
 | unowned items | 0 |
 | missing status items | 0 |
@@ -42,8 +42,8 @@ Every row in the JSON artifact has one v4 system owner and an explicit migration
 | Table | Owner | Columns | Indexes |
 |---|---|---:|---:|
 | `app.lessons` | SYS-SCHEDULE | 24 | 15 |
-| `app.subscriptions` | SYS-COMMERCE | 12 | 2 |
-| `app.payments` | SYS-COMMERCE | 14 | 4 |
+| `app.subscriptions` | SYS-COMMERCE | 23 | 4 |
+| `app.payments` | SYS-COMMERCE | 18 | 6 |
 | `app.tasks` | SYS-WORKFLOW | 15 | 5 |
 | `app.users` | SYS-PLATFORM | 14 | 3 |
 
@@ -55,15 +55,15 @@ Indexes: `lessons_branch_scheduled_idx`, `lessons_group_idx`, `lessons_lead_sche
 
 ### `app.subscriptions`
 
-Columns: `conversion_lead_id`, `created_at`, `expires_at`, `id`, `lessons_total`, `lessons_used`, `package_id`, `payment_id`, `starts_at`, `status`, `student_id`, `updated_at`
+Columns: `base_price_minor`, `commercial_snapshot`, `conversion_lead_id`, `created_at`, `currency_code`, `discount_fixed_minor`, `discount_percent_basis_points`, `discount_reason`, `discount_type`, `expires_at`, `final_price_minor`, `id`, `lessons_total`, `lessons_used`, `package_id`, `package_version`, `payment_id`, `snapshot_version`, `starts_at`, `status`, `student_id`, `updated_at`, `version`
 
-Indexes: `subscriptions_conversion_lead_unique_idx`, `subscriptions_student_expires_idx`
+Indexes: `subscriptions_conversion_lead_unique_idx`, `subscriptions_student_expires_idx`, `subscriptions_v4_client_status_idx`, `subscriptions_v4_package_idx`
 
 ### `app.payments`
 
-Columns: `amount`, `branch_id`, `created_at`, `created_by`, `currency`, `deleted_at`, `external_id`, `id`, `invoice_number`, `lesson_id`, `method`, `notes`, `payment_date`, `student_id`
+Columns: `amount`, `amount_minor`, `branch_id`, `created_at`, `created_by`, `currency`, `deleted_at`, `external_id`, `id`, `idempotency_ref`, `invoice_number`, `issued_subscription_id`, `lesson_id`, `method`, `notes`, `payment_date`, `request_fingerprint`, `student_id`
 
-Indexes: `payments_branch_id_idx`, `payments_lesson_idx`, `payments_payment_date_idx`, `payments_student_date_idx`
+Indexes: `payments_branch_id_idx`, `payments_lesson_idx`, `payments_payment_date_idx`, `payments_student_date_idx`, `payments_v4_idempotency_idx`, `payments_v4_issued_idx`
 
 ### `app.tasks`
 
@@ -117,6 +117,8 @@ Indexes: `users_app_accounts_role_created_idx`, `users_email_lower_unique`, `use
 | sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:421` | commerce-migration-pending |
 | sql-mutation | insert into app.payments | `server/src/crm/subscriptions.service.ts:765` | commerce-migration-pending |
 | sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:781` | commerce-migration-pending |
+| sql-mutation | insert into app.subscriptions | `server/src/crm/commerce/commerce-schema.repository.ts:185` | commerce-migration-pending |
+| sql-mutation | insert into app.payments | `server/src/crm/commerce/commerce-schema.repository.ts:333` | commerce-migration-pending |
 
 ## Verification
 

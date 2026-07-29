@@ -231,7 +231,10 @@ describe("Client archive preview and tombstone (PostgreSQL)", () => {
     await database.query("delete from app.subscriptions where id = $1", [
       subscriptionId,
     ]);
-    await database.query("delete from app.payments where id = $1", [paymentId]);
+    await database.transaction(async (client) => {
+      await client.query("set local session_replication_role = replica");
+      await client.query("delete from app.payments where id = $1", [paymentId]);
+    });
     await database.query("delete from app.tasks where id = $1", [taskId]);
     await database.query("delete from app.lessons where id = $1", [lessonId]);
     await database.query(

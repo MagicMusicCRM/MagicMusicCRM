@@ -674,12 +674,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/crm/commerce/lesson-settlement-postgres.integration.spec.ts`
   - **Оценка:** 8 ч. · **Зависимости:** T4.1.1, T8.1.4 · **Приоритет:** P0 · **Sprint:** S2
 
-- [ ] **T5.1.2** [REQ-SUB-001, REQ-SUB-002, REQ-SUB-003]: Создать catalog/snapshot/ledger schema
+- [x] **T5.1.2** [REQ-SUB-001, REQ-SUB-002, REQ-SUB-003]: Создать catalog/snapshot/ledger schema
   - **Описание:** разделить mutable package, immutable issued snapshot, installments, payments и obligation/ledger facts.
   - **Подпункты:**
-    - [ ] Создать additive schema/constraints/indexes в minor units.
-    - [ ] Запретить UPDATE/DELETE проведённых payment/lesson facts.
-    - [ ] Добавить snapshot version и lifecycle events.
+    - [x] Создать additive schema/constraints/indexes в minor units.
+    - [x] Запретить UPDATE/DELETE проведённых payment/lesson facts.
+    - [x] Добавить snapshot version и lifecycle events.
   - **Вход:** T8.1.3, T8.1.4, `commerce.md §2/§4`.
   - **Выход:** migrations/entities/repositories.
   - **📎 Ссылка:** ADR-009.

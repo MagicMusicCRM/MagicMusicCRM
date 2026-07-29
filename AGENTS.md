@@ -150,6 +150,9 @@ _Актуализация 2026-07-29: `T8.2.1` закрыта: migration `0088` 
 
 _Актуализация 2026-07-29: `T4.4.1` закрыта: единый `test:schedule-v4` gate покрывает 2 000 seeded interval cases, 64 randomized weekly-series samples в четырёх IANA timezone, параллельные create/drag/reschedule и two-worker completion. Advisory locks/version guards оставляют ровно одного победителя, terminal/financial facts детерминированы; Flutter inventory подтверждает attendance routes/mutations/controls=0. Exact schedule 9/9 suites и 25/25 tests, full backend 129/129 suites и 1071/1071 tests, Flutter 411/411, analyze/typecheck/build clean (`docs/audits/v4-schedule-concurrency.md`). `INT-S2` ждёт `INT-S1`; следующий доступный шаг `/forge`: `T5.1.2` catalog/snapshot/ledger schema._
 
+### 🌊 Wave v4/S3 — Subscription Integrity
+_Актуализация 2026-07-29: `T5.1.2` закрыта: migration `0089` добавляет versioned catalog price в minor units, immutable issued commercial snapshot с percent/fixed discount shape, installments, append-only ActualPayment/obligation/lifecycle facts и typed repository. Процентная скидка проверяется от указанной базовой суммы (`8000 − 20% = 6400`), фиксированная скидка поддержана; teacher compensation остаётся только `fixed/hourly/none`. Payment/ledger/Lesson fact UPDATE/DELETE отклоняются PostgreSQL. Migration down→up PASS, exact schema 2/2, targeted regression 16/16, full backend 130/130 suites и 1073/1073 tests, typecheck/build clean, inventory 266 routes/591 DTO fields/0 unowned (`docs/audits/v4-commerce-schema.md`). Следующий шаг `/forge`: `T5.2.1` Subscription Package catalog._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 
