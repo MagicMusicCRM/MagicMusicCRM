@@ -537,6 +537,7 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final Widget? trailing;
 
   /// Мелкая приписка под значением — провенанс («из HolliHop») там, где важно
   /// отличать настоящие данные от подставленных приложением.
@@ -552,6 +553,7 @@ class _InfoRow extends StatelessWidget {
     required this.value,
     this.hint,
     this.hintColor,
+    this.trailing,
   });
 
   @override
@@ -601,6 +603,10 @@ class _InfoRow extends StatelessWidget {
               ],
             ),
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: AppSpace.sm),
+            trailing!,
+          ],
         ],
       ),
     );

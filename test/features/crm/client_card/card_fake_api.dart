@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
+
+typedef IdempotentCardCall = ({
+  String path,
+  Map<String, dynamic> data,
+  MagicMutationIdentity identity,
+});
+typedef CardPostCall = ({String path, Map<String, dynamic> data});
 
 /// Фейк на шве API-клиента (НЕ `implements MagicCrmService` — его методы живут
 /// на extension'ах и резолвятся статически, так что такой фейк не был бы
@@ -18,6 +26,10 @@ class FakeCardApiClient extends MagicApiClient {
     this.student,
     this.leadTasks = const [],
     this.subscriptionPackages = const [],
+    this.studentSubscriptions = const [],
+    this.replacementPreview,
+    this.replacementResult,
+    this.replacementFailures = 0,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   /// Сырой (camelCase, как с сервера) лид для GET /crm/leads/:id/card.
@@ -30,10 +42,17 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> leadTasks;
 
   final List<Map<String, dynamic>> subscriptionPackages;
+  final List<Map<String, dynamic>> studentSubscriptions;
+  final Map<String, dynamic>? replacementPreview;
+  final Map<String, dynamic>? replacementResult;
+  int replacementFailures;
 
   Map<String, dynamic>? updateLeadBody;
   Map<String, dynamic>? updateStudentBody;
   final List<String> requests = [];
+  final List<CardPostCall> postRequests = [];
+  final List<IdempotentCardCall> idempotentRequests = [];
+  int studentCardLoadCount = 0;
 
   @override
   Future<T> get<T>(
@@ -79,6 +98,7 @@ class FakeCardApiClient extends MagicApiClient {
           as T;
     }
     if (student != null && path == '/crm/students/${student!['id']}/card') {
+      studentCardLoadCount++;
       return <String, dynamic>{
             'student': student,
             'groups': <dynamic>[],
@@ -88,7 +108,7 @@ class FakeCardApiClient extends MagicApiClient {
             'comments': <dynamic>[],
             'expectedPayments': <dynamic>[],
             'balance': null,
-            'subscriptions': <dynamic>[],
+            'subscriptions': studentSubscriptions,
             'links': <dynamic>[],
             'timeline': <dynamic>[],
           }
@@ -125,11 +145,44 @@ class FakeCardApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     requests.add('POST $path');
+    postRequests.add((
+      path: path,
+      data: data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+    ));
+    if (replacementPreview != null && path.endsWith('/replace/preview')) {
+      return Map<String, dynamic>.from(replacementPreview!) as T;
+    }
     if (lead != null &&
         path == '/crm/leads/${lead!['id']}/subscriptions/issue') {
       return <String, dynamic>{
             'student': {'id': 'student-from-${lead!['id']}'},
           }
+          as T;
+    }
+    return <String, dynamic>{} as T;
+  }
+
+  @override
+  Future<T> postIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    final body = Map<String, dynamic>.from(data as Map);
+    idempotentRequests.add((path: path, data: body, identity: identity));
+    requests.add('POST $path');
+    if (path.endsWith('/replace')) {
+      if (replacementFailures > 0) {
+        replacementFailures--;
+        throw const MagicApiException(
+          message: 'Соединение прервано после отправки.',
+        );
+      }
+      return Map<String, dynamic>.from(
+            replacementResult ?? const <String, dynamic>{},
+          )
           as T;
     }
     return <String, dynamic>{} as T;

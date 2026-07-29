@@ -157,6 +157,8 @@ _Актуализация 2026-07-29: `T5.2.1` закрыта: versioned Subscri
 
 _Актуализация 2026-07-29: `T5.2.2` закрыта: выдача атомарно и idempotent создаёт immutable snapshot, точные obligations и рассрочку без ложной выручки; процентная скидка считается от указанной суммы (`8000 − 20% = 6400`), фиксированная скидка и обязательная причина поддержаны. ActualPayment записывается отдельной append-only cash/cashless командой, duplicate retry не создаёт второй факт. Flutter client-card получил адаптивную форму со стабильными mutation identities и отдельным partial payment. Exact backend 32/32 и Flutter 7/7 (`docs/audits/v4-subscription-issue-payment.md`). Следующий шаг `/forge`: `T5.2.3` preview/confirm замены._
 
+_Актуализация 2026-07-29: `T5.2.3` закрыта: подписанный пяти-минутный preview связывает actor/student/version/package, used/future usage, payment total и детерминированный reservation plan. Confirm повторно блокирует и пересчитывает данные, затем одной Platform Integrity transaction закрывает old subscription, создаёт ровно один immutable snapshot, differential debt/overpayment, переносит допустимые резервы и освобождает overflow; payments не копируются и не меняются. Flutter client-card показывает used/future, предупреждения, перенос/освобождение и итоговый долг/переплату, сохраняя stable retry identity. Exact PostgreSQL 4/4, Flutter 2/2, TypeScript clean (`docs/audits/v4-subscription-replace.md`). Следующий шаг `/forge`: `T5.2.4` preview/confirm отмены._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 

@@ -718,12 +718,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/crm/commerce/subscription-issue-postgres.integration.spec.ts`
   - **Оценка:** 8 ч. · **Зависимости:** T5.1.2, T5.2.1 · **Приоритет:** P0 · **Sprint:** S3
 
-- [ ] **T5.2.3** [REQ-SUB-002, REQ-AUDIT-001]: Реализовать preview/confirm замены
+- [x] **T5.2.3** [REQ-SUB-002, REQ-AUDIT-001]: Реализовать preview/confirm замены
   - **Описание:** перенести used units, сохранить payments и создать differential debt/overpayment.
   - **Подпункты:**
-    - [ ] Рассчитать used/future reservations и подписанный preview token.
-    - [ ] Заблокировать new volume < used.
-    - [ ] Атомарно закрыть old/create new snapshot/obligation/reservations/audit.
+    - [x] Рассчитать used/future reservations и подписанный preview token.
+    - [x] Заблокировать new volume < used.
+    - [x] Атомарно закрыть old/create new snapshot/obligation/reservations/audit.
   - **Вход:** T5.2.2, `commerce.md §7`.
   - **Выход:** replace API/UI/warning/concurrency tests.
   - **📎 Ссылка:** ADR-009, ADR-011.

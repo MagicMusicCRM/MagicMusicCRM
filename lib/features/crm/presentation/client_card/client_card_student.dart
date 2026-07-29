@@ -467,6 +467,88 @@ extension _ClientCardStudent on _ClientCardState {
     }
   }
 
+  Future<void> _showReplaceSubscriptionFlow(
+    Subscription oldSubscription,
+  ) async {
+    final issuedSubscriptionId = oldSubscription.id;
+    if (_replacingSubscription ||
+        !oldSubscription.isActive ||
+        issuedSubscriptionId == null ||
+        issuedSubscriptionId.isEmpty) {
+      return;
+    }
+
+    final crm = ref.read(magicCrmServiceProvider);
+    _emitState(() => _replacingSubscription = true);
+    try {
+      final response = await crm.listSubscriptionPackages(limit: 100);
+      final packages = activeSubscriptionPackages(response);
+      if (!mounted) return;
+      if (packages.isEmpty) {
+        MagicToast.show(
+          context,
+          'Нет доступных абонементов для замены',
+          type: MagicToastType.info,
+        );
+        return;
+      }
+
+      final selected = await showIssueSubscriptionSheet(
+        context,
+        packages: packages,
+        title: 'Новый абонемент',
+        subtitle: 'Выберите активный пакет для замены',
+      );
+      if (selected == null || !mounted) return;
+      final newPackageId = selected['id']?.toString();
+      if (newPackageId == null || newPackageId.isEmpty) return;
+
+      final preview = await crm.previewSubscriptionReplacement(
+        _studentId,
+        issuedSubscriptionId: issuedSubscriptionId,
+        newPackageId: newPackageId,
+      );
+      if (!mounted) return;
+
+      final replaced = await showSubscriptionReplacementSheet(
+        context,
+        oldSubscription: oldSubscription,
+        preview: preview,
+        onConfirm: (confirmation) async {
+          await crm.replaceSubscription(
+            _studentId,
+            issuedSubscriptionId: issuedSubscriptionId,
+            input: confirmation.input,
+            identity: confirmation.identity,
+          );
+        },
+      );
+      if (replaced != true || !mounted) return;
+
+      _dirty = true;
+      await _fetchStudentData();
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Абонемент заменён',
+        detail: preview.newPackage.name,
+        type: MagicToastType.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось заменить абонемент',
+        detail: '$error',
+        type: MagicToastType.danger,
+      );
+    } finally {
+      if (mounted) {
+        _emitState(() => _replacingSubscription = false);
+      }
+    }
+  }
+
   Future<void> _showAssignHomeworkSheet() async {
     final crm = ref.read(magicCrmServiceProvider);
 

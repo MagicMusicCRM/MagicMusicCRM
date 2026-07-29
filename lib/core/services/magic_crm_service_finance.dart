@@ -131,6 +131,330 @@ class RecordSubscriptionPaymentInput {
   };
 }
 
+enum SubscriptionFinancialPositionKind { debt, overpayment, settled }
+
+class SubscriptionReplacementPackage {
+  const SubscriptionReplacementPackage({
+    required this.id,
+    required this.version,
+    required this.name,
+    required this.unitCount,
+  });
+
+  final String id;
+  final int version;
+  final String name;
+  final num unitCount;
+
+  factory SubscriptionReplacementPackage.fromJson(Map<String, dynamic> json) {
+    return SubscriptionReplacementPackage(
+      id: json['id'].toString(),
+      version: _replacementInt(json['version']),
+      name: json['name'].toString(),
+      unitCount: _replacementNum(json['unitCount']),
+    );
+  }
+}
+
+class SubscriptionReplacementUsage {
+  const SubscriptionReplacementUsage({
+    required this.usedUnits,
+    required this.reservedLessonCount,
+    required this.reservedUnits,
+    required this.transferableReservationCount,
+    required this.transferableReservationUnits,
+    required this.releasedReservationCount,
+    required this.releasedReservationUnits,
+    required this.futureLessonCount,
+    required this.futureUnits,
+  });
+
+  final String usedUnits;
+  final int reservedLessonCount;
+  final String reservedUnits;
+  final int transferableReservationCount;
+  final String transferableReservationUnits;
+  final int releasedReservationCount;
+  final String releasedReservationUnits;
+  final int futureLessonCount;
+  final String futureUnits;
+
+  factory SubscriptionReplacementUsage.fromJson(Map<String, dynamic> json) {
+    return SubscriptionReplacementUsage(
+      usedUnits: json['usedUnits'].toString(),
+      reservedLessonCount: _replacementInt(json['reservedLessonCount']),
+      reservedUnits: json['reservedUnits'].toString(),
+      transferableReservationCount: _replacementInt(
+        json['transferableReservationCount'],
+      ),
+      transferableReservationUnits: json['transferableReservationUnits']
+          .toString(),
+      releasedReservationCount: _replacementInt(
+        json['releasedReservationCount'],
+      ),
+      releasedReservationUnits: json['releasedReservationUnits'].toString(),
+      futureLessonCount: _replacementInt(json['futureLessonCount']),
+      futureUnits: json['futureUnits'].toString(),
+    );
+  }
+}
+
+class SubscriptionReplacementPosition {
+  const SubscriptionReplacementPosition({
+    required this.kind,
+    required this.amountMinor,
+  });
+
+  final SubscriptionFinancialPositionKind kind;
+  final BigInt amountMinor;
+
+  factory SubscriptionReplacementPosition.fromJson(Map<String, dynamic> json) {
+    final kind = switch (json['kind']?.toString()) {
+      'debt' => SubscriptionFinancialPositionKind.debt,
+      'overpayment' => SubscriptionFinancialPositionKind.overpayment,
+      _ => SubscriptionFinancialPositionKind.settled,
+    };
+    return SubscriptionReplacementPosition(
+      kind: kind,
+      amountMinor: _replacementMinor(json['amountMinor']),
+    );
+  }
+}
+
+class SubscriptionReplacementFinancial {
+  const SubscriptionReplacementFinancial({
+    required this.currencyCode,
+    required this.oldFinalMinor,
+    required this.newFinalMinor,
+    required this.actualPaidMinor,
+    required this.obligationDeltaMinor,
+    required this.resultingPosition,
+  });
+
+  final String currencyCode;
+  final BigInt oldFinalMinor;
+  final BigInt newFinalMinor;
+  final BigInt actualPaidMinor;
+  final BigInt obligationDeltaMinor;
+  final SubscriptionReplacementPosition resultingPosition;
+
+  factory SubscriptionReplacementFinancial.fromJson(Map<String, dynamic> json) {
+    return SubscriptionReplacementFinancial(
+      currencyCode: json['currencyCode'].toString(),
+      oldFinalMinor: _replacementMinor(json['oldFinalMinor']),
+      newFinalMinor: _replacementMinor(json['newFinalMinor']),
+      actualPaidMinor: _replacementMinor(json['actualPaidMinor']),
+      obligationDeltaMinor: _replacementMinor(json['obligationDeltaMinor']),
+      resultingPosition: SubscriptionReplacementPosition.fromJson(
+        _replacementMap(json['resultingPosition']),
+      ),
+    );
+  }
+}
+
+class SubscriptionReplacementWarning {
+  const SubscriptionReplacementWarning({
+    required this.code,
+    required this.message,
+    this.count,
+    this.units,
+  });
+
+  final String code;
+  final String message;
+  final int? count;
+  final String? units;
+
+  factory SubscriptionReplacementWarning.fromJson(Map<String, dynamic> json) {
+    return SubscriptionReplacementWarning(
+      code: json['code'].toString(),
+      message: json['message'].toString(),
+      count: json['count'] == null ? null : _replacementInt(json['count']),
+      units: json['units']?.toString(),
+    );
+  }
+}
+
+class SubscriptionReplacementPreview {
+  const SubscriptionReplacementPreview({
+    required this.issuedSubscriptionId,
+    required this.expectedVersion,
+    required this.oldPackageId,
+    required this.newPackage,
+    required this.usage,
+    required this.financial,
+    required this.warnings,
+    required this.previewToken,
+    required this.expiresAt,
+  });
+
+  final String issuedSubscriptionId;
+  final int expectedVersion;
+  final String oldPackageId;
+  final SubscriptionReplacementPackage newPackage;
+  final SubscriptionReplacementUsage usage;
+  final SubscriptionReplacementFinancial financial;
+  final List<SubscriptionReplacementWarning> warnings;
+  final String previewToken;
+  final DateTime expiresAt;
+
+  factory SubscriptionReplacementPreview.fromJson(Map<String, dynamic> json) {
+    final warningItems = json['warnings'] is List
+        ? json['warnings'] as List
+        : const <dynamic>[];
+    return SubscriptionReplacementPreview(
+      issuedSubscriptionId: json['issuedSubscriptionId'].toString(),
+      expectedVersion: _replacementInt(json['expectedVersion']),
+      oldPackageId: json['oldPackageId'].toString(),
+      newPackage: SubscriptionReplacementPackage.fromJson(
+        _replacementMap(json['newPackage']),
+      ),
+      usage: SubscriptionReplacementUsage.fromJson(
+        _replacementMap(json['usage']),
+      ),
+      financial: SubscriptionReplacementFinancial.fromJson(
+        _replacementMap(json['financial']),
+      ),
+      warnings: warningItems
+          .map(
+            (item) =>
+                SubscriptionReplacementWarning.fromJson(_replacementMap(item)),
+          )
+          .toList(growable: false),
+      previewToken: json['previewToken'].toString(),
+      expiresAt: DateTime.parse(json['expiresAt'].toString()),
+    );
+  }
+}
+
+class ReplaceSubscriptionInput {
+  const ReplaceSubscriptionInput({
+    required this.expectedVersion,
+    required this.previewToken,
+    required this.reason,
+  });
+
+  final int expectedVersion;
+  final String previewToken;
+  final String reason;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'expectedVersion': expectedVersion,
+    'previewToken': previewToken,
+    'confirm': true,
+    'reason': reason.trim(),
+  };
+}
+
+class SubscriptionReplacementReference {
+  const SubscriptionReplacementReference({
+    required this.oldSubscriptionId,
+    required this.oldSubscriptionVersion,
+    required this.newSubscriptionId,
+    required this.newSubscriptionVersion,
+    required this.newPackageId,
+    required this.newPackageVersion,
+    required this.usedUnits,
+    required this.transferredReservationCount,
+    required this.transferredReservationUnits,
+    required this.releasedReservationCount,
+    required this.releasedReservationUnits,
+    required this.deltaMinor,
+    required this.positionKind,
+    required this.positionMinor,
+    required this.currencyCode,
+    this.obligationFactId,
+  });
+
+  final String oldSubscriptionId;
+  final int oldSubscriptionVersion;
+  final String newSubscriptionId;
+  final int newSubscriptionVersion;
+  final String newPackageId;
+  final int newPackageVersion;
+  final String usedUnits;
+  final int transferredReservationCount;
+  final String transferredReservationUnits;
+  final int releasedReservationCount;
+  final String releasedReservationUnits;
+  final BigInt deltaMinor;
+  final SubscriptionFinancialPositionKind positionKind;
+  final BigInt positionMinor;
+  final String currencyCode;
+  final String? obligationFactId;
+
+  factory SubscriptionReplacementReference.fromJson(Map<String, dynamic> json) {
+    return SubscriptionReplacementReference(
+      oldSubscriptionId: json['oldSubscriptionId'].toString(),
+      oldSubscriptionVersion: _replacementInt(json['oldSubscriptionVersion']),
+      newSubscriptionId: json['newSubscriptionId'].toString(),
+      newSubscriptionVersion: _replacementInt(json['newSubscriptionVersion']),
+      newPackageId: json['newPackageId'].toString(),
+      newPackageVersion: _replacementInt(json['newPackageVersion']),
+      usedUnits: json['usedUnits'].toString(),
+      transferredReservationCount: _replacementInt(
+        json['transferredReservationCount'],
+      ),
+      transferredReservationUnits: json['transferredReservationUnits']
+          .toString(),
+      releasedReservationCount: _replacementInt(
+        json['releasedReservationCount'],
+      ),
+      releasedReservationUnits: json['releasedReservationUnits'].toString(),
+      deltaMinor: _replacementMinor(json['deltaMinor']),
+      positionKind: switch (json['positionKind']?.toString()) {
+        'debt' => SubscriptionFinancialPositionKind.debt,
+        'overpayment' => SubscriptionFinancialPositionKind.overpayment,
+        _ => SubscriptionFinancialPositionKind.settled,
+      },
+      positionMinor: _replacementMinor(json['positionMinor']),
+      currencyCode: json['ccy'].toString(),
+      obligationFactId: json['obligationFactId']?.toString(),
+    );
+  }
+}
+
+class SubscriptionReplacementResult {
+  const SubscriptionReplacementResult({
+    required this.replacement,
+    required this.replayed,
+    required this.auditId,
+    required this.eventId,
+  });
+
+  final SubscriptionReplacementReference replacement;
+  final bool replayed;
+  final String auditId;
+  final String eventId;
+
+  factory SubscriptionReplacementResult.fromJson(Map<String, dynamic> json) {
+    return SubscriptionReplacementResult(
+      replacement: SubscriptionReplacementReference.fromJson(
+        _replacementMap(json['replacement']),
+      ),
+      replayed: json['replayed'] == true,
+      auditId: json['auditId'].toString(),
+      eventId: json['eventId'].toString(),
+    );
+  }
+}
+
+Map<String, dynamic> _replacementMap(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((key, item) => MapEntry(key.toString(), item));
+  }
+  throw const FormatException('Некорректный ответ замены абонемента.');
+}
+
+int _replacementInt(Object? value) =>
+    value is int ? value : int.parse(value.toString());
+
+num _replacementNum(Object? value) =>
+    value is num ? value : num.parse(value.toString());
+
+BigInt _replacementMinor(Object? value) => BigInt.parse(value.toString());
+
 /// Finance: adjustments, payments, expenses, subscription packages,
 /// homework, task status, analytics.
 extension MagicCrmFinance on MagicCrmService {
@@ -468,6 +792,34 @@ extension MagicCrmFinance on MagicCrmService {
       identity: identity,
       data: input.toJson(),
     );
+  }
+
+  Future<SubscriptionReplacementPreview> previewSubscriptionReplacement(
+    String studentId, {
+    required String issuedSubscriptionId,
+    required String newPackageId,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/students/$studentId/subscriptions/'
+      '$issuedSubscriptionId/replace/preview',
+      data: <String, dynamic>{'newPackageId': newPackageId},
+    );
+    return SubscriptionReplacementPreview.fromJson(response);
+  }
+
+  Future<SubscriptionReplacementResult> replaceSubscription(
+    String studentId, {
+    required String issuedSubscriptionId,
+    required ReplaceSubscriptionInput input,
+    required MagicMutationIdentity identity,
+  }) async {
+    final response = await _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/students/$studentId/subscriptions/'
+      '$issuedSubscriptionId/replace',
+      identity: identity,
+      data: input.toJson(),
+    );
+    return SubscriptionReplacementResult.fromJson(response);
   }
 
   /// Issues the first subscription for a lead and converts it to a student in

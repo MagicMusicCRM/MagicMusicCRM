@@ -17,11 +17,13 @@ import 'client_card_ui.dart';
 Future<Map<String, dynamic>?> showIssueSubscriptionSheet(
   BuildContext context, {
   required List<Map<String, dynamic>> packages,
+  String title = 'Выдать абонемент',
+  String subtitle = 'Выберите пакет занятий',
 }) {
   return showMagicSheet<Map<String, dynamic>>(
     context,
-    title: 'Выдать абонемент',
-    subtitle: 'Выберите пакет занятий',
+    title: title,
+    subtitle: subtitle,
     icon: Icons.card_membership_rounded,
     builder: (sheetContext) {
       return Column(
