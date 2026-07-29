@@ -527,8 +527,28 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
     });
 
     const runner = new MigrationRunner(pool);
-    await expect(runner.down()).resolves.toBe(
-      "0091_commerce_issued_subscription_aggregate_versions",
+    const peeledMigrations: string[] = [];
+    while (true) {
+      const latest = await pool.query<{ id: string }>(
+        `
+          select id
+          from app_schema_migrations
+          order by applied_at desc
+          limit 1
+        `,
+      );
+      if (latest.rows[0]?.id === "0090_commerce_package_aggregate_versions") {
+        break;
+      }
+      const rolledBack = await runner.down();
+      if (!rolledBack) throw new Error("Migration chain ended before 0090.");
+      peeledMigrations.push(rolledBack);
+    }
+    expect(peeledMigrations).toEqual(
+      expect.arrayContaining([
+        "0091_commerce_issued_subscription_aggregate_versions",
+        "0092_shared_tasks_audience_schema",
+      ]),
     );
     try {
       await expect(runner.down()).rejects.toMatchObject({
@@ -545,9 +565,8 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
       );
       expect(applied.rows[0]!.count).toBe("1");
     } finally {
-      await expect(runner.up()).resolves.toContain(
-        "0091_commerce_issued_subscription_aggregate_versions",
-      );
+      const restored = await runner.up();
+      expect(restored).toEqual(expect.arrayContaining(peeledMigrations));
     }
   });
 
