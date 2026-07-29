@@ -488,25 +488,54 @@ extension _ClientCardTabsA on _ClientCardState {
                         ? AppTheme.danger
                         : AppTheme.success,
                     trailing: s.isActive && (s.id?.isNotEmpty ?? false)
-                        ? IconButton(
-                            key: Key('subscription-replace-${s.id}'),
-                            tooltip: 'Заменить абонемент',
-                            onPressed: _replacingSubscription
-                                ? null
-                                : () => _showReplaceSubscriptionFlow(s),
-                            icon: _replacingSubscription
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColor.gold,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.swap_horiz_rounded,
-                                    color: AppColor.gold,
-                                  ),
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                key: Key('subscription-replace-${s.id}'),
+                                tooltip: 'Заменить абонемент',
+                                onPressed:
+                                    _replacingSubscription ||
+                                        _cancellingSubscription
+                                    ? null
+                                    : () => _showReplaceSubscriptionFlow(s),
+                                icon: _replacingSubscription
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColor.gold,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.swap_horiz_rounded,
+                                        color: AppColor.gold,
+                                      ),
+                              ),
+                              IconButton(
+                                key: Key('subscription-cancel-${s.id}'),
+                                tooltip: 'Отменить абонемент',
+                                onPressed:
+                                    _replacingSubscription ||
+                                        _cancellingSubscription
+                                    ? null
+                                    : () => _showCancelSubscriptionFlow(s),
+                                icon: _cancellingSubscription
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColor.danger,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.cancel_outlined,
+                                        color: AppColor.danger,
+                                      ),
+                              ),
+                            ],
                           )
                         : null,
                   ),

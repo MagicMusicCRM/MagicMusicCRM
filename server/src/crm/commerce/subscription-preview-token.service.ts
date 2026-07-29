@@ -5,9 +5,12 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
+  signSubscriptionCancelPreview,
   signSubscriptionReplacePreview,
+  SubscriptionCancelPreviewTokenPayload,
   SubscriptionPreviewTokenError,
   SubscriptionReplacePreviewTokenPayload,
+  verifySubscriptionCancelPreview,
   verifySubscriptionReplacePreview,
 } from "./subscription-preview-token";
 
@@ -60,6 +63,53 @@ export class SubscriptionPreviewTokenService {
           error.code === "PREVIEW_TOKEN_EXPIRED"
             ? "Предпросмотр замены устарел. Обновите расчёт."
             : "Подписанный предпросмотр замены недействителен.",
+      });
+    }
+  }
+
+  issueCancellation(
+    payload: Omit<
+      SubscriptionCancelPreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+    now = new Date(),
+  ): {
+    token: string;
+    expiresAt: string;
+    payload: SubscriptionCancelPreviewTokenPayload;
+  } {
+    const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+    const complete: SubscriptionCancelPreviewTokenPayload = {
+      ...payload,
+      issuedAtSeconds,
+      expiresAtSeconds:
+        issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+    };
+    return {
+      token: signSubscriptionCancelPreview(this.secret(), complete),
+      expiresAt: new Date(complete.expiresAtSeconds * 1000).toISOString(),
+      payload: complete,
+    };
+  }
+
+  verifyCancellation(
+    token: string,
+    now = new Date(),
+  ): SubscriptionCancelPreviewTokenPayload {
+    try {
+      return verifySubscriptionCancelPreview(
+        this.secret(),
+        token,
+        Math.floor(now.getTime() / 1000),
+      );
+    } catch (error) {
+      if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
+      throw new UnprocessableEntityException({
+        code: error.code,
+        message:
+          error.code === "PREVIEW_TOKEN_EXPIRED"
+            ? "Предпросмотр отмены устарел. Обновите расчёт."
+            : "Подписанный предпросмотр отмены недействителен.",
       });
     }
   }

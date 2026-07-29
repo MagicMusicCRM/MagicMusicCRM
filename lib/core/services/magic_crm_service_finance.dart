@@ -439,6 +439,277 @@ class SubscriptionReplacementResult {
   }
 }
 
+class SubscriptionCancellationPackage {
+  const SubscriptionCancellationPackage({
+    required this.id,
+    required this.name,
+    required this.unitCount,
+  });
+
+  final String id;
+  final String name;
+  final num unitCount;
+
+  factory SubscriptionCancellationPackage.fromJson(Map<String, dynamic> json) {
+    return SubscriptionCancellationPackage(
+      id: json['id'].toString(),
+      name: json['name'].toString(),
+      unitCount: _replacementNum(json['unitCount']),
+    );
+  }
+}
+
+class SubscriptionCancellationUsage {
+  const SubscriptionCancellationUsage({required this.usedUnits});
+
+  final String usedUnits;
+
+  factory SubscriptionCancellationUsage.fromJson(Map<String, dynamic> json) {
+    return SubscriptionCancellationUsage(
+      usedUnits: json['usedUnits'].toString(),
+    );
+  }
+}
+
+class SubscriptionCancellationFinancial {
+  const SubscriptionCancellationFinancial({
+    required this.currencyCode,
+    required this.finalMinor,
+    required this.actualPaidMinor,
+    required this.writeoffMinor,
+    required this.balanceMinor,
+  });
+
+  final String currencyCode;
+  final BigInt finalMinor;
+  final BigInt actualPaidMinor;
+  final BigInt writeoffMinor;
+  final BigInt balanceMinor;
+
+  factory SubscriptionCancellationFinancial.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return SubscriptionCancellationFinancial(
+      currencyCode: json['currencyCode'].toString(),
+      finalMinor: _replacementMinor(json['finalMinor']),
+      actualPaidMinor: _replacementMinor(json['actualPaidMinor']),
+      writeoffMinor: _replacementMinor(json['writeoffMinor']),
+      balanceMinor: _replacementMinor(json['balanceMinor']),
+    );
+  }
+}
+
+class SubscriptionCancellationFutureLesson {
+  const SubscriptionCancellationFutureLesson({
+    required this.lessonId,
+    required this.scheduledAt,
+    required this.units,
+    required this.reserved,
+  });
+
+  final String lessonId;
+  final DateTime scheduledAt;
+  final String units;
+  final bool reserved;
+
+  factory SubscriptionCancellationFutureLesson.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return SubscriptionCancellationFutureLesson(
+      lessonId: json['lessonId'].toString(),
+      scheduledAt: DateTime.parse(json['scheduledAt'].toString()),
+      units: json['units'].toString(),
+      reserved: json['reserved'] == true,
+    );
+  }
+}
+
+class SubscriptionCancellationFuture {
+  const SubscriptionCancellationFuture({
+    required this.lessonCount,
+    required this.reservedLessonCount,
+    required this.reservedUnits,
+    required this.lessons,
+  });
+
+  final int lessonCount;
+  final int reservedLessonCount;
+  final String reservedUnits;
+  final List<SubscriptionCancellationFutureLesson> lessons;
+
+  factory SubscriptionCancellationFuture.fromJson(Map<String, dynamic> json) {
+    final lessonItems = json['lessons'] is List
+        ? json['lessons'] as List
+        : const <dynamic>[];
+    return SubscriptionCancellationFuture(
+      lessonCount: _replacementInt(json['lessonCount']),
+      reservedLessonCount: _replacementInt(json['reservedLessonCount']),
+      reservedUnits: json['reservedUnits'].toString(),
+      lessons: lessonItems
+          .map(
+            (item) => SubscriptionCancellationFutureLesson.fromJson(
+              _replacementMap(item),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
+class SubscriptionCancellationWarning {
+  const SubscriptionCancellationWarning({
+    required this.code,
+    required this.message,
+    this.count,
+    this.units,
+  });
+
+  final String code;
+  final String message;
+  final int? count;
+  final String? units;
+
+  factory SubscriptionCancellationWarning.fromJson(Map<String, dynamic> json) {
+    return SubscriptionCancellationWarning(
+      code: json['code'].toString(),
+      message: json['message'].toString(),
+      count: json['count'] == null ? null : _replacementInt(json['count']),
+      units: json['units']?.toString(),
+    );
+  }
+}
+
+class SubscriptionCancellationPreview {
+  const SubscriptionCancellationPreview({
+    required this.issuedSubscriptionId,
+    required this.expectedVersion,
+    required this.package,
+    required this.usage,
+    required this.financial,
+    required this.future,
+    required this.warnings,
+    required this.previewToken,
+    required this.expiresAt,
+  });
+
+  final String issuedSubscriptionId;
+  final int expectedVersion;
+  final SubscriptionCancellationPackage package;
+  final SubscriptionCancellationUsage usage;
+  final SubscriptionCancellationFinancial financial;
+  final SubscriptionCancellationFuture future;
+  final List<SubscriptionCancellationWarning> warnings;
+  final String previewToken;
+  final DateTime expiresAt;
+
+  factory SubscriptionCancellationPreview.fromJson(Map<String, dynamic> json) {
+    final warningItems = json['warnings'] is List
+        ? json['warnings'] as List
+        : const <dynamic>[];
+    return SubscriptionCancellationPreview(
+      issuedSubscriptionId: json['issuedSubscriptionId'].toString(),
+      expectedVersion: _replacementInt(json['expectedVersion']),
+      package: SubscriptionCancellationPackage.fromJson(
+        _replacementMap(json['package']),
+      ),
+      usage: SubscriptionCancellationUsage.fromJson(
+        _replacementMap(json['usage']),
+      ),
+      financial: SubscriptionCancellationFinancial.fromJson(
+        _replacementMap(json['financial']),
+      ),
+      future: SubscriptionCancellationFuture.fromJson(
+        _replacementMap(json['future']),
+      ),
+      warnings: warningItems
+          .map(
+            (item) =>
+                SubscriptionCancellationWarning.fromJson(_replacementMap(item)),
+          )
+          .toList(growable: false),
+      previewToken: json['previewToken'].toString(),
+      expiresAt: DateTime.parse(json['expiresAt'].toString()),
+    );
+  }
+}
+
+class CancelSubscriptionInput {
+  const CancelSubscriptionInput({
+    required this.expectedVersion,
+    required this.previewToken,
+    required this.reason,
+  });
+
+  final int expectedVersion;
+  final String previewToken;
+  final String reason;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'expectedVersion': expectedVersion,
+    'previewToken': previewToken,
+    'confirm': true,
+    'reason': reason.trim(),
+  };
+}
+
+class SubscriptionCancellationReference {
+  const SubscriptionCancellationReference({
+    required this.issuedSubscriptionId,
+    required this.version,
+    required this.status,
+    required this.releasedReservationCount,
+    required this.releasedReservationUnits,
+    required this.futureLessonCount,
+  });
+
+  final String issuedSubscriptionId;
+  final int version;
+  final String status;
+  final int releasedReservationCount;
+  final String releasedReservationUnits;
+  final int futureLessonCount;
+
+  factory SubscriptionCancellationReference.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return SubscriptionCancellationReference(
+      issuedSubscriptionId: json['issuedSubscriptionId'].toString(),
+      version: _replacementInt(json['version']),
+      status: json['status'].toString(),
+      releasedReservationCount: _replacementInt(
+        json['releasedReservationCount'],
+      ),
+      releasedReservationUnits: json['releasedReservationUnits'].toString(),
+      futureLessonCount: _replacementInt(json['futureLessonCount']),
+    );
+  }
+}
+
+class SubscriptionCancellationResult {
+  const SubscriptionCancellationResult({
+    required this.cancellation,
+    required this.replayed,
+    required this.auditId,
+    required this.eventId,
+  });
+
+  final SubscriptionCancellationReference cancellation;
+  final bool replayed;
+  final String auditId;
+  final String eventId;
+
+  factory SubscriptionCancellationResult.fromJson(Map<String, dynamic> json) {
+    return SubscriptionCancellationResult(
+      cancellation: SubscriptionCancellationReference.fromJson(
+        _replacementMap(json['cancellation']),
+      ),
+      replayed: json['replayed'] == true,
+      auditId: json['auditId'].toString(),
+      eventId: json['eventId'].toString(),
+    );
+  }
+}
+
 Map<String, dynamic> _replacementMap(Object? value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) {
@@ -820,6 +1091,33 @@ extension MagicCrmFinance on MagicCrmService {
       data: input.toJson(),
     );
     return SubscriptionReplacementResult.fromJson(response);
+  }
+
+  Future<SubscriptionCancellationPreview> previewSubscriptionCancellation(
+    String studentId, {
+    required String issuedSubscriptionId,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/students/$studentId/subscriptions/'
+      '$issuedSubscriptionId/cancel/preview',
+      data: const <String, dynamic>{},
+    );
+    return SubscriptionCancellationPreview.fromJson(response);
+  }
+
+  Future<SubscriptionCancellationResult> cancelSubscription(
+    String studentId, {
+    required String issuedSubscriptionId,
+    required CancelSubscriptionInput input,
+    required MagicMutationIdentity identity,
+  }) async {
+    final response = await _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/students/$studentId/subscriptions/'
+      '$issuedSubscriptionId/cancel',
+      identity: identity,
+      data: input.toJson(),
+    );
+    return SubscriptionCancellationResult.fromJson(response);
   }
 
   /// Issues the first subscription for a lead and converts it to a student in

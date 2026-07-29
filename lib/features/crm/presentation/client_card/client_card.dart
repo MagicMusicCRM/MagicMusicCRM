@@ -32,6 +32,7 @@ import 'client_card_staff_api.dart';
 import 'client_card_dialogs.dart';
 import 'client_card_sheets.dart';
 import 'client_card_ui.dart';
+import 'subscription_cancel_sheet.dart';
 import 'subscription_issue_sheet.dart';
 import 'subscription_replace_sheet.dart';
 import 'student_schedule_section.dart';
@@ -89,6 +90,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _saving = false;
   bool _converting = false;
   bool _replacingSubscription = false;
+  bool _cancellingSubscription = false;
   bool _loadingCard = true;
   int _commentsRefreshKey = 0;
   // Bumped after a homework is assigned so the «Прогресс» tab refetches.

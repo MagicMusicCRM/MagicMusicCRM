@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const TOKEN_VERSION = "v1";
-const TOKEN_DOMAIN = "magicmusiccrm:subscription-replace-preview:v1";
+const REPLACE_TOKEN_DOMAIN =
+  "magicmusiccrm:subscription-replace-preview:v1";
+const CANCEL_TOKEN_DOMAIN =
+  "magicmusiccrm:subscription-cancel-preview:v1";
 
 export interface SubscriptionReplacePreviewTokenPayload {
   kind: "subscription.replace";
@@ -32,6 +35,29 @@ export interface SubscriptionReplacePreviewTokenPayload {
   expiresAtSeconds: number;
 }
 
+export interface SubscriptionCancelPreviewTokenPayload {
+  kind: "subscription.cancel";
+  actorUserId: string;
+  studentId: string;
+  issuedSubscriptionId: string;
+  expectedVersion: number;
+  packageId: string;
+  packageVersion: number;
+  unitCount: string;
+  usedUnits: string;
+  currencyCode: string;
+  finalMinor: string;
+  actualPaidMinor: string;
+  writeoffMinor: string;
+  balanceMinor: string;
+  futureLessonCount: number;
+  reservedLessonCount: number;
+  reservedUnits: string;
+  impactFingerprint: string;
+  issuedAtSeconds: number;
+  expiresAtSeconds: number;
+}
+
 export type SubscriptionPreviewTokenErrorCode =
   | "PREVIEW_TOKEN_INVALID"
   | "PREVIEW_TOKEN_EXPIRED";
@@ -47,16 +73,12 @@ export function signSubscriptionReplacePreview(
   secret: string,
   payload: SubscriptionReplacePreviewTokenPayload,
 ): string {
-  assertSecret(secret);
-  assertPayload(payload);
-  const body = Buffer.from(JSON.stringify(payload), "utf8").toString(
-    "base64url",
+  return signPayload(
+    secret,
+    REPLACE_TOKEN_DOMAIN,
+    payload,
+    assertReplacePayload,
   );
-  return [
-    TOKEN_VERSION,
-    body,
-    signature(secret, body).toString("base64url"),
-  ].join(".");
 }
 
 export function verifySubscriptionReplacePreview(
@@ -64,6 +86,68 @@ export function verifySubscriptionReplacePreview(
   token: string,
   nowSeconds: number,
 ): SubscriptionReplacePreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    REPLACE_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertReplacePayload,
+  );
+}
+
+export function signSubscriptionCancelPreview(
+  secret: string,
+  payload: SubscriptionCancelPreviewTokenPayload,
+): string {
+  return signPayload(
+    secret,
+    CANCEL_TOKEN_DOMAIN,
+    payload,
+    assertCancelPayload,
+  );
+}
+
+export function verifySubscriptionCancelPreview(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): SubscriptionCancelPreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    CANCEL_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertCancelPayload,
+  );
+}
+
+function signPayload<T>(
+  secret: string,
+  domain: string,
+  payload: T,
+  assert: (value: unknown) => asserts value is T,
+): string {
+  assertSecret(secret);
+  assert(payload);
+  const body = Buffer.from(JSON.stringify(payload), "utf8").toString(
+    "base64url",
+  );
+  return [
+    TOKEN_VERSION,
+    body,
+    signature(secret, domain, body).toString("base64url"),
+  ].join(".");
+}
+
+function verifyPayload<T>(
+  secret: string,
+  domain: string,
+  token: string,
+  nowSeconds: number,
+  assert: (value: unknown) => asserts value is T & {
+    expiresAtSeconds: number;
+  },
+): T {
   assertSecret(secret);
   if (token.length > 16_384) {
     throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
@@ -74,7 +158,7 @@ export function verifySubscriptionReplacePreview(
   }
   const body = parts[1]!;
   const provided = decodeBase64Url(parts[2]!);
-  const expected = signature(secret, body);
+  const expected = signature(secret, domain, body);
   if (
     provided.length !== expected.length ||
     !timingSafeEqual(provided, expected)
@@ -87,16 +171,16 @@ export function verifySubscriptionReplacePreview(
   } catch {
     throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
   }
-  assertPayload(payload);
+  assert(payload);
   if (payload.expiresAtSeconds < nowSeconds) {
     throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_EXPIRED");
   }
   return payload;
 }
 
-function signature(secret: string, body: string): Buffer {
+function signature(secret: string, domain: string, body: string): Buffer {
   return createHmac("sha256", secret)
-    .update(`${TOKEN_DOMAIN}.${body}`)
+    .update(`${domain}.${body}`)
     .digest();
 }
 
@@ -113,7 +197,7 @@ function assertSecret(secret: string): void {
   }
 }
 
-function assertPayload(
+function assertReplacePayload(
   value: unknown,
 ): asserts value is SubscriptionReplacePreviewTokenPayload {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -179,6 +263,66 @@ function assertPayload(
       payload.positionKind as string,
     ) ||
     !isMinor(payload.positionMinor) ||
+    !isPositiveInteger(payload.issuedAtSeconds) ||
+    !isPositiveInteger(payload.expiresAtSeconds) ||
+    payload.expiresAtSeconds < payload.issuedAtSeconds
+  ) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+}
+
+function assertCancelPayload(
+  value: unknown,
+): asserts value is SubscriptionCancelPreviewTokenPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+  const payload = value as Record<string, unknown>;
+  const exactKeys = [
+    "kind",
+    "actorUserId",
+    "studentId",
+    "issuedSubscriptionId",
+    "expectedVersion",
+    "packageId",
+    "packageVersion",
+    "unitCount",
+    "usedUnits",
+    "currencyCode",
+    "finalMinor",
+    "actualPaidMinor",
+    "writeoffMinor",
+    "balanceMinor",
+    "futureLessonCount",
+    "reservedLessonCount",
+    "reservedUnits",
+    "impactFingerprint",
+    "issuedAtSeconds",
+    "expiresAtSeconds",
+  ];
+  if (
+    Object.keys(payload).length !== exactKeys.length ||
+    exactKeys.some((key) => !(key in payload)) ||
+    payload.kind !== "subscription.cancel" ||
+    !isUuid(payload.actorUserId) ||
+    !isUuid(payload.studentId) ||
+    !isUuid(payload.issuedSubscriptionId) ||
+    !isPositiveInteger(payload.expectedVersion) ||
+    !isUuid(payload.packageId) ||
+    !isPositiveInteger(payload.packageVersion) ||
+    !isUnits(payload.unitCount) ||
+    !isUnits(payload.usedUnits) ||
+    typeof payload.currencyCode !== "string" ||
+    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
+    !isMinor(payload.finalMinor) ||
+    !isMinor(payload.actualPaidMinor) ||
+    !isMinor(payload.writeoffMinor) ||
+    !isSignedMinor(payload.balanceMinor) ||
+    !isNonnegativeInteger(payload.futureLessonCount) ||
+    !isNonnegativeInteger(payload.reservedLessonCount) ||
+    !isUnits(payload.reservedUnits) ||
+    typeof payload.impactFingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(payload.impactFingerprint) ||
     !isPositiveInteger(payload.issuedAtSeconds) ||
     !isPositiveInteger(payload.expiresAtSeconds) ||
     payload.expiresAtSeconds < payload.issuedAtSeconds

@@ -12,16 +12,21 @@ import { PlatformAuditInput } from "../../platform/platform-integrity.types";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { CrmPolicy } from "../crm.policy";
 import {
+  SubscriptionCancelCommandDto,
+} from "../dto/subscription-cancel.dto";
+import {
   SubscriptionReplaceCommandDto,
   SubscriptionReplacePreviewDto,
 } from "../dto/subscription-replace.dto";
 import { IssuedCommercialSnapshot } from "./commerce-schema.types";
 import {
+  CancellationContext,
   ReplacementContext,
   ReplacementPackageRow,
   SubscriptionLifecycleRepository,
 } from "./subscription-lifecycle.repository";
 import {
+  SubscriptionCancelPreviewTokenPayload,
   SubscriptionReplacePreviewTokenPayload,
 } from "./subscription-preview-token";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
@@ -48,6 +53,15 @@ export interface ReplacementResultRef extends Record<string, unknown> {
   positionMinor: string;
   ccy: string;
   obligationFactId: string | null;
+}
+
+export interface CancellationResultRef extends Record<string, unknown> {
+  sourceId: string;
+  resultVersion: number;
+  state: "cancelled";
+  releasedCount: number;
+  releasedUnits: string;
+  futureCount: number;
 }
 
 interface ReplacementCalculation {
@@ -374,6 +388,224 @@ export class SubscriptionLifecycleService {
     };
   }
 
+  async previewCancellation(
+    actor: ActorContext,
+    studentId: string,
+    issuedSubscriptionId: string,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const context = await this.repository.readCancellationContext(
+      issuedSubscriptionId,
+    );
+    this.assertCancellableContext(context);
+    this.assertStudentScope(context, studentId);
+    const signed = this.previewTokens.issueCancellation(
+      this.createCancellationTokenPayload(actor, context),
+    );
+    return {
+      issuedSubscriptionId,
+      expectedVersion: context.version,
+      package: {
+        id: context.package.id,
+        name: context.package.name,
+        unitCount: context.package.unitCount,
+      },
+      usage: {
+        usedUnits: context.usedUnits,
+      },
+      financial: {
+        currencyCode: context.currencyCode,
+        finalMinor: context.finalMinor,
+        actualPaidMinor: context.actualPaidMinor,
+        writeoffMinor: context.writeoffMinor,
+        balanceMinor: context.balanceMinor,
+      },
+      future: {
+        lessonCount: context.futureLessonCount,
+        reservedLessonCount: context.reservedLessonCount,
+        reservedUnits: context.reservedUnits,
+        lessons: context.futureLessons.map((lesson) => ({
+          lessonId: lesson.lessonId,
+          scheduledAt: lesson.scheduledAt,
+          units: lesson.units,
+          reserved: lesson.reserved,
+        })),
+      },
+      warnings: this.cancellationWarnings(context),
+      previewToken: signed.token,
+      expiresAt: signed.expiresAt,
+    };
+  }
+
+  async cancel(
+    actor: ActorContext,
+    studentId: string,
+    issuedSubscriptionId: string,
+    dto: SubscriptionCancelCommandDto,
+    metadata: SubscriptionLifecycleMutationMetadata,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    this.assertCancelCommand(dto, metadata);
+    const audit: PlatformAuditInput = {
+      action: "crm.subscription_cancelled",
+      entityType: "subscription",
+      entityId: issuedSubscriptionId,
+      reason: dto.reason,
+      beforeRef: {
+        subscriptionId: issuedSubscriptionId,
+        version: dto.expectedVersion,
+        lifecycle: "active",
+      },
+      metadata: {
+        lifecycle: "cancelled",
+      },
+    };
+    const result =
+      await this.integrity.executeVersionedMutation<CancellationResultRef>({
+        actorKey: actor.userId,
+        actorUserId: actor.userId,
+        operation: "crm.subscription.cancel",
+        idempotencyKey: metadata.idempotencyKey,
+        requestId: metadata.requestId,
+        aggregateType: "commerce:issued-subscription",
+        aggregateId: issuedSubscriptionId,
+        expectedVersion: dto.expectedVersion,
+        payload: {
+          issuedSubscriptionId,
+          studentId,
+          expectedVersion: dto.expectedVersion,
+          previewToken: dto.previewToken,
+          confirm: dto.confirm,
+          reason: dto.reason,
+        },
+        audit,
+        outbox: {
+          type: "commerce.subscription.changed",
+          payload: {
+            entityId: issuedSubscriptionId,
+            state: "cancelled",
+            invalidates: ["student-finance", "subscription", "schedule"],
+          },
+        },
+        mutate: async (client, nextVersion) => {
+          const issued = await this.repository.lockIssuedSubscription(
+            client,
+            issuedSubscriptionId,
+          );
+          if (!issued) {
+            throw new NotFoundException("Выданный абонемент не найден.");
+          }
+          if (
+            issued.status !== "active" ||
+            Number(issued.version) !== dto.expectedVersion
+          ) {
+            throw new ConflictException({
+              code: "SUBSCRIPTION_CANCEL_CONFLICT",
+              message: "Абонемент уже изменён или больше не активен.",
+              expectedVersion: dto.expectedVersion,
+              currentVersion: Number(issued.version),
+              currentStatus: issued.status,
+            });
+          }
+          // Like replacement, token verification belongs inside mutate so a
+          // completed idempotent replay stays stable after token expiry.
+          const signedPayload = this.previewTokens.verifyCancellation(
+            dto.previewToken,
+          );
+          this.assertCancellationTokenBinding(
+            signedPayload,
+            actor,
+            studentId,
+            issuedSubscriptionId,
+            dto.expectedVersion,
+          );
+          await this.repository.lockReservedRows(
+            client,
+            issuedSubscriptionId,
+          );
+          const context =
+            await this.repository.readCancellationContextInTransaction(
+              client,
+              issuedSubscriptionId,
+            );
+          this.assertCancellableContext(context);
+          this.assertStudentScope(context, studentId);
+          this.assertCancellationPreviewStillCurrent(
+            signedPayload,
+            this.createCancellationTokenPayload(actor, context),
+          );
+
+          const closed = await this.repository.closeCancelledSubscription(
+            client,
+            {
+              issuedSubscriptionId,
+              expectedVersion: dto.expectedVersion,
+              nextVersion,
+            },
+          );
+          if (!closed) {
+            throw new ConflictException({
+              code: "SUBSCRIPTION_CANCEL_CONFLICT",
+              message: "Абонемент изменился во время отмены.",
+            });
+          }
+          const released =
+            await this.repository.releaseCancellationReservations(
+              client,
+              issuedSubscriptionId,
+            );
+          if (
+            released.count !== context.reservedLessonCount ||
+            released.units !== context.reservedUnits ||
+            released.remaining !== 0
+          ) {
+            throw new ConflictException({
+              code: "SUBSCRIPTION_RESERVATION_CONFLICT",
+              message:
+                "Резервы занятий изменились во время отмены абонемента.",
+            });
+          }
+          await this.repository.createCancelLifecycle(client, {
+            issuedSubscriptionId,
+            actorUserId: actor.userId,
+            reason: dto.reason,
+            aggregateVersion: nextVersion,
+          });
+          audit.afterRef = {
+            subscriptionId: issuedSubscriptionId,
+            version: nextVersion,
+            lifecycle: "cancelled",
+          };
+          audit.metadata = {
+            lifecycle: "cancelled",
+            releasedReservationCount: released.count,
+            futureLessonCount: context.futureLessonCount,
+          };
+          return {
+            sourceId: issuedSubscriptionId,
+            resultVersion: nextVersion,
+            state: "cancelled",
+            releasedCount: released.count,
+            releasedUnits: released.units,
+            futureCount: context.futureLessonCount,
+          };
+        },
+      });
+    return {
+      cancellation: {
+        issuedSubscriptionId: result.resultRef.sourceId,
+        version: result.resultRef.resultVersion,
+        status: result.resultRef.state,
+        releasedReservationCount: result.resultRef.releasedCount,
+        releasedReservationUnits: result.resultRef.releasedUnits,
+        futureLessonCount: result.resultRef.futureCount,
+      },
+      replayed: result.replayed,
+      auditId: result.auditId,
+      eventId: result.eventId,
+    };
+  }
+
   private createTokenPayload(
     actor: ActorContext,
     context: ReplacementContext,
@@ -412,6 +644,40 @@ export class SubscriptionLifecycleService {
       deltaMinor: calculation.deltaMinor.toString(),
       positionKind: calculation.positionKind,
       positionMinor: absolute(calculation.positionMinor).toString(),
+    };
+  }
+
+  private createCancellationTokenPayload(
+    actor: ActorContext,
+    context: CancellationContext,
+  ): Omit<
+    SubscriptionCancelPreviewTokenPayload,
+    "issuedAtSeconds" | "expiresAtSeconds"
+  > {
+    return {
+      kind: "subscription.cancel",
+      actorUserId: actor.userId,
+      studentId: context.studentId,
+      issuedSubscriptionId: context.issuedSubscriptionId,
+      expectedVersion: context.version,
+      packageId: context.package.id,
+      packageVersion: context.package.version,
+      unitCount: context.package.unitCount,
+      usedUnits: context.usedUnits,
+      currencyCode: context.currencyCode,
+      finalMinor: context.finalMinor,
+      actualPaidMinor: context.actualPaidMinor,
+      writeoffMinor: context.writeoffMinor,
+      balanceMinor: context.balanceMinor,
+      futureLessonCount: context.futureLessonCount,
+      reservedLessonCount: context.reservedLessonCount,
+      reservedUnits: context.reservedUnits,
+      impactFingerprint: fingerprintPayload({
+        payments: context.paymentRefs,
+        writeoffs: context.writeoffRefs,
+        obligations: context.obligationRefs,
+        future: context.futureLessons,
+      }),
     };
   }
 
@@ -457,6 +723,21 @@ export class SubscriptionLifecycleService {
           "Объём нового пакета не может быть меньше уже использованного.",
         usedUnits: context.usedUnits,
         newUnitCount: context.newPackage.unitCount,
+      });
+    }
+  }
+
+  private assertCancellableContext(
+    context: CancellationContext | null,
+  ): asserts context is CancellationContext {
+    if (!context) {
+      throw new NotFoundException("Выданный абонемент не найден.");
+    }
+    if (context.status !== "active") {
+      throw new UnprocessableEntityException({
+        code: "SUBSCRIPTION_NOT_ACTIVE",
+        message: "Отменить можно только активный абонемент.",
+        status: context.status,
       });
     }
   }
@@ -554,11 +835,31 @@ export class SubscriptionLifecycleService {
   }
 
   private assertStudentScope(
-    context: ReplacementContext,
+    context: { studentId: string },
     studentId: string,
   ): void {
     if (context.studentId !== studentId) {
       throw new NotFoundException("Выданный абонемент не найден.");
+    }
+  }
+
+  private assertCancellationTokenBinding(
+    payload: SubscriptionCancelPreviewTokenPayload,
+    actor: ActorContext,
+    studentId: string,
+    issuedSubscriptionId: string,
+    expectedVersion: number,
+  ): void {
+    if (
+      payload.actorUserId !== actor.userId ||
+      payload.studentId !== studentId ||
+      payload.issuedSubscriptionId !== issuedSubscriptionId ||
+      payload.expectedVersion !== expectedVersion
+    ) {
+      throw new UnprocessableEntityException({
+        code: "PREVIEW_TOKEN_SCOPE_MISMATCH",
+        message: "Предпросмотр создан для другой операции или пользователя.",
+      });
     }
   }
 
@@ -581,6 +882,27 @@ export class SubscriptionLifecycleService {
         code: "REPLACEMENT_PREVIEW_STALE",
         message:
           "После предпросмотра изменились платежи, использование, резервы или пакет.",
+      });
+    }
+  }
+
+  private assertCancellationPreviewStillCurrent(
+    signed: SubscriptionCancelPreviewTokenPayload,
+    current: Omit<
+      SubscriptionCancelPreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+  ): void {
+    const {
+      issuedAtSeconds: _issuedAtSeconds,
+      expiresAtSeconds: _expiresAtSeconds,
+      ...signedFacts
+    } = signed;
+    if (fingerprintPayload(signedFacts) !== fingerprintPayload(current)) {
+      throw new ConflictException({
+        code: "CANCELLATION_PREVIEW_STALE",
+        message:
+          "После предпросмотра изменились платежи, списания, резервы или баланс.",
       });
     }
   }
@@ -627,6 +949,49 @@ export class SubscriptionLifecycleService {
     return warnings;
   }
 
+  private cancellationWarnings(context: CancellationContext) {
+    const warnings: {
+      code: string;
+      count?: number;
+      units?: string;
+      message: string;
+    }[] = [];
+    if (context.futureLessonCount > 0) {
+      warnings.push({
+        code: "FUTURE_LESSONS_PRESERVED",
+        count: context.futureLessonCount,
+        message:
+          "Будущие занятия сохранятся; активные резервы абонемента будут сняты.",
+      });
+    }
+    if (context.reservedLessonCount > 0) {
+      warnings.push({
+        code: "RESERVATIONS_RELEASED",
+        count: context.reservedLessonCount,
+        units: context.reservedUnits,
+        message:
+          "Резервы будут сняты без удаления или изменения самих занятий.",
+      });
+    }
+    if (BigInt(context.actualPaidMinor) > 0n) {
+      warnings.push({
+        code: "ACTUAL_PAYMENTS_PRESERVED",
+        message: "Фактические платежи и выручка останутся неизменными.",
+      });
+    }
+    if (
+      context.writeoffRefs.length > 0 ||
+      BigInt(context.writeoffMinor) > 0n
+    ) {
+      warnings.push({
+        code: "WRITEOFFS_PRESERVED",
+        count: context.writeoffRefs.length,
+        message: "Исторические списания останутся неизменными.",
+      });
+    }
+    return warnings;
+  }
+
   private assertCommand(
     dto: SubscriptionReplaceCommandDto,
     metadata: SubscriptionLifecycleMutationMetadata,
@@ -657,6 +1022,56 @@ export class SubscriptionLifecycleService {
       throw new UnprocessableEntityException({
         code: "PREVIEW_TOKEN_INVALID",
         message: "Передайте подписанный предпросмотр замены.",
+      });
+    }
+    if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
+      throw new BadRequestException({
+        code: "INVALID_IDEMPOTENCY_KEY",
+        message: "Idempotency-Key должен содержать 8–160 безопасных символов.",
+      });
+    }
+    if (
+      !metadata.requestId ||
+      metadata.requestId.length > 128 ||
+      /[\r\n]/.test(metadata.requestId)
+    ) {
+      throw new BadRequestException({
+        code: "INVALID_REQUEST_ID",
+        message: "X-Request-Id обязателен и не должен превышать 128 символов.",
+      });
+    }
+  }
+
+  private assertCancelCommand(
+    dto: SubscriptionCancelCommandDto,
+    metadata: SubscriptionLifecycleMutationMetadata,
+  ): void {
+    if (dto.confirm !== true) {
+      throw new UnprocessableEntityException({
+        code: "CANCELLATION_CONFIRMATION_REQUIRED",
+        message: "Подтвердите отмену после просмотра последствий.",
+      });
+    }
+    if (!Number.isSafeInteger(dto.expectedVersion) || dto.expectedVersion < 1) {
+      throw new UnprocessableEntityException({
+        code: "SUBSCRIPTION_VERSION_REQUIRED",
+        message: "Передайте актуальную версию абонемента.",
+      });
+    }
+    if (!/^[A-Za-z0-9._:-]{1,120}$/.test(dto.reason)) {
+      throw new UnprocessableEntityException({
+        code: "CANCELLATION_REASON_REQUIRED",
+        message: "Передайте безопасный код причины отмены.",
+      });
+    }
+    if (
+      typeof dto.previewToken !== "string" ||
+      dto.previewToken.length === 0 ||
+      dto.previewToken.length > 16_384
+    ) {
+      throw new UnprocessableEntityException({
+        code: "PREVIEW_TOKEN_INVALID",
+        message: "Передайте подписанный предпросмотр отмены.",
       });
     }
     if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {

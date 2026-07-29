@@ -30,6 +30,9 @@ class FakeCardApiClient extends MagicApiClient {
     this.replacementPreview,
     this.replacementResult,
     this.replacementFailures = 0,
+    this.cancellationPreview,
+    this.cancellationResult,
+    this.cancellationFailures = 0,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   /// Сырой (camelCase, как с сервера) лид для GET /crm/leads/:id/card.
@@ -46,6 +49,9 @@ class FakeCardApiClient extends MagicApiClient {
   final Map<String, dynamic>? replacementPreview;
   final Map<String, dynamic>? replacementResult;
   int replacementFailures;
+  final Map<String, dynamic>? cancellationPreview;
+  final Map<String, dynamic>? cancellationResult;
+  int cancellationFailures;
 
   Map<String, dynamic>? updateLeadBody;
   Map<String, dynamic>? updateStudentBody;
@@ -152,6 +158,9 @@ class FakeCardApiClient extends MagicApiClient {
     if (replacementPreview != null && path.endsWith('/replace/preview')) {
       return Map<String, dynamic>.from(replacementPreview!) as T;
     }
+    if (cancellationPreview != null && path.endsWith('/cancel/preview')) {
+      return Map<String, dynamic>.from(cancellationPreview!) as T;
+    }
     if (lead != null &&
         path == '/crm/leads/${lead!['id']}/subscriptions/issue') {
       return <String, dynamic>{
@@ -182,6 +191,18 @@ class FakeCardApiClient extends MagicApiClient {
       }
       return Map<String, dynamic>.from(
             replacementResult ?? const <String, dynamic>{},
+          )
+          as T;
+    }
+    if (path.endsWith('/cancel')) {
+      if (cancellationFailures > 0) {
+        cancellationFailures--;
+        throw const MagicApiException(
+          message: 'Соединение прервано после отправки.',
+        );
+      }
+      return Map<String, dynamic>.from(
+            cancellationResult ?? const <String, dynamic>{},
           )
           as T;
     }

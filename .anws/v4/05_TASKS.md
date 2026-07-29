@@ -732,12 +732,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/crm/commerce/subscription-replace-postgres.integration.spec.ts`
   - **Оценка:** 8 ч. · **Зависимости:** T5.2.2 · **Приоритет:** P0 · **Sprint:** S3
 
-- [ ] **T5.2.4** [REQ-SUB-004, REQ-AUDIT-001]: Реализовать preview/confirm отмены
+- [x] **T5.2.4** [REQ-SUB-004, REQ-AUDIT-001]: Реализовать preview/confirm отмены
   - **Описание:** деактивировать issued subscription и reservations без финансовой mutation/duplicate row.
   - **Подпункты:**
-    - [ ] Показать payments/writeoffs/balance/future lessons.
-    - [ ] Атомарно cancel lifecycle и пересчитать future reservation coverage.
-    - [ ] Создать только subscription action audit/outbox.
+    - [x] Показать payments/writeoffs/balance/future lessons.
+    - [x] Атомарно cancel lifecycle и пересчитать future reservation coverage.
+    - [x] Создать только subscription action audit/outbox.
   - **Вход:** T5.2.2, T4.1.1, `commerce.md §8`.
   - **Выход:** cancel API/UI/tests.
   - **📎 Ссылка:** ADR-009, ADR-011.

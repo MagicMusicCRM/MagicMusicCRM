@@ -102,6 +102,87 @@ export interface ReplacementObligationRow {
   currency_code: string;
 }
 
+interface CancellationContextDatabaseRow {
+  issued_id: string;
+  student_id: string;
+  package_id: string;
+  package_name: string;
+  package_version: number | string;
+  unit_count: string;
+  status: string;
+  version: number | string;
+  currency_code: string;
+  final_minor: string;
+  used_units: string;
+  actual_paid_minor: string;
+  writeoff_minor: string;
+  net_obligation_minor: string;
+  balance_minor: string;
+  payment_refs: CancellationPaymentRef[];
+  writeoff_refs: CancellationWriteoffRef[];
+  obligation_refs: CancellationObligationRef[];
+  future_lesson_count: number | string;
+  reserved_lesson_count: number | string;
+  reserved_units: string;
+  future_lessons: CancellationFutureLesson[];
+}
+
+export interface CancellationPaymentRef {
+  id: string;
+  amountMinor: string;
+  occurredAt: string;
+}
+
+export interface CancellationWriteoffRef {
+  id: string;
+  lessonId: string;
+  amountMinor: string;
+  units: string;
+  occurredAt: string;
+}
+
+export interface CancellationObligationRef {
+  id: string;
+  direction: "debit" | "credit";
+  amountMinor: string;
+  occurredAt: string;
+}
+
+export interface CancellationFutureLesson {
+  lessonId: string;
+  reservationId: string | null;
+  scheduledAt: string;
+  units: string;
+  reserved: boolean;
+}
+
+export interface CancellationContext {
+  issuedSubscriptionId: string;
+  studentId: string;
+  package: {
+    id: string;
+    name: string;
+    version: number;
+    unitCount: string;
+  };
+  status: string;
+  version: number;
+  currencyCode: string;
+  finalMinor: string;
+  usedUnits: string;
+  actualPaidMinor: string;
+  writeoffMinor: string;
+  netObligationMinor: string;
+  balanceMinor: string;
+  paymentRefs: CancellationPaymentRef[];
+  writeoffRefs: CancellationWriteoffRef[];
+  obligationRefs: CancellationObligationRef[];
+  futureLessonCount: number;
+  reservedLessonCount: number;
+  reservedUnits: string;
+  futureLessons: CancellationFutureLesson[];
+}
+
 const replacementContextSql = `
   with recursive lifecycle_chain(id) as (
     select $1::uuid
@@ -214,6 +295,221 @@ const replacementContextSql = `
     and issued.commercial_snapshot is not null
 `;
 
+const cancellationContextSql = `
+  with recursive lifecycle_chain(id) as (
+    select $1::uuid
+    union
+    select event.before_issued_subscription_id
+    from app.subscription_lifecycle_events event
+    join lifecycle_chain current
+      on current.id = event.after_issued_subscription_id
+    where event.event_type = 'replace'
+      and event.before_issued_subscription_id is not null
+  ),
+  current_charge as (
+    select sum(fact.units)::numeric as units
+    from app.lesson_client_charge_facts fact
+    where fact.subscription_id = $1
+      and fact.charge_type = 'subscription'
+  ),
+  payment_rows as (
+    select
+      payment.id,
+      payment.amount_minor,
+      payment.payment_date
+    from app.payments payment
+    where payment.deleted_at is null
+      and payment.issued_subscription_id in (
+        select id from lifecycle_chain
+      )
+  ),
+  writeoff_rows as (
+    select
+      fact.id,
+      fact.lesson_id,
+      fact.amount_minor,
+      fact.units,
+      fact.created_at
+    from app.lesson_client_charge_facts fact
+    where fact.subscription_id in (
+      select id from lifecycle_chain
+    )
+  ),
+  obligation_rows as (
+    select
+      fact.id,
+      fact.direction,
+      fact.amount_minor,
+      fact.occurred_at
+    from app.subscription_obligation_facts fact
+    where fact.issued_subscription_id in (
+      select id from lifecycle_chain
+    )
+  ),
+  reserved_rows as (
+    select
+      reservation.id as reservation_id,
+      reservation.lesson_id,
+      lesson.scheduled_at,
+      reservation.units
+    from app.lesson_reservations reservation
+    join app.lessons lesson on lesson.id = reservation.lesson_id
+    where reservation.subscription_id = $1
+      and reservation.state = 'reserved'
+  ),
+  missing_future_rows as (
+    select
+      null::uuid as reservation_id,
+      snapshot.lesson_id,
+      lesson.scheduled_at,
+      snapshot.client_charge_value as units
+    from app.lesson_snapshots snapshot
+    join app.lessons lesson on lesson.id = snapshot.lesson_id
+    where snapshot.subscription_id = $1
+      and snapshot.client_charge_type = 'subscription'
+      and snapshot.validation_state = 'valid'
+      and lesson.deleted_at is null
+      and lesson.lifecycle_state = 'scheduled'
+      and lesson.scheduled_at >= now()
+      and not exists (
+        select 1
+        from reserved_rows reservation
+        where reservation.lesson_id = snapshot.lesson_id
+      )
+  ),
+  future_rows as (
+    select
+      reservation_id,
+      lesson_id,
+      scheduled_at,
+      units,
+      true as reserved
+    from reserved_rows
+    union all
+    select
+      reservation_id,
+      lesson_id,
+      scheduled_at,
+      units,
+      false as reserved
+    from missing_future_rows
+  ),
+  totals as (
+    select
+      coalesce((select sum(amount_minor) from payment_rows), 0)::bigint
+        as actual_paid_minor,
+      coalesce((select sum(amount_minor) from writeoff_rows), 0)::bigint
+        as writeoff_minor,
+      coalesce(
+        (
+          select sum(
+            case
+              when direction = 'debit' then amount_minor
+              else -amount_minor
+            end
+          )
+          from obligation_rows
+        ),
+        0
+      )::bigint as net_obligation_minor
+  )
+  select
+    issued.id as issued_id,
+    issued.student_id,
+    issued.package_id,
+    issued.commercial_snapshot ->> 'displayName' as package_name,
+    issued.package_version,
+    issued.lessons_total as unit_count,
+    issued.status,
+    issued.version,
+    issued.currency_code,
+    issued.final_price_minor as final_minor,
+    coalesce(
+      (
+        issued.commercial_snapshot
+          #>> '{commercialRules,carriedUsedUnits}'
+      )::numeric + coalesce((select units from current_charge), 0),
+      (select units from current_charge),
+      issued.lessons_used,
+      0
+    )::numeric as used_units,
+    totals.actual_paid_minor,
+    totals.writeoff_minor,
+    totals.net_obligation_minor,
+    (
+      totals.actual_paid_minor - totals.net_obligation_minor
+    )::bigint as balance_minor,
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', id,
+            'amountMinor', amount_minor::text,
+            'occurredAt', payment_date
+          )
+          order by payment_date, id
+        )
+        from payment_rows
+      ),
+      '[]'::jsonb
+    ) as payment_refs,
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', id,
+            'lessonId', lesson_id,
+            'amountMinor', amount_minor::text,
+            'units', units::text,
+            'occurredAt', created_at
+          )
+          order by created_at, id
+        )
+        from writeoff_rows
+      ),
+      '[]'::jsonb
+    ) as writeoff_refs,
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', id,
+            'direction', direction,
+            'amountMinor', amount_minor::text,
+            'occurredAt', occurred_at
+          )
+          order by occurred_at, id
+        )
+        from obligation_rows
+      ),
+      '[]'::jsonb
+    ) as obligation_refs,
+    (select count(*) from future_rows) as future_lesson_count,
+    (select count(*) from reserved_rows) as reserved_lesson_count,
+    coalesce((select sum(units) from reserved_rows), 0)::numeric
+      as reserved_units,
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'lessonId', lesson_id,
+            'reservationId', reservation_id,
+            'scheduledAt', scheduled_at,
+            'units', units::text,
+            'reserved', reserved
+          )
+          order by scheduled_at, lesson_id, reservation_id nulls last
+        )
+        from future_rows
+      ),
+      '[]'::jsonb
+    ) as future_lessons
+  from app.subscriptions issued
+  cross join totals
+  where issued.id = $1
+    and issued.commercial_snapshot is not null
+`;
+
 @Injectable()
 export class SubscriptionLifecycleRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -228,6 +524,17 @@ export class SubscriptionLifecycleRepository {
         [issuedSubscriptionId, newPackageId],
       );
     return this.mapContext(result.rows[0]);
+  }
+
+  async readCancellationContext(
+    issuedSubscriptionId: string,
+  ): Promise<CancellationContext | null> {
+    const result =
+      await this.database.query<CancellationContextDatabaseRow>(
+        cancellationContextSql,
+        [issuedSubscriptionId],
+      );
+    return this.mapCancellationContext(result.rows[0]);
   }
 
   async lockIssuedSubscription(
@@ -314,6 +621,17 @@ export class SubscriptionLifecycleRepository {
     return this.mapContext(result.rows[0]);
   }
 
+  async readCancellationContextInTransaction(
+    client: PoolClient,
+    issuedSubscriptionId: string,
+  ): Promise<CancellationContext | null> {
+    const result = await client.query<CancellationContextDatabaseRow>(
+      cancellationContextSql,
+      [issuedSubscriptionId],
+    );
+    return this.mapCancellationContext(result.rows[0]);
+  }
+
   async closeReplacedSubscription(
     client: PoolClient,
     input: {
@@ -326,6 +644,34 @@ export class SubscriptionLifecycleRepository {
       `
         update app.subscriptions
         set status = 'replaced',
+          version = $3,
+          updated_at = now()
+        where id = $1
+          and status = 'active'
+          and version = $2
+          and commercial_snapshot is not null
+      `,
+      [
+        input.issuedSubscriptionId,
+        input.expectedVersion,
+        input.nextVersion,
+      ],
+    );
+    return result.rowCount === 1;
+  }
+
+  async closeCancelledSubscription(
+    client: PoolClient,
+    input: {
+      issuedSubscriptionId: string;
+      expectedVersion: number;
+      nextVersion: number;
+    },
+  ): Promise<boolean> {
+    const result = await client.query(
+      `
+        update app.subscriptions
+        set status = 'cancelled',
           version = $3,
           updated_at = now()
         where id = $1
@@ -509,6 +855,47 @@ export class SubscriptionLifecycleRepository {
     };
   }
 
+  async releaseCancellationReservations(
+    client: PoolClient,
+    issuedSubscriptionId: string,
+  ): Promise<{ count: number; units: string; remaining: number }> {
+    const result = await client.query<{
+      count: string;
+      units: string;
+    }>(
+      `
+        with released as (
+          update app.lesson_reservations
+          set state = 'released',
+            version = version + 1,
+            updated_at = now()
+          where subscription_id = $1
+            and state = 'reserved'
+          returning units
+        )
+        select
+          count(*)::text as count,
+          coalesce(sum(units), 0)::text as units
+        from released
+      `,
+      [issuedSubscriptionId],
+    );
+    const remaining = await client.query<{ count: string }>(
+      `
+        select count(*)::text as count
+        from app.lesson_reservations
+        where subscription_id = $1
+          and state = 'reserved'
+      `,
+      [issuedSubscriptionId],
+    );
+    return {
+      count: Number(result.rows[0]?.count ?? 0),
+      units: normalizeNumeric(result.rows[0]?.units ?? "0"),
+      remaining: Number(remaining.rows[0]?.count ?? 0),
+    };
+  }
+
   async createReplacementObligation(
     client: PoolClient,
     input: {
@@ -588,6 +975,37 @@ export class SubscriptionLifecycleRepository {
     );
   }
 
+  async createCancelLifecycle(
+    client: PoolClient,
+    input: {
+      issuedSubscriptionId: string;
+      actorUserId: string;
+      reason: string;
+      aggregateVersion: number;
+    },
+  ): Promise<void> {
+    await client.query(
+      `
+        insert into app.subscription_lifecycle_events (
+          issued_subscription_id,
+          event_type,
+          before_issued_subscription_id,
+          after_issued_subscription_id,
+          actor_user_id,
+          reason,
+          aggregate_version
+        )
+        values ($1, 'cancel', $1, null, $2, $3, $4)
+      `,
+      [
+        input.issuedSubscriptionId,
+        input.actorUserId,
+        input.reason,
+        input.aggregateVersion,
+      ],
+    );
+  }
+
   private mapContext(
     row: ReplacementContextDatabaseRow | undefined,
   ): ReplacementContext | null {
@@ -637,6 +1055,59 @@ export class SubscriptionLifecycleRepository {
       })),
       futureLessonCount: Number(row.future_lesson_count),
       futureUnits: normalizeNumeric(row.future_units),
+    };
+  }
+
+  private mapCancellationContext(
+    row: CancellationContextDatabaseRow | undefined,
+  ): CancellationContext | null {
+    if (!row) return null;
+    return {
+      issuedSubscriptionId: row.issued_id,
+      studentId: row.student_id,
+      package: {
+        id: row.package_id,
+        name: row.package_name,
+        version: Number(row.package_version),
+        unitCount: normalizeNumeric(row.unit_count),
+      },
+      status: row.status,
+      version: Number(row.version),
+      currencyCode: row.currency_code,
+      finalMinor: row.final_minor,
+      usedUnits: normalizeNumeric(row.used_units),
+      actualPaidMinor: row.actual_paid_minor,
+      writeoffMinor: row.writeoff_minor,
+      netObligationMinor: row.net_obligation_minor,
+      balanceMinor: row.balance_minor,
+      paymentRefs: row.payment_refs.map((payment) => ({
+        id: payment.id,
+        amountMinor: String(payment.amountMinor),
+        occurredAt: new Date(payment.occurredAt).toISOString(),
+      })),
+      writeoffRefs: row.writeoff_refs.map((writeoff) => ({
+        id: writeoff.id,
+        lessonId: writeoff.lessonId,
+        amountMinor: String(writeoff.amountMinor),
+        units: normalizeNumeric(String(writeoff.units)),
+        occurredAt: new Date(writeoff.occurredAt).toISOString(),
+      })),
+      obligationRefs: row.obligation_refs.map((obligation) => ({
+        id: obligation.id,
+        direction: obligation.direction,
+        amountMinor: String(obligation.amountMinor),
+        occurredAt: new Date(obligation.occurredAt).toISOString(),
+      })),
+      futureLessonCount: Number(row.future_lesson_count),
+      reservedLessonCount: Number(row.reserved_lesson_count),
+      reservedUnits: normalizeNumeric(row.reserved_units),
+      futureLessons: row.future_lessons.map((lesson) => ({
+        lessonId: lesson.lessonId,
+        reservationId: lesson.reservationId,
+        scheduledAt: new Date(lesson.scheduledAt).toISOString(),
+        units: normalizeNumeric(String(lesson.units)),
+        reserved: lesson.reserved,
+      })),
     };
   }
 }

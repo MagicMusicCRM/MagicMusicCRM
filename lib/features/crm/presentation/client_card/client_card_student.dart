@@ -549,6 +549,63 @@ extension _ClientCardStudent on _ClientCardState {
     }
   }
 
+  Future<void> _showCancelSubscriptionFlow(Subscription subscription) async {
+    final issuedSubscriptionId = subscription.id;
+    if (_replacingSubscription ||
+        _cancellingSubscription ||
+        !subscription.isActive ||
+        issuedSubscriptionId == null ||
+        issuedSubscriptionId.isEmpty) {
+      return;
+    }
+
+    final crm = ref.read(magicCrmServiceProvider);
+    _emitState(() => _cancellingSubscription = true);
+    try {
+      final preview = await crm.previewSubscriptionCancellation(
+        _studentId,
+        issuedSubscriptionId: issuedSubscriptionId,
+      );
+      if (!mounted) return;
+
+      final cancelled = await showSubscriptionCancellationSheet(
+        context,
+        preview: preview,
+        onConfirm: (confirmation) async {
+          await crm.cancelSubscription(
+            _studentId,
+            issuedSubscriptionId: issuedSubscriptionId,
+            input: confirmation.input,
+            identity: confirmation.identity,
+          );
+        },
+      );
+      if (cancelled != true || !mounted) return;
+
+      _dirty = true;
+      await _fetchStudentData();
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Абонемент отменён',
+        detail: preview.package.name,
+        type: MagicToastType.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось отменить абонемент',
+        detail: '$error',
+        type: MagicToastType.danger,
+      );
+    } finally {
+      if (mounted) {
+        _emitState(() => _cancellingSubscription = false);
+      }
+    }
+  }
+
   Future<void> _showAssignHomeworkSheet() async {
     final crm = ref.read(magicCrmServiceProvider);
 

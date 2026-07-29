@@ -16,6 +16,10 @@ import { SubscriptionIssueService } from "./commerce/subscription-issue.service"
 import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { RecordActualPaymentDto } from "./dto/record-actual-payment.dto";
 import {
+  SubscriptionCancelCommandDto,
+  SubscriptionCancelPreviewDto,
+} from "./dto/subscription-cancel.dto";
+import {
   SubscriptionReplaceCommandDto,
   SubscriptionReplacePreviewDto,
 } from "./dto/subscription-replace.dto";
@@ -84,6 +88,43 @@ export class SubscriptionCommerceController {
     @Body() dto: SubscriptionReplaceCommandDto,
   ) {
     return this.lifecycleService.replace(
+      actor,
+      studentId,
+      issuedSubscriptionId,
+      dto,
+      {
+        idempotencyKey: idempotencyKey ?? "",
+        requestId: requestId ?? "",
+      },
+    );
+  }
+
+  @Post(":studentId/subscriptions/:issuedSubscriptionId/cancel/preview")
+  previewSubscriptionCancellation(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Param("issuedSubscriptionId", ParseUUIDPipe)
+    issuedSubscriptionId: string,
+    @Body() _dto: SubscriptionCancelPreviewDto,
+  ) {
+    return this.lifecycleService.previewCancellation(
+      actor,
+      studentId,
+      issuedSubscriptionId,
+    );
+  }
+
+  @Post(":studentId/subscriptions/:issuedSubscriptionId/cancel")
+  cancelSubscription(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Param("issuedSubscriptionId", ParseUUIDPipe)
+    issuedSubscriptionId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: SubscriptionCancelCommandDto,
+  ) {
+    return this.lifecycleService.cancel(
       actor,
       studentId,
       issuedSubscriptionId,
