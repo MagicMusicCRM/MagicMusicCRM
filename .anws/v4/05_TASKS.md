@@ -154,12 +154,12 @@ flowchart TD
 
 ## Phase 2 — Runtime integration (S2)
 
-- [ ] **T8.2.1** [REQ-LESSON-002, REQ-AUDIT-001]: Реализовать durable completion worker
+- [x] **T8.2.1** [REQ-LESSON-002, REQ-AUDIT-001]: Реализовать durable completion worker
   - **Описание:** claim-ить due lessons и вызывать Lesson lifecycle transaction без потери/дублирования.
   - **Подпункты:**
-    - [ ] Реализовать batch claim, lease/reclaim и terminal guard.
-    - [ ] Добавить retry/backoff/poison visibility и metrics.
-    - [ ] Добавить kill-after-commit и multi-worker tests.
+    - [x] Реализовать batch claim, lease/reclaim и terminal guard.
+    - [x] Добавить retry/backoff/poison visibility и metrics.
+    - [x] Добавить kill-after-commit и multi-worker tests.
   - **Вход:** T8.1.4, T4.2.4, T5.1.1; `platform_integrity.md §6–7`.
   - **Выход:** worker, health/metrics, concurrency tests.
   - **📎 Ссылка:** ADR-008, ADR-011.
