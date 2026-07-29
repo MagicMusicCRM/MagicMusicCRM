@@ -16,6 +16,7 @@ import {
   audienceForHomework,
   audienceForLesson,
   audienceForStudent,
+  clientFinanceAudienceForStudent,
 } from "./audience";
 import { APPEAL_KEY, resolveAppealDate } from "./appeal-date";
 
@@ -174,6 +175,7 @@ export class SubscriptionsService {
   }
 
   async listSubscriptions(actor: ActorContext, query: CrmListQuery) {
+    this.policy.assertCanReadSchoolFinance(actor);
     const limit = Math.min(query.limit ?? 20, 100);
     const result = await this.database.query<SubscriptionRow>(
       `
@@ -334,19 +336,11 @@ export class SubscriptionsService {
         paymentId: sub.payment_id,
       },
     });
-    const affectedUserIds = await audienceForStudent(this.database, studentId);
-    this.realtime.emitCrmChanged({
-      entity: "payment",
-      action: "created",
-      id: sub.payment_id,
-      affectedUserIds,
-    });
-    this.realtime.emitCrmChanged({
-      entity: "subscription",
-      action: "created",
-      id: sub.id,
-      affectedUserIds,
-    });
+    const affectedUserIds = await clientFinanceAudienceForStudent(
+      this.database,
+      studentId,
+    );
+    this.realtime.emitFinanceChanged(affectedUserIds);
     return {
       id: sub.id,
       studentId,
@@ -784,18 +778,11 @@ export class SubscriptionsService {
           affectedUserIds: homeworkAudience,
         });
       }
-      this.realtime.emitCrmChanged({
-        entity: "payment",
-        action: "created",
-        id: outcome.payment.id,
-        affectedUserIds,
-      });
-      this.realtime.emitCrmChanged({
-        entity: "subscription",
-        action: "created",
-        id: outcome.subscription.id,
-        affectedUserIds,
-      });
+      const financeUserIds = await clientFinanceAudienceForStudent(
+        this.database,
+        outcome.student.id,
+      );
+      this.realtime.emitFinanceChanged(financeUserIds);
     }
 
     return this.toLeadIssueDto(outcome);

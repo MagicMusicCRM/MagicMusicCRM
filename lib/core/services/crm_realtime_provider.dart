@@ -32,8 +32,20 @@ class CrmChangedEvent {
         const [],
   );
 
+  static CrmChangedEvent? fromFinanceMap(Map<String, dynamic> map) {
+    if (map['scope']?.toString() != 'client-finance') return null;
+    return const CrmChangedEvent(entity: 'finance', action: 'updated');
+  }
+
   bool get isFallbackPoll => action == 'poll';
 }
+
+bool crmCanReceiveClientFinanceEvents(String? role) =>
+    role == 'client' ||
+    role == 'admin' ||
+    role == 'manager' ||
+    role == 'director' ||
+    role == 'system_admin';
 
 /// App-level realtime stream of CRM changes. Kept alive (not autoDispose) so a
 /// single staff/client socket serves every screen. It also emits low-frequency
@@ -57,6 +69,14 @@ final crmRealtimeProvider = StreamProvider<CrmChangedEvent>((ref) {
       conn.onCrmChanged((payload) {
         lastSocketEventAt = DateTime.now();
         emit(CrmChangedEvent.fromMap(payload));
+      });
+      conn.onFinanceChanged((payload) {
+        final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+        if (!crmCanReceiveClientFinanceEvents(role)) return;
+        final event = CrmChangedEvent.fromFinanceMap(payload);
+        if (event == null) return;
+        lastSocketEventAt = DateTime.now();
+        emit(event);
       });
     } catch (_) {
       // Best-effort: fallback polling below keeps screens eventually fresh.
@@ -83,6 +103,9 @@ final crmRealtimeProvider = StreamProvider<CrmChangedEvent>((ref) {
     final isStaff = role != null && role.isNotEmpty && role != 'client';
     if (!isStaff && fallbackTick % 10 != 0) return;
     for (final entity in _fallbackCrmEntities) {
+      if (entity == 'finance' && !crmCanReceiveClientFinanceEvents(role)) {
+        continue;
+      }
       emit(CrmChangedEvent(entity: entity, action: 'poll'));
     }
   });
@@ -103,8 +126,7 @@ const _fallbackCrmEntities = <String>[
   'lead',
   'student',
   'homework',
-  'payment',
-  'subscription',
+  'finance',
   'task',
   'group',
   'comment',

@@ -748,12 +748,12 @@ flowchart TD
 
 ## Phase 3 — Projections and integration (S3)
 
-- [ ] **T5.3.1** [REQ-SUB-005, REQ-CLIENT-003]: Реализовать role-scoped subscription/finance surfaces
+- [x] **T5.3.1** [REQ-SUB-005, REQ-CLIENT-003]: Реализовать role-scoped subscription/finance surfaces
   - **Описание:** Client видит own read-only, Admin/Manager client-card only, Director/sysadmin full, Teacher ничего.
   - **Подпункты:**
-    - [ ] Создать separate DTO/query scopes и cache keys.
-    - [ ] Перешить client self и staff client-card sections.
-    - [ ] Исключить finance data из teacher API/realtime/export.
+    - [x] Создать separate DTO/query scopes и cache keys.
+    - [x] Перешить client self и staff client-card sections.
+    - [x] Исключить finance data из teacher API/realtime/export.
   - **Вход:** T2.2.2, T5.2.4, `commerce.md §9`.
   - **Выход:** scoped endpoints/screens/actor tests.
   - **📎 Ссылка:** ADR-007, ADR-009.

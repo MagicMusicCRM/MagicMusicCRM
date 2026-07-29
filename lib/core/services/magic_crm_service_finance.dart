@@ -808,6 +808,24 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
+  /// Own read-only commerce projection for the signed-in Client. Staff and
+  /// Teacher surfaces must not use this endpoint.
+  Future<ClientCommerceProjection> getMyCommerceProjection() async {
+    final response = await _api.get<Map<String, dynamic>>('/crm/me/commerce');
+    return ClientCommerceProjection.fromJson(response);
+  }
+
+  /// Actor-scoped commerce projection for one student card. The backend
+  /// derives the projection profile from the current actor and resource scope.
+  Future<StudentCommerceProjection> getStudentCommerceProjection(
+    String studentId,
+  ) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/students/$studentId/commerce',
+    );
+    return StudentCommerceProjection.fromJson(response);
+  }
+
   Future<List<Payment>> listPayments({
     String? studentId,
     String? from,

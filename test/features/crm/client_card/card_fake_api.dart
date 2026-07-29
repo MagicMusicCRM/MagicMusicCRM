@@ -22,11 +22,14 @@ typedef CardPostCall = ({String path, Map<String, dynamic> data});
 /// перехватывает PATCH-тела сохранения.
 class FakeCardApiClient extends MagicApiClient {
   FakeCardApiClient({
+    this.role = 'admin',
     this.lead,
     this.student,
     this.leadTasks = const [],
     this.subscriptionPackages = const [],
     this.studentSubscriptions = const [],
+    this.studentAccounts = const [],
+    this.studentMovements = const [],
     this.replacementPreview,
     this.replacementResult,
     this.replacementFailures = 0,
@@ -34,6 +37,8 @@ class FakeCardApiClient extends MagicApiClient {
     this.cancellationResult,
     this.cancellationFailures = 0,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+
+  final String role;
 
   /// Сырой (camelCase, как с сервера) лид для GET /crm/leads/:id/card.
   final Map<String, dynamic>? lead;
@@ -46,6 +51,8 @@ class FakeCardApiClient extends MagicApiClient {
 
   final List<Map<String, dynamic>> subscriptionPackages;
   final List<Map<String, dynamic>> studentSubscriptions;
+  final List<Map<String, dynamic>> studentAccounts;
+  final List<Map<String, dynamic>> studentMovements;
   final Map<String, dynamic>? replacementPreview;
   final Map<String, dynamic>? replacementResult;
   int replacementFailures;
@@ -56,6 +63,7 @@ class FakeCardApiClient extends MagicApiClient {
   Map<String, dynamic>? updateLeadBody;
   Map<String, dynamic>? updateStudentBody;
   final List<String> requests = [];
+  final List<String> getRequests = [];
   final List<CardPostCall> postRequests = [];
   final List<IdempotentCardCall> idempotentRequests = [];
   int studentCardLoadCount = 0;
@@ -66,9 +74,10 @@ class FakeCardApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    getRequests.add(path);
     if (path == '/legal/gate') {
       return <String, dynamic>{
-            'role': 'admin',
+            'role': role,
             'profileComplete': true,
             'legalAccepted': true,
             'deletionPending': false,
@@ -120,8 +129,57 @@ class FakeCardApiClient extends MagicApiClient {
           }
           as T;
     }
+    if (student != null && path == '/crm/students/${student!['id']}/commerce') {
+      return <String, dynamic>{
+            'projection': switch (role) {
+              'manager' => 'manager_scoped',
+              'director' => 'director_scoped',
+              'system_admin' => 'system_admin_emergency',
+              _ => 'admin_scoped',
+            },
+            'student': {
+              'studentId': student!['id'],
+              'accounts': studentAccounts,
+              'subscriptions': studentSubscriptions
+                  .map(_commerceSubscription)
+                  .toList(growable: false),
+              'movements': studentMovements,
+            },
+          }
+          as T;
+    }
     // Остальные списки/справочники карточки: пустой обобщённый ответ.
     return <String, dynamic>{'items': <dynamic>[]} as T;
+  }
+
+  Map<String, dynamic> _commerceSubscription(Map<String, dynamic> item) {
+    final packagePrice = item['packagePrice'];
+    final priceMinor = packagePrice is num
+        ? (packagePrice * 100).round().toString()
+        : '0';
+    return {
+      'id': item['id'],
+      'status': item['status'] ?? 'active',
+      'startsAt': item['startsAt'] ?? '2026-01-01T00:00:00.000Z',
+      'expiresAt': item['expiresAt'],
+      'units': {
+        'total': item['lessonsTotal']?.toString() ?? '0',
+        'used': item['lessonsUsed']?.toString() ?? '0',
+        'remaining':
+            ((item['lessonsTotal'] as num? ?? 0) -
+                    (item['lessonsUsed'] as num? ?? 0))
+                .toString(),
+      },
+      'terms': {
+        'displayName': item['packageName'] ?? 'Абонемент',
+        'validityDays': null,
+        'basePriceMinor': priceMinor,
+        'finalPriceMinor': priceMinor,
+        'currencyCode': 'RUB',
+        'discount': {'type': 'none'},
+      },
+      'installments': <dynamic>[],
+    };
   }
 
   @override

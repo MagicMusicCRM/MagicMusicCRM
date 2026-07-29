@@ -198,7 +198,19 @@ extension _ClientCardData on _ClientCardState {
     }
     try {
       final crm = ref.read(magicCrmServiceProvider);
-      final card = await crm.getStudentCard(id);
+      final cardFuture = crm.getStudentCard(id);
+      StudentCommerceProjection? commerce;
+      try {
+        final role = (await ref.read(releaseGateStatusProvider.future)).role;
+        if (crmHasClientCardFinanceAccess(role)) {
+          commerce = await crm.getStudentCommerceProjection(id);
+        }
+      } catch (error) {
+        // Finance is an independently scoped section. Fail closed (and keep the
+        // base card usable) when identity or commerce projection loading fails.
+        debugPrint('Student commerce projection load failed: $error');
+      }
+      final card = await cardFuture;
       if (!mounted) return;
       final student = card['student'] is Map<String, dynamic>
           ? card['student'] as Map<String, dynamic>
@@ -206,13 +218,13 @@ extension _ClientCardData on _ClientCardState {
       _emitState(() {
         _student = student;
         _editorEpoch++;
-        _balance = card['balance'] is Map<String, dynamic>
-            ? StudentBalance.fromMap(card['balance'] as Map<String, dynamic>)
-            : null;
-        _subscriptions = _list(
-          card['subscriptions'],
-        ).map(Subscription.fromMap).toList();
-        _payments = _list(card['payments']).map(Payment.fromMap).toList();
+        // Never merge finance keys from the broad base-card response. Teacher
+        // therefore performs zero commerce requests and still cannot surface
+        // stale/accidental balance, payment or subscription fields.
+        _balance = commerce?.student.primaryBalance;
+        _subscriptions =
+            commerce?.student.subscriptionModels ?? const <Subscription>[];
+        _payments = commerce?.student.paymentModels ?? const <Payment>[];
         _lessons = _list(card['lessons']).map(Lesson.fromMap).toList();
         _studentTasks = _list(card['tasks']);
         _studentComments = _list(card['comments']);
@@ -393,8 +405,7 @@ extension _ClientCardData on _ClientCardState {
       case 'task':
       case 'comment':
       case 'lesson':
-      case 'payment':
-      case 'subscription':
+      case 'finance':
       case 'group':
       case 'chat_work':
         if (_mode.hasLeadHalf && _leadId.isNotEmpty) {

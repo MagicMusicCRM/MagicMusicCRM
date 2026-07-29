@@ -16,9 +16,8 @@ import 'package:magic_music_crm/features/profile/presentation/screens/profile_sc
 final clientPaymentsProvider = FutureProvider<List<Payment>>((ref) async {
   final studentId = ref.watch(magicCurrentStudentIdProvider).asData?.value;
   if (studentId == null) return const [];
-  return ref
-      .watch(magicCrmServiceProvider)
-      .listPayments(studentId: studentId, limit: 100);
+  final projection = await ref.watch(myCommerceProjectionProvider.future);
+  return projection.studentById(studentId)?.paymentModels ?? const [];
 });
 
 class ClientDashboardScreen extends ConsumerStatefulWidget {
@@ -68,17 +67,13 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
           ref.invalidate(upcomingLessonsRichProvider);
           ref.invalidate(pastLessonsRichProvider);
           break;
-        case 'payment':
-          ref.invalidate(clientPaymentsProvider);
-          break;
-        case 'subscription':
-          ref.invalidate(subscriptionProvider);
+        case 'finance':
+          ref.invalidate(myCommerceProjectionProvider);
           break;
         case 'student':
           ref.invalidate(myStudentsProvider);
           ref.invalidate(magicCurrentStudentIdProvider);
-          ref.invalidate(subscriptionProvider);
-          ref.invalidate(clientPaymentsProvider);
+          ref.invalidate(myCommerceProjectionProvider);
           ref.invalidate(upcomingLessonsRichProvider);
           ref.invalidate(pastLessonsRichProvider);
           break;

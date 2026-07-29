@@ -227,7 +227,10 @@ extension _ClientCardStudent on _ClientCardState {
   // телефоне карточка — bottom sheet во всю ширину, и три кнопки с отступами
   // не влезали в 320–360dp — правый край переполнялся. Wrap переносит кнопки
   // на вторую строку.
-  Widget _buildStudentActionBar(ColorScheme cs) {
+  Widget _buildStudentActionBar(
+    ColorScheme cs, {
+    required bool canReadClientFinance,
+  }) {
     final busy = _loadingStudent || _student == null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -259,20 +262,21 @@ extension _ClientCardStudent on _ClientCardState {
                     _showAssignHomeworkSheet();
                 }
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(
-                  value: 'subscription',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      Icons.card_membership_rounded,
-                      color: AppColor.gold,
+              itemBuilder: (context) => [
+                if (canReadClientFinance)
+                  const PopupMenuItem(
+                    value: 'subscription',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        Icons.card_membership_rounded,
+                        color: AppColor.gold,
+                      ),
+                      title: Text('Выдать абонемент'),
                     ),
-                    title: Text('Выдать абонемент'),
                   ),
-                ),
-                PopupMenuItem(
+                const PopupMenuItem(
                   value: 'homework',
                   child: ListTile(
                     dense: true,

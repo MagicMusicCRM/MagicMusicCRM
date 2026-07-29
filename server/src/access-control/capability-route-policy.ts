@@ -123,6 +123,36 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  if (
+    read &&
+    (path === "/crm/me/commerce" ||
+      /^\/crm\/students\/[^/]+\/commerce$/.test(path))
+  ) {
+    return policy(
+      "commerce.client_finance.read",
+      path === "/crm/me/commerce" ? "self" : "self_or_assigned",
+      ["client", ...staffRoles],
+      "CommerceProjectionService actor-scoped client finance",
+    );
+  }
+
+  if (
+    read &&
+    [
+      "/crm/payments",
+      "/crm/subscriptions",
+      "/crm/student-balances",
+      "/crm/expected-payments",
+    ].includes(path)
+  ) {
+    return policy(
+      "commerce.school_finance.read",
+      "global",
+      rootBusinessRoles,
+      "CrmPolicy.assertCanReadSchoolFinance",
+    );
+  }
+
   if (path.includes("subscription-packages")) {
     return policy(
       read ? "commerce.package.read" : "commerce.package.manage",

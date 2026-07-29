@@ -31,6 +31,10 @@ export interface AccessInvalidatedPayload {
   scope: 'user' | 'role';
 }
 
+export interface FinanceChangedPayload {
+  scope: 'client-finance';
+}
+
 /**
  * Decouples CRM mutation code from the WebSocket gateway. MessengerModule already
  * imports CrmModule, so injecting the gateway into CrmService directly would be a
@@ -41,6 +45,7 @@ export interface AccessInvalidatedPayload {
 @Injectable()
 export class RealtimeBus {
   static readonly crmRoom = 'crm';
+  static readonly financeRoom = 'finance';
 
   private readonly logger = new Logger(RealtimeBus.name);
   private server?: Server;
@@ -83,6 +88,27 @@ export class RealtimeBus {
       } satisfies CrmChangedPayload);
     } catch (err) {
       this.logger.warn(`Failed to emit setting change: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Finance changes use a dedicated staff-only room and client account rooms.
+   * The fixed payload deliberately carries no aggregate id, entity type, money,
+   * or other business data; authorized clients refetch their scoped projection.
+   */
+  emitFinanceChanged(clientUserIds: readonly string[] = []): void {
+    const payload: FinanceChangedPayload = { scope: 'client-finance' };
+    try {
+      this.server
+        ?.to(RealtimeBus.financeRoom)
+        .emit('finance.changed', payload);
+      for (const userId of new Set(clientUserIds)) {
+        if (userId) {
+          this.server?.to(`user:${userId}`).emit('finance.changed', payload);
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to emit finance.changed: ${String(err)}`);
     }
   }
 

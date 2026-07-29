@@ -85,6 +85,7 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
       new CrmPolicy(),
       {
         emitCrmChanged: jest.fn(),
+        emitFinanceChanged: jest.fn(),
       } as unknown as RealtimeBus,
     );
 
@@ -525,19 +526,29 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
       can_delete: false,
     });
 
-    await expect(new MigrationRunner(pool).down()).rejects.toMatchObject({
-      code: "23514",
-      message:
-        "catalog version history exists; rollback would break idempotent replay",
-    });
-    const applied = await pool.query<{ count: string }>(
-      `
-        select count(*)::text as count
-        from app_schema_migrations
-        where id = '0090_commerce_package_aggregate_versions'
-      `,
+    const runner = new MigrationRunner(pool);
+    await expect(runner.down()).resolves.toBe(
+      "0091_commerce_issued_subscription_aggregate_versions",
     );
-    expect(applied.rows[0]!.count).toBe("1");
+    try {
+      await expect(runner.down()).rejects.toMatchObject({
+        code: "23514",
+        message:
+          "catalog version history exists; rollback would break idempotent replay",
+      });
+      const applied = await pool.query<{ count: string }>(
+        `
+          select count(*)::text as count
+          from app_schema_migrations
+          where id = '0090_commerce_package_aggregate_versions'
+        `,
+      );
+      expect(applied.rows[0]!.count).toBe("1");
+    } finally {
+      await expect(runner.up()).resolves.toContain(
+        "0091_commerce_issued_subscription_aggregate_versions",
+      );
+    }
   });
 
   function packageInput(

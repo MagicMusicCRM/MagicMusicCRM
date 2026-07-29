@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/models/commerce_projection.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 
 part 'magic_crm_service_core.dart';
@@ -24,6 +25,15 @@ final myStudentsProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
   return ref.watch(magicCrmServiceProvider).listMyStudents();
+});
+
+/// Single read-only source for the Client portal's subscription, payment and
+/// balance surfaces. It is deliberately separate from `/crm/me` so the base
+/// identity projection never acquires finance fields.
+final myCommerceProjectionProvider = FutureProvider<ClientCommerceProjection>((
+  ref,
+) {
+  return ref.watch(magicCrmServiceProvider).getMyCommerceProjection();
 });
 
 /// The student the parent has explicitly picked in the portal switcher.

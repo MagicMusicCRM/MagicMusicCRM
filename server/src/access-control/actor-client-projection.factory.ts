@@ -11,6 +11,7 @@ export const CLIENT_PROJECTION_SURFACES = [
   "search",
   "schedule",
   "chat",
+  "finance",
   "export",
 ] as const;
 

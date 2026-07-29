@@ -163,7 +163,7 @@ describe("v4 six-actor route matrix (PostgreSQL)", () => {
 
     expect(deviations).toEqual([]);
     expect(allowed + denied).toBe(routes.length * USER_ROLES.length);
-    expect(allowed).toBe(1_236);
-    expect(denied).toBe(294);
+    expect(allowed).toBe(1_224);
+    expect(denied).toBe(306);
   });
 });

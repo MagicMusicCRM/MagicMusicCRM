@@ -112,14 +112,14 @@ describe("FinanceService subscription-backed lesson costs", () => {
           ('00000000-0000-0000-0000-000000000705', '00000000-0000-0000-0000-000000000605', '00000000-0000-0000-0000-000000000204', 'partially_paid', 0.4, 0, null);
       `);
 
-      const policy = { assertCanReadStudentFinance: jest.fn() };
+      const policy = { assertCanReadSchoolFinance: jest.fn() };
       const service = new FinanceService(
         databaseFor(db),
         {} as AuditService,
         policy as unknown as CrmPolicy,
         {} as RealtimeBus,
       );
-      const actor = { userId: "manager-a", role: "manager" as const };
+      const actor = { userId: "director-a", role: "director" as const };
 
       await expect(
         service.listStudentBalances(actor, {
@@ -149,7 +149,7 @@ describe("FinanceService subscription-backed lesson costs", () => {
       ).resolves.toMatchObject({
         items: [{ totalPaid: 0, totalCost: 1000, balance: -1000 }],
       });
-      expect(policy.assertCanReadStudentFinance).toHaveBeenCalledTimes(4);
+      expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledTimes(4);
     } finally {
       await db.close();
     }

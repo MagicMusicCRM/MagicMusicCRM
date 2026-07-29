@@ -21,7 +21,7 @@ import { StudentBalanceQuery } from "./dto/student-balance.query";
 import { UpdateExpenseDto } from "./dto/update-expense.dto";
 import { UpsertExpenseDto } from "./dto/upsert-expense.dto";
 import { CrmPolicy } from "./crm.policy";
-import { audienceForStudent } from "./audience";
+import { clientFinanceAudienceForStudent } from "./audience";
 import { findStudent } from "./student-read";
 import { PaymentRow, toPaymentDto } from "./crm-mappers";
 
@@ -169,6 +169,7 @@ export class FinanceService {
   }
 
   async listPayments(actor: ActorContext, query: PaymentQuery) {
+    this.policy.assertCanReadSchoolFinance(actor);
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<PaymentRow>(
       `
@@ -258,6 +259,7 @@ export class FinanceService {
   }
 
   async listExpectedPayments(actor: ActorContext, query: CrmListQuery) {
+    this.policy.assertCanReadSchoolFinance(actor);
     if (!query.studentId) {
       throw new BadRequestException("studentId обязателен.");
     }
@@ -289,8 +291,7 @@ export class FinanceService {
   }
 
   async listStudentBalances(actor: ActorContext, query: StudentBalanceQuery) {
-    // Финансы ученика: Управляющий + Администратор (см. canReadStudentFinance).
-    this.policy.assertCanReadStudentFinance(actor);
+    this.policy.assertCanReadSchoolFinance(actor);
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<StudentBalanceRow>(
       `
@@ -875,16 +876,11 @@ export class FinanceService {
       entityId: payment.student_id,
       metadata: { paymentId: payment.id },
     });
-    const affectedUserIds = await audienceForStudent(
+    const affectedUserIds = await clientFinanceAudienceForStudent(
       this.database,
       payment.student_id,
     );
-    this.realtime.emitCrmChanged({
-      entity: "payment",
-      action: "created",
-      id: payment.id,
-      affectedUserIds,
-    });
+    this.realtime.emitFinanceChanged(affectedUserIds);
     return toPaymentDto(payment);
   }
 

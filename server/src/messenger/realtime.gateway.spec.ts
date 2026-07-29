@@ -77,8 +77,26 @@ describe('RealtimeGateway authentication', () => {
     });
     expect(socket.join).toHaveBeenCalledWith('user:admin-a');
     expect(socket.join).toHaveBeenCalledWith('crm');
+    expect(socket.join).toHaveBeenCalledWith(RealtimeBus.financeRoom);
     expect(socket.join).toHaveBeenCalledWith(RealtimeGateway.adminInboxRoom);
     expect(socket.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('keeps teacher sockets out of the finance room', async () => {
+    const { gateway } = createGateway({
+      sub: 'teacher-a',
+      role: 'teacher'
+    });
+    const socket = createSocket();
+
+    await gateway.handleConnection(socket as never);
+
+    expect(socket.join).toHaveBeenCalledWith('user:teacher-a');
+    expect(socket.join).toHaveBeenCalledWith(RealtimeBus.crmRoom);
+    expect(socket.join).not.toHaveBeenCalledWith(RealtimeBus.financeRoom);
+    expect(socket.join).not.toHaveBeenCalledWith(
+      RealtimeGateway.adminInboxRoom
+    );
   });
 
   it('rejects a signed token whose role is outside the application allowlist', async () => {

@@ -18,6 +18,30 @@ describe('RealtimeBus', () => {
     });
   });
 
+  it('broadcasts an opaque finance hint to staff and client rooms only', () => {
+    const emit = jest.fn();
+    const to = jest.fn((_room: string) => ({ emit }));
+    const bus = new RealtimeBus();
+    bus.setServer({ to } as unknown as Server);
+
+    bus.emitFinanceChanged(['client-a', 'client-a', 'client-b', '']);
+
+    expect(to.mock.calls.map(([room]) => room)).toEqual([
+      RealtimeBus.financeRoom,
+      'user:client-a',
+      'user:client-b'
+    ]);
+    expect(to).not.toHaveBeenCalledWith('user:teacher-a');
+    expect(emit).toHaveBeenCalledTimes(3);
+    for (const call of emit.mock.calls) {
+      expect(call).toEqual([
+        'finance.changed',
+        { scope: 'client-finance' }
+      ]);
+      expect(Object.keys(call[1])).toEqual(['scope']);
+    }
+  });
+
   it('is a no-op (never throws) when no server is registered', () => {
     const bus = new RealtimeBus();
     expect(() =>

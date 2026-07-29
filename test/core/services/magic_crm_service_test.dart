@@ -1888,22 +1888,37 @@ void main() {
     test('maps subscriptions to legacy keys', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
-          path: '/crm/subscriptions',
+          path: '/crm/students/student-a/commerce',
           statusCode: 200,
           body: {
-            'items': [
-              {
-                'id': 'sub-a',
-                'studentId': 'student-a',
-                'lessonsTotal': 8,
-                'lessonsUsed': 3,
-                'startsAt': '2026-06-01',
-                'expiresAt': '2026-07-01',
-                'status': 'active',
-                'createdAt': '2026-06-01T00:00:00.000Z',
-                'updatedAt': '2026-06-12T00:00:00.000Z',
-              },
-            ],
+            'projection': 'admin_scoped',
+            'student': {
+              'studentId': 'student-a',
+              'accounts': <dynamic>[],
+              'subscriptions': [
+                {
+                  'id': 'sub-a',
+                  'status': 'active',
+                  'startsAt': '2026-06-01',
+                  'expiresAt': '2026-07-01',
+                  'units': {'total': '8', 'used': '3', 'remaining': '5'},
+                  'terms': {
+                    'displayName': 'Вокал — 8 часов',
+                    'validityDays': 30,
+                    'basePriceMinor': '800000',
+                    'finalPriceMinor': '640000',
+                    'currencyCode': 'RUB',
+                    'discount': {
+                      'type': 'percent',
+                      'percentBasisPoints': 2000,
+                      'reason': 'retention.offer',
+                    },
+                  },
+                  'installments': <dynamic>[],
+                },
+              ],
+              'movements': <dynamic>[],
+            },
           },
         ),
       ]);
@@ -1914,11 +1929,14 @@ void main() {
         limit: 1,
       );
 
-      expect(adapter.requests.single.queryParameters['studentId'], 'student-a');
-      expect(adapter.requests.single.queryParameters['limit'], 1);
+      expect(adapter.requests.single.queryParameters, isEmpty);
       expect(subscriptions.single['student_id'], 'student-a');
       expect(subscriptions.single['lessons_total'], 8);
-      expect(subscriptions.single['valid_until'], '2026-07-01');
+      expect(subscriptions.single['lessons_used'], 3);
+      expect(subscriptions.single['lessons_remaining'], 5);
+      expect(subscriptions.single['package_name'], 'Вокал — 8 часов');
+      expect(subscriptions.single['package_price'], 6400);
+      expect(subscriptions.single['valid_until'], '2026-07-01T00:00:00.000');
     });
 
     test('maps payments and creates payment payload', () async {

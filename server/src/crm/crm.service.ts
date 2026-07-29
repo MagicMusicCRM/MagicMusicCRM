@@ -58,8 +58,6 @@ import { CrmListQuery } from "./dto/crm-list.query";
 import { StudentSearchQuery } from "./dto/student-search.query";
 import { UpdateStudentDto } from "./dto/update-student.dto";
 import { CrmPolicy } from "./crm.policy";
-import { SubscriptionsService } from "./subscriptions.service";
-import { FinanceService } from "./finance.service";
 import { TasksService } from "./tasks.service";
 import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
@@ -100,8 +98,6 @@ export class CrmService {
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
-    private readonly subscriptions: SubscriptionsService,
-    private readonly finance: FinanceService,
     private readonly tasks: TasksService,
     private readonly schedule: ScheduleService,
     private readonly timeline: TimelineService,
@@ -128,16 +124,14 @@ export class CrmService {
     }
     const students = Array.from(byId.values());
     const studentIds = students.map((student) => student.id);
-    // Read the self-view lessons/tasks/payments from the domain services that
-    // own that SQL; getMySummary orchestrates, it no longer re-implements them.
+    // Commerce has its own actor-scoped projection boundary. The base self
+    // summary only composes the non-financial lesson/task sections.
     let upcomingLessons: unknown[] = [];
     let openTasks: unknown[] = [];
-    let recentPayments: unknown[] = [];
     if (studentIds.length) {
-      [upcomingLessons, openTasks, recentPayments] = await Promise.all([
+      [upcomingLessons, openTasks] = await Promise.all([
         this.schedule.listUpcomingLessonsForStudents(studentIds).catch(() => []),
         this.tasks.listOpenTasksForStudents(studentIds).catch(() => []),
-        this.finance.listRecentPaymentsForStudents(studentIds).catch(() => []),
       ]);
     }
 
@@ -145,7 +139,6 @@ export class CrmService {
       students: students.map((row) => this.toStudentDto(row)),
       upcomingLessons,
       tasks: openTasks,
-      recentPayments,
     };
   }
 
@@ -454,48 +447,27 @@ export class CrmService {
       teacherUserIds: student.teacher_user_ids ?? [],
     });
 
-    // Финансовые секции (баланс/оплаты/ожидаемые) видит только Управляющий +
-    // Администратор. Для остальных (напр. преподавателя) карточка всё равно
-    // открывается — финансы просто пустые. КАЖДАЯ секция изолирована (.catch),
-    // чтобы отказ в доступе или сбой одной секции НИКОГДА не ронял всю карточку
-    // (ранее Promise.all был «всё-или-ничего» → у admin/teacher падала вся
-    // карточка из-за manager-only баланса).
-    const canReadFinance = this.policy.canReadStudentFinance(actor);
+    // Commerce is projected separately at /crm/students/:id/commerce. Keeping
+    // the base card finance-free prevents mixed-scope DTOs and cache entries.
     const emptyList = { items: [] as never[] };
 
     const [
       groups,
       lessons,
-      payments,
       tasks,
       comments,
-      expectedPayments,
-      balances,
-      subscriptions,
       links,
       chatWork,
       fieldAudit,
     ] = await Promise.all([
       this.listStudentGroups(actor, studentId, { limit: 100 }),
       this.schedule.listLessons(actor, { studentId, limit: 100 }),
-      canReadFinance
-        ? this.finance.listPayments(actor, { studentId, limit: 100 }).catch(() => emptyList)
-        : Promise.resolve(emptyList),
       this.tasks.listTasks(actor, { studentId, limit: 100 }),
       this.timeline.listComments(actor, {
         entityType: "student",
         entityId: studentId,
         limit: 100,
       }).catch(() => emptyList),
-      canReadFinance
-        ? this.finance.listExpectedPayments(actor, { studentId, limit: 100 }).catch(() => emptyList)
-        : Promise.resolve(emptyList),
-      canReadFinance
-        ? this.finance.listStudentBalances(actor, { studentId, limit: 1 }).catch(() => emptyList)
-        : Promise.resolve(emptyList),
-      canReadFinance
-        ? this.subscriptions.listSubscriptions(actor, { studentId, limit: 50 }).catch(() => emptyList)
-        : Promise.resolve(emptyList),
       this.listUserCrmLinks("student", studentId),
       this.listChatWorkTimeline("student", studentId),
       // Field edits («кто поменял телефон»). Returns empty for non-staff, and
@@ -531,14 +503,6 @@ export class CrmService {
         status: lesson.status,
         occurredAt: lesson.scheduledAt,
       })),
-      ...payments.items.map((payment) => ({
-        id: payment.id,
-        type: "payment",
-        title: "Платеж",
-        body: `${payment.amount} ${payment.currency}`,
-        status: null,
-        occurredAt: payment.paymentDate,
-      })),
       ...chatWork,
       ...fieldAudit.items.map((entry) => ({
         id: String(entry.id),
@@ -558,12 +522,8 @@ export class CrmService {
       student: this.toStudentDto(student),
       groups: groups.items,
       lessons: lessons.items,
-      payments: payments.items,
       tasks: tasks.items,
       comments: comments.items,
-      expectedPayments: expectedPayments.items,
-      balance: balances.items[0] ?? null,
-      subscriptions: subscriptions.items,
       links,
       timeline,
     };
@@ -1230,10 +1190,8 @@ export class CrmService {
     return rows.map((row) => toTimelineDto(row));
   }
 
-  // The self-view lessons/tasks/payments reads now live in ScheduleService /
-  // TasksService / FinanceService (listUpcomingLessonsForStudents /
-  // listOpenTasksForStudents / listRecentPaymentsForStudents); getMySummary
-  // calls those instead of holding the SQL here.
+  // The self-view lesson/task reads live in ScheduleService / TasksService.
+  // Commerce is intentionally served through its separate projection boundary.
 
   private async listClientStudents(userId: string): Promise<StudentRow[]> {
     const result = await this.database.query<StudentRow>(

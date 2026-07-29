@@ -36,6 +36,16 @@ bool crmHasManagerAccess(String role) =>
 bool crmHasSchoolFinanceAccess(String role) =>
     role == 'director' || role == 'system_admin';
 
+/// Per-client finance is narrower than ordinary CRM access but intentionally
+/// wider than school-wide finance: front-desk Admin and Manager may use it only
+/// inside a client card. Client self-view uses a separate `/crm/me/commerce`
+/// surface; Teacher never receives commerce data.
+bool crmHasClientCardFinanceAccess(String role) =>
+    role == 'admin' ||
+    role == 'manager' ||
+    role == 'director' ||
+    role == 'system_admin';
+
 /// Active commercial templates are needed by every role that can issue a
 /// subscription. Catalog lifecycle changes remain a Director/root concern.
 bool crmCanReadSubscriptionPackages(String role) =>

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuditModule } from '../audit/audit.module';
+import { AccessControlModule } from '../access-control/access-control.module';
 import { LEAD_INTAKE_PORT } from '../common/lead-intake.port';
 import { JwtAuthGuard } from '../common/security/jwt-auth.guard';
 import { DatabaseModule } from '../db/database.module';
@@ -82,10 +83,15 @@ import { ActualPaymentService } from './commerce/actual-payment.service';
 import { SubscriptionLifecycleRepository } from './commerce/subscription-lifecycle.repository';
 import { SubscriptionLifecycleService } from './commerce/subscription-lifecycle.service';
 import { SubscriptionPreviewTokenService } from './commerce/subscription-preview-token.service';
+import { CommerceProjectionController } from './commerce/commerce-projection.controller';
+import { CommerceProjectionFactory } from './commerce/commerce-projection.factory';
+import { CommerceProjectionRepository } from './commerce/commerce-projection.repository';
+import { CommerceProjectionService } from './commerce/commerce-projection.service';
 
 @Module({
   imports: [
     AuditModule,
+    AccessControlModule,
     DatabaseModule,
     JwtModule.register({}),
     NotificationsModule,
@@ -109,6 +115,7 @@ import { SubscriptionPreviewTokenService } from './commerce/subscription-preview
     AvailabilityController,
     LeadWebhookController,
     SubscriptionCommerceController,
+    CommerceProjectionController,
   ],
   providers: [
     CrmService,
@@ -169,6 +176,9 @@ import { SubscriptionPreviewTokenService } from './commerce/subscription-preview
     SubscriptionLifecycleRepository,
     SubscriptionLifecycleService,
     SubscriptionPreviewTokenService,
+    CommerceProjectionFactory,
+    CommerceProjectionRepository,
+    CommerceProjectionService,
     {
       provide: LESSON_SETTLEMENT_PORT,
       useExisting: LessonSettlementService,

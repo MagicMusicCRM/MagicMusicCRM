@@ -234,17 +234,19 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
 
   @override
   Widget build(BuildContext context) {
-    // Realtime: refresh the current report when another staff member changes a
-    // payment, lesson, or expense. Reports are heavy → longer (800ms) debounce.
+    // Realtime: client-finance writes arrive as recipient-scoped
+    // `finance.changed`; lessons and expenses keep their existing CRM events.
+    // Reports are heavy → longer (800ms) debounce.
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
       if (event == null || !mounted) return;
       if (event.isFallbackPoll) return;
-      if (event.entity != 'payment' &&
+      if (event.entity != 'finance' &&
           event.entity != 'lesson' &&
           event.entity != 'expense') {
         return;
       }
+      if (!_canSeeFinance) return;
       if (_loading) return;
       _realtimeDebounce?.cancel();
       _realtimeDebounce = Timer(const Duration(milliseconds: 800), () {
@@ -663,5 +665,4 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   }
 
   // ── KVA-198 card builders ───────────────────────────────────────────────────
-
 }

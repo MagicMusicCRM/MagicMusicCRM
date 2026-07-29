@@ -8,8 +8,6 @@ import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
-import { SubscriptionsService } from "./subscriptions.service";
-import { FinanceService } from "./finance.service";
 import { TasksService } from "./tasks.service";
 import { CrmPolicy } from "./crm.policy";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
@@ -51,17 +49,6 @@ describe("CrmService", () => {
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
-    const subscriptions = {
-      listSubscriptions: jest.fn().mockResolvedValue({ items: [] }),
-    };
-    const finance = {
-      listPayments: jest
-        .fn()
-        .mockResolvedValue({ items: [], totalAmount: 0, totalCount: 0 }),
-      listExpectedPayments: jest.fn().mockResolvedValue({ items: [] }),
-      listStudentBalances: jest.fn().mockResolvedValue({ items: [] }),
-      listRecentPaymentsForStudents: jest.fn().mockResolvedValue([]),
-    };
     const tasks = {
       listTasks: jest.fn().mockResolvedValue({ items: [] }),
       listOpenTasksForStudents: jest.fn().mockResolvedValue([]),
@@ -80,8 +67,6 @@ describe("CrmService", () => {
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      subscriptions as unknown as SubscriptionsService,
-      finance as unknown as FinanceService,
       tasks as unknown as TasksService,
       schedule as unknown as ScheduleService,
       timeline as unknown as TimelineService,
@@ -92,7 +77,7 @@ describe("CrmService", () => {
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
-    return { service, query, audit, policy, subscriptions, finance, tasks, notifications, database };
+    return { service, query, audit, policy, tasks, notifications, database };
   };
 
   const createServiceWithQueryResults = (
@@ -127,17 +112,6 @@ describe("CrmService", () => {
       assertCanReadPayroll: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
-    const subscriptions = {
-      listSubscriptions: jest.fn().mockResolvedValue({ items: [] }),
-    };
-    const finance = {
-      listPayments: jest
-        .fn()
-        .mockResolvedValue({ items: [], totalAmount: 0, totalCount: 0 }),
-      listExpectedPayments: jest.fn().mockResolvedValue({ items: [] }),
-      listStudentBalances: jest.fn().mockResolvedValue({ items: [] }),
-      listRecentPaymentsForStudents: jest.fn().mockResolvedValue([]),
-    };
     const tasks = {
       listTasks: jest.fn().mockResolvedValue({ items: [] }),
       listOpenTasksForStudents: jest.fn().mockResolvedValue([]),
@@ -156,8 +130,6 @@ describe("CrmService", () => {
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      subscriptions as unknown as SubscriptionsService,
-      finance as unknown as FinanceService,
       tasks as unknown as TasksService,
       schedule as unknown as ScheduleService,
       timeline as unknown as TimelineService,
@@ -168,7 +140,7 @@ describe("CrmService", () => {
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
     );
 
-    return { service, query, audit, policy, subscriptions, finance, tasks, notifications, database };
+    return { service, query, audit, policy, tasks, notifications, database };
   };
 
   it("creates students through v3 identity/profile contract and audit", async () => {
@@ -455,13 +427,12 @@ describe("CrmService", () => {
     jest.spyOn(service as unknown as { listUserCrmLinks: () => Promise<unknown> }, "listUserCrmLinks").mockResolvedValue([]);
   };
 
-  it("opens the student card for a non-finance role (teacher) without finance and never crashes", async () => {
+  it("keeps the teacher student card free of embedded commerce sections", async () => {
     // findStudent is now a shared db read (student-read.ts) — seed its row via
     // the query mock instead of spying a method.
-    const { service, policy, finance } = createService([
+    const { service } = createService([
       { id: "student-a", profile_user_id: "user-a", teacher_user_ids: ["teacher-a"] },
     ]);
-    (policy.canReadStudentFinance as jest.Mock).mockReturnValue(false);
     stubCardSections(service);
 
     const card = await service.getStudentCard(
@@ -469,31 +440,27 @@ describe("CrmService", () => {
       "student-a",
     );
 
-    expect(card.balance).toBeNull();
-    expect(card.payments).toEqual([]);
-    // Finance sections (now on FinanceService) are never queried for a non-finance role.
-    expect(finance.listStudentBalances).not.toHaveBeenCalled();
-    expect(finance.listPayments).not.toHaveBeenCalled();
-    expect(finance.listExpectedPayments).not.toHaveBeenCalled();
+    expect(card).not.toHaveProperty("balance");
+    expect(card).not.toHaveProperty("payments");
+    expect(card).not.toHaveProperty("expectedPayments");
+    expect(card).not.toHaveProperty("subscriptions");
   });
 
-  it("never lets a forbidden/failed balance crash the student card for a finance reader (admin)", async () => {
-    const { service, policy, finance } = createService([
+  it("keeps the admin student card free of embedded commerce sections", async () => {
+    const { service } = createService([
       { id: "student-a", profile_user_id: "user-a", teacher_user_ids: [] },
     ]);
-    (policy.canReadStudentFinance as jest.Mock).mockReturnValue(true);
     stubCardSections(service);
-    (finance.listStudentBalances as jest.Mock).mockRejectedValue(
-      new Error("balance forbidden"),
-    );
 
     const card = await service.getStudentCard(
       { userId: "admin-a", role: "admin" },
       "student-a",
     );
 
-    // Card still resolves; the failed balance degrades to null instead of 404.
-    expect(card.balance).toBeNull();
+    expect(card).not.toHaveProperty("balance");
+    expect(card).not.toHaveProperty("payments");
+    expect(card).not.toHaveProperty("expectedPayments");
+    expect(card).not.toHaveProperty("subscriptions");
   });
 
   it("lists active student groups after student read authorization", async () => {
@@ -1123,17 +1090,15 @@ describe("CrmService", () => {
       { rows: [] }, // family-linked students
       { rows: [] }, // manually linked students
     ]);
-    // recentPayments come from the (unspied) listClientSummaryPayments query,
-    // which errors on the exhausted mock and degrades to [] via getMySummary's catch.
-
-    await expect(service.getMySummary(clientActor)).resolves.toEqual(
+    const summary = await service.getMySummary(clientActor);
+    expect(summary).toEqual(
       expect.objectContaining({
         students: [expect.objectContaining({ id: "student-a" })],
         upcomingLessons: [],
         tasks: [],
-        recentPayments: [],
       }),
     );
+    expect(summary).not.toHaveProperty("recentPayments");
   });
 
 });

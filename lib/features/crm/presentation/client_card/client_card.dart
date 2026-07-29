@@ -12,6 +12,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/top_up_dialo
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
@@ -21,6 +22,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/models/comment.dart';
+import 'package:magic_music_crm/core/models/commerce_projection.dart';
 import 'package:magic_music_crm/core/models/family_member.dart';
 import 'package:magic_music_crm/core/models/student_balance.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
@@ -169,7 +171,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
     (Icons.auto_graph_rounded, 'Прогресс'),
   ];
 
-  List<(IconData, String)> get _tabs => _isStudent ? _studentTabs : _leadTabs;
+  List<(IconData, String)> _tabsFor({required bool canReadClientFinance}) {
+    if (!_isStudent) return _leadTabs;
+    if (canReadClientFinance) return _studentTabs;
+    return _studentTabs
+        .where((tab) => tab.$2 != 'Оплаты')
+        .toList(growable: false);
+  }
 
   // The (entityType, entityId) pairs whose comment / task / history streams the
   // card aggregates. A single-side card returns one pair; a converted client
@@ -391,6 +399,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
     });
 
     final cs = Theme.of(context).colorScheme;
+    final actorRole = ref.watch(releaseGateStatusProvider).asData?.value.role;
+    final canReadClientFinance = crmHasClientCardFinanceAccess(actorRole ?? '');
+    final tabs = _tabsFor(canReadClientFinance: canReadClientFinance);
+    final visibleTabIndex = _tabIndex < tabs.length ? _tabIndex : 0;
     final fallbackStatus = _statuses.isNotEmpty
         ? _statuses.first
         : ('new', 'Новый', AppTheme.primaryGold);
@@ -434,14 +446,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
                 height: 1,
                 color: cs.outlineVariant.withValues(alpha: 0.6),
               ),
-              _buildTabBar(cs),
+              _buildTabBar(cs, tabs, selectedIndex: visibleTabIndex),
               Divider(
                 height: 1,
                 color: cs.outlineVariant.withValues(alpha: 0.6),
               ),
               Expanded(
                 child: IndexedStack(
-                  index: _tabIndex,
+                  index: visibleTabIndex,
                   children: _isStudent
                       ? [
                           _buildClientInfoTab(cs, curStatus),
@@ -449,7 +461,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                           _buildCommentsTab(cs),
                           _buildFamilyTab(cs),
                           _buildLessonsTab(cs),
-                          _buildPaymentsTab(cs),
+                          if (canReadClientFinance) _buildPaymentsTab(cs),
                           _buildStudentHistoryTab(cs),
                           _buildProgressTab(cs),
                         ]
@@ -467,7 +479,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
                 height: 1,
                 color: cs.outlineVariant.withValues(alpha: 0.6),
               ),
-              _isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs),
+              _isStudent
+                  ? _buildStudentActionBar(
+                      cs,
+                      canReadClientFinance: canReadClientFinance,
+                    )
+                  : _buildActionBar(cs),
             ],
           ),
         ),

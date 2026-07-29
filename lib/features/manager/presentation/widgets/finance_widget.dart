@@ -279,7 +279,9 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
-      final bytes = await ref.read(magicCrmServiceProvider).exportFinanceMonthly(
+      final bytes = await ref
+          .read(magicCrmServiceProvider)
+          .exportFinanceMonthly(
             format: ext,
             from: _periodStart(),
             to: _periodEnd(),
@@ -358,13 +360,13 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Realtime: refresh totals/lists when another staff member records a payment
-    // or an expense.
+    // Realtime: client-finance writes arrive as recipient-scoped
+    // `finance.changed`; expenses keep their existing `crm.changed` event.
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
       if (event == null || !mounted) return;
       if (event.isFallbackPoll) return;
-      if (event.entity != 'payment' && event.entity != 'expense') return;
+      if (event.entity != 'finance' && event.entity != 'expense') return;
       // Skip while a load or an add (payment/expense) is in flight — those
       // refetch themselves on completion.
       if (_loading || _addingPayment || _savingExpense) return;

@@ -28,7 +28,16 @@ describe("capability route policy", () => {
     ],
     ["POST", "/crm/lessons/id/attendance", "schedule.attendance.write"],
     ["POST", "/crm/lessons/id/complete", "schedule.lesson.complete"],
-    ["GET", "/crm/payments", "commerce.client_finance.read"],
+    ["GET", "/crm/me/commerce", "commerce.client_finance.read"],
+    [
+      "GET",
+      "/crm/students/id/commerce",
+      "commerce.client_finance.read",
+    ],
+    ["GET", "/crm/payments", "commerce.school_finance.read"],
+    ["GET", "/crm/subscriptions", "commerce.school_finance.read"],
+    ["GET", "/crm/student-balances", "commerce.school_finance.read"],
+    ["GET", "/crm/expected-payments", "commerce.school_finance.read"],
     ["POST", "/crm/subscriptions", "commerce.subscription.issue"],
     [
       "POST",
@@ -51,6 +60,31 @@ describe("capability route policy", () => {
   ])("maps %s %s to %s", (method, path, expected) => {
     expect(resolveCapabilityRoutePolicy(method, path)).toMatchObject({
       capabilityKey: expected,
+    });
+  });
+
+  it("separates client commerce resources from global school finance", () => {
+    expect(resolveCapabilityRoutePolicy("GET", "/crm/me/commerce")).toMatchObject(
+      {
+        capabilityKey: "commerce.client_finance.read",
+        scope: "self",
+      },
+    );
+    expect(
+      resolveCapabilityRoutePolicy(
+        "GET",
+        "/crm/students/00000000-0000-0000-0000-000000000001/commerce",
+      ),
+    ).toMatchObject({
+      capabilityKey: "commerce.client_finance.read",
+      scope: "self_or_assigned",
+    });
+    expect(
+      resolveCapabilityRoutePolicy("GET", "/crm/student-balances"),
+    ).toMatchObject({
+      capabilityKey: "commerce.school_finance.read",
+      scope: "global",
+      legacyAllowedRoles: ["director", "system_admin"],
     });
   });
 

@@ -1,4 +1,8 @@
-import { NotFoundException, BadRequestException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
@@ -7,6 +11,7 @@ import { FinanceService } from "./finance.service";
 
 describe("FinanceService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
+  const schoolActor = { userId: "director-a", role: "director" as const };
 
   const build = (query: jest.Mock) => {
     const database = {
@@ -23,7 +28,10 @@ describe("FinanceService", () => {
       assertCanReadSchoolFinance: jest.fn(),
       assertCanReadStudent: jest.fn(),
     };
-    const realtime = { emitCrmChanged: jest.fn() };
+    const realtime = {
+      emitCrmChanged: jest.fn(),
+      emitFinanceChanged: jest.fn(),
+    };
     const service = new FinanceService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
@@ -302,7 +310,7 @@ describe("FinanceService", () => {
   it("keeps a voided entry out of the balance", async () => {
     const { service, query } = createService([]);
 
-    await service.listStudentBalances(actor, { limit: 10 });
+    await service.listStudentBalances(schoolActor, { limit: 10 });
 
     // Без этого фильтра сторнирование не меняло бы баланс — то есть отмена
     // ничего бы не отменяла.
@@ -333,7 +341,7 @@ describe("FinanceService", () => {
     ]);
 
     await expect(
-      service.listPayments(actor, {
+      service.listPayments(schoolActor, {
         from: "2026-06-01T00:00:00.000Z",
         to: "2026-07-01T00:00:00.000Z",
         limit: 10,
@@ -355,8 +363,8 @@ describe("FinanceService", () => {
     });
 
     expect(query.mock.calls[0][1]).toEqual([
-      "manager",
-      "manager-a",
+      "director",
+      "director-a",
       null,
       "2026-06-01T00:00:00.000Z",
       "2026-07-01T00:00:00.000Z",
@@ -364,53 +372,20 @@ describe("FinanceService", () => {
     ]);
   });
 
-  it("allows a client to list payments for a manually linked student", async () => {
-    const { service, query } = createServiceWithQueryResults([
-      {
-        rows: [
-          {
-            id: "payment-linked",
-            student_id: "student-linked",
-            student_user_id: null,
-            student_first_name: "Анна",
-            student_last_name: "Связанная",
-            amount: "9000.00",
-            currency: "RUB",
-            payment_date: "2026-06-22T12:00:00.000Z",
-            method: "subscription",
-            external_id: null,
-            notes: "Покупка абонемента",
-            created_by: "manager-a",
-            created_at: "2026-06-22T12:00:00.000Z",
-          },
-        ],
-      },
-      { rows: [{ total_amount: "9000", total_count: "1" }] },
-    ]);
+  it("denies teacher global payments before composing finance rows", async () => {
+    const { service, query, policy } = createService([]);
+    policy.assertCanReadSchoolFinance.mockImplementation(() => {
+      throw new ForbiddenException();
+    });
 
     await expect(
       service.listPayments(
-        { userId: "client-linked", role: "client" },
+        { userId: "teacher-a", role: "teacher" },
         { studentId: "student-linked", limit: 10 },
       ),
-    ).resolves.toEqual({
-      items: [
-        expect.objectContaining({
-          id: "payment-linked",
-          studentId: "student-linked",
-          amount: 9000,
-        }),
-      ],
-      totalAmount: 9000,
-      totalCount: 1,
-    });
+    ).rejects.toBeInstanceOf(ForbiddenException);
 
-    for (const call of query.mock.calls.slice(0, 2)) {
-      const sql = String(call[0]);
-      expect(sql).toContain("app.user_crm_links");
-      expect(sql).toContain("link.user_id = $2");
-      expect(sql).toContain("link.entity_type = 'student'");
-    }
+    expect(query).not.toHaveBeenCalled();
   });
 
   it("lists computed student balances for CRM writers", async () => {
@@ -428,7 +403,7 @@ describe("FinanceService", () => {
     ]);
 
     await expect(
-      service.listStudentBalances(actor, {
+      service.listStudentBalances(schoolActor, {
         studentId: "student-a",
         debtOnly: true,
         limit: 20,
@@ -451,7 +426,7 @@ describe("FinanceService", () => {
       ],
     });
 
-    expect(policy.assertCanReadStudentFinance).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(schoolActor);
     expect(query.mock.calls[0][1]).toEqual(["student-a", true, 20]);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("coalesce(sub_pay.amount, pkg.price)");
@@ -507,7 +482,7 @@ describe("FinanceService", () => {
     ]);
 
     await expect(
-      service.listExpectedPayments(actor, {
+      service.listExpectedPayments(schoolActor, {
         studentId: "student-a",
         limit: 10,
       }),
@@ -525,7 +500,8 @@ describe("FinanceService", () => {
       ],
     });
 
-    expect(policy.assertCanReadStudent).toHaveBeenCalledWith(actor, {
+    expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(schoolActor);
+    expect(policy.assertCanReadStudent).toHaveBeenCalledWith(schoolActor, {
       profileUserId: "client-a",
       teacherUserIds: [],
     });
@@ -542,7 +518,7 @@ describe("FinanceService", () => {
       },
       { rows: [{ total_amount: "12345", total_count: "37" }] },
     ]);
-    const result = await service.listPayments(actor, {});
+    const result = await service.listPayments(schoolActor, {});
     expect(result.items).toHaveLength(2);
     // The total reflects the full filtered set (37 payments / 12345), not the
     // sum of the returned page (1200).
@@ -607,11 +583,11 @@ describe("FinanceService", () => {
       created_by: "manager-a",
       created_at: "2026-06-23T00:00:00.000Z",
     };
-    const { service, query } = createServiceWithQueryResults([
+    const { service, query, realtime } = createServiceWithQueryResults([
       { rows: [] }, // 1st: advisory lock
       { rows: [] }, // 1st: dup-check empty
       { rows: [paymentRow] }, // insert
-      { rows: [] }, // affected client users for realtime fan-out
+      { rows: [{ user_id: "client-a" }] }, // active Client finance audience
       { rows: [] }, // 2nd: advisory lock
       { rows: [paymentRow] }, // 2nd: dup-check returns existing
     ]);
@@ -631,6 +607,12 @@ describe("FinanceService", () => {
     // second submit must NOT insert again.
     expect(query).toHaveBeenCalledTimes(6);
     expect(String(query.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
+    expect(realtime.emitFinanceChanged).toHaveBeenCalledTimes(1);
+    expect(realtime.emitFinanceChanged).toHaveBeenCalledWith(["client-a"]);
+    expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
+    const financeAudienceSql = String(query.mock.calls[3][0]);
+    expect(financeAudienceSql).toContain("recipient.role = 'client'");
+    expect(financeAudienceSql).toContain("recipient.is_app_account = true");
   });
 
   describe("привязка платежа к занятию (✔ владелец 17.07)", () => {

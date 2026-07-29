@@ -7,6 +7,7 @@ import { SubscriptionsService } from "./subscriptions.service";
 
 describe("SubscriptionsService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
+  const schoolActor = { userId: "director-a", role: "director" as const };
 
   const createService = (rows: Record<string, unknown>[] = []) => {
     const query = jest.fn().mockResolvedValue({ rows });
@@ -20,8 +21,12 @@ describe("SubscriptionsService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertCanManageSubscriptionPackages: jest.fn(),
+      assertCanReadSchoolFinance: jest.fn(),
     };
-    const realtime = { emitCrmChanged: jest.fn() };
+    const realtime = {
+      emitCrmChanged: jest.fn(),
+      emitFinanceChanged: jest.fn(),
+    };
 
     const service = new SubscriptionsService(
       database as unknown as DatabaseService,
@@ -49,8 +54,12 @@ describe("SubscriptionsService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertCanManageSubscriptionPackages: jest.fn(),
+      assertCanReadSchoolFinance: jest.fn(),
     };
-    const realtime = { emitCrmChanged: jest.fn() };
+    const realtime = {
+      emitCrmChanged: jest.fn(),
+      emitFinanceChanged: jest.fn(),
+    };
     const service = new SubscriptionsService(
       { query, transaction } as unknown as DatabaseService,
       audit as unknown as AuditService,
@@ -77,10 +86,10 @@ describe("SubscriptionsService", () => {
     ]);
 
     await expect(
-      service.listSubscriptions(
-        { userId: "client-a", role: "client" },
-        { studentId: "student-a", limit: 1 },
-      ),
+      service.listSubscriptions(schoolActor, {
+        studentId: "student-a",
+        limit: 1,
+      }),
     ).resolves.toEqual({
       items: [
         {
@@ -102,52 +111,31 @@ describe("SubscriptionsService", () => {
     });
 
     expect(query.mock.calls[0][1]).toEqual([
-      "client",
-      "client-a",
+      "director",
+      "director-a",
       "student-a",
       1,
     ]);
   });
 
-  it("allows a client to list subscriptions for a manually linked student", async () => {
-    const { service, query } = createService([
-      {
-        id: "sub-linked",
-        student_id: "student-linked",
-        student_user_id: null,
-        lessons_total: 12,
-        lessons_used: 0,
-        starts_at: "2026-06-22",
-        expires_at: "2026-08-22",
-        status: "active",
-        created_at: "2026-06-22T00:00:00.000Z",
-        updated_at: "2026-06-22T00:00:00.000Z",
-      },
-    ]);
+  it("denies teacher global subscriptions before composing finance rows", async () => {
+    const { service, query, policy } = createService([]);
+    policy.assertCanReadSchoolFinance.mockImplementation(() => {
+      throw new ForbiddenException();
+    });
 
     await expect(
       service.listSubscriptions(
-        { userId: "client-linked", role: "client" },
+        { userId: "teacher-a", role: "teacher" },
         { studentId: "student-linked", limit: 1 },
       ),
-    ).resolves.toEqual({
-      items: [
-        expect.objectContaining({
-          id: "sub-linked",
-          studentId: "student-linked",
-          lessonsTotal: 12,
-        }),
-      ],
-    });
+    ).rejects.toBeInstanceOf(ForbiddenException);
 
-    const sql = String(query.mock.calls[0][0]);
-    expect(sql).toContain("app.user_crm_links");
-    expect(sql).toContain("link.user_id = $2");
-    expect(sql).toContain("link.entity_type = 'student'");
+    expect(query).not.toHaveBeenCalled();
   });
 
   it("issues a subscription from a package atomically with audit (P5b)", async () => {
-    const { service, query, transaction, audit, policy } =
+    const { service, query, transaction, audit, policy, realtime } =
       createServiceWithQueryResults([
       { rows: [{ id: "student-a" }] },
       { rows: [{
@@ -160,7 +148,7 @@ describe("SubscriptionsService", () => {
           package_id: "pkg-a",
           payment_id: "pay-a",
         }] },
-      { rows: [] }, // realtime audience
+      { rows: [{ user_id: "client-a" }] }, // active Client finance audience
     ]);
 
     await expect(
@@ -190,6 +178,10 @@ describe("SubscriptionsService", () => {
         entityId: "student-a",
       }),
     );
+    expect(realtime.emitFinanceChanged).toHaveBeenCalledWith(["client-a"]);
+    const financeAudienceSql = String(query.mock.calls[2][0]);
+    expect(financeAudienceSql).toContain("recipient.role = 'client'");
+    expect(financeAudienceSql).toContain("recipient.is_app_account = true");
   });
 
   it("atomically converts a lead only when issuing its subscription", async () => {
@@ -311,6 +303,9 @@ describe("SubscriptionsService", () => {
             { user_id: "teacher-user" },
           ],
         }, // converted homework audience
+        {
+          rows: [{ user_id: "client-a" }],
+        }, // finance audience: active Client accounts only
       ]);
 
     await expect(
@@ -383,6 +378,10 @@ describe("SubscriptionsService", () => {
         id: "trial-a",
         affectedUserIds: ["client-a", "teacher-user"],
       }),
+    );
+    expect(realtime.emitFinanceChanged).toHaveBeenCalledWith(["client-a"]);
+    expect(realtime.emitFinanceChanged).not.toHaveBeenCalledWith(
+      expect.arrayContaining(["teacher-user"]),
     );
     expect(realtime.emitCrmChanged).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -539,7 +538,7 @@ describe("SubscriptionsService", () => {
         },
       ]);
 
-      const result = await service.listSubscriptions(actor, { limit: 1 });
+      const result = await service.listSubscriptions(schoolActor, { limit: 1 });
 
       // ✔ Решение владельца: оплату по абонементу считаем по личному счёту.
       // Выдача абонемента кладёт его стоимость на счёт (issueSubscription), и
@@ -553,7 +552,7 @@ describe("SubscriptionsService", () => {
     it("берёт приход из личного счёта, а не из отдельной таблицы", async () => {
       const { service, query } = createService([]);
 
-      await service.listSubscriptions(actor, { limit: 1 });
+      await service.listSubscriptions(schoolActor, { limit: 1 });
 
       const sql = String(query.mock.calls[0][0]);
       // Строки в этих тестах замоканы, SQL не исполняется — поэтому сам запрос

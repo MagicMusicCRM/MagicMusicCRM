@@ -13,9 +13,10 @@ final subscriptionProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
 
   if (studentId == null) return null;
 
-  final subscriptions = await ref
-      .watch(magicCrmServiceProvider)
-      .listSubscriptions(studentId: studentId, limit: 1);
+  final projection = await ref.watch(myCommerceProjectionProvider.future);
+  final subscriptions =
+      projection.studentById(studentId)?.legacySubscriptions ??
+      const <Map<String, dynamic>>[];
 
   return subscriptions.firstOrNull;
 });

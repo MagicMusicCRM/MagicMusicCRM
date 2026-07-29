@@ -311,6 +311,12 @@ class MagicRealtimeConnection {
     _onMap('crm.changed', handler);
   }
 
+  /// Recipient-scoped client-finance invalidation. The payload contains no
+  /// financial values; authorized views refetch their commerce projection.
+  void onFinanceChanged(MagicRealtimeHandler handler) {
+    _onMap('finance.changed', handler);
+  }
+
   /// Access projection invalidation for every active session of this account.
   void onAccessInvalidated(MagicRealtimeHandler handler) {
     _onMap('access.invalidated', handler);
@@ -364,6 +370,7 @@ const _magicRealtimeEvents = <String>[
   'typing.stop',
   'presence.updated',
   'crm.changed',
+  'finance.changed',
   'access.invalidated',
 ];
 

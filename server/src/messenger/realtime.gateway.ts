@@ -140,9 +140,12 @@ export class RealtimeGateway
       if (payload.role !== 'client') {
         await socket.join(RealtimeBus.crmRoom);
       }
-      // Admin/manager/system_admin receive administration inbox fan-out so new
-      // user→staff conversations and messages surface without manual refresh.
+      // Only operational staff receive finance invalidation. Teacher remains
+      // in the generic CRM room for assigned schedule/chat hints, never here.
       if (isStaffRole(payload.role)) {
+        await socket.join(RealtimeBus.financeRoom);
+        // Staff receive administration inbox fan-out so new user→staff
+        // conversations and messages surface without manual refresh.
         await socket.join(RealtimeGateway.adminInboxRoom);
       }
       this.logger.log(`Realtime connected user=${payload.sub}`);

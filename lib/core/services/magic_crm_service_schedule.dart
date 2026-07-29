@@ -517,8 +517,17 @@ extension MagicCrmSchedule on MagicCrmService {
     String? studentId,
     int limit = 20,
   }) async {
+    // Lesson creation and other compatibility callers need one student's
+    // subscriptions, not the school-wide list. Keep their legacy map contract
+    // while sourcing it from the actor-scoped commerce projection.
+    if (studentId != null) {
+      final projection = await getStudentCommerceProjection(studentId);
+      return projection.student.legacySubscriptions
+          .take(limit)
+          .toList(growable: false);
+    }
+
     final queryParameters = <String, dynamic>{'limit': limit};
-    if (studentId != null) queryParameters['studentId'] = studentId;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/subscriptions',

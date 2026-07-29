@@ -56,6 +56,66 @@ export async function audienceForStudent(
 }
 
 /**
+ * Finance invalidation recipients for one student. Unlike the general CRM
+ * audience, this resolver proves at the database boundary that every returned
+ * room belongs to an active Client application account. A manually linked
+ * Teacher/staff user must therefore never receive a finance.changed event.
+ */
+export async function clientFinanceAudienceForStudent(
+  db: DatabaseService,
+  studentId: string | null | undefined,
+): Promise<string[]> {
+  if (!studentId) return [];
+  const result = await db.query<{ user_id: string }>(
+    `
+      select distinct candidate.user_id
+      from (
+        select profile.user_id
+        from app.students student
+        join app.profiles profile
+          on profile.id = student.profile_id
+         and profile.deleted_at is null
+        where student.id = $1
+          and student.deleted_at is null
+          and profile.user_id is not null
+        union
+        select link.user_id
+        from app.user_crm_links link
+        where link.entity_type = 'student'
+          and link.entity_id = $1
+          and link.deleted_at is null
+        union
+        select account_profile.user_id
+        from app.family_members student_member
+        join app.families family
+          on family.id = student_member.family_id
+         and family.deleted_at is null
+        join app.family_members account_member
+          on account_member.family_id = family.id
+         and account_member.entity_type = 'profile'
+         and account_member.role in ('parent', 'payer')
+         and account_member.deleted_at is null
+        join app.profiles account_profile
+          on account_profile.id = account_member.entity_id
+         and account_profile.deleted_at is null
+        where student_member.entity_type = 'student'
+          and student_member.entity_id = $1
+          and student_member.deleted_at is null
+          and account_profile.user_id is not null
+      ) candidate
+      join app.users recipient
+        on recipient.id = candidate.user_id
+       and recipient.deleted_at is null
+       and recipient.role = 'client'
+       and recipient.is_app_account = true
+      where candidate.user_id is not null
+    `,
+    [studentId],
+  );
+  return (result?.rows ?? []).map((row) => row.user_id);
+}
+
+/**
  * Users to notify about a homework mutation: the linked student/lead client
  * audience plus the teacher assigned to the homework's lesson. Staff receive
  * the same invalidation through the shared CRM room, so they do not need to be

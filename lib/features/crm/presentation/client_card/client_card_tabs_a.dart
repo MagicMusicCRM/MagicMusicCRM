@@ -163,7 +163,11 @@ extension _ClientCardTabsA on _ClientCardState {
     );
   }
 
-  Widget _buildTabBar(ColorScheme cs) {
+  Widget _buildTabBar(
+    ColorScheme cs,
+    List<(IconData, String)> tabs, {
+    required int selectedIndex,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpace.lg,
@@ -173,9 +177,9 @@ extension _ClientCardTabsA on _ClientCardState {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            for (var i = 0; i < _tabs.length; i++) ...[
+            for (var i = 0; i < tabs.length; i++) ...[
               if (i > 0) const SizedBox(width: AppSpace.sm),
-              _buildTabChip(cs, i),
+              _buildTabChip(cs, i, tabs, selectedIndex: selectedIndex),
             ],
           ],
         ),
@@ -183,9 +187,14 @@ extension _ClientCardTabsA on _ClientCardState {
     );
   }
 
-  Widget _buildTabChip(ColorScheme cs, int index) {
-    final selected = _tabIndex == index;
-    final (icon, label) = _tabs[index];
+  Widget _buildTabChip(
+    ColorScheme cs,
+    int index,
+    List<(IconData, String)> tabs, {
+    required int selectedIndex,
+  }) {
+    final selected = selectedIndex == index;
+    final (icon, label) = tabs[index];
     return Material(
       color: selected ? AppColor.goldSoft : Colors.transparent,
       borderRadius: BorderRadius.circular(AppRadius.chip),
