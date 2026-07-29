@@ -38,6 +38,7 @@ describe("SharedTask conservative migration (PostgreSQL)", () => {
   });
 
   it("merges only proven exact copies and preserves ambiguous rows separately", async () => {
+    await cleanupStaleRuntimeFixtures(pool);
     await runner.down();
     let migrationApplied = false;
     const fixture = await createLegacyFixture(pool);
@@ -157,6 +158,132 @@ describe("SharedTask conservative migration (PostgreSQL)", () => {
     }
   });
 });
+
+async function cleanupStaleRuntimeFixtures(pool: Pool) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query("set local session_replication_role = replica");
+    const users = await client.query<{ id: string }>(
+      `
+        select id
+        from app.users
+        where email like 'shared-task-api-%@example.test'
+           or email like 'task-reminders-%@example.test'
+      `,
+    );
+    const userIds = users.rows.map((row) => row.id);
+    if (userIds.length === 0) {
+      await client.query("commit");
+      return;
+    }
+    const tasks = await client.query<{ id: string }>(
+      `
+        select id
+        from app.shared_tasks
+        where origin = 'runtime' and created_by = any($1::uuid[])
+      `,
+      [userIds],
+    );
+    const taskIds = tasks.rows.map((row) => row.id);
+    await client.query(
+      "delete from app.task_audience_resolution_audits where task_id = any($1::uuid[])",
+      [taskIds],
+    );
+    await client.query(
+      "delete from app.shared_task_reminders where task_id = any($1::uuid[])",
+      [taskIds],
+    );
+    await client.query(
+      "delete from app.task_closes where task_id = any($1::uuid[])",
+      [taskIds],
+    );
+    await client.query(
+      "delete from app.task_audiences where task_id = any($1::uuid[])",
+      [taskIds],
+    );
+    await client.query(
+      "delete from app.shared_tasks where id = any($1::uuid[])",
+      [taskIds],
+    );
+    await client.query(
+      `
+        delete from app.platform_outbox_events
+        where aggregate_type = 'workflow:shared-task'
+          and aggregate_id = any($1::text[])
+      `,
+      [taskIds],
+    );
+    await client.query(
+      `
+        delete from app.audit_events
+        where entity_type = 'shared_task'
+          and entity_id = any($1::text[])
+      `,
+      [taskIds],
+    );
+    await client.query(
+      `
+        delete from app.idempotency_records
+        where actor_key = any($1::text[])
+          and operation like 'workflow.shared-task.%'
+      `,
+      [userIds],
+    );
+    await client.query(
+      `
+        delete from app.aggregate_versions
+        where aggregate_type = 'workflow:shared-task'
+          and aggregate_id = any($1::text[])
+      `,
+      [taskIds],
+    );
+    await client.query(
+      `
+        delete from app.staff_branch_assignments
+        where staff_member_id in (
+          select staff.id
+          from app.staff_members staff
+          join app.profiles profile on profile.id = staff.profile_id
+          where profile.user_id = any($1::uuid[])
+        )
+      `,
+      [userIds],
+    );
+    await client.query(
+      "delete from app.user_crm_links where user_id = any($1::uuid[])",
+      [userIds],
+    );
+    await client.query(
+      `
+        delete from app.staff_members
+        where profile_id in (
+          select id from app.profiles where user_id = any($1::uuid[])
+        )
+      `,
+      [userIds],
+    );
+    await client.query(
+      "delete from app.profiles where user_id = any($1::uuid[])",
+      [userIds],
+    );
+    await client.query(
+      `
+        delete from app.branches
+        where name like 'shared-task-api-%-branch'
+      `,
+    );
+    await client.query("delete from app.users where id = any($1::uuid[])", [
+      userIds,
+    ]);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 async function createLegacyFixture(pool: Pool) {
   const marker = `shared-task-migration-${randomUUID()}`;

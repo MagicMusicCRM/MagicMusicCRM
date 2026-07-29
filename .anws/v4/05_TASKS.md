@@ -860,7 +860,7 @@ flowchart TD
 
 ## Phase 4 — Verification (S4)
 
-- [ ] **T6.4.1** [REQ-TASK-001, REQ-TASK-002]: Закрыть task audience/concurrency/device suite
+- [x] **T6.4.1** [REQ-TASK-001, REQ-TASK-002]: Закрыть task audience/concurrency/device suite
   - **Описание:** проверить membership changes, two-close race, reminder outage и adaptive UX.
   - **Подпункты:**
     - [ ] Прогнать user/users/branch/allBranches cases.

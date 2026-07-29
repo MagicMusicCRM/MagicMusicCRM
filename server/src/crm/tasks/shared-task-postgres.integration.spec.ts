@@ -1,4 +1,5 @@
 import { ConfigService } from "@nestjs/config";
+import { NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
@@ -71,6 +72,23 @@ describe("SharedTask API domain (PostgreSQL)", () => {
 
     const visible = await tasks.list(fixture.admin, { state: "open" });
     expect(visible.items.map((item) => item.id)).toContain(first.id);
+    const resolution = await pool.query<{
+      matched_selector: { type: string; targetId: string };
+      membership_version: string;
+    }>(
+      `
+        select matched_selector, membership_version
+        from app.task_audience_resolution_audits
+        where task_id = $1 and actor_user_id = $2 and action = 'list'
+        order by created_at desc
+        limit 1
+      `,
+      [first.id, fixture.admin.userId],
+    );
+    expect(resolution.rows[0]).toMatchObject({
+      matched_selector: { type: "branch", targetId: fixture.branchId },
+    });
+    expect(resolution.rows[0]!.membership_version).toMatch(/^staff:/);
 
     await pool.query(
       `
@@ -82,6 +100,46 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     );
     const hidden = await tasks.list(fixture.admin, { state: "open" });
     expect(hidden.items.map((item) => item.id)).not.toContain(first.id);
+    await expect(
+      tasks.close(
+        fixture.admin,
+        first.id,
+        { expectedVersion: first.version },
+        {
+          idempotencyKey: `close-${randomUUID()}`,
+          requestId: `close-request-${randomUUID()}`,
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("resolves allBranches dynamically for every task-capable role", async () => {
+    const created = await tasks.create(
+      fixture.director,
+      {
+        title: "All branches",
+        allDay: true,
+        startAt: "2026-08-04T00:00:00.000Z",
+        audiences: [{ type: "allBranches" }],
+      },
+      {
+        idempotencyKey: `create-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      },
+    );
+    const visible = await tasks.list(fixture.teacher, { state: "open" });
+    expect(visible.items.map((item) => item.id)).toContain(created.id);
+    await expect(
+      tasks.close(
+        { ...fixture.teacher, role: "client" },
+        created.id,
+        { expectedVersion: created.version },
+        {
+          idempotencyKey: `close-${randomUUID()}`,
+          requestId: `close-request-${randomUUID()}`,
+        },
+      ),
+    ).rejects.toBeDefined();
   });
 
   it("returns one stable result when two current audience members close concurrently", async () => {
@@ -166,16 +224,18 @@ async function createFixture(pool: Pool) {
       values
         ($1, 'director', now()),
         ($2, 'admin', now()),
-        ($3, 'manager', now())
+        ($3, 'manager', now()),
+        ($4, 'teacher', now())
       returning id, role::text as role
     `,
     [
       `${marker}-director@example.test`,
       `${marker}-admin@example.test`,
       `${marker}-manager@example.test`,
+      `${marker}-teacher@example.test`,
     ],
   );
-  const [directorRow, adminRow, managerRow] = users.rows;
+  const [directorRow, adminRow, managerRow, teacherRow] = users.rows;
   const branch = await pool.query<{ id: string }>(
     "insert into app.branches (name) values ($1) returning id",
     [`${marker}-branch`],
@@ -223,6 +283,7 @@ async function createFixture(pool: Pool) {
     director: { userId: directorRow!.id, role: "director" } as ActorContext,
     admin: { userId: adminRow!.id, role: "admin" } as ActorContext,
     manager: { userId: managerRow!.id, role: "manager" } as ActorContext,
+    teacher: { userId: teacherRow!.id, role: "teacher" } as ActorContext,
   };
 }
 
