@@ -193,9 +193,7 @@ export class SharedTaskService {
       limit: query.limit ?? 100,
     });
     await this.repository.recordListResolutions(result.rows, actor.userId);
-    const items = await Promise.all(
-      result.rows.map((row) => this.toDto(row)),
-    );
+    const items = await this.toDtos(result.rows);
     return {
       items,
       counters: await this.repository.counters(actor.userId, actor.role),
@@ -378,6 +376,33 @@ export class SharedTaskService {
       this.repository.audienceProjection(row.id),
       this.repository.reminderProjection(row.id),
     ]);
+    return this.buildDto(row, audiences.rows, reminders.rows);
+  }
+
+  private async toDtos(rows: readonly ResolvedSharedTaskRow[]) {
+    const ids = rows.map((row) => row.id);
+    const [audiences, reminders] = await Promise.all([
+      this.repository.audienceProjectionForTasks(ids),
+      this.repository.reminderProjectionForTasks(ids),
+    ]);
+    return rows.map((row) =>
+      this.buildDto(
+        row,
+        audiences.rows.filter((item) => item.task_id === row.id),
+        reminders.rows.filter((item) => item.task_id === row.id),
+      ),
+    );
+  }
+
+  private buildDto(
+    row: SharedTaskRow | ResolvedSharedTaskRow,
+    audiences: Awaited<
+      ReturnType<SharedTaskRepository["audienceProjection"]>
+    >["rows"],
+    reminders: Awaited<
+      ReturnType<SharedTaskRepository["reminderProjection"]>
+    >["rows"],
+  ) {
     return {
       id: row.id,
       title: row.title,
@@ -394,16 +419,16 @@ export class SharedTaskService {
       createdBy: row.created_by,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      audiences: audiences.rows.map((audience) => ({
+      audiences: audiences.map((audience) => ({
         type: audience.audience_type,
         ...(audience.target_id ? { targetId: audience.target_id } : {}),
       })),
-      reminders: reminders.rows.map((reminder) => ({
+      reminders: reminders.map((reminder) => ({
         dueAt: reminder.due_at,
         channel: reminder.channel,
         status: reminder.status,
       })),
-      hasReminder: reminders.rows.length > 0,
+      hasReminder: reminders.length > 0,
     };
   }
 

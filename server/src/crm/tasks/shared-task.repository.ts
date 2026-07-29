@@ -79,6 +79,21 @@ export class SharedTaskRepository {
     );
   }
 
+  audienceProjectionForTasks(taskIds: readonly string[]) {
+    if (taskIds.length === 0) {
+      return Promise.resolve({ rows: [] as TaskAudienceRow[] });
+    }
+    return this.database.query<TaskAudienceRow>(
+      `
+        select *
+        from app.task_audiences
+        where task_id = any($1::uuid[])
+        order by task_id, audience_type, target_id nulls first, id
+      `,
+      [taskIds],
+    );
+  }
+
   reminderProjection(taskId: string) {
     return this.database.query<SharedTaskReminderRow>(
       `
@@ -88,6 +103,22 @@ export class SharedTaskRepository {
         order by due_at, channel, id
       `,
       [taskId],
+    );
+  }
+
+  reminderProjectionForTasks(taskIds: readonly string[]) {
+    if (taskIds.length === 0) {
+      return Promise.resolve({ rows: [] as SharedTaskReminderRow[] });
+    }
+    return this.database.query<SharedTaskReminderRow>(
+      `
+        select *
+        from app.shared_task_reminders
+        where task_id = any($1::uuid[])
+          and status in ('pending', 'claimed')
+        order by task_id, due_at, channel, id
+      `,
+      [taskIds],
     );
   }
 

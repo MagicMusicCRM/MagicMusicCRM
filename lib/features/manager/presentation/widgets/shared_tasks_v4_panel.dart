@@ -684,6 +684,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   String _audienceType = 'allBranches';
   String? _targetId;
   final List<Map<String, dynamic>> _audiences = [];
+  List<Map<String, dynamic>> _existingReminders = const [];
   bool _reminder = false;
 
   @override
@@ -705,6 +706,13 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       _audiences.add({'type': 'allBranches'});
     }
     _reminder = task?['hasReminder'] == true;
+    final existingReminders = task?['reminders'];
+    if (existingReminders is List) {
+      _existingReminders = existingReminders
+          .whereType<Map<String, dynamic>>()
+          .map((item) => {'dueAt': item['dueAt'], 'channel': item['channel']})
+          .toList();
+    }
   }
 
   @override
@@ -825,7 +833,10 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                 title: const Text('Напомнить в приложении'),
                 subtitle: const Text('Не блокирует текущую работу'),
                 value: _reminder,
-                onChanged: (value) => setState(() => _reminder = value),
+                onChanged: (value) => setState(() {
+                  _reminder = value;
+                  if (!value) _existingReminders = const [];
+                }),
               ),
             ],
           ),
@@ -880,15 +891,17 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       if (end != null) 'endAt': end.toUtc().toIso8601String(),
       'audiences': _audiences,
       if (_reminder)
-        'reminders': [
-          {
-            'dueAt': _start
-                .subtract(const Duration(hours: 1))
-                .toUtc()
-                .toIso8601String(),
-            'channel': 'in_app',
-          },
-        ],
+        'reminders': _existingReminders.isNotEmpty
+            ? _existingReminders
+            : [
+                {
+                  'dueAt': _start
+                      .subtract(const Duration(hours: 1))
+                      .toUtc()
+                      .toIso8601String(),
+                  'channel': 'in_app',
+                },
+              ],
       if (widget.task != null) 'expectedVersion': widget.task!['version'],
     });
   }
