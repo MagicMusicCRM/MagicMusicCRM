@@ -732,19 +732,39 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     final canControl = role != null && crmHasManagerAccess(role);
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton(
-        onPressed: _creatingTask ? null : _createTask,
-        tooltip: _creatingTask ? 'Подготовка…' : 'Новая задача',
-        child: _creatingTask
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.add),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Material(
+            key: const Key('open-shared-tasks-v4'),
+            color: AppColor.overlay,
+            shape: const CircleBorder(
+              side: BorderSide(color: AppColor.goldLine),
+            ),
+            child: IconButton(
+              onPressed: _openSharedTasks,
+              tooltip: 'Общие задачи',
+              color: AppColor.gold,
+              icon: const Icon(Icons.groups_2_outlined),
+            ),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: 'legacy-task-create',
+            onPressed: _creatingTask ? null : _createTask,
+            tooltip: _creatingTask ? 'Подготовка…' : 'Новая задача',
+            child: _creatingTask
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.add),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -777,18 +797,6 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
           ),
           // Год / Месяц / День — opens on «День» = today (owner rule).
           _TaskViewSwitcher(view: _calView, onChanged: _setCalView),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                key: const Key('open-shared-tasks-v4'),
-                onPressed: _openSharedTasks,
-                icon: const Icon(Icons.groups_2_outlined, size: 18),
-                label: const Text('Общие задачи'),
-              ),
-            ),
-          ),
           if (canControl)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
