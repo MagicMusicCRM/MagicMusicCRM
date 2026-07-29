@@ -32,6 +32,7 @@ import 'client_card_staff_api.dart';
 import 'client_card_dialogs.dart';
 import 'client_card_sheets.dart';
 import 'client_card_ui.dart';
+import 'subscription_issue_sheet.dart';
 import 'student_schedule_section.dart';
 
 part 'client_card_widgets.dart';

@@ -1,5 +1,136 @@
 part of 'magic_crm_service.dart';
 
+enum SubscriptionPaymentMethod {
+  cash('cash'),
+  cashless('cashless');
+
+  const SubscriptionPaymentMethod(this.apiValue);
+  final String apiValue;
+}
+
+enum SubscriptionDiscountKind { percent, fixed }
+
+/// Discount shape accepted by the v4 subscription-issue command.
+///
+/// Percent is stored as integer basis points in Flutter, preserving the API's
+/// two-decimal precision without floating-point drift (20% = 2000).
+class SubscriptionDiscountInput {
+  const SubscriptionDiscountInput._({
+    required this.kind,
+    required this.reason,
+    this.percentBasisPoints,
+    this.fixedMinor,
+  });
+
+  factory SubscriptionDiscountInput.percent({
+    required int basisPoints,
+    required String reason,
+  }) {
+    return SubscriptionDiscountInput._(
+      kind: SubscriptionDiscountKind.percent,
+      percentBasisPoints: basisPoints,
+      reason: reason.trim(),
+    );
+  }
+
+  factory SubscriptionDiscountInput.fixed({
+    required BigInt fixedMinor,
+    required String reason,
+  }) {
+    return SubscriptionDiscountInput._(
+      kind: SubscriptionDiscountKind.fixed,
+      fixedMinor: fixedMinor,
+      reason: reason.trim(),
+    );
+  }
+
+  final SubscriptionDiscountKind kind;
+  final String reason;
+  final int? percentBasisPoints;
+  final BigInt? fixedMinor;
+
+  Map<String, dynamic> toJson() {
+    return switch (kind) {
+      SubscriptionDiscountKind.percent => <String, dynamic>{
+        'type': 'percent',
+        'percent': percentBasisPoints! % 100 == 0
+            ? percentBasisPoints! ~/ 100
+            : percentBasisPoints! / 100,
+        'reason': reason,
+      },
+      SubscriptionDiscountKind.fixed => <String, dynamic>{
+        'type': 'fixed',
+        'fixedMinor': fixedMinor!.toString(),
+        'reason': reason,
+      },
+    };
+  }
+}
+
+class SubscriptionInstallmentInput {
+  const SubscriptionInstallmentInput({
+    required this.dueAt,
+    required this.amountMinor,
+  });
+
+  final DateTime dueAt;
+  final BigInt amountMinor;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'dueAt': dueAt.toUtc().toIso8601String(),
+    'amountMinor': amountMinor.toString(),
+  };
+}
+
+class IssueSubscriptionInput {
+  const IssueSubscriptionInput({
+    required this.packageId,
+    this.discount,
+    this.installments = const <SubscriptionInstallmentInput>[],
+    this.paymentMethod,
+  });
+
+  final String packageId;
+  final SubscriptionDiscountInput? discount;
+  final List<SubscriptionInstallmentInput> installments;
+  final SubscriptionPaymentMethod? paymentMethod;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'packageId': packageId,
+    if (discount != null) 'discount': discount!.toJson(),
+    if (installments.isNotEmpty)
+      'installments': installments
+          .map((installment) => installment.toJson())
+          .toList(growable: false),
+    if (paymentMethod != null) 'paymentMethod': paymentMethod!.apiValue,
+  };
+}
+
+class RecordSubscriptionPaymentInput {
+  const RecordSubscriptionPaymentInput({
+    required this.amountMinor,
+    required this.method,
+    required this.occurredAt,
+    this.issuedSubscriptionId,
+    this.currencyCode,
+  });
+
+  final String? issuedSubscriptionId;
+  final BigInt amountMinor;
+  final SubscriptionPaymentMethod method;
+  final DateTime occurredAt;
+  final String? currencyCode;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    if (issuedSubscriptionId != null)
+      'issuedSubscriptionId': issuedSubscriptionId,
+    'amountMinor': amountMinor.toString(),
+    'method': method.apiValue,
+    'occurredAt': occurredAt.toUtc().toIso8601String(),
+    if (currencyCode != null) 'currencyCode': currencyCode,
+  };
+}
+
 /// Finance: adjustments, payments, expenses, subscription packages,
 /// homework, task status, analytics.
 extension MagicCrmFinance on MagicCrmService {
@@ -316,12 +447,26 @@ extension MagicCrmFinance on MagicCrmService {
   }
 
   Future<Map<String, dynamic>> issueSubscription(
-    String studentId,
-    String packageId,
-  ) async {
-    return _api.post<Map<String, dynamic>>(
+    String studentId, {
+    required IssueSubscriptionInput input,
+    required MagicMutationIdentity identity,
+  }) async {
+    return _api.postIdempotent<Map<String, dynamic>>(
       '/crm/students/$studentId/subscriptions/issue',
-      data: {'packageId': packageId},
+      identity: identity,
+      data: input.toJson(),
+    );
+  }
+
+  Future<Map<String, dynamic>> recordSubscriptionPayment(
+    String studentId, {
+    required RecordSubscriptionPaymentInput input,
+    required MagicMutationIdentity identity,
+  }) async {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/students/$studentId/subscription-payments',
+      identity: identity,
+      data: input.toJson(),
     );
   }
 

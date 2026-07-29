@@ -30,6 +30,11 @@ describe("capability route policy", () => {
     ["POST", "/crm/lessons/id/complete", "schedule.lesson.complete"],
     ["GET", "/crm/payments", "commerce.client_finance.read"],
     ["POST", "/crm/subscriptions", "commerce.subscription.issue"],
+    [
+      "POST",
+      "/crm/students/id/subscription-payments",
+      "commerce.subscription.issue",
+    ],
     ["GET", "/crm/subscription-packages", "commerce.package.read"],
     ["POST", "/crm/subscription-packages", "commerce.package.manage"],
     ["PATCH", "/crm/subscription-packages/id", "commerce.package.manage"],

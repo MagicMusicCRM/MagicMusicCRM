@@ -24,7 +24,6 @@ import {
   UpdateAdjustmentDto,
 } from "./dto/create-adjustment.dto";
 import { CreateTransferDto } from "./dto/create-transfer.dto";
-import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { CreateStudentDto } from "./dto/create-student.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { StudentBalanceQuery } from "./dto/student-balance.query";
@@ -205,12 +204,4 @@ export class CrmStudentsController {
     return this.crm.inviteStudent(actor, id);
   }
 
-  @Post("students/:id/subscriptions/issue")
-  issueSubscription(
-    @CurrentActor() actor: ActorContext,
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() dto: IssueSubscriptionDto,
-  ) {
-    return this.subscriptions.issueSubscription(actor, id, dto);
-  }
 }

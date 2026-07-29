@@ -34,6 +34,12 @@ export interface IssuedCommercialSnapshot {
   currencyCode: CurrencyCode;
   discount: IssuedDiscountSnapshot;
   finalPriceMinor: string;
+  installments?: {
+    installmentNumber: number;
+    dueAt: string;
+    amountMinor: string;
+  }[];
+  paymentMethod?: "cash" | "cashless" | null;
   commercialRules: Record<string, unknown>;
 }
 

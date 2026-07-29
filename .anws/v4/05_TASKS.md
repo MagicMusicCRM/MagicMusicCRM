@@ -704,12 +704,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/crm/commerce/package-catalog.integration.spec.ts && flutter test test/features/v4/subscription_catalog_test.dart`
   - **Оценка:** 8 ч. · **Зависимости:** T5.1.2, T2.3.1 · **Приоритет:** P0 · **Sprint:** S3
 
-- [ ] **T5.2.2** [REQ-SUB-002, REQ-SUB-003]: Реализовать issue/discount/installment/payment flow
+- [x] **T5.2.2** [REQ-SUB-002, REQ-SUB-003]: Реализовать issue/discount/installment/payment flow
   - **Описание:** атомарно выдать snapshot и obligations, отдельно фиксируя idempotent ActualPayment cash/cashless.
   - **Подпункты:**
-    - [ ] Валидировать percent xor fixed discount + mandatory reason/final≥0.
-    - [ ] Валидировать ≥2 installments и точную сумму.
-    - [ ] Реализовать issue/payment API и adaptive client-card form.
+    - [x] Валидировать percent xor fixed discount + mandatory reason/final≥0.
+    - [x] Валидировать ≥2 installments и точную сумму.
+    - [x] Реализовать issue/payment API и adaptive client-card form.
   - **Вход:** T5.1.2, T5.2.1, `commerce.md §5–6`.
   - **Выход:** issue/payment services/API/UI/tests.
   - **📎 Ссылка:** ADR-009, ADR-011.

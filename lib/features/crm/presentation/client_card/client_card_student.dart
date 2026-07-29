@@ -393,34 +393,65 @@ extension _ClientCardStudent on _ClientCardState {
     final packageId = selected['id']?.toString();
     if (packageId == null || packageId.isEmpty) return;
 
+    if (!issuingForLead) {
+      final issued = await showSubscriptionIssueFormSheet(
+        context,
+        package: selected,
+        onSubmit: (submission) async {
+          final response = await crm.issueSubscription(
+            _studentId,
+            input: submission.issue,
+            identity: submission.issueIdentity,
+          );
+          final payment = submission.payment;
+          if (payment == null) return;
+
+          final subscription = response['subscription'];
+          final issuedSubscriptionId = subscription is Map
+              ? subscription['id']?.toString()
+              : null;
+          if (issuedSubscriptionId == null || issuedSubscriptionId.isEmpty) {
+            throw const FormatException(
+              'Сервер не вернул идентификатор выданного абонемента.',
+            );
+          }
+          await crm.recordSubscriptionPayment(
+            _studentId,
+            input: payment.toInput(issuedSubscriptionId: issuedSubscriptionId),
+            identity: payment.identity,
+          );
+        },
+      );
+      if (issued != true || !mounted) return;
+      _dirty = true;
+      MagicToast.show(
+        context,
+        'Абонемент выдан',
+        detail: selected['name']?.toString(),
+        type: MagicToastType.success,
+      );
+      _fetchStudentData();
+      return;
+    }
+
     if (issuingForLead) _emitState(() => _converting = true);
     try {
-      if (issuingForLead) {
-        // The package endpoint atomically copies the persisted lead record.
-        // Save the in-memory draft first; otherwise choosing a package closes
-        // the card and silently drops fields typed since the last Save action.
-        if (_edited && !await _persistEdits()) return;
-        await crm.issueLeadSubscription(_leadId, packageId);
-      } else {
-        await crm.issueSubscription(_studentId, packageId);
-      }
+      // The package endpoint atomically copies the persisted lead record.
+      // Save the in-memory draft first; otherwise choosing a package closes
+      // the card and silently drops fields typed since the last Save action.
+      if (_edited && !await _persistEdits()) return;
+      await crm.issueLeadSubscription(_leadId, packageId);
       if (!mounted) return;
       _dirty = true;
       MagicToast.show(
         context,
-        issuingForLead
-            ? 'Абонемент выдан — лид стал учеником'
-            : 'Абонемент выдан',
+        'Абонемент выдан — лид стал учеником',
         detail: selected['name']?.toString(),
         type: MagicToastType.success,
       );
-      if (issuingForLead) {
-        // Reopen from «Ученики» against the freshly-created student id. This
-        // also prevents any stale lead id from being reused by later actions.
-        Navigator.pop(context, true);
-      } else {
-        _fetchStudentData();
-      }
+      // Reopen from «Ученики» against the freshly-created student id. This
+      // also prevents any stale lead id from being reused by later actions.
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       MagicToast.show(
@@ -430,7 +461,7 @@ extension _ClientCardStudent on _ClientCardState {
         type: MagicToastType.danger,
       );
     } finally {
-      if (issuingForLead && mounted) {
+      if (mounted) {
         _emitState(() => _converting = false);
       }
     }

@@ -136,6 +136,7 @@ export function resolveCapabilityRoutePolicy(
 
   if (
     path.includes("/subscriptions") ||
+    path.includes("/subscription-payments") ||
     path.includes("/payments") ||
     path.includes("/student-balances") ||
     path.includes("/expected-payments")

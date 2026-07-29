@@ -75,6 +75,10 @@ import { LessonCompletionService } from './schedule/lesson-completion.service';
 import { LessonCompletionWorker } from './schedule/lesson-completion.worker';
 import { PackageCatalogRepository } from './commerce/package-catalog.repository';
 import { PackageCatalogService } from './commerce/package-catalog.service';
+import { SubscriptionCommerceController } from './subscription-commerce.controller';
+import { SubscriptionIssueRepository } from './commerce/subscription-issue.repository';
+import { SubscriptionIssueService } from './commerce/subscription-issue.service';
+import { ActualPaymentService } from './commerce/actual-payment.service';
 
 @Module({
   imports: [
@@ -101,6 +105,7 @@ import { PackageCatalogService } from './commerce/package-catalog.service';
     CrmClientConfigController,
     AvailabilityController,
     LeadWebhookController,
+    SubscriptionCommerceController,
   ],
   providers: [
     CrmService,
@@ -155,6 +160,9 @@ import { PackageCatalogService } from './commerce/package-catalog.service';
     LessonCompletionWorker,
     PackageCatalogRepository,
     PackageCatalogService,
+    SubscriptionIssueRepository,
+    SubscriptionIssueService,
+    ActualPaymentService,
     {
       provide: LESSON_SETTLEMENT_PORT,
       useExisting: LessonSettlementService,

@@ -6,6 +6,46 @@ import 'package:magic_music_crm/core/api/magic_api_tokens.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
+/// Caller-owned metadata for a command that may be retried after an ambiguous
+/// network failure.
+///
+/// Most mutations can use [MagicApiClient]'s automatically generated headers.
+/// Multi-step UI commands (subscription issue + optional payment) keep these
+/// identities in widget state and pass them explicitly, so a user-initiated
+/// retry cannot accidentally execute either step under a fresh key.
+class MagicMutationIdentity {
+  const MagicMutationIdentity({
+    required this.idempotencyKey,
+    required this.requestId,
+  });
+
+  final String idempotencyKey;
+  final String requestId;
+
+  static int _sequence = 0;
+
+  factory MagicMutationIdentity.create(String operation) {
+    final safeOperation = operation
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9._:-]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final sequence = _sequence++;
+    final suffix = '$stamp-$sequence';
+    final prefix = safeOperation.isEmpty ? 'command' : safeOperation;
+    return MagicMutationIdentity(
+      idempotencyKey: 'magiccrm-$prefix-$suffix',
+      requestId: 'flutter-$prefix-$suffix',
+    );
+  }
+
+  Map<String, dynamic> get headers => <String, dynamic>{
+    'Idempotency-Key': idempotencyKey,
+    'X-Request-Id': requestId,
+  };
+}
+
 class MagicApiClient {
   final Dio _dio;
   final MagicTokenStore _tokenStore;
@@ -85,6 +125,28 @@ class MagicApiClient {
     );
   }
 
+  /// POST with caller-owned command identity.
+  ///
+  /// Use this only when the caller must preserve the same identity across
+  /// separate user-initiated retries. Connection and 401 retries already keep
+  /// the identity stable inside [request].
+  Future<T> postIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) {
+    return request<T>(
+      'POST',
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+      mutationIdentity: identity,
+    );
+  }
+
   Future<T> patch<T>(
     String path, {
     Object? data,
@@ -153,9 +215,11 @@ class MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
     ResponseType? responseType,
+    MagicMutationIdentity? mutationIdentity,
   }) async {
     _addApiBreadcrumb(method, path, authenticated: authenticated);
-    final requestHeaders = _mutationHeaders(method);
+    final requestHeaders =
+        mutationIdentity?.headers ?? _mutationHeaders(method);
     try {
       return await _sendWithRetry<T>(
         method,
