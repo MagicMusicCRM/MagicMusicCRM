@@ -798,12 +798,12 @@ flowchart TD
 
 ## Phase 1 — Foundation (S4)
 
-- [ ] **T6.1.1** [REQ-TASK-001, REQ-AUDIT-001]: Создать SharedTask schema и audience audit
+- [x] **T6.1.1** [REQ-TASK-001, REQ-AUDIT-001]: Создать SharedTask schema и audience audit
   - **Описание:** заменить recipient copies одной задачей с selectors user/users/branch/allBranches и единым close.
   - **Подпункты:**
-    - [ ] Создать additive tables SharedTask/TaskAudience/TaskClose/Reminder.
-    - [ ] Добавить `TaskAudienceResolutionAudit` с matched selector/membership time.
-    - [ ] Подготовить conservative migration: объединять только proven common-origin copies.
+    - [x] Создать additive tables SharedTask/TaskAudience/TaskClose/Reminder.
+    - [x] Добавить `TaskAudienceResolutionAudit` с matched selector/membership time.
+    - [x] Подготовить conservative migration: объединять только proven common-origin copies.
   - **Вход:** T8.1.3, T8.1.4, `workflow_tasks.md §2–4`.
   - **Выход:** migration/entities/repositories/migration fixtures.
   - **📎 Ссылка:** ADR-011.
