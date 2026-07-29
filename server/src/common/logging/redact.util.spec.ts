@@ -31,7 +31,27 @@ describe('redactSensitive', () => {
     ).toEqual({
       phone: '[PII]',
       firstName: '[PII]',
-      note: 'напишите на [EMAIL]'
+      note: '[PRIVATE]'
+    });
+  });
+
+  it('masks financial, comment and representative fields', () => {
+    expect(
+      redactSensitive({
+        balance: 1500,
+        debt: 200,
+        clientCost: 1200,
+        teacherRate: 900,
+        commentBody: 'private note',
+        representativeName: 'Parent'
+      })
+    ).toEqual({
+      balance: '[PRIVATE]',
+      debt: '[PRIVATE]',
+      clientCost: '[PRIVATE]',
+      teacherRate: '[PRIVATE]',
+      commentBody: '[PRIVATE]',
+      representativeName: '[PRIVATE]'
     });
   });
 
@@ -39,5 +59,17 @@ describe('redactSensitive', () => {
     expect(redactSensitive('Authorization: Bearer abc.def.ghi')).toBe(
       'Authorization: Bearer [REDACTED]'
     );
+  });
+
+  it('keeps accessVersion concurrency metadata while redacting accessToken', () => {
+    expect(
+      redactSensitive({
+        accessVersion: 7,
+        accessToken: 'private-token'
+      })
+    ).toEqual({
+      accessVersion: 7,
+      accessToken: '[REDACTED]'
+    });
   });
 });

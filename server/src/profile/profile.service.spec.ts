@@ -110,7 +110,14 @@ describe("ProfileService profile list performance", () => {
     expect(sql).toContain("limited_profiles");
     expect(sql).toContain("p.phone_normalized as normalized_phone");
     expect(sql).toContain("linked_students_count");
+    expect(sql).toContain("u.role <> 'system_admin'");
     expect(sql).not.toContain("regexp_replace");
+    expect((database.query as jest.Mock).mock.calls[0][1]).toEqual([
+      null,
+      null,
+      20,
+      "manager",
+    ]);
   });
 });
 

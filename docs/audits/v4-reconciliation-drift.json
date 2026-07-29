@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "task": "T8.1.5",
+  "generatedAt": "2026-07-25T16:19:49.758Z",
+  "mode": "fixture",
+  "source": "drift:source",
+  "target": "drift:target",
+  "status": "drift",
+  "tolerancePolicy": {
+    "economicFacts": 0,
+    "unexplainedFacts": 0
+  },
+  "summary": {
+    "invariants": 8,
+    "sourceFacts": 8,
+    "targetFacts": 9,
+    "invariantsWithDrift": 1,
+    "unexplainedDiff": 1
+  },
+  "invariants": [
+    {
+      "id": "finance.payment-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Append-only active payment facts remain identical.",
+      "sourceCount": 1,
+      "targetCount": 2,
+      "sourceDigestSha256": "8bdb9427d753c5b8464f8a059463711084e1ae3d2198209b0576f87fef298c80",
+      "targetDigestSha256": "6248935071246e375ccc51a97f177d4f62f0bb63e2eac362eefe16c9d64daaa7",
+      "unexplainedDiff": [
+        {
+          "entityId": "payment-1",
+          "factHashSha256": "d2a90fec7dce7e20a4d95eb8ccb77bc3e342a1c33dd4a6ce9e668e2a5f118592",
+          "sourceCount": 1,
+          "targetCount": 2
+        }
+      ]
+    },
+    {
+      "id": "finance.adjustment-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Account adjustment facts and lifecycle remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "ee4290a1d2e5b4e5f0ecb54b4d8c84afdbf18cd373c53dd02ea8c68c964f842f",
+      "targetDigestSha256": "ee4290a1d2e5b4e5f0ecb54b4d8c84afdbf18cd373c53dd02ea8c68c964f842f",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "finance.balance-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Materialized student balances remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "c9c2934e1a4486ab70bcf58976ab7055d059b4a7d370e2d382050c7b3f0ff6a8",
+      "targetDigestSha256": "c9c2934e1a4486ab70bcf58976ab7055d059b4a7d370e2d382050c7b3f0ff6a8",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.subscription-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Issued subscription ownership, usage, and links remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "2b259409b313c88a7844cdae8ecdfd28ecf04459dd9f99c7105ee568e22877b0",
+      "targetDigestSha256": "2b259409b313c88a7844cdae8ecdfd28ecf04459dd9f99c7105ee568e22877b0",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "schedule.lesson-facts",
+      "owner": "SYS-SCHEDULE",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Lesson lifecycle, resources, and audience remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "8f02d4286b159d7e5d06f7aeadc170fe65a871a174732067762658a72e7d9b55",
+      "targetDigestSha256": "8f02d4286b159d7e5d06f7aeadc170fe65a871a174732067762658a72e7d9b55",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "schedule.participation-facts",
+      "owner": "SYS-SCHEDULE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Attendance and charge participation facts remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "9c82dcf3319253b49a03fb8b1dc9b13dba85bf92640c87472c666bea258a9ddc",
+      "targetDigestSha256": "9c82dcf3319253b49a03fb8b1dc9b13dba85bf92640c87472c666bea258a9ddc",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "workflow.task-facts",
+      "owner": "SYS-WORKFLOW",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Task target, audience, lifecycle, and version inputs remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "303736f95c187241b8c129633057af2c233b5926b82ba667d59ef4346808b556",
+      "targetDigestSha256": "303736f95c187241b8c129633057af2c233b5926b82ba667d59ef4346808b556",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "access.role-mappings",
+      "owner": "SYS-ACCESS",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Application role and CRM entity mappings remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "30391e234b2d7c4741b1181f38cf24f6ae06a63a3144cef1065606dcd84f11f0",
+      "targetDigestSha256": "30391e234b2d7c4741b1181f38cf24f6ae06a63a3144cef1065606dcd84f11f0",
+      "unexplainedDiff": []
+    }
+  ],
+  "signature": {
+    "algorithm": "Ed25519",
+    "contentSha256": "4c9db0c4c0a8588486159dae622c6d20ffd0d4ba370f467d3193342e3b7f8f6a",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAcXf2MJROlrmwNbIO47TcZkFNEEEe48GZPEh7GpxL2fI=\n-----END PUBLIC KEY-----\n",
+    "valueBase64": "3FXzrsIJOGp2fs3zsVIScc03ox0UdsilbmXph9jOQUo2Zo2YRNgffbvEjLTWw5dlt15cCBppca7P+g53QcI5BA==",
+    "verified": true
+  }
+}

@@ -14,6 +14,8 @@
 
 export interface LessonRow {
   id: string;
+  version?: number | string;
+  lifecycle_state?: string;
   student_id: string | null;
   group_id: string | null;
   lead_id: string | null;
@@ -42,6 +44,15 @@ export interface LessonRow {
   room_name: string | null;
   group_name: string | null;
   group_price_per_lesson: string | null;
+  completion_type?: string | null;
+  client_charge_type?: string | null;
+  client_charge_value?: string | number | null;
+  teacher_compensation_type?: string | null;
+  teacher_compensation_value?: string | number | null;
+  subscription_id?: string | null;
+  snapshot_trial?: boolean | null;
+  snapshot_validation_state?: string | null;
+  reservation_state?: string | null;
 }
 
 export interface TaskRow {
@@ -249,6 +260,11 @@ export interface PaymentRow {
 export function toLessonDto(row: LessonRow) {
   return {
     id: row.id,
+    version:
+      row.version === null || row.version === undefined
+        ? null
+        : Number(row.version),
+    lifecycleState: row.lifecycle_state ?? null,
     studentId: row.student_id,
     groupId: row.group_id,
     leadId: row.lead_id,
@@ -288,6 +304,23 @@ export function toLessonDto(row: LessonRow) {
       row.group_price_per_lesson === null
         ? null
         : Number(row.group_price_per_lesson),
+    completionType: row.completion_type ?? null,
+    clientChargeType: row.client_charge_type ?? null,
+    clientChargeValue:
+      row.client_charge_value === null ||
+      row.client_charge_value === undefined
+        ? null
+        : Number(row.client_charge_value),
+    teacherCompensationType: row.teacher_compensation_type ?? null,
+    teacherCompensationValue:
+      row.teacher_compensation_value === null ||
+      row.teacher_compensation_value === undefined
+        ? null
+        : Number(row.teacher_compensation_value),
+    subscriptionId: row.subscription_id ?? null,
+    snapshotTrial: row.snapshot_trial ?? null,
+    snapshotValidationState: row.snapshot_validation_state ?? null,
+    reservationState: row.reservation_state ?? null,
   };
 }
 

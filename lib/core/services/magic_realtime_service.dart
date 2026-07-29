@@ -311,6 +311,11 @@ class MagicRealtimeConnection {
     _onMap('crm.changed', handler);
   }
 
+  /// Access projection invalidation for every active session of this account.
+  void onAccessInvalidated(MagicRealtimeHandler handler) {
+    _onMap('access.invalidated', handler);
+  }
+
   /// Fires on every (re)connect of the underlying socket. Use it to re-join all
   /// needed rooms after a network drop — Socket.IO restores only the server-side
   /// user/crm rooms, so chat/channel subscriptions must be re-issued by the app.
@@ -359,6 +364,7 @@ const _magicRealtimeEvents = <String>[
   'typing.stop',
   'presence.updated',
   'crm.changed',
+  'access.invalidated',
 ];
 
 String _sessionKeyForAccessToken(String token) {

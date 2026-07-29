@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { AccessControlModule } from "./access-control/access-control.module";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { RequestIdMiddleware } from "./common/middleware/request-id.middleware";
@@ -14,6 +15,7 @@ import { LegalModule } from "./legal/legal.module";
 import { MessengerModule } from "./messenger/messenger.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ProfileModule } from "./profile/profile.module";
+import { PlatformModule } from "./platform/platform.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { SettingsModule } from "./settings/settings.module";
 
@@ -23,6 +25,7 @@ import { SettingsModule } from "./settings/settings.module";
       isGlobal: true,
       validationSchema: envValidationSchema,
     }),
+    AccessControlModule,
     DatabaseModule,
     RealtimeModule,
     AuditModule,
@@ -35,6 +38,7 @@ import { SettingsModule } from "./settings/settings.module";
     LegalModule,
     NotificationsModule,
     SettingsModule,
+    PlatformModule,
     HealthModule,
   ],
   providers: [SafeLogger],

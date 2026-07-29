@@ -1,47 +1,8 @@
 import { PGlite } from "@electric-sql/pglite";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
-import { AuditService } from "../audit/audit.service";
-import { AttendanceService } from "../crm/attendance.service";
-import { DatabaseService } from "./database.service";
-import { NotificationsService } from "../notifications/notifications.service";
 
 jest.setTimeout(60_000);
-
-type EmbeddedClient = {
-  query: <T extends Record<string, unknown> = Record<string, unknown>>(
-    sql: string,
-    params?: unknown[],
-  ) => Promise<{ rows: T[] }>;
-};
-
-const clientFor = (db: PGlite): EmbeddedClient => ({
-  query: async <T extends Record<string, unknown>>(
-    sql: string,
-    params?: unknown[],
-  ) => {
-    const result = await db.query<T>(sql, params);
-    return { rows: result.rows };
-  },
-});
-
-const databaseFor = (db: PGlite): DatabaseService => {
-  const client = clientFor(db);
-  return {
-    query: client.query,
-    transaction: async <T>(work: (executor: EmbeddedClient) => Promise<T>) => {
-      await db.exec("begin");
-      try {
-        const value = await work(client);
-        await db.exec("commit");
-        return value;
-      } catch (error) {
-        await db.exec("rollback");
-        throw error;
-      }
-    },
-  } as unknown as DatabaseService;
-};
 
 describe("T9.1 schema-backed PostgreSQL invariants", () => {
   it("applies migration 0072 and enforces lead-homework/conversion/token constraints", async () => {
@@ -141,7 +102,7 @@ describe("T9.1 schema-backed PostgreSQL invariants", () => {
     }
   });
 
-  it("charges an ordinary lesson exactly once and never charges a trial", async () => {
+  it("keeps legacy attendance evidence outside the active write domain", async () => {
     const db = new PGlite();
     try {
       await db.exec(`
@@ -227,43 +188,10 @@ describe("T9.1 schema-backed PostgreSQL invariants", () => {
            '00000000-0000-0000-0000-000000000602', 8, 0, 'active');
       `);
 
-      const database = databaseFor(db);
-      const service = new AttendanceService(
-        database,
-        { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
-        { notifyUser: jest.fn() } as unknown as NotificationsService,
+      const rows = await db.query<{ count: string }>(
+        "select count(*)::text as count from app.lesson_participation",
       );
-      const actor = { userId: "admin-a", role: "admin" as const };
-      const studentId = "00000000-0000-0000-0000-000000000602";
-      const ordinaryId = "00000000-0000-0000-0000-000000000603";
-      const trialId = "00000000-0000-0000-0000-000000000604";
-
-      await service.upsertLessonAttendance(actor, ordinaryId, {
-        items: [{ studentId, kind: "attended" }],
-      });
-      await service.upsertLessonAttendance(actor, ordinaryId, {
-        items: [{ studentId, kind: "attended" }],
-      });
-      await service.upsertLessonAttendance(actor, trialId, {
-        items: [{ studentId, kind: "attended" }],
-      });
-
-      const usage = await db.query<{ lessons_used: string }>(
-        "select lessons_used::text from app.subscriptions where id = $1",
-        ["00000000-0000-0000-0000-000000000605"],
-      );
-      expect(usage.rows[0].lessons_used).toBe("1.00");
-      const charges = await db.query<{
-        lesson_id: string;
-        charged_hours: string;
-      }>(
-        `select lesson_id, charged_hours::text
-         from app.lesson_participation order by lesson_id`,
-      );
-      expect(charges.rows).toEqual([
-        { lesson_id: ordinaryId, charged_hours: "1.00" },
-        { lesson_id: trialId, charged_hours: "0.00" },
-      ]);
+      expect(rows.rows[0].count).toBe("0");
     } finally {
       await db.close();
     }

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "sprint": "S0",
+  "revision": "f77ea8970d1a6f97cc485cb46cdef2f7cc207769",
+  "status": "pass",
+  "generatedAt": "2026-07-25T16:43:01.9183423Z",
+  "cleanDetachedWorktree": true,
+  "skippedIntegrationSuites": 0,
+  "preflight": {
+    "digestSha256": "ad5b694d8de542f2e9e30d553935c85e66acfb4d8012dd54eda88ee48be7cadf",
+    "findings": 19,
+    "transactionReadOnly": true,
+    "writeProbeRejected": true,
+    "repeatedRunsStable": true
+  },
+  "reconciliation": {
+    "cleanUnexplainedDiff": 0,
+    "driftUnexplainedDiff": 1,
+    "signaturesVerified": true
+  },
+  "gates": [
+    {
+      "name": "S0 task/evidence inventory",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "PostgreSQL test dependency",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "v4 inventory",
+      "status": "pass",
+      "durationSeconds": 11.705
+    },
+    {
+      "name": "Backend lock install",
+      "status": "pass",
+      "durationSeconds": 23.6
+    },
+    {
+      "name": "Backend typecheck",
+      "status": "pass",
+      "durationSeconds": 10.488
+    },
+    {
+      "name": "Platform PostgreSQL integration",
+      "status": "pass",
+      "durationSeconds": 11.752
+    },
+    {
+      "name": "Backend full test",
+      "status": "pass",
+      "durationSeconds": 107.58
+    },
+    {
+      "name": "Backend build",
+      "status": "pass",
+      "durationSeconds": 13.74
+    },
+    {
+      "name": "Read-only preflight pass 1",
+      "status": "pass",
+      "durationSeconds": 3.656
+    },
+    {
+      "name": "Read-only preflight pass 2",
+      "status": "pass",
+      "durationSeconds": 3.021
+    },
+    {
+      "name": "Preflight repeatability/read-only assertion",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Reconciliation clean fixture",
+      "status": "pass",
+      "durationSeconds": 3.138
+    },
+    {
+      "name": "Reconciliation drift fixture",
+      "status": "pass",
+      "durationSeconds": 3.127
+    },
+    {
+      "name": "Reconciliation fixture assertions",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Flutter analyze",
+      "status": "pass",
+      "durationSeconds": 237.599
+    },
+    {
+      "name": "Flutter full test",
+      "status": "pass",
+      "durationSeconds": 86.744
+    },
+    {
+      "name": "Clean worktree and lock integrity",
+      "status": "pass",
+      "durationSeconds": 0
+    }
+  ],
+  "durationSeconds": 519.322
+}

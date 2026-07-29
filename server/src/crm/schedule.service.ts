@@ -75,6 +75,8 @@ interface ConflictRow {
 
 interface ScheduleSeriesRow {
   id: string;
+  client_type?: "lead" | "student" | null;
+  client_id?: string | null;
   student_id: string | null;
   group_id: string | null;
   teacher_id: string | null;
@@ -94,6 +96,16 @@ interface ScheduleSeriesRow {
   teacher_name?: string | null;
   room_name?: string | null;
   branch_name?: string | null;
+  timezone_name?: string | null;
+  completion_type?: string | null;
+  client_charge_type?: string | null;
+  client_charge_value?: number | string | null;
+  teacher_compensation_type?: string | null;
+  teacher_compensation_value?: number | string | null;
+  subscription_id?: string | null;
+  trial?: boolean | null;
+  occurrence_count?: number | string | null;
+  version?: number | string;
 }
 
 @Injectable()
@@ -402,6 +414,21 @@ export class ScheduleService {
     // выше и так отдаёт ему только его занятия.
     const canSeePayments =
       this.policy.canReadStudentFinance(actor) || actor.role === "client";
+    const clientChargeSnapshotSql = canSeePayments
+      ? "snapshot.client_charge_type"
+      : "null::text";
+    const clientChargeValueSnapshotSql = canSeePayments
+      ? "snapshot.client_charge_value"
+      : "null::numeric";
+    const subscriptionSnapshotSql = canSeePayments
+      ? "snapshot.subscription_id"
+      : "null::uuid";
+    const teacherCompensationSnapshotSql = canSeeRates
+      ? "snapshot.teacher_compensation_type"
+      : "null::text";
+    const teacherCompensationValueSnapshotSql = canSeeRates
+      ? "snapshot.teacher_compensation_value"
+      : "null::numeric";
     // Closed enum from the DTO (@IsIn) — never raw user input. desc serves the
     // client «История»: with limit 50 the OLD asc order returned the 50 oldest
     // imported lessons and hid everything recent.
@@ -415,8 +442,18 @@ export class ScheduleService {
       : `null::numeric`;
     const result = await this.database.query<LessonRow>(
       `
-        select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
+        select l.id, l.version, l.lifecycle_state,
+          l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
           l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
+          snapshot.completion_type,
+          ${clientChargeSnapshotSql} as client_charge_type,
+          ${clientChargeValueSnapshotSql} as client_charge_value,
+          ${teacherCompensationSnapshotSql} as teacher_compensation_type,
+          ${teacherCompensationValueSnapshotSql} as teacher_compensation_value,
+          ${subscriptionSnapshotSql} as subscription_id,
+          snapshot.trial as snapshot_trial,
+          snapshot.validation_state as snapshot_validation_state,
+          reservation.state as reservation_state,
           ${appliedRateSql} as applied_teacher_rate,
           ${paidSql} as paid_amount,
           sp.user_id as student_user_id, tp.user_id as teacher_user_id,
@@ -436,6 +473,14 @@ export class ScheduleService {
         left join app.branches b on b.id = l.branch_id and b.deleted_at is null
         left join app.rooms r on r.id = l.room_id and r.deleted_at is null
         left join app.groups g on g.id = l.group_id and g.deleted_at is null
+        left join app.lesson_snapshots snapshot on snapshot.lesson_id = l.id
+        left join lateral (
+          select lesson_reservation.state
+          from app.lesson_reservations lesson_reservation
+          where lesson_reservation.lesson_id = l.id
+          order by lesson_reservation.updated_at desc, lesson_reservation.id desc
+          limit 1
+        ) reservation on true
         where l.deleted_at is null
           and (
             $3::uuid is null
@@ -1145,16 +1190,26 @@ export class ScheduleService {
 
   async listScheduleSeries(
     actor: ActorContext,
-    query: { studentId?: string; groupId?: string; includeExpired?: boolean },
+    query: {
+      clientType?: "lead" | "student";
+      clientId?: string;
+      studentId?: string;
+      groupId?: string;
+      includeExpired?: boolean;
+    },
   ) {
     this.policy.assertCanReadOperationalData(actor);
     const result = await this.database.query<ScheduleSeriesRow>(
       `
-        select s.id, s.student_id, s.group_id, s.teacher_id, s.room_id,
+        select s.id, s.client_type, s.client_id,
+          s.student_id, s.group_id, s.teacher_id, s.room_id,
           s.branch_id, s.weekday, s.begin_time, s.duration_minutes,
           s.valid_from::text as valid_from,
           s.valid_until::text as valid_until,
-          s.notes, s.created_at, s.updated_at,
+          s.notes, s.created_at, s.updated_at, s.timezone_name,
+          s.completion_type, s.client_charge_type, s.client_charge_value,
+          s.teacher_compensation_type, s.teacher_compensation_value,
+          s.subscription_id, s.trial, s.occurrence_count, s.version,
           concat_ws(' ', tp.first_name, tp.last_name) as teacher_name,
           r.name as room_name, b.name as branch_name
         from app.schedule_series s
@@ -1163,16 +1218,27 @@ export class ScheduleService {
         left join app.rooms r on r.id = s.room_id
         left join app.branches b on b.id = s.branch_id
         where s.deleted_at is null
-          and ($1::uuid is null or s.student_id = $1)
-          and ($2::uuid is null or s.group_id = $2)
           and (
-            $3::boolean
+            $1::text is null
+            or (
+              s.client_type = $1
+              and s.client_id = $2::uuid
+            )
+          )
+          and ($3::uuid is null or s.student_id = $3)
+          and ($4::uuid is null or s.group_id = $4)
+          and (
+            $5::boolean
             or s.valid_until is null
-            or s.valid_until >= (now() at time zone 'Europe/Moscow')::date
+            or s.valid_until >= (
+              now() at time zone coalesce(s.timezone_name, 'Europe/Moscow')
+            )::date
           )
         order by s.weekday, s.begin_time
       `,
       [
+        query.clientType ?? null,
+        query.clientId ?? null,
         query.studentId ?? null,
         query.groupId ?? null,
         query.includeExpired === true,
@@ -1492,6 +1558,10 @@ export class ScheduleService {
   private toScheduleSeriesDto(row: ScheduleSeriesRow) {
     return {
       id: row.id,
+      clientRef:
+        row.client_type && row.client_id
+          ? { type: row.client_type, id: row.client_id }
+          : null,
       studentId: row.student_id,
       groupId: row.group_id,
       teacherId: row.teacher_id,
@@ -1505,6 +1575,27 @@ export class ScheduleService {
       durationMinutes: Number(row.duration_minutes),
       validFrom: row.valid_from,
       validUntil: row.valid_until,
+      timezone: row.timezone_name ?? null,
+      completionType: row.completion_type ?? null,
+      clientChargeType: row.client_charge_type ?? null,
+      clientChargeValue:
+        row.client_charge_value === null ||
+        row.client_charge_value === undefined
+          ? null
+          : Number(row.client_charge_value),
+      teacherCompensationType: row.teacher_compensation_type ?? null,
+      teacherCompensationValue:
+        row.teacher_compensation_value === null ||
+        row.teacher_compensation_value === undefined
+          ? null
+          : Number(row.teacher_compensation_value),
+      subscriptionId: row.subscription_id ?? null,
+      trial: row.trial ?? null,
+      occurrenceCount:
+        row.occurrence_count === null || row.occurrence_count === undefined
+          ? null
+          : Number(row.occurrence_count),
+      version: row.version === undefined ? null : Number(row.version),
       notes: row.notes,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -1517,6 +1608,13 @@ export class ScheduleService {
     rawDto: UpsertLessonDto,
   ) {
     const dto = this.applyClientRef(rawDto);
+    if (dto.status !== undefined) {
+      throw new BadRequestException({
+        code: "MANUAL_LESSON_LIFECYCLE_FORBIDDEN",
+        message: "Lesson lifecycle is server-managed.",
+        fields: ["status"],
+      });
+    }
     if (dto.scheduledAt) {
       this.assertScheduledAtWithinBookingWindow(dto.scheduledAt);
     }
@@ -1568,11 +1666,6 @@ export class ScheduleService {
         );
         const previous = before.rows[0] ?? null;
         await this.assertCanUpdateLesson(actor, lessonId, dto, previous);
-        if (previous && dto.status === "completed" && !previous.is_trial) {
-          throw new BadRequestException(
-            "Обычное занятие завершайте через посещаемость, чтобы корректно списать абонемент.",
-          );
-        }
     const effectiveLeadId = replacesSubject
       ? (dto.leadId ?? null)
       : previous?.lead_id;
@@ -1581,8 +1674,8 @@ export class ScheduleService {
       this.assertLeadLessonIsTrial(effectiveLeadId, effectiveIsTrial);
     }
     // Contract 2: 409 on a busy teacher/room — but ONLY when the PATCH
-    // actually touches scheduling. Teacher status/notes saves and attendance
-    // flows carry none of these fields and must stay 409-free.
+    // actually touches scheduling. Notes-only saves carry none of these fields
+    // and must stay 409-free.
     const touchesScheduling =
       dto.scheduledAt !== undefined ||
       dto.teacherId !== undefined ||
@@ -1620,9 +1713,9 @@ export class ScheduleService {
         const result = await client.query<LessonRow>(
       `
         update app.lessons
-        set student_id = case when $14::boolean then $2::uuid else student_id end,
-          group_id = case when $14::boolean then $3::uuid else group_id end,
-          lead_id = case when $14::boolean then $4::uuid else lead_id end,
+        set student_id = case when $13::boolean then $2::uuid else student_id end,
+          group_id = case when $13::boolean then $3::uuid else group_id end,
+          lead_id = case when $13::boolean then $4::uuid else lead_id end,
           teacher_id = coalesce($5, teacher_id),
           branch_id = coalesce($6, branch_id),
           room_id = coalesce($7, room_id),
@@ -1637,10 +1730,9 @@ export class ScheduleService {
           end,
           scheduled_at = coalesce($8::timestamptz, scheduled_at),
           duration_minutes = coalesce($9, duration_minutes),
-          status = coalesce($10, status),
-          is_trial = coalesce($11, is_trial),
-          notes = coalesce($12, notes),
-          teacher_rate = coalesce($13::numeric, teacher_rate),
+          is_trial = coalesce($10, is_trial),
+          notes = coalesce($11, notes),
+          teacher_rate = coalesce($12::numeric, teacher_rate),
           updated_at = now()
         where id = $1 and deleted_at is null
         returning id, student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
@@ -1658,7 +1750,6 @@ export class ScheduleService {
         dto.roomId ?? null,
         dto.scheduledAt,
         dto.durationMinutes ?? null,
-        dto.status ?? null,
         dto.isTrial ?? null,
         dto.notes?.trim() || null,
         dto.teacherRate ?? null,
@@ -1699,8 +1790,8 @@ export class ScheduleService {
 
   // KVA-158: when a lesson is actually rescheduled — its time, room or
   // assigned teacher changes — push an in-app + FCM notification to the
-  // ASSIGNED teacher. We deliberately do NOT fire on every save (status,
-  // notes, etc.) so teachers are not spammed.
+    // ASSIGNED teacher. We deliberately do NOT fire on notes-only saves so
+    // teachers are not spammed.
   private async notifyTeacherOfReschedule(
     lessonId: string,
     previous: RescheduleSnapshotRow | null,

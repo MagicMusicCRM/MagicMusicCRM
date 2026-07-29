@@ -835,6 +835,12 @@ export class CrmService {
         from app.group_students gs
         join app.groups g on g.id = gs.group_id and g.deleted_at is null
         join app.students s on s.id = gs.student_id and s.deleted_at is null
+        left join app.teachers group_teacher
+          on group_teacher.id = g.teacher_id
+         and group_teacher.deleted_at is null
+        left join app.profiles group_teacher_profile
+          on group_teacher_profile.id = group_teacher.profile_id
+         and group_teacher_profile.deleted_at is null
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
         left join app.lessons l on l.student_id = s.id and l.deleted_at is null
@@ -842,11 +848,18 @@ export class CrmService {
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         where gs.group_id = $1
           and gs.left_at is null
+          and (
+            ${managerAdminRolesSql("$2")}
+            or (
+              $2::text = 'teacher'
+              and group_teacher_profile.user_id = $3
+            )
+          )
         group by s.id, p.id, u.id
         order by p.last_name nulls last, p.first_name nulls last, s.id
-        limit $2
+        limit $4
       `,
-      [groupId, limit],
+      [groupId, actor.role, actor.userId, limit],
     );
     return { items: result.rows.map((row) => this.toStudentDto(row)) };
   }

@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/lesson_state_badges.dart';
 import '../../../../core/widgets/skeletons.dart';
 import '../../../../core/widgets/v7/v7.dart';
 import 'create_student_dialog.dart';
@@ -301,4 +302,3 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
     }
   }
 }
-

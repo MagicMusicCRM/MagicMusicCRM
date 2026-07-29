@@ -469,6 +469,10 @@ describe("StaffService", () => {
       "app",
       6,
       15,
+      "manager",
     ]);
+    expect(query.mock.calls[0][0]).toContain(
+      "u.role <> 'system_admin'::app.user_role",
+    );
   });
 });

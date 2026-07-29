@@ -1,6 +1,5 @@
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
-import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { LeadIntakeService } from "./lead-intake.service";
@@ -14,18 +13,14 @@ describe("LeadIntakeService", () => {
       assertCanWriteCrm: jest.fn(),
       assertCanReadOperationalData: jest.fn(),
     };
-    const notifications = {
-      notifyNewLead: jest.fn().mockResolvedValue(undefined),
-    };
     const realtime = { emitCrmChanged: jest.fn() };
     const service = new LeadIntakeService(
       db as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      notifications as unknown as NotificationsService,
       realtime as unknown as RealtimeBus,
     );
-    return { service, audit, policy, notifications, realtime };
+    return { service, audit, policy, realtime };
   };
 
   const createService = (rows: Record<string, unknown>[] = []) => {
@@ -432,43 +427,4 @@ describe("LeadIntakeService", () => {
     expect(query.mock.calls[0][0]).toContain("'Через приложение'");
   });
 
-  describe("createLeadFromSiteWebhook", () => {
-    it("webhook lead normalizes phone, stamps «Новый» and notifies staff", async () => {
-      const { service, query, notifications, audit } = createServiceWithQueryResults([
-        { rows: [{ id: "status-new" }] }, // lead_statuses «Новый»
-        { rows: [{ id: "lead-web" }] }, // insert into app.leads
-      ]);
-      const result = await service.createLeadFromSiteWebhook({
-        name: "Мария",
-        phone: "8 (999) 123-45-67",
-        discipline: "Вокал",
-        comment: "Хочу пробное занятие",
-      });
-      expect(result).toEqual({ leadId: "lead-web" });
-      const insert = query.mock.calls.find((c) =>
-        String(c[0]).includes("insert into app.leads"),
-      );
-      expect(insert![1]).toEqual([
-        "Мария",
-        "+79991234567",
-        null,
-        "site",
-        "Дисциплина: Вокал\nХочу пробное занятие",
-        "status-new",
-      ]);
-      expect(notifications.notifyNewLead).toHaveBeenCalledWith({
-        leadId: "lead-web",
-        name: "Мария",
-        source: "site",
-      });
-      expect(audit.record).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: "crm.lead_created",
-          entityType: "lead",
-          entityId: "lead-web",
-          metadata: expect.objectContaining({ fromSiteWebhook: true }),
-        }),
-      );
-    });
-  });
 });

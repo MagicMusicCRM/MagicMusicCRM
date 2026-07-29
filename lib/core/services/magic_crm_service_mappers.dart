@@ -43,6 +43,8 @@ Map<String, dynamic> _legacyStudent(Map<String, dynamic> item) {
       : const <String, dynamic>{};
   return {
     'id': item['id'],
+    'version': item['version'],
+    'lifecycle_state': item['lifecycleState'],
     'lead_id': item['leadId'],
     'status': item['status'],
     'custom_data': customData,
@@ -476,6 +478,16 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
     'room_name': item['roomName'],
     'group_name': item['groupName'],
     'group_price_per_lesson': item['groupPricePerLesson'],
+    'completion_type': item['completionType'],
+    'client_charge_type': item['clientChargeType'],
+    'client_charge_value': item['clientChargeValue'],
+    'teacher_compensation_type': item['teacherCompensationType'],
+    'teacher_compensation_value': item['teacherCompensationValue'],
+    'subscription_id': item['subscriptionId'],
+    'snapshot_trial': item['snapshotTrial'],
+    'snapshot_validation_state': item['snapshotValidationState'],
+    'lifecycle_state': item['lifecycleState'],
+    'reservation_state': item['reservationState'],
     'student_first_name': studentParts.$1,
     'student_last_name': studentParts.$2,
     'teacher_first_name': teacherParts.$1,
@@ -491,37 +503,6 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
       'branches': {'id': item['branchId'], 'name': item['branchName']},
     },
     'branches': {'id': item['branchId'], 'name': item['branchName']},
-  };
-}
-
-Map<String, dynamic> _legacyAttendance(Map<String, dynamic> item) {
-  final students = item['students'] is List ? item['students'] as List : [];
-  final legacyStudents = <Map<String, dynamic>>[];
-  final legacyParticipations = <Map<String, dynamic>>[];
-
-  for (final raw in students.whereType<Map<String, dynamic>>()) {
-    final studentId = raw['studentId'];
-    final status = raw['status']?.toString() ?? 'present';
-    legacyStudents.add({
-      'id': studentId,
-      'name': raw['studentName'] ?? 'Без имени',
-    });
-    legacyParticipations.add({
-      'lesson_id': item['lessonId'],
-      'student_id': studentId,
-      'is_present': status != 'absent',
-      // KVA-237: 5 типов посещения; для легаси-строк выводим из status.
-      'kind': raw['kind'] ?? (status == 'absent' ? 'unpaid_miss' : 'attended'),
-      'charge_share': raw['chargeShare'] ?? 1,
-      'charged_hours': raw['chargedHours'],
-      'pass_reason': raw['passReason'] ?? '',
-    });
-  }
-
-  return {
-    'lesson_id': item['lessonId'],
-    'students': legacyStudents,
-    'participations': legacyParticipations,
   };
 }
 

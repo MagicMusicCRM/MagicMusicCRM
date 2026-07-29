@@ -14,9 +14,13 @@
     "hollihop:link-leads": "ts-node src/migration/link-students-to-leads.ts",
     "db:rollback:prod": "node dist/db/migrate.js down",
     "security:gate": "ts-node src/security/security-gate.ts",
+    "v4:preflight": "ts-node src/platform/v4-preflight.ts",
+    "v4:reconcile": "ts-node src/platform/v4-reconcile.ts",
+    "v4:access-coverage": "ts-node src/access-control/v4-access-coverage.ts",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
+    "test:actor-matrix:v4": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/access-control/actor-matrix-postgres.integration.spec.ts src/access-control/actor-matrix-payload-leak.spec.ts",
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch",
     "typecheck": "tsc --noEmit"
   },

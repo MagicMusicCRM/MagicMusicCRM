@@ -84,7 +84,7 @@ Widget _lessonRow(
     }
     teacherName = tName.isEmpty ? '—' : tName;
   }
-  final completed = l.status == 'completed';
+  final projection = LessonStateProjection.fromMap(l.raw);
   final lessonId = l.id;
   return Card(
     margin: const EdgeInsets.only(bottom: 8),
@@ -107,21 +107,16 @@ Widget _lessonRow(
                 : 'Ставка: ${l.appliedTeacherRate} ₽/ч',
         ].join(' • '),
       ),
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: (completed ? AppTheme.success : AppTheme.primaryGold)
-              .withAlpha(30),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          completed ? 'Завершено' : 'Запланировано',
-          style: TextStyle(
-            fontSize: 11,
-            color: completed ? AppTheme.success : AppTheme.primaryGold,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+      trailing: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (l.isTrial) ...[
+            const LessonTrialBadge(compact: true),
+            const SizedBox(height: 4),
+          ],
+          LessonStateBadge(projection: projection),
+        ],
       ),
     ),
   );

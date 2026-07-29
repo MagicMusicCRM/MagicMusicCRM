@@ -4,20 +4,17 @@ import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/client_card_sheets.dart';
 import 'package:intl/intl.dart';
 
 /// Teacher schedule (P2-7 / KVA-195). v7 restyle + parity with the admin
 /// schedule: shows the signed-in teacher's lessons from the same
 /// `listLessons` payload the manager view consumes (student / room / branch
-/// names, status, plan notes). Read-only chrome is fine for the teacher — the
-/// service calls (`listTeachers` / `listLessons` / `updateLesson`) are
-/// unchanged; only the surfaces/accents are migrated to
-/// the v7 tokens (AppColor / AppRadius / AppSpace) and the P0 components
-/// (showMagicSheet / MagicToast / SkeletonBox). Surfaces follow the app theme
-/// (light + dark) via [Theme.of]; accents use the v7 gold/success/danger.
+/// names, state and plan notes). The calendar and linked client/history/
+/// homework drilldowns are actor-scoped and strictly read-only.
 class TeacherScheduleWidget extends ConsumerStatefulWidget {
   const TeacherScheduleWidget({super.key});
 
@@ -28,22 +25,29 @@ class TeacherScheduleWidget extends ConsumerStatefulWidget {
 
 class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
   bool _isLoading = true;
+  Object? _loadError;
 
   List<Appointment> _appointments = [];
-  // Keeps the raw lesson payload keyed by lesson id so trial-only completion
-  // can be distinguished from ordinary lessons (completed by admin attendance).
   final Map<String, Map<String, dynamic>> _lessonsById = {};
   final CalendarController _calendarController = CalendarController();
+  CalendarView _view = CalendarView.day;
+  String? _teacherId;
   bool _realtimeRefreshQueued = false;
 
   @override
   void initState() {
     super.initState();
+    _calendarController.view = _view;
     _fetchScheduleData();
   }
 
   Future<void> _fetchScheduleData() async {
-    setState(() => _isLoading = true);
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _loadError = null;
+      });
+    }
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final profile = await ref.read(magicAuthServiceProvider).currentProfile();
@@ -58,12 +62,20 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
           .firstOrNull;
 
       if (teacher == null) {
-        setState(() => _isLoading = false);
+        if (!mounted) return;
+        setState(() {
+          _appointments = const [];
+          _lessonsById.clear();
+          _loadError = StateError('Профиль преподавателя не найден');
+          _isLoading = false;
+        });
         return;
       }
 
+      final teacherId = teacher['id']?.toString();
+      _teacherId = teacherId;
       final lessonsRes = await crm.listLessons(
-        teacherId: teacher['id']?.toString(),
+        teacherId: teacherId,
         limit: 200,
       );
 
@@ -86,7 +98,6 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
             : int.tryParse(durationRaw?.toString() ?? '') ?? 60;
         final end = start.add(Duration(minutes: duration));
 
-        final status = lesson['status'] as String?;
         final subjectName =
             [lesson['student_name'], lesson['lead_name'], lesson['group_name']]
                 .map((value) => value?.toString().trim() ?? '')
@@ -94,179 +105,40 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
                   (value) => value.isNotEmpty,
                   orElse: () => 'Ученик',
                 );
-        final studentName = lesson['is_trial'] == true
-            ? 'Пробное · $subjectName'
-            : subjectName;
         final roomName = lesson['room_name']?.toString() ?? 'Аудитория';
         final branchName = lesson['branch_name']?.toString() ?? '';
         final locationInfo = branchName.isNotEmpty
             ? '$roomName ($branchName)'
             : roomName;
 
-        // v7 accents: gold for scheduled, success for completed, danger for
-        // cancelled. Surfaces stay theme-driven; only the per-card accent uses
-        // the locked tokens.
-        Color bgColor = AppColor.gold;
-        if (status == 'completed') bgColor = AppColor.success;
-        if (status == 'cancelled') bgColor = AppColor.danger;
+        final state = LessonStateProjection.fromMap(lesson);
 
         appointments.add(
           Appointment(
             startTime: start,
             endTime: end,
-            subject: studentName,
+            subject: subjectName,
             location: locationInfo,
-            color: bgColor,
+            color: state.token.accent,
             notes: lesson['notes']?.toString() ?? '',
             id: lesson['id'],
           ),
         );
       }
 
+      if (!mounted) return;
       setState(() {
         _appointments = appointments;
+        _loadError = null;
         _isLoading = false;
       });
     } catch (e) {
       debugPrint('Error fetching teacher schedule: $e');
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _markCompleted(String lessonId) async {
-    try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateLesson(lessonId, status: 'completed');
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Занятие завершено',
-          type: MagicToastType.success,
-        );
-      }
-      _fetchScheduleData();
-    } catch (e) {
-      debugPrint('Error completing lesson: $e');
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Не удалось завершить занятие',
-          type: MagicToastType.danger,
-        );
-      }
-    }
-  }
-
-  Future<void> _editLessonPlan(String lessonId, String currentPlan) async {
-    final controller = TextEditingController(text: currentPlan);
-    final cs = Theme.of(context).colorScheme;
-    final result = await showMagicSheet<String>(
-      context,
-      title: 'План занятия',
-      subtitle: 'Что планируете делать на уроке?',
-      icon: Icons.edit_note_rounded,
-      builder: (ctx) => TextField(
-        controller: controller,
-        maxLines: 5,
-        autofocus: true,
-        style: TextStyle(color: cs.onSurface),
-        decoration: InputDecoration(
-          hintText: 'Опишите план урока…',
-          filled: true,
-          fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.4),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            borderSide: BorderSide(color: AppColor.divider),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            borderSide: BorderSide(color: AppColor.divider),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            borderSide: const BorderSide(color: AppColor.gold),
-          ),
-        ),
-      ),
-      actions: [
-        _SheetButton.secondary(
-          label: 'Отмена',
-          onPressed: () => Navigator.pop(context),
-        ),
-        _SheetButton.gold(
-          label: 'Сохранить',
-          onPressed: () => Navigator.pop(context, controller.text),
-        ),
-      ],
-    );
-    controller.dispose();
-
-    if (result != null) {
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateLesson(lessonId, notes: result.trim());
-      _fetchScheduleData();
-    }
-  }
-
-  Future<void> _assignHomework(String lessonId) async {
-    final lesson = _lessonsById[lessonId];
-    if (lesson == null) return;
-    final studentId = lesson['student_id']?.toString();
-    final leadId = lesson['lead_id']?.toString();
-    if ((studentId == null || studentId.isEmpty) &&
-        (leadId == null || leadId.isEmpty)) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'У занятия нет ученика или лида',
-          type: MagicToastType.danger,
-        );
-      }
-      return;
-    }
-
-    final crm = ref.read(magicCrmServiceProvider);
-    List<Map<String, dynamic>> recent = const [];
-    try {
-      recent = await crm.listHomeworks(lessonId: lessonId, limit: 20);
-    } catch (_) {
-      // The create form remains usable if the preview fetch is temporarily
-      // unavailable; the mutation itself still has server-side lesson scope.
-    }
-    if (!mounted) return;
-
-    final input = await showAssignHomeworkSheet(
-      context,
-      recentHomeworks: recent,
-    );
-    if (input == null || !mounted) return;
-
-    try {
-      await crm.createHomework(
-        studentId: studentId?.isNotEmpty == true ? studentId : null,
-        leadId: leadId?.isNotEmpty == true ? leadId : null,
-        lessonId: lessonId,
-        title: input.title,
-        description: input.description,
-        dueAt: input.dueAt?.toIso8601String(),
-      );
       if (!mounted) return;
-      MagicToast.show(
-        context,
-        'ДЗ назначено',
-        detail: input.title,
-        type: MagicToastType.success,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      MagicToast.show(
-        context,
-        'Не удалось назначить ДЗ',
-        detail: '$e',
-        type: MagicToastType.danger,
-      );
+      setState(() {
+        _loadError = e;
+        _isLoading = false;
+      });
     }
   }
 
@@ -279,15 +151,16 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
     });
   }
 
-  void _showLessonDetails(Appointment appointment) {
+  Future<void> _showLessonDetails(Appointment appointment) async {
     if (appointment.id == null) return;
     final lessonId = appointment.id.toString();
+    final lesson = _lessonsById[lessonId];
+    if (lesson == null) return;
     final cs = Theme.of(context).colorScheme;
-    final accent = appointment.color;
     final hasPlan = appointment.notes?.isNotEmpty == true;
-    final isTrial = _lessonsById[lessonId]?['is_trial'] == true;
+    final state = LessonStateProjection.fromMap(lesson);
 
-    showMagicSheet<void>(
+    await showMagicSheet<void>(
       context,
       title: appointment.subject,
       subtitle:
@@ -297,6 +170,26 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              'Карточка клиента',
+              key: ValueKey('teacher-client-card-title'),
+              style: TextStyle(
+                color: AppColor.gold,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Wrap(
+              spacing: AppSpace.xs,
+              runSpacing: AppSpace.xs,
+              children: [
+                LessonStateBadge(projection: state),
+                if (lesson['is_trial'] == true)
+                  const LessonTrialBadge(compact: true),
+              ],
+            ),
+            const SizedBox(height: AppSpace.lg),
             _DetailRow(
               icon: Icons.place_outlined,
               text: appointment.location ?? 'Не указано',
@@ -329,36 +222,28 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
               ),
             ),
             const SizedBox(height: AppSpace.lg),
-            // Teachers edit the plan/homework. Attendance and ordinary-lesson
-            // completion are admin+ because they drive subscription charges.
-            _ActionTile(
-              icon: Icons.edit_note_rounded,
-              label: 'Изменить план',
+            _ReadOnlyLinkTile(
+              key: ValueKey('teacher-history-$lessonId'),
+              icon: Icons.history_rounded,
+              label: 'История занятий',
               accent: AppColor.gold,
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(ctx);
-                _editLessonPlan(lessonId, appointment.notes ?? '');
+                await Future<void>.delayed(kThemeAnimationDuration);
+                if (mounted) await _showLessonHistory(lesson);
               },
             ),
-            _ActionTile(
-              icon: Icons.assignment_rounded,
-              label: 'Домашнее задание',
+            _ReadOnlyLinkTile(
+              key: ValueKey('teacher-homeworks-$lessonId'),
+              icon: Icons.assignment_outlined,
+              label: 'Домашние задания',
               accent: AppColor.gold,
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(ctx);
-                _assignHomework(lessonId);
+                await Future<void>.delayed(kThemeAnimationDuration);
+                if (mounted) await _showHomeworkHistory(lesson);
               },
             ),
-            if (isTrial && accent == AppColor.gold)
-              _ActionTile(
-                icon: Icons.check_circle_outline_rounded,
-                label: 'Завершить пробное',
-                accent: AppColor.success,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _markCompleted(lessonId);
-                },
-              ),
           ],
         );
       },
@@ -369,6 +254,140 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
         ),
       ],
     );
+  }
+
+  Future<List<Map<String, dynamic>>> _loadLessonHistory(
+    Map<String, dynamic> lesson,
+  ) async {
+    final crm = ref.read(magicCrmServiceProvider);
+    final studentId = lesson['student_id']?.toString();
+    if (studentId != null && studentId.isNotEmpty) {
+      return crm.listLessons(
+        studentId: studentId,
+        teacherId: _teacherId,
+        order: 'desc',
+        limit: 50,
+      );
+    }
+    final leadId = lesson['lead_id']?.toString();
+    if (leadId == null || leadId.isEmpty) return const [];
+    final assignedTrials = await crm.listLessons(
+      teacherId: _teacherId,
+      isTrial: true,
+      order: 'desc',
+      limit: 200,
+    );
+    return assignedTrials
+        .where((item) => item['lead_id']?.toString() == leadId)
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadHomeworkHistory(
+    Map<String, dynamic> lesson,
+  ) {
+    final studentId = lesson['student_id']?.toString();
+    final leadId = lesson['lead_id']?.toString();
+    if (studentId?.isNotEmpty != true && leadId?.isNotEmpty != true) {
+      return Future.value(const []);
+    }
+    return ref
+        .read(magicCrmServiceProvider)
+        .listHomeworks(
+          studentId: studentId?.isNotEmpty == true ? studentId : null,
+          leadId: leadId?.isNotEmpty == true ? leadId : null,
+          limit: 50,
+        );
+  }
+
+  Future<void> _showLessonHistory(Map<String, dynamic> lesson) {
+    final history = _loadLessonHistory(lesson);
+    return showMagicSheet<void>(
+      context,
+      title: 'История занятий',
+      subtitle: _clientName(lesson),
+      icon: Icons.history_rounded,
+      builder: (_) => _TeacherLessonHistory(future: history),
+      actions: [
+        _SheetButton.gold(
+          label: 'Закрыть',
+          onPressed: () => Navigator.pop(context),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showHomeworkHistory(Map<String, dynamic> lesson) {
+    final homeworks = _loadHomeworkHistory(lesson);
+    return showMagicSheet<void>(
+      context,
+      title: 'Домашние задания',
+      subtitle: _clientName(lesson),
+      icon: Icons.assignment_outlined,
+      builder: (_) => _TeacherHomeworkHistory(future: homeworks),
+      actions: [
+        _SheetButton.gold(
+          label: 'Закрыть',
+          onPressed: () => Navigator.pop(context),
+        ),
+      ],
+    );
+  }
+
+  String _clientName(Map<String, dynamic> lesson) {
+    return [lesson['student_name'], lesson['lead_name'], lesson['group_name']]
+        .map((value) => value?.toString().trim() ?? '')
+        .firstWhere((value) => value.isNotEmpty, orElse: () => 'Клиент');
+  }
+
+  void _setView(CalendarView view) {
+    setState(() {
+      _view = view;
+      _calendarController.view = view;
+    });
+  }
+
+  Widget _viewSelector(ColorScheme cs, double width) {
+    if (width >= 420) {
+      return SegmentedButton<CalendarView>(
+        key: const ValueKey('teacher-calendar-view-segments'),
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: CalendarView.day, label: Text('День')),
+          ButtonSegment(value: CalendarView.week, label: Text('Неделя')),
+        ],
+        selected: {_view},
+        onSelectionChanged: (views) => _setView(views.single),
+      );
+    }
+    return Container(
+      key: const ValueKey('teacher-calendar-view-dropdown'),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: AppColor.divider),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<CalendarView>(
+          value: _view,
+          dropdownColor: cs.surface,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          items: const [
+            DropdownMenuItem(value: CalendarView.day, child: Text('День')),
+            DropdownMenuItem(value: CalendarView.week, child: Text('Неделя')),
+          ],
+          onChanged: (view) {
+            if (view != null) _setView(view);
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _calendarController.dispose();
+    super.dispose();
   }
 
   @override
@@ -388,63 +407,19 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
             horizontal: AppSpace.lg,
             vertical: AppSpace.sm,
           ),
-          child: Row(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: cs.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  border: Border.all(color: AppColor.divider),
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                _viewSelector(cs, constraints.maxWidth),
+                const Spacer(),
+                IconButton(
+                  key: const ValueKey('teacher-calendar-refresh'),
+                  icon: Icon(Icons.refresh_rounded, color: cs.onSurfaceVariant),
+                  tooltip: 'Обновить',
+                  onPressed: _fetchScheduleData,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<CalendarView>(
-                    value: _calendarController.view,
-                    dropdownColor: cs.surface,
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                    icon: Icon(
-                      Icons.expand_more_rounded,
-                      color: cs.onSurfaceVariant,
-                      size: 20,
-                    ),
-                    style: TextStyle(
-                      color: cs.onSurface,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: CalendarView.day,
-                        child: Text('День'),
-                      ),
-                      DropdownMenuItem(
-                        value: CalendarView.week,
-                        child: Text('Неделя'),
-                      ),
-                      DropdownMenuItem(
-                        value: CalendarView.month,
-                        child: Text('Месяц'),
-                      ),
-                      DropdownMenuItem(
-                        value: CalendarView.schedule,
-                        child: Text('Расписание'),
-                      ),
-                    ],
-                    onChanged: (view) {
-                      if (view != null) {
-                        setState(() => _calendarController.view = view);
-                      }
-                    },
-                  ),
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: Icon(Icons.refresh_rounded, color: cs.onSurfaceVariant),
-                tooltip: 'Обновить',
-                onPressed: _fetchScheduleData,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
 
@@ -452,72 +427,94 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
         Expanded(
           child: _isLoading
               ? const _ScheduleLoading()
-              : SfCalendar(
-                  controller: _calendarController,
-                  view: CalendarView.day,
-                  firstDayOfWeek: 1, // Monday
-                  todayHighlightColor: AppColor.gold,
-                  cellBorderColor: AppColor.divider,
-                  backgroundColor: Colors.transparent,
-                  timeSlotViewSettings: const TimeSlotViewSettings(
-                    startHour: 6,
-                    endHour: 23,
-                    timeFormat: 'HH:mm',
-                    timeIntervalHeight: 60,
-                  ),
-                  dataSource: _TeacherLessonDataSource(_appointments),
-                  onTap: (CalendarTapDetails details) {
-                    if (details.appointments != null &&
-                        details.appointments!.isNotEmpty) {
-                      final Appointment appItem = details.appointments![0];
-                      _showLessonDetails(appItem);
-                    }
-                  },
-                  appointmentBuilder:
-                      (
-                        BuildContext context,
-                        CalendarAppointmentDetails details,
-                      ) {
-                        final Appointment app = details.appointments.first;
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpace.xs,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: app.color.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(AppRadius.chip),
-                            border: Border.all(color: app.color, width: 1),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+              : _loadError != null
+              ? _ScheduleError(onRetry: _fetchScheduleData)
+              : Stack(
+                  children: [
+                    SfCalendar(
+                      key: const ValueKey('teacher-calendar-grid'),
+                      controller: _calendarController,
+                      view: _view,
+                      firstDayOfWeek: 1, // Monday
+                      todayHighlightColor: AppColor.gold,
+                      cellBorderColor: AppColor.divider,
+                      backgroundColor: Colors.transparent,
+                      timeSlotViewSettings: const TimeSlotViewSettings(
+                        startHour: 6,
+                        endHour: 23,
+                        timeFormat: 'HH:mm',
+                        timeIntervalHeight: 60,
+                      ),
+                      dataSource: _TeacherLessonDataSource(_appointments),
+                      onTap: (CalendarTapDetails details) {
+                        if (details.appointments != null &&
+                            details.appointments!.isNotEmpty) {
+                          final Appointment appItem = details.appointments![0];
+                          _showLessonDetails(appItem);
+                        }
+                      },
+                      appointmentBuilder:
+                          (
+                            BuildContext context,
+                            CalendarAppointmentDetails details,
+                          ) {
+                            final Appointment app = details.appointments.first;
+                            final lesson = _lessonsById[app.id?.toString()];
+                            return Container(
+                              key: ValueKey('teacher-lesson-${app.id}'),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpace.xs,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: app.color.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.chip,
+                                ),
+                                border: Border.all(color: app.color, width: 1),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
-                                    child: Text(
-                                      app.subject,
-                                      style: TextStyle(
-                                        color: app.color,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
+                                  Row(
+                                    children: [
+                                      if (lesson?['is_trial'] == true) ...[
+                                        const LessonTrialBadge(compact: true),
+                                        const SizedBox(width: 3),
+                                      ],
+                                      Expanded(
+                                        child: Text(
+                                          app.subject,
+                                          style: TextStyle(
+                                            color: app.color,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    ],
+                                  ),
+                                  Text(
+                                    app.location ?? '',
+                                    style: TextStyle(
+                                      color: app.color,
+                                      fontSize: 9,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
-                              Text(
-                                app.location ?? '',
-                                style: TextStyle(color: app.color, fontSize: 9),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                            );
+                          },
+                    ),
+                    if (_appointments.isEmpty)
+                      const Positioned.fill(
+                        child: IgnorePointer(child: _ScheduleEmpty()),
+                      ),
+                  ],
                 ),
         ),
       ],
@@ -542,6 +539,219 @@ class _ScheduleLoading extends StatelessWidget {
           SizedBox(width: AppSpace.md),
           Expanded(child: SkeletonBox(height: 54, radius: AppRadius.chip)),
         ],
+      ),
+    );
+  }
+}
+
+class _ScheduleError extends StatelessWidget {
+  const _ScheduleError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: AppColor.danger,
+            ),
+            const SizedBox(height: AppSpace.md),
+            Text(
+              'Не удалось загрузить расписание',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: cs.onSurface,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'Проверьте соединение и повторите попытку.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+            ),
+            const SizedBox(height: AppSpace.lg),
+            OutlinedButton.icon(
+              key: const ValueKey('teacher-calendar-retry'),
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Повторить'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScheduleEmpty extends StatelessWidget {
+  const _ScheduleEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Container(
+        key: const ValueKey('teacher-calendar-empty'),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.xl,
+          vertical: AppSpace.lg,
+        ),
+        decoration: BoxDecoration(
+          color: cs.surface.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: AppColor.divider),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.event_available_outlined,
+              size: 36,
+              color: AppColor.text2,
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              'Занятий пока нет',
+              style: TextStyle(
+                color: cs.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TeacherLessonHistory extends StatelessWidget {
+  const _TeacherLessonHistory({required this.future});
+
+  final Future<List<Map<String, dynamic>>> future;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AsyncReadOnlyList(
+      future: future,
+      emptyLabel: 'История занятий пуста',
+      itemBuilder: (lesson) {
+        final scheduledAt = DateTime.tryParse(
+          lesson['scheduled_at']?.toString() ?? '',
+        );
+        return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            scheduledAt == null
+                ? 'Дата не указана'
+                : DateFormat(
+                    'dd.MM.yyyy · HH:mm',
+                    'ru',
+                  ).format(scheduledAt.toLocal()),
+          ),
+          subtitle: Text(
+            lesson['room_name']?.toString() ?? 'Аудитория не указана',
+          ),
+          trailing: LessonStateBadge.fromMap(lesson),
+        );
+      },
+    );
+  }
+}
+
+class _TeacherHomeworkHistory extends StatelessWidget {
+  const _TeacherHomeworkHistory({required this.future});
+
+  final Future<List<Map<String, dynamic>>> future;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AsyncReadOnlyList(
+      future: future,
+      emptyLabel: 'Домашних заданий пока нет',
+      itemBuilder: (homework) {
+        final status = switch (homework['status']?.toString()) {
+          'submitted' => 'Сдано',
+          'done' || 'completed' || 'checked' => 'Проверено',
+          _ => 'Задано',
+        };
+        return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.assignment_outlined, color: AppColor.gold),
+          title: Text(homework['title']?.toString() ?? 'Домашнее задание'),
+          subtitle: Text(status),
+        );
+      },
+    );
+  }
+}
+
+class _AsyncReadOnlyList extends StatelessWidget {
+  const _AsyncReadOnlyList({
+    required this.future,
+    required this.emptyLabel,
+    required this.itemBuilder,
+  });
+
+  final Future<List<Map<String, dynamic>>> future;
+  final String emptyLabel;
+  final Widget Function(Map<String, dynamic>) itemBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 420),
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Padding(
+              padding: EdgeInsets.all(AppSpace.xl),
+              child: Center(
+                child: CircularProgressIndicator(color: AppColor.gold),
+              ),
+            );
+          }
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(AppSpace.lg),
+              child: Text(
+                'Не удалось загрузить данные',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: cs.onSurfaceVariant),
+              ),
+            );
+          }
+          final items = snapshot.data ?? const [];
+          if (items.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.all(AppSpace.lg),
+              child: Text(
+                emptyLabel,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: cs.onSurfaceVariant),
+              ),
+            );
+          }
+          return ListView.separated(
+            shrinkWrap: true,
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (_, index) => itemBuilder(items[index]),
+          );
+        },
       ),
     );
   }
@@ -573,10 +783,10 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-/// Tappable action row inside the lesson detail sheet (gold-soft fill + tinted
-/// icon badge), mirroring the v7 pop-menu item.
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
+/// Read-only navigation row from the limited Teacher client card.
+class _ReadOnlyLinkTile extends StatelessWidget {
+  const _ReadOnlyLinkTile({
+    super.key,
     required this.icon,
     required this.label,
     required this.accent,
@@ -636,32 +846,20 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
-/// Footer button for the v7 sheets. Flat gold (no shadow) for the primary
-/// action; outlined secondary for dismiss/cancel.
+/// Footer button for read-only sheets.
 class _SheetButton extends StatelessWidget {
-  const _SheetButton._({
-    required this.label,
-    required this.onPressed,
-    required this.gold,
-  });
+  const _SheetButton._({required this.label, required this.onPressed});
 
   factory _SheetButton.gold({
     required String label,
     required VoidCallback onPressed,
-  }) => _SheetButton._(label: label, onPressed: onPressed, gold: true);
-
-  factory _SheetButton.secondary({
-    required String label,
-    required VoidCallback onPressed,
-  }) => _SheetButton._(label: label, onPressed: onPressed, gold: false);
+  }) => _SheetButton._(label: label, onPressed: onPressed);
 
   final String label;
   final VoidCallback onPressed;
-  final bool gold;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final style = ButtonStyle(
       elevation: const WidgetStatePropertyAll(0),
       shadowColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -676,22 +874,11 @@ class _SheetButton extends StatelessWidget {
       ),
     );
 
-    if (gold) {
-      return FilledButton(
-        onPressed: onPressed,
-        style: style.copyWith(
-          backgroundColor: const WidgetStatePropertyAll(AppColor.gold),
-          foregroundColor: const WidgetStatePropertyAll(AppColor.onGold),
-        ),
-        child: Text(label),
-      );
-    }
-
-    return OutlinedButton(
+    return FilledButton(
       onPressed: onPressed,
       style: style.copyWith(
-        foregroundColor: WidgetStatePropertyAll(cs.onSurface),
-        side: const WidgetStatePropertyAll(BorderSide(color: AppColor.divider)),
+        backgroundColor: const WidgetStatePropertyAll(AppColor.gold),
+        foregroundColor: const WidgetStatePropertyAll(AppColor.onGold),
       ),
       child: Text(label),
     );

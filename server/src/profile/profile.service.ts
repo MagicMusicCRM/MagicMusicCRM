@@ -173,6 +173,7 @@ export class ProfileService {
           where p.deleted_at is null
             and u.deleted_at is null
             and u.is_app_account = true
+            and ($4::text = 'system_admin' or u.role <> 'system_admin'::app.user_role)
             and ($1::text is null or u.role = $1::app.user_role)
             and (
               $2::text is null
@@ -405,7 +406,7 @@ export class ProfileService {
         left join candidate_staff_count csfc on csfc.user_id = vp.user_id
         order by vp.created_at desc, vp.id desc
       `,
-      [query.role ?? null, q || null, limit],
+      [query.role ?? null, q || null, limit, actor.role],
     );
 
     return {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/homework_widget.dart';
 
@@ -54,28 +55,6 @@ class UpcomingLessonsList extends ConsumerStatefulWidget {
 
 class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
   int _activeTab = 0; // 0: Upcoming, 1: History, 2: Homework
-
-  String _statusLabel(String? s) {
-    switch (s) {
-      case 'completed':
-        return 'Завершено';
-      case 'cancelled':
-        return 'Отменено';
-      default:
-        return 'Запланировано';
-    }
-  }
-
-  Color _statusColor(String? s) {
-    switch (s) {
-      case 'completed':
-        return AppTheme.success;
-      case 'cancelled':
-        return AppTheme.danger;
-      default:
-        return AppTheme.primaryGold;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -192,7 +171,6 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                               .trim();
 
                           final room = lesson['room_name'] as String? ?? '';
-                          final status = lesson['status'] as String?;
                           final isTrial = lesson['is_trial'] == true;
                           final dt = DateTime.tryParse(
                             lesson['scheduled_at'] as String? ?? '',
@@ -231,26 +209,7 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         if (isTrial) ...[
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 7,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.primaryGold
-                                                  .withAlpha(30),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            child: const Text(
-                                              'Пробный урок',
-                                              style: TextStyle(
-                                                color: AppTheme.primaryGold,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
+                                          const LessonTrialBadge(),
                                           const SizedBox(height: 4),
                                         ],
                                         Text(
@@ -324,24 +283,7 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                                       ],
                                     ),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _statusColor(status).withAlpha(25),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      _statusLabel(status),
-                                      style: TextStyle(
-                                        color: _statusColor(status),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
+                                  LessonStateBadge.fromMap(lesson),
                                 ],
                               ),
                             ),

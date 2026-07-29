@@ -146,6 +146,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           .read(magicCrmServiceProvider)
           .updateLesson(
             lessonId,
+            expectedVersion: (lesson['version'] as num?)?.toInt() ?? 1,
             scheduledAt: newScheduledAtIso,
             roomId: roomChanged ? targetRoomId : null,
           );
@@ -178,8 +179,6 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       }
     } on MagicApiException catch (e) {
       if (!mounted) return;
-      // Сначала откат блока — force-повтор при подтверждении заново применит
-      // состояние через _fetchDayLessons.
       _emitState(() {
         lesson['scheduled_at'] = prevScheduledAt;
         lesson['room_id'] = prevRoomId;
@@ -188,33 +187,19 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
             : _roomNames[prevRoomId.toString()];
         lesson['conflict_types'] = prevConflicts;
       });
-      // Контракт 2: 409 = педагог/аудитория заняты в целевом слоте. Показываем
-      // кто/когда/где; admin+ может «Перенести всё равно» (force: true).
+      final violations = lessonConstraintViolations(e);
       final conflicts = scheduleConflictsFrom409(e);
-      if (conflicts == null) {
+      if (violations != null && violations.isNotEmpty) {
+        await _showScheduleViolations(violations);
+      } else if (conflicts != null) {
+        await _confirmScheduleBusy(conflicts);
+      } else {
         MagicToast.show(
           context,
           'Не удалось перенести занятие',
           detail: '$e',
           type: MagicToastType.danger,
         );
-      } else {
-        final retry = await _confirmScheduleBusy(
-          conflicts,
-          confirmLabel: 'Перенести всё равно',
-        );
-        if (retry == true && mounted) {
-          await _forcePatchLesson(
-            lessonId,
-            {
-              'scheduledAt': newScheduledAtIso,
-              // roomChanged уже гарантирует непустой targetRoomId.
-              if (roomChanged) 'roomId': targetRoomId,
-            },
-            successMessage: 'Занятие перенесено',
-            failureMessage: 'Не удалось перенести занятие',
-          );
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -238,16 +223,8 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     }
   }
 
-  // ── 409 «слот занят» при переносе/растяжении (контракт 2) ──────────────────
-  // Компактный диалог для сетки: список конфликтов (кто · когда · где) и
-  // force-подтверждение только для admin+ (сервер гейтит то же самое).
-  Future<bool?> _confirmScheduleBusy(
-    List<ScheduleConflictInfo> conflicts, {
-    required String confirmLabel,
-  }) {
-    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
-    final canForce = kScheduleForceRoles.contains(role);
-    return showDialog<bool>(
+  Future<void> _confirmScheduleBusy(List<ScheduleConflictInfo> conflicts) {
+    return showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         icon: const Icon(Icons.warning_amber_rounded, color: AppColor.danger),
@@ -267,55 +244,50 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
                 ),
               ),
             const SizedBox(height: 4),
-            Text(
-              canForce
-                  ? 'Назначить всё равно?'
-                  : 'Выберите другой слот — назначить может администратор.',
-            ),
+            const Text('Выберите другой слот: обход конфликтов недоступен.'),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Исправить'),
           ),
-          if (canForce)
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColor.gold,
-                foregroundColor: AppColor.onGold,
-              ),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(confirmLabel),
-            ),
         ],
       ),
     );
   }
 
-  Future<void> _forcePatchLesson(
-    String lessonId,
-    Map<String, dynamic> payload, {
-    required String successMessage,
-    required String failureMessage,
-  }) async {
-    try {
-      await ref
-          .read(magicApiClientProvider)
-          .updateLessonRaw(lessonId, payload, force: true);
-      if (!mounted) return;
-      await _fetchDayLessons(_selectedDate); // server re-derives conflicts
-      if (!mounted) return;
-      MagicToast.show(context, successMessage, type: MagicToastType.success);
-    } catch (e) {
-      if (!mounted) return;
-      MagicToast.show(
-        context,
-        failureMessage,
-        detail: '$e',
-        type: MagicToastType.danger,
-      );
-    }
+  Future<void> _showScheduleViolations(
+    List<LessonConstraintViolation> violations,
+  ) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.rule_rounded, color: AppColor.danger),
+        title: const Text('Изменение не сохранено'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final violation in violations)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  '• ${violation.title}\n'
+                  '  ${violation.resourceLabel}: ${violation.resourceId}',
+                ),
+              ),
+            const Text('Исправьте все ограничения и повторите действие.'),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Исправить'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showUndoableMove(
@@ -351,6 +323,14 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           .read(magicCrmServiceProvider)
           .updateLesson(
             lessonId,
+            expectedVersion:
+                (_lessons.firstWhere(
+                          (row) => row['id']?.toString() == lessonId,
+                          orElse: () => const <String, dynamic>{},
+                        )['version']
+                        as num?)
+                    ?.toInt() ??
+                1,
             scheduledAt: prevScheduledAt.toString(),
             roomId: prevRoomId?.toString(),
           );
@@ -403,6 +383,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           .read(magicCrmServiceProvider)
           .updateLesson(
             lessonId,
+            expectedVersion: (lesson['version'] as num?)?.toInt() ?? 1,
             scheduledAt: newScheduledAtIso,
             durationMinutes: newDurationMinutes,
           );
@@ -421,31 +402,19 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         lesson['duration_minutes'] = prevDuration;
         lesson['conflict_types'] = prevConflicts;
       });
-      // Контракт 2: растяжение налезло на чужое занятие → 409 с конфликтами.
+      final violations = lessonConstraintViolations(e);
       final conflicts = scheduleConflictsFrom409(e);
-      if (conflicts == null) {
+      if (violations != null && violations.isNotEmpty) {
+        await _showScheduleViolations(violations);
+      } else if (conflicts != null) {
+        await _confirmScheduleBusy(conflicts);
+      } else {
         MagicToast.show(
           context,
           'Не удалось изменить длительность',
           detail: '$e',
           type: MagicToastType.danger,
         );
-      } else {
-        final retry = await _confirmScheduleBusy(
-          conflicts,
-          confirmLabel: 'Изменить всё равно',
-        );
-        if (retry == true && mounted) {
-          await _forcePatchLesson(
-            lessonId,
-            {
-              'scheduledAt': newScheduledAtIso,
-              'durationMinutes': newDurationMinutes,
-            },
-            successMessage: 'Длительность обновлена',
-            failureMessage: 'Не удалось изменить длительность',
-          );
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -657,21 +626,11 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       studentName: studentName,
       roomName: roomName,
       roomColor: roomColor,
-      statusColor: _statusColor(lesson['status']),
+      stateProjection: LessonStateProjection.fromMap(lesson),
+      isTrial: lesson['is_trial'] == true,
       hasConflict: conflicts.isNotEmpty,
       onTap: () => _showLessonDetails(lesson),
     );
-  }
-
-  Color _statusColor(dynamic status) {
-    switch (status?.toString()) {
-      case 'completed':
-        return AppColor.success;
-      case 'cancelled':
-        return AppColor.danger;
-      default:
-        return AppColor.gold;
-    }
   }
 
   // ── Lesson details dialog ─────────────────────────────────────────────────
@@ -701,14 +660,8 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     final timeRange =
         '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – '
         '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
-    final completable =
-        lessonId != null &&
-        currentStatus != 'completed' &&
-        currentStatus != 'done';
-
     showLessonDetailsSheet(
       context,
-      lesson: lesson,
       teacherName: teacherName,
       studentName: studentName,
       roomName: roomName,
@@ -716,28 +669,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       currentStatus: currentStatus,
       conflicts: conflicts,
       lessonId: lessonId,
-      completable: completable,
       onEdit: () => _editLesson(lesson),
-      onComplete: () => _completeLesson(lesson),
       onDelete: () => _deleteLesson(lessonId!),
-      onUpdateStatus: (status, message) =>
-          _updateLessonStatus(lessonId!, status, message),
     );
-  }
-
-  Future<void> _completeLesson(Map<String, dynamic> lesson) async {
-    final lessonId = lesson['id']?.toString();
-    if (lessonId == null || lessonId.isEmpty) return;
-    if (lesson['is_trial'] == true) {
-      await _updateLessonStatus(
-        lessonId,
-        'completed',
-        'Пробное занятие отмечено проведённым',
-      );
-      return;
-    }
-    await LessonAttendanceDialog.show(context, lesson);
-    if (mounted) _fetchAll();
   }
 
   Future<void> _editLesson(Map<String, dynamic> lesson) async {
@@ -763,36 +697,6 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       messenger.showSnackBar(
         SnackBar(
           content: Text('Не удалось удалить занятие: $e'),
-          backgroundColor: AppColor.danger,
-        ),
-      );
-    }
-  }
-
-  Future<void> _updateLessonStatus(
-    String lessonId,
-    String status,
-    String successMsg,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateLesson(lessonId, status: status);
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(successMsg),
-          backgroundColor: AppColor.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      _fetchAll();
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Не удалось обновить занятие: $e'),
           backgroundColor: AppColor.danger,
         ),
       );

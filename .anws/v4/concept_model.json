@@ -1,0 +1,334 @@
+{
+  "version": "4.0",
+  "status": "approved-input",
+  "source": "docs/PRE-V4-PRODUCT-SPEC.md",
+  "created_at": "2026-07-25",
+  "glossary": {
+    "Client": "Обобщённая ссылка в индивидуальном занятии на ровно одну сущность: Lead или Student.",
+    "Lead": "Потенциальный клиент до перевода в учебный процесс.",
+    "Student": "Клиент, переведённый в учебный процесс и имеющий учебную карточку.",
+    "RolePackage": "Готовый системный набор capabilities для одной бизнес-роли.",
+    "UserPermissionOverride": "Индивидуальное разрешение или запрет поверх RolePackage, установленное Director или system_admin.",
+    "HardAccessInvariant": "Правило, которое нельзя изменить персональной галочкой: system_admin имеет всё; Teacher не получает контакты, финансы и мутации занятия.",
+    "SystemAdmin": "Скрытая от бизнес-интерфейса аварийная роль с безусловным доступом ко всей системе.",
+    "Director": "Старшая видимая бизнес-роль; управляет ролями строго ниже себя и индивидуальными разрешениями.",
+    "Lesson": "Единичное занятие со снимком плановых ресурсов, стоимости, способа списания и ставки преподавателя.",
+    "LessonSeries": "Набор связанных Lesson, созданных по повторяющемуся правилу.",
+    "SuccessfulLesson": "Lesson, автоматически завершённое после времени окончания и не переведённое ранее в перенос или отмену.",
+    "RescheduledLesson": "Терминальная исходная запись Lesson с причиной, финансовым решением и ссылкой на новое Lesson.",
+    "AttendanceMetric": "Только вычисляемое количество SuccessfulLesson; редактируемой посещаемости в v4 нет.",
+    "SubscriptionPackage": "Шаблон каталога с названием, объёмом, сроком и базовой ценой.",
+    "IssuedSubscription": "Неизменяемый коммерческий снимок SubscriptionPackage, назначенный конкретному Student.",
+    "SubscriptionReservation": "Визуальное хронологическое покрытие будущего Lesson доступной единицей IssuedSubscription без фактического списания.",
+    "InstallmentPlan": "График ожидаемых платежей, сумма которых равна итоговой стоимости IssuedSubscription.",
+    "ActualPayment": "Неизменяемый факт получения денег с методом Cash или Cashless.",
+    "SubscriptionCancellation": "Деактивация IssuedSubscription без изменения ActualPayment, списаний и исторической статистики.",
+    "SharedTask": "Одна задача для нескольких сотрудников, филиала или всех филиалов с единым состоянием завершения.",
+    "WorkspaceTab": "Account-scoped desktop-контекст экрана или сущности, восстанавливаемый после перезапуска без несохранённой формы.",
+    "ContextLink": "Разрешённый ролевой переход от одной доменной сущности к связанной с сохранением возвратного контекста.",
+    "TeacherVisibleComment": "Конкретный комментарий, который staff-пользователь явно разрешил показывать назначенному Teacher."
+  },
+  "entities": [
+    {
+      "id": "User",
+      "responsibility": "Аутентифицированный субъект действий.",
+      "key_relations": ["RolePackage", "UserPermissionOverride", "AuditEvent", "WorkspaceSession"]
+    },
+    {
+      "id": "RolePackage",
+      "responsibility": "Хранит системный baseline capabilities для Client, Teacher, Admin, Manager, Director или system_admin.",
+      "lifecycle": ["system-defined", "versioned", "active"]
+    },
+    {
+      "id": "UserPermissionOverride",
+      "responsibility": "Переопределяет совместимый capability одного User.",
+      "lifecycle": ["created", "updated", "reset-on-role-change", "audited"]
+    },
+    {
+      "id": "Lead",
+      "responsibility": "Хранит обязательные ФИО, телефон, источник, статус и дополнительные поля потенциального клиента.",
+      "lifecycle": ["active", "converted-or-independent", "archived"]
+    },
+    {
+      "id": "Student",
+      "responsibility": "Хранит учебную карточку, филиал, статус и связи клиента.",
+      "lifecycle": ["active", "archived"]
+    },
+    {
+      "id": "LeadSource",
+      "responsibility": "Справочное значение источника обращения.",
+      "lifecycle": ["active", "archived"]
+    },
+    {
+      "id": "CustomFieldDefinition",
+      "responsibility": "Описывает дополнительное поле Lead или Student и его обязательность.",
+      "lifecycle": ["active", "archived"]
+    },
+    {
+      "id": "TeacherAssignment",
+      "responsibility": "Связывает Teacher с одним или несколькими Branch.",
+      "lifecycle": ["active", "ended"]
+    },
+    {
+      "id": "BranchWorkingHours",
+      "responsibility": "Определяет допустимые интервалы работы Branch по дням недели."
+    },
+    {
+      "id": "TeacherAvailability",
+      "responsibility": "Определяет рабочие интервалы и одноразовую либо повторяющуюся недоступность Teacher."
+    },
+    {
+      "id": "Lesson",
+      "responsibility": "Хранит участника, ресурсы, время и финансовый снимок одного занятия.",
+      "lifecycle": ["scheduled", "successfully_completed", "rescheduled", "cancelled"]
+    },
+    {
+      "id": "LessonSeries",
+      "responsibility": "Связывает повторяющиеся Lesson и правило их создания.",
+      "lifecycle": ["active", "partially_changed", "ended"]
+    },
+    {
+      "id": "SubscriptionPackage",
+      "responsibility": "Каталожный шаблон абонемента.",
+      "lifecycle": ["active", "archived"]
+    },
+    {
+      "id": "IssuedSubscription",
+      "responsibility": "Хранит коммерческий снимок, использованный объём и активность абонемента клиента.",
+      "lifecycle": ["active", "replaced", "cancelled", "expired", "exhausted"]
+    },
+    {
+      "id": "SubscriptionReservation",
+      "responsibility": "Связывает будущий Lesson с доступным остатком без финансового списания.",
+      "lifecycle": ["calculated", "recalculated", "consumed-or-released"]
+    },
+    {
+      "id": "ActualPayment",
+      "responsibility": "Хранит фактический платёж и его метод.",
+      "lifecycle": ["recorded", "immutable-financial-fact"]
+    },
+    {
+      "id": "ExpectedPayment",
+      "responsibility": "Хранит дату и сумму части рассрочки.",
+      "lifecycle": ["planned", "paid", "overdue", "cancelled-by-replacement"]
+    },
+    {
+      "id": "SharedTask",
+      "responsibility": "Хранит общую задачу, временное окно, аудиторию получателей и единый статус.",
+      "lifecycle": ["open", "closed"]
+    },
+    {
+      "id": "Comment",
+      "responsibility": "Хранит внутренний текст и явный признак видимости Teacher.",
+      "lifecycle": ["private", "teacher-visible", "archived"]
+    },
+    {
+      "id": "WorkspaceSession",
+      "responsibility": "Связывает desktop workspace и активные окна с одним User и auth-session.",
+      "lifecycle": ["active", "logged-out", "restored-for-same-account"]
+    },
+    {
+      "id": "WorkspaceTab",
+      "responsibility": "Хранит тип контекста, entity id, фильтры, дату и порядок вкладки.",
+      "lifecycle": ["open", "reordered", "closed", "restored"]
+    },
+    {
+      "id": "AuditEvent",
+      "responsibility": "Неизменяемо фиксирует чувствительное действие и его контекст."
+    }
+  ],
+  "relations": [
+    "Lead may link to one Student; archiving Lead never archives Student.",
+    "Lesson references exactly one of Client(Lead|Student) or Group.",
+    "Lesson references exactly one Teacher, Branch and Room for all new or mutable records.",
+    "Lesson may reference one predecessor and one successor for reschedule lineage.",
+    "LessonSeries owns many Lesson but each Lesson is independently addressable.",
+    "IssuedSubscription snapshots one SubscriptionPackage and belongs to one Student.",
+    "IssuedSubscription has many ActualPayment, ExpectedPayment and consumed Lesson links.",
+    "SubscriptionReservation links one future Lesson to at most one IssuedSubscription unit.",
+    "SharedTask targets users, one Branch or all Branches and has one shared completion state.",
+    "WorkspaceSession owns up to ten WorkspaceTab and never crosses User boundaries.",
+    "Comment may be visible to Teacher only when explicitly shared and the Student is assigned to that Teacher.",
+    "Every sensitive mutation produces one AuditEvent."
+  ],
+  "flows": [
+    {
+      "id": "F-RBAC",
+      "steps": [
+        "Load hard invariants",
+        "Load RolePackage",
+        "Apply UserPermissionOverride",
+        "Authorize server request",
+        "Propagate effective-access change to all sessions within five seconds"
+      ]
+    },
+    {
+      "id": "F-LESSON-CREATE",
+      "steps": [
+        "Select Client or Group",
+        "Capture required resources and financial snapshot",
+        "Validate working hours, branches and all overlap dimensions",
+        "Create Lesson atomically",
+        "Calculate visual subscription reservation"
+      ]
+    },
+    {
+      "id": "F-LESSON-COMPLETE",
+      "steps": [
+        "Reach scheduled end",
+        "Claim unfinished Lesson idempotently",
+        "Set successful terminal state",
+        "Consume reserved subscription or apply configured personal-account charge",
+        "Accrue teacher compensation once",
+        "Publish realtime invalidation and AuditEvent"
+      ]
+    },
+    {
+      "id": "F-LESSON-RESCHEDULE",
+      "steps": [
+        "Capture mandatory reason and client/teacher financial decisions",
+        "Make original Lesson red and terminal",
+        "Create linked successor through full validation",
+        "Release and recalculate reservation",
+        "Prevent original Lesson from auto-completing"
+      ]
+    },
+    {
+      "id": "F-SUBSCRIPTION-ISSUE",
+      "steps": [
+        "Select active SubscriptionPackage",
+        "Capture discount and reason",
+        "Build optional InstallmentPlan",
+        "Persist IssuedSubscription snapshot",
+        "Record only actually received payments",
+        "Recalculate future reservations"
+      ]
+    },
+    {
+      "id": "F-SUBSCRIPTION-REPLACE",
+      "steps": [
+        "Preview used units, future lessons and financial delta",
+        "Reject a package smaller than already consumed units",
+        "Persist new snapshot without mutating ActualPayment",
+        "Create debt or overpayment from delta",
+        "Recalculate reservations and audit once"
+      ]
+    },
+    {
+      "id": "F-SUBSCRIPTION-CANCEL",
+      "steps": [
+        "Preview financial history and future lessons",
+        "Deactivate IssuedSubscription",
+        "Keep payments, write-offs and historical statistics unchanged",
+        "Recalculate future reservations",
+        "Create only AuditEvent"
+      ]
+    },
+    {
+      "id": "F-SHARED-TASK",
+      "steps": [
+        "Resolve user, multi-user, Branch or all-Branch audience",
+        "Display one open shared task",
+        "Allow work elsewhere without modal blocking",
+        "First authorized close wins idempotently",
+        "Remove reminders for all recipients through realtime"
+      ]
+    },
+    {
+      "id": "F-WORKSPACE",
+      "steps": [
+        "Open or focus entity context",
+        "Maintain up to ten account-scoped tabs",
+        "Synchronize record invalidation between tabs",
+        "Detect stale writes before overwrite",
+        "Restore saved contexts only for the same account",
+        "Broadcast logout to all tabs and windows"
+      ]
+    }
+  ],
+  "hard_invariants": [
+    "system_admin is always authorized and cannot be removed from the last active emergency account.",
+    "Director is the highest visible business role and can manage only lower roles.",
+    "Manager and lower roles cannot mutate roles or capabilities.",
+    "Teacher cannot receive client contacts, finance, subscription data or lesson mutations.",
+    "Editable attendance does not exist in v4.",
+    "A scheduled Lesson reaches successful completion only after its end time.",
+    "A financial fact is never rewritten by subscription cancellation.",
+    "A retry or concurrent request cannot duplicate payment, lesson completion, task close or subscription mutation.",
+    "A business role cannot bypass a schedule conflict.",
+    "Archived records keep historical and financial links.",
+    "Workspace state is never restored across accounts."
+  ],
+  "missing_components": [
+    {
+      "name": "CapabilityRegistry",
+      "reason": "Current code has role sets but no generic role package and per-user override model."
+    },
+    {
+      "name": "PermissionInvalidation",
+      "reason": "Current JWT/session behavior can preserve changed access longer than the approved five-second window."
+    },
+    {
+      "name": "TeacherSafeClientProjection",
+      "reason": "Teacher responses must omit contacts and finance at the server boundary."
+    },
+    {
+      "name": "LessonLifecycleProcessor",
+      "reason": "Current completion depends on mutable attendance and manual actions."
+    },
+    {
+      "name": "ScheduleConstraintEngine",
+      "reason": "Current conflict logic does not enforce all participant, hours, branch and availability rules."
+    },
+    {
+      "name": "CommercialSnapshotAndInstallments",
+      "reason": "Current issued subscriptions do not preserve discount, installment and replacement semantics."
+    },
+    {
+      "name": "SharedTaskAudience",
+      "reason": "Current task supports one assignee and one deadline."
+    },
+    {
+      "name": "ContextNavigationRegistry",
+      "reason": "Current cross-screen links and return state are ad hoc."
+    },
+    {
+      "name": "DesktopWorkspace",
+      "reason": "Current Flutter shell has one selected CRM context and no internal tabs."
+    },
+    {
+      "name": "RecordConcurrencyContract",
+      "reason": "Multi-tab writes require version conflict and idempotency behavior."
+    }
+  ],
+  "clarifications": [
+    {
+      "topic": "attendance",
+      "answer": "Удалить как управляемый функционал; считать клиентскую абстракцию по успешно автоматически завершённым занятиям."
+    },
+    {
+      "topic": "teacher_schedule",
+      "answer": "Только read-only; День и Неделя; без drag-and-drop и завершения."
+    },
+    {
+      "topic": "subscription_permissions",
+      "answer": "Каталог — Director/system_admin; клиентские выдача, замена и отмена — Admin/Manager/Director/system_admin."
+    },
+    {
+      "topic": "subscription_finance",
+      "answer": "Замена создаёт долг или переплату; отмена не меняет платежи и статистику."
+    },
+    {
+      "topic": "task_completion",
+      "answer": "Общий статус; закрытие одним сотрудником закрывает задачу всем; интерфейс не блокируется."
+    },
+    {
+      "topic": "desktop_tabs",
+      "answer": "Восстанавливаются по аккаунту; несохранённые формы не восстанавливаются; logout синхронный."
+    },
+    {
+      "topic": "teacher_privacy",
+      "answer": "ФИО, назначенная история занятий и ДЗ доступны; контакты и финансы скрыты; комментарии только явно разрешённые."
+    }
+  ]
+}

@@ -13,21 +13,21 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+import { ClientRefDto } from "./client-ref.dto";
 
 /**
  * Contract 7 (правки №2): the pinned attendee reference shape. A lesson's
  * subject may be a STUDENT or a LEAD (leads attend trial lessons). Mapped
  * server-side onto studentId/leadId — both legacy fields stay accepted.
  */
-export class LessonClientRefDto {
-  @IsIn(["lead", "student"])
-  type!: "lead" | "student";
-
-  @IsUUID()
-  id!: string;
-}
+export { ClientRefDto as LessonClientRefDto } from "./client-ref.dto";
 
 export class UpsertLessonDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
+
   @IsOptional()
   @IsUUID()
   studentId?: string;
@@ -63,15 +63,44 @@ export class UpsertLessonDto {
   durationMinutes?: number;
 
   @IsOptional()
-  @IsIn(["scheduled", "completed", "cancelled", "missed"])
+  // Compatibility-only create value. Terminal lifecycle changes are performed
+  // exclusively by the server worker or explicit cancel/reschedule commands.
+  @IsIn(["scheduled"])
   status?: string;
 
   @IsOptional()
   @IsBoolean()
   isTrial?: boolean;
 
-  // Contract 2: admin+ override — create/move the lesson even though the
-  // teacher or the room is busy at that time (the 409 pre-flight showed why).
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  completionType?: string;
+
+  @IsOptional()
+  @IsIn(["subscription", "personal_account", "none"])
+  clientChargeType?: "subscription" | "personal_account" | "none";
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  clientChargeValue?: number;
+
+  @IsOptional()
+  @IsIn(["fixed", "hourly", "none"])
+  teacherCompensationType?: "fixed" | "hourly" | "none";
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  teacherCompensationValue?: number;
+
+  @IsOptional()
+  @IsUUID()
+  subscriptionId?: string;
+
+  // Legacy compatibility field. The unified v4 command rejects `true`;
+  // constraint override is not available through create/edit/drag routes.
   @IsOptional()
   @IsBoolean()
   force?: boolean;
@@ -80,8 +109,8 @@ export class UpsertLessonDto {
   // studentId/leadId keep working for existing callers.
   @IsOptional()
   @ValidateNested()
-  @Type(() => LessonClientRefDto)
-  clientRef?: LessonClientRefDto;
+  @Type(() => ClientRefDto)
+  clientRef?: ClientRefDto;
 
   @IsOptional()
   @IsString()

@@ -1,7 +1,10 @@
 import { Type } from "class-transformer";
 import {
+  IsBoolean,
   IsDateString,
+  IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -9,14 +12,25 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from "class-validator";
+import { ClientRefDto } from "./client-ref.dto";
 
-// KVA-236: серия постоянного расписания. student ИЛИ group — проверяется в
-// сервисе (как lessons_student_or_group_check).
+// v4 atomic series: one typed Lead/Student client plus an immutable Lesson
+// template. Legacy scalar refs remain accepted only as input adapters.
 export class CreateScheduleSeriesDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ClientRefDto)
+  clientRef?: ClientRefDto;
+
   @IsOptional()
   @IsUUID()
   studentId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  leadId?: string;
 
   @IsOptional()
   @IsUUID()
@@ -58,6 +72,37 @@ export class CreateScheduleSeriesDto {
   @IsOptional()
   @IsDateString()
   validUntil?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isTrial?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  completionType?: string;
+
+  @IsOptional()
+  @IsIn(["subscription", "personal_account", "none"])
+  clientChargeType?: "subscription" | "personal_account" | "none";
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  clientChargeValue?: number;
+
+  @IsOptional()
+  @IsIn(["fixed", "hourly", "none"])
+  teacherCompensationType?: "fixed" | "hourly" | "none";
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  teacherCompensationValue?: number;
+
+  @IsOptional()
+  @IsUUID()
+  subscriptionId?: string;
 
   @IsOptional()
   @IsString()

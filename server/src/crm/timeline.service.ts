@@ -33,6 +33,8 @@ interface CommentRow {
   author_last_name: string | null;
   body: string;
   kind: string;
+  shared_with_teacher?: boolean;
+  version?: number | string;
   created_at: Date | string;
   /**
    * Когда идёт занятие, к которому оставлен комментарий. `null` у обычных.
@@ -127,6 +129,7 @@ export class TimelineService {
             and c.entity_type::text = $1
             and c.entity_id = $2::uuid
             and c.kind = any($7::text[])
+            and ($8::boolean = false or c.shared_with_teacher = true)
 
           union all
 
@@ -217,6 +220,7 @@ export class TimelineService {
         includeAudit,
         limit,
         this.allowedCommentKinds(actor.role),
+        actor.role === "teacher",
       ],
     );
     return { items: result.rows.map((row) => toTimelineDto(row)) };
@@ -251,7 +255,7 @@ export class TimelineService {
       `
         select c.id, c.entity_type, c.entity_id, c.author_id, c.kind,
           p.first_name as author_first_name, p.last_name as author_last_name,
-          c.body, c.created_at,
+          c.body, c.shared_with_teacher, c.version, c.created_at,
           l.scheduled_at as lesson_at
         from app.entity_comments c
         left join app.users u on u.id = c.author_id and u.deleted_at is null
@@ -264,6 +268,7 @@ export class TimelineService {
          and l.deleted_at is null
         where c.deleted_at is null
           and c.kind = any($3::text[])
+          and ($6::boolean = false or c.shared_with_teacher = true)
           and (
             (c.entity_type = $1::app.crm_entity_type and c.entity_id = $2)
             or (
@@ -291,7 +296,14 @@ export class TimelineService {
         order by c.created_at desc, c.id desc
         limit $4
       `,
-      [query.entityType, query.entityId, allowedKinds, limit, withLessons],
+      [
+        query.entityType,
+        query.entityId,
+        allowedKinds,
+        limit,
+        withLessons,
+        actor.role === "teacher",
+      ],
     );
     return { items: result.rows.map((row) => this.toCommentDto(row)) };
   }
@@ -306,14 +318,21 @@ export class TimelineService {
     const result = await this.database.query<CommentRow>(
       `
         insert into app.entity_comments (
-          entity_type, entity_id, author_id, body, kind
+          entity_type, entity_id, author_id, body, kind, shared_with_teacher
         )
-        values ($1::app.crm_entity_type, $2, $3, $4, $5)
+        values ($1::app.crm_entity_type, $2, $3, $4, $5, $6)
         returning id, entity_type, entity_id, author_id,
           null::text as author_first_name, null::text as author_last_name,
-          body, kind, created_at
+          body, kind, shared_with_teacher, version, created_at
       `,
-      [dto.entityType, dto.entityId, actor.userId, body, kind],
+      [
+        dto.entityType,
+        dto.entityId,
+        actor.userId,
+        body,
+        kind,
+        kind === "teacher_note" || actor.role === "teacher",
+      ],
     );
     const comment = result.rows[0];
     // Contract 5: commenting on a lead/student card claims the empty
@@ -336,47 +355,6 @@ export class TimelineService {
     this.realtime.emitCrmChanged({
       entity: "comment",
       action: "created",
-      id: comment.id,
-    });
-    return this.toCommentDto(comment);
-  }
-
-  // Toggle whether an existing comment is visible to the assigned teacher.
-  // Default comments are `admin_comment` (staff-only); flipping to `teacher_note`
-  // makes them visible to the teacher too, and back hides them again. Only staff
-  // may change visibility; `progress` (client-facing) notes are out of scope.
-  async setCommentVisibility(
-    actor: ActorContext,
-    commentId: string,
-    visibleToTeacher: boolean,
-  ) {
-    this.policy.assertCanWriteCrm(actor);
-    const kind = visibleToTeacher ? "teacher_note" : "admin_comment";
-    const result = await this.database.query<CommentRow>(
-      `
-        update app.entity_comments
-        set kind = $2
-        where id = $1
-          and deleted_at is null
-          and kind in ('admin_comment', 'teacher_note')
-        returning id, entity_type, entity_id, author_id,
-          null::text as author_first_name, null::text as author_last_name,
-          body, kind, created_at
-      `,
-      [commentId, kind],
-    );
-    const comment = result.rows[0];
-    if (!comment) throw new NotFoundException("Комментарий не найден.");
-    await this.audit.record({
-      actor,
-      action: "crm.comment_visibility_changed",
-      entityType: comment.entity_type,
-      entityId: comment.entity_id,
-      metadata: { commentId: comment.id, kind },
-    });
-    this.realtime.emitCrmChanged({
-      entity: "comment",
-      action: "updated",
       id: comment.id,
     });
     return this.toCommentDto(comment);
@@ -476,6 +454,12 @@ export class TimelineService {
       // Заполнено только у комментариев к занятиям: карточка по нему и рисует
       // пометку «к занятию такого-то числа».
       lessonAt: row.lesson_at ?? null,
+      ...(typeof row.shared_with_teacher === "boolean"
+        ? { sharedWithTeacher: row.shared_with_teacher }
+        : {}),
+      ...(row.version === undefined
+        ? {}
+        : { version: Number(row.version) }),
     };
   }
 

@@ -9,19 +9,14 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesso
 
 /// Finding a student when creating a lesson.
 ///
-/// Regression: the picker was handed `listStudents(limit: 100)` and filtered
-/// that list in memory, so any student past the first page could not be found —
-/// however exactly their name was typed. The school has ~1000 students, so the
-/// search silently covered a tenth of them. `/crm/students/search` (pg_trgm,
-/// ranked, phone + custom_data aware) already existed; the picker just never
-/// called it.
+/// Regression: the old picker filtered one capped Student page in memory. The
+/// v4 form must delegate every Lead/Student query to the actor-scoped typed
+/// `/crm/clients/search` endpoint.
 
 const _branchId = '11111111-1111-1111-1111-111111111111';
 
-/// Fake API that mirrors the real split: `/crm/students` serves ONE capped page
-/// and `/crm/students/search` is the only thing that sees the whole table.
-/// «Зинаида Заречная» is deliberately absent from the page, so a test that
-/// finds her can only have gone to the server.
+/// «Зинаида Заречная» is deliberately absent from the initial response, so a
+/// test that finds her can only have issued a server query.
 class _FakeApiClient extends MagicApiClient {
   _FakeApiClient()
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
@@ -34,39 +29,47 @@ class _FakeApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    if (path == '/crm/students') {
+    if (path == '/crm/clients/search') {
+      final query = queryParameters?['q']?.toString() ?? '';
+      if (query.isNotEmpty) searchedQueries.add(query);
       return <String, dynamic>{
-        'items': [
-          for (var i = 1; i <= 100; i++)
-            {
-              'id': 'student-$i',
-              'firstName': 'Ученик',
-              'lastName': '$i',
-              'status': 'active',
-            },
-        ],
-      } as T;
-    }
-    if (path == '/crm/students/search') {
-      searchedQueries.add(queryParameters?['q']?.toString() ?? '');
-      return <String, dynamic>{
-        'items': [
-          {
-            'id': 'student-501',
-            'firstName': 'Зинаида',
-            'lastName': 'Заречная',
-            'status': 'active',
-          },
-        ],
-        'totalCount': 1,
-      } as T;
+            'items': query.isEmpty
+                ? [
+                    {
+                      'ref': {
+                        'type': 'student',
+                        'id': '33333333-3333-3333-3333-333333333333',
+                      },
+                      'label': 'Ученик из первой страницы',
+                      'lifecycleState': 'active',
+                      'tombstone': false,
+                    },
+                  ]
+                : [
+                    {
+                      'ref': {
+                        'type': 'student',
+                        'id': '55555555-5555-5555-5555-555555555555',
+                      },
+                      'label': 'Зинаида Заречная',
+                      'lifecycleState': 'active',
+                      'tombstone': false,
+                    },
+                  ],
+          }
+          as T;
     }
     if (path == '/crm/branches') {
       return <String, dynamic>{
-        'items': [
-          {'id': _branchId, 'name': 'Главный филиал', 'utcOffsetMinutes': 0},
-        ],
-      } as T;
+            'items': [
+              {
+                'id': _branchId,
+                'name': 'Главный филиал',
+                'utcOffsetMinutes': 0,
+              },
+            ],
+          }
+          as T;
     }
     return <String, dynamic>{'items': const []} as T;
   }
@@ -94,8 +97,8 @@ void main() {
     await tester.pumpWidget(_host(client));
     await tester.pumpAndSettle();
 
-    // Open the student picker.
-    await tester.tap(find.text('Ученик *'));
+    // Open the unified typed Client picker.
+    await tester.tap(find.byKey(const ValueKey('lesson-client-field')));
     await tester.pumpAndSettle();
 
     // She is nowhere in the pre-loaded page — the old picker stopped here.
@@ -109,28 +112,23 @@ void main() {
     expect(
       client.searchedQueries,
       contains('Зинаида'),
-      reason: 'typing must reach /crm/students/search, not filter one page',
+      reason: 'typing must reach /crm/clients/search, not filter one page',
     );
     expect(find.text('Зинаида Заречная'), findsOneWidget);
 
-    // Picking her must stick. The field renders the name out of the pre-loaded
-    // page, so a server-found student used to select and then display as «Не
-    // выбран» — the pick looked like it silently failed.
+    // Picking her must stick even though she was absent from the initial page.
     await tester.tap(find.text('Зинаида Заречная'));
     await tester.pumpAndSettle();
 
     // The sheet is gone, so the surviving name is the one the field renders.
-    final studentField = find
-        .ancestor(of: find.text('Ученик *'), matching: find.byType(Column))
-        .first;
+    final studentField = find.byKey(const ValueKey('lesson-client-field'));
     expect(
       find.descendant(
         of: studentField,
         matching: find.text('Зинаида Заречная'),
       ),
       findsOneWidget,
-      reason: 'the field reads names out of the pre-loaded page, so a '
-          'server-found student would select and then display «Не выбран»',
+      reason: 'the selected typed client must retain the server label',
     );
   });
 }

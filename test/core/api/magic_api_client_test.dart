@@ -34,6 +34,32 @@ void main() {
       );
     });
 
+    test('adds stable v4 command metadata to mutating requests', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/lessons',
+          statusCode: 200,
+          body: {'id': 'lesson-a'},
+        ),
+      ]);
+      final client = _client(adapter);
+
+      await client.post<Map<String, dynamic>>(
+        '/crm/lessons',
+        data: {'scheduledAt': '2026-07-26T10:00:00.000Z'},
+      );
+
+      final headers = adapter.requests.single.headers;
+      expect(
+        headers['Idempotency-Key'],
+        matches(RegExp(r'^magiccrm-[0-9]+-[0-9]+$')),
+      );
+      expect(
+        headers['X-Request-Id'],
+        matches(RegExp(r'^flutter-[0-9]+-[0-9]+$')),
+      );
+    });
+
     test(
       'refreshes once after unauthorized response and retries request',
       () async {

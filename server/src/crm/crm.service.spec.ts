@@ -438,7 +438,15 @@ describe("CrmService", () => {
     });
 
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual(["group-a", 10]);
+    expect(query.mock.calls[0][1]).toEqual([
+      "group-a",
+      "manager",
+      "manager-a",
+      10,
+    ]);
+    expect(query.mock.calls[0][0]).toContain(
+      "group_teacher_profile.user_id = $3",
+    );
   });
 
   const stubCardSections = (service: CrmService) => {

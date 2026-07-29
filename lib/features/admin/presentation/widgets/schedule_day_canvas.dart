@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 part 'schedule_day_canvas_logic.dart';
 part 'schedule_day_canvas_widgets.dart';
 

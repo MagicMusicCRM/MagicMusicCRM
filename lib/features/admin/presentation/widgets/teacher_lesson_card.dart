@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 
 /// A single lesson row in the by-teacher day column: time, student, room, and a
 /// conflict/status marker. Extracted from _ScheduleWidgetState — pure display;
@@ -9,7 +11,8 @@ class TeacherLessonCard extends StatelessWidget {
   final String studentName;
   final String roomName;
   final Color roomColor;
-  final Color statusColor;
+  final LessonStateProjection stateProjection;
+  final bool isTrial;
   final bool hasConflict;
   final VoidCallback onTap;
 
@@ -19,7 +22,8 @@ class TeacherLessonCard extends StatelessWidget {
     required this.studentName,
     required this.roomName,
     required this.roomColor,
-    required this.statusColor,
+    required this.stateProjection,
+    required this.isTrial,
     required this.hasConflict,
     required this.onTap,
   });
@@ -85,7 +89,7 @@ class TeacherLessonCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Status indicator
+            // State and trial are independent projections.
             if (hasConflict)
               const Icon(
                 Icons.warning_amber_rounded,
@@ -93,13 +97,15 @@ class TeacherLessonCard extends StatelessWidget {
                 size: 18,
               )
             else
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (isTrial) ...[
+                    const LessonTrialBadge(compact: true),
+                    const SizedBox(height: 4),
+                  ],
+                  LessonStateBadge(projection: stateProjection),
+                ],
               ),
           ],
         ),

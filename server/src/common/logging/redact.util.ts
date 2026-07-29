@@ -6,6 +6,9 @@ const sensitiveKeyPattern =
 const piiKeyPattern =
   /(e-?mail|phone|\btel\b|first[_-]?name|last[_-]?name|full[_-]?name|middle[_-]?name|patronymic|\bfio\b|\bdob\b|birth|address|passport)/i;
 
+const privateBusinessKeyPattern =
+  /(amount|price|cost|balance|debt|revenue|expense|salary|rate|currency|payment|subscription|comment|body|message|note|description|text|content|representative)/i;
+
 // Email values embedded in free-text strings. (Phone-in-text is intentionally
 // not regex-masked to avoid false positives on dates/ids; phone *fields* are
 // covered by piiKeyPattern above.)
@@ -19,8 +22,12 @@ export function redactSensitive(value: unknown): unknown {
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => {
+        // Monotonic concurrency metadata is not a credential. Keep it usable
+        // in safe result/audit references while still redacting access tokens.
+        if (key === 'accessVersion') return [key, redactSensitive(entry)];
         if (sensitiveKeyPattern.test(key)) return [key, '[REDACTED]'];
         if (piiKeyPattern.test(key)) return [key, '[PII]'];
+        if (privateBusinessKeyPattern.test(key)) return [key, '[PRIVATE]'];
         return [key, redactSensitive(entry)];
       })
     );

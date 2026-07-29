@@ -18,4 +18,9 @@ export class CreateBranchDto {
   @Min(-720)
   @Max(840)
   utcOffsetMinutes?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  timezone?: string;
 }

@@ -835,7 +835,7 @@ describe("ScheduleService", () => {
     );
   });
 
-  it("allows teachers to update notes and complete their own trial lessons", async () => {
+  it("allows teachers to update notes without exposing lifecycle writes", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       {
         rows: [
@@ -864,7 +864,7 @@ describe("ScheduleService", () => {
             room_id: null,
             scheduled_at: "2026-06-12T12:00:00.000Z",
             duration_minutes: 60,
-            status: "completed",
+            status: "scheduled",
             is_trial: true,
             notes: "План занятия",
             student_user_id: null,
@@ -884,11 +884,11 @@ describe("ScheduleService", () => {
       service.updateLesson(
         { userId: "teacher-user-a", role: "teacher" },
         "lesson-a",
-        { status: "completed", notes: "План занятия" },
+        { notes: "План занятия" },
       ),
     ).resolves.toMatchObject({
       id: "lesson-a",
-      status: "completed",
+      status: "scheduled",
       notes: "План занятия",
     });
 
@@ -905,7 +905,6 @@ describe("ScheduleService", () => {
       null,
       undefined,
       null,
-      "completed",
       null,
       "План занятия",
       null,
@@ -913,31 +912,17 @@ describe("ScheduleService", () => {
     ]);
   });
 
-  it("requires attendance when completing an ordinary lesson", async () => {
-    const { service, query } = createServiceWithQueryResults([
-      {
-        rows: [{
-          student_id: "student-a",
-          group_id: null,
-          lead_id: null,
-          teacher_id: "teacher-a",
-          room_id: null,
-          scheduled_at: "2026-07-21T09:00:00.000Z",
-          duration_minutes: 60,
-          is_trial: false,
-          teacher_user_id: "teacher-user-a",
-        }],
-      },
-    ]);
+  it("rejects manual completion before touching persistence", async () => {
+    const { service, query } = createServiceWithQueryResults([]);
 
     await expect(
       service.updateLesson(actor, "lesson-a", { status: "completed" }),
-    ).rejects.toThrow("через посещаемость");
-    expect(
-      query.mock.calls.some((call) =>
-        String(call[0]).includes("update app.lessons"),
-      ),
-    ).toBe(false);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "MANUAL_LESSON_LIFECYCLE_FORBIDDEN",
+      }),
+    });
+    expect(query).not.toHaveBeenCalled();
   });
 
   it("soft-deletes a lesson and clears its reminder markers", async () => {
@@ -1611,52 +1596,17 @@ describe("ScheduleService", () => {
       );
     });
 
-    it("a cancel-only PATCH never runs the conflict check", async () => {
-      const { service, query } = createServiceWithQueryResults([
-        {
-          rows: [
-            {
-              teacher_id: "teacher-a",
-              room_id: "room-a",
-              scheduled_at: "2026-07-20T10:00:00.000Z",
-              duration_minutes: 60,
-              group_id: null,
-              teacher_user_id: null,
-            },
-          ],
-        }, // snapshot
-        {
-          rows: [
-            {
-              id: "lesson-a",
-              student_id: "student-a",
-              group_id: null,
-              lead_id: null,
-              teacher_id: "teacher-a",
-              branch_id: null,
-              room_id: "room-a",
-              scheduled_at: "2026-07-20T10:00:00.000Z",
-              duration_minutes: 60,
-              status: "cancelled",
-              is_trial: false,
-              notes: null,
-              student_user_id: null,
-              teacher_user_id: null,
-              student_name: null,
-              teacher_name: null,
-              branch_name: null,
-              room_name: null,
-              group_name: null,
-              group_price_per_lesson: null,
-            },
-          ],
-        }, // UPDATE ... RETURNING
-      ]);
+    it("rejects cancel-only PATCH in favor of the explicit command", async () => {
+      const { service, query } = createServiceWithQueryResults([]);
 
-      await service.updateLesson(actor, "lesson-a", { status: "cancelled" });
-
-      const sqls = query.mock.calls.map((c) => String(c[0]));
-      expect(sqls.some((sql) => sql.includes("tstzrange"))).toBe(false);
+      await expect(
+        service.updateLesson(actor, "lesson-a", { status: "cancelled" }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "MANUAL_LESSON_LIFECYCLE_FORBIDDEN",
+        }),
+      });
+      expect(query).not.toHaveBeenCalled();
     });
 
     it("409s a drag-move onto a busy slot, excluding the moved lesson itself", async () => {
@@ -1846,14 +1796,14 @@ describe("ScheduleService", () => {
         String(call[0]).includes("update app.lessons"),
       );
       expect(String(updateCall?.[0])).toContain(
-        "case when $14::boolean then $2::uuid else student_id end",
+        "case when $13::boolean then $2::uuid else student_id end",
       );
       expect(updateCall?.[1]?.slice(1, 4)).toEqual([
         null,
         null,
         "lead-b",
       ]);
-      expect(updateCall?.[1]?.[13]).toBe(true);
+      expect(updateCall?.[1]?.[12]).toBe(true);
     });
 
     it("rejects an ambiguous recurring-series subject", async () => {

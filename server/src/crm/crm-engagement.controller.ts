@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -29,6 +31,7 @@ import { TaskBoardQuery } from "./dto/task-board.query";
 import { TaskHistoryQuery } from "./dto/task-history.query";
 import { TimelineQuery } from "./dto/timeline.query";
 import { UpsertTaskDto } from "./dto/upsert-task.dto";
+import { CommentSharingService } from "./clients/comment-sharing.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -38,6 +41,7 @@ export class CrmEngagementController {
     private readonly tasks: TasksService,
     private readonly timeline: TimelineService,
     private readonly sectionViews: SectionViewsService,
+    private readonly commentSharing: CommentSharingService,
   ) {}
 
   /**
@@ -126,9 +130,26 @@ export class CrmEngagementController {
   setCommentVisibility(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: SetCommentVisibilityDto,
   ) {
-    return this.timeline.setCommentVisibility(actor, id, dto.visibleToTeacher);
+    const sharedWithTeacher =
+      dto.sharedWithTeacher ?? dto.visibleToTeacher;
+    if (sharedWithTeacher === undefined) {
+      throw new BadRequestException(
+        "sharedWithTeacher or visibleToTeacher is required.",
+      );
+    }
+    const effectiveRequestId = requestId ?? "";
+    return this.commentSharing.setTeacherSharing(actor, {
+      commentId: id,
+      sharedWithTeacher,
+      expectedVersion: dto.expectedVersion,
+      reasonCode: dto.reasonCode ?? "crm.comment.teacher-sharing",
+      requestId: effectiveRequestId,
+      idempotencyKey: idempotencyKey ?? `request:${effectiveRequestId}`,
+    });
   }
 
   @Post("tasks")

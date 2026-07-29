@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "task": "T8.1.3",
+  "mode": "repeatable-read/read-only",
+  "summary": {
+    "checks": 16,
+    "findings": 20,
+    "blockerFindings": 19,
+    "warningFindings": 1
+  },
+  "checks": [
+    {
+      "id": "access.user-crm-link-ambiguous",
+      "owner": "SYS-ACCESS",
+      "severity": "blocker",
+      "description": "User has multiple active CRM links for the same entity type.",
+      "count": 0,
+      "rows": []
+    },
+    {
+      "id": "access.user-link-cardinality",
+      "owner": "SYS-ACCESS",
+      "severity": "blocker",
+      "description": "Active application account does not have exactly one role-compatible CRM link.",
+      "count": 2,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000040",
+          "relatedId": null,
+          "detail": "expected_student_links_0"
+        },
+        {
+          "entityId": "b48365b2-1c8c-496f-87b8-2ca25189df00",
+          "relatedId": null,
+          "detail": "expected_staff_links_0"
+        }
+      ]
+    },
+    {
+      "id": "commerce.duplicate-payment-external-id",
+      "owner": "SYS-COMMERCE",
+      "severity": "blocker",
+      "description": "Active payment facts reuse the same non-empty external identifier.",
+      "count": 1,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000021",
+          "relatedId": "10000000-0000-0000-0000-000000000022",
+          "detail": "duplicate_external_id"
+        }
+      ]
+    },
+    {
+      "id": "commerce.materialized-balance-drift",
+      "owner": "SYS-COMMERCE",
+      "severity": "warning",
+      "description": "Stored student balance differs from the current ledger projection.",
+      "count": 1,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000004",
+          "relatedId": null,
+          "detail": "stored_balance_differs_from_projection"
+        }
+      ]
+    },
+    {
+      "id": "commerce.subscription-reference-gaps",
+      "owner": "SYS-COMMERCE",
+      "severity": "blocker",
+      "description": "Issued subscriptions cannot prove package/payment references or student consistency.",
+      "count": 0,
+      "rows": []
+    },
+    {
+      "id": "commerce.subscription-snapshot-unprovable",
+      "owner": "SYS-COMMERCE",
+      "severity": "blocker",
+      "description": "Issued subscription has no provable immutable commercial snapshot.",
+      "count": 1,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000023",
+          "relatedId": null,
+          "detail": "commercial_snapshot_schema_missing"
+        }
+      ]
+    },
+    {
+      "id": "commerce.subscription-usage-out-of-range",
+      "owner": "SYS-COMMERCE",
+      "severity": "blocker",
+      "description": "Issued subscription usage is negative or exceeds its total capacity.",
+      "count": 1,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000023",
+          "relatedId": null,
+          "detail": "lessons_used_out_of_range"
+        }
+      ]
+    },
+    {
+      "id": "crm.student-identity-missing",
+      "owner": "SYS-CRM",
+      "severity": "blocker",
+      "description": "Active student has neither profile identity nor source lead mapping.",
+      "count": 2,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000004",
+          "relatedId": null,
+          "detail": "profile_and_lead_missing"
+        },
+        {
+          "entityId": "10000000-0000-0000-0000-000000000005",
+          "relatedId": null,
+          "detail": "profile_and_lead_missing"
+        }
+      ]
+    },
+    {
+      "id": "crm.student-phone-ambiguous",
+      "owner": "SYS-CRM",
+      "severity": "warning",
+      "description": "Multiple active students normalize to the same non-empty profile phone.",
+      "count": 0,
+      "rows": []
+    },
+    {
+      "id": "schedule.active-teacher-branch-missing",
+      "owner": "SYS-SCHEDULE",
+      "severity": "blocker",
+      "description": "Active teacher has no current explicit branch assignment.",
+      "count": 1,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000003",
+          "relatedId": null,
+          "detail": "teacher_branch"
+        }
+      ]
+    },
+    {
+      "id": "schedule.future-missing-resources",
+      "owner": "SYS-SCHEDULE",
+      "severity": "blocker",
+      "description": "Future lessons miss teacher, branch, room, client reference, or positive duration.",
+      "count": 1,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000012",
+          "relatedId": null,
+          "detail": "teacher,branch,room"
+        }
+      ]
+    },
+    {
+      "id": "schedule.future-overlaps",
+      "owner": "SYS-SCHEDULE",
+      "severity": "blocker",
+      "description": "Future scheduled lessons overlap on teacher, room, student, lead, or group.",
+      "count": 3,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000010",
+          "relatedId": "10000000-0000-0000-0000-000000000011",
+          "detail": "room"
+        },
+        {
+          "entityId": "10000000-0000-0000-0000-000000000010",
+          "relatedId": "10000000-0000-0000-0000-000000000011",
+          "detail": "student"
+        },
+        {
+          "entityId": "10000000-0000-0000-0000-000000000010",
+          "relatedId": "10000000-0000-0000-0000-000000000011",
+          "detail": "teacher"
+        }
+      ]
+    },
+    {
+      "id": "schedule.future-snapshot-incomplete",
+      "owner": "SYS-SCHEDULE",
+      "severity": "blocker",
+      "description": "Future scheduled lesson lacks an immutable completion/financial snapshot.",
+      "count": 3,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000010",
+          "relatedId": null,
+          "detail": "lesson_snapshot_schema_missing"
+        },
+        {
+          "entityId": "10000000-0000-0000-0000-000000000011",
+          "relatedId": null,
+          "detail": "lesson_snapshot_schema_missing"
+        },
+        {
+          "entityId": "10000000-0000-0000-0000-000000000012",
+          "relatedId": null,
+          "detail": "lesson_snapshot_schema_missing"
+        }
+      ]
+    },
+    {
+      "id": "schedule.future-teacher-branch-missing",
+      "owner": "SYS-SCHEDULE",
+      "severity": "blocker",
+      "description": "Future lesson teacher has no explicit assignment to the lesson branch.",
+      "count": 2,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000010",
+          "relatedId": "10000000-0000-0000-0000-000000000003",
+          "detail": "teacher_branch"
+        },
+        {
+          "entityId": "10000000-0000-0000-0000-000000000011",
+          "relatedId": "10000000-0000-0000-0000-000000000003",
+          "detail": "teacher_branch"
+        }
+      ]
+    },
+    {
+      "id": "workflow.task-audience-ambiguous",
+      "owner": "SYS-WORKFLOW",
+      "severity": "blocker",
+      "description": "Active task has neither an assignee nor a branch audience anchor.",
+      "count": 1,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000030",
+          "relatedId": null,
+          "detail": "assignee_and_branch_missing"
+        }
+      ]
+    },
+    {
+      "id": "workflow.task-entity-orphan",
+      "owner": "SYS-WORKFLOW",
+      "severity": "blocker",
+      "description": "Active task points to an entity row that cannot be mapped.",
+      "count": 1,
+      "rows": [
+        {
+          "entityId": "10000000-0000-0000-0000-000000000031",
+          "relatedId": "10000000-0000-0000-0000-000000000099",
+          "detail": "orphan_student"
+        }
+      ]
+    }
+  ],
+  "proof": {
+    "transactionReadOnly": true,
+    "writeProbeRejected": true,
+    "writeProbeSqlState": "25006",
+    "repeatedScanStable": true,
+    "scanDigestSha256": "350b1b1841252f42f1dffe0bc792a19870e3f7a1ad955f31870fa4f87c6a1df8"
+  }
+}

@@ -19,6 +19,12 @@ export const JWT_AUDIENCE = 'magicmusiccrm-app';
 
 export interface AuthenticatedRequest {
   user?: ActorContext;
+  capabilityAccess?: {
+    capabilityKey: string;
+    scope: string;
+    decisionSource: string;
+    legacyPolicy: string;
+  };
 }
 
 export function isStaffRole(role: UserRole): boolean {

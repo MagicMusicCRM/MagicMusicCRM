@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/services/access_invalidation_provider.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_shimmer.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/login_screen.dart';
@@ -19,7 +20,6 @@ import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashbo
 import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_screen.dart';
@@ -105,6 +105,7 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final routerProvider = Provider<GoRouter>((ref) {
   final routerRefreshNotifier = ValueNotifier<int>(0);
   ref.onDispose(routerRefreshNotifier.dispose);
+  ref.watch(accessInvalidationProvider);
 
   void refreshRouter() {
     routerRefreshNotifier.value++;
@@ -375,9 +376,7 @@ class _AppGateLoadingScreenState extends ConsumerState<_AppGateLoadingScreen> {
     return Scaffold(
       backgroundColor: AppColor.bg,
       body: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: AppColor.bg,
-        ),
+        decoration: const BoxDecoration(color: AppColor.bg),
         child: SafeArea(
           child: Center(
             child: ConstrainedBox(
@@ -532,11 +531,7 @@ class _LeadDeepLinkScreenState extends ConsumerState<_LeadDeepLinkScreen> {
     if (_opened || !mounted) return;
     _opened = true;
 
-    await showClientCard(
-      context,
-      entityType: 'lead',
-      entityId: widget.leadId,
-    );
+    await showClientCard(context, entityType: 'lead', entityId: widget.leadId);
 
     if (!mounted) return;
     context.go(_deepLinkHomeRoute(ref));
@@ -589,9 +584,8 @@ class _StudentDeepLinkScreenState
   Widget build(BuildContext context) => const _DeepLinkScaffold();
 }
 
-/// Lightweight host that presents the existing [LessonAttendanceDialog] for a
-/// lesson opened by id (deep link). The sheet self-fetches attendance from the
-/// minimal `{'id': …}` stub.
+/// Compatibility host for old lesson deep links. Lifecycle details are opened
+/// from the role schedule; attendance no longer has a business UI.
 class _LessonDeepLinkScreen extends ConsumerStatefulWidget {
   const _LessonDeepLinkScreen({required this.lessonId});
 
@@ -611,15 +605,10 @@ class _LessonDeepLinkScreenState extends ConsumerState<_LessonDeepLinkScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _open());
   }
 
-  Future<void> _open() async {
+  void _open() {
     if (_opened || !mounted) return;
     _opened = true;
-
-    await LessonAttendanceDialog.show(context, <String, dynamic>{
-      'id': widget.lessonId,
-    });
-
-    if (!mounted) return;
+    if (widget.lessonId.isEmpty) return;
     context.go(_deepLinkHomeRoute(ref));
   }
 

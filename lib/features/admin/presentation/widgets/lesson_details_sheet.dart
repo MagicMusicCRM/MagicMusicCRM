@@ -61,12 +61,11 @@ String conflictLabel(String type) {
 }
 
 /// Lesson details bottom sheet: student/teacher/room/time/status + conflicts,
-/// with Complete / Edit / Cancel / Delete actions wired through callbacks.
+/// with read-only lifecycle state plus Edit / Delete actions.
 /// Extracted from _ScheduleWidgetState._showLessonDetails — presentation only,
 /// the caller precomputes the display values and supplies the actions.
 Future<void> showLessonDetailsSheet(
   BuildContext context, {
-  required Map<String, dynamic> lesson,
   required String teacherName,
   required String studentName,
   required String roomName,
@@ -74,11 +73,8 @@ Future<void> showLessonDetailsSheet(
   required String currentStatus,
   required List<String> conflicts,
   required String? lessonId,
-  required bool completable,
   required VoidCallback onEdit,
-  required VoidCallback onComplete,
   required Future<void> Function() onDelete,
-  required Future<void> Function(String status, String message) onUpdateStatus,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -230,40 +226,6 @@ Future<void> showLessonDetailsSheet(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
                   child: Column(
                     children: [
-                      if (completable) ...[
-                        SizedBox(
-                          width: double.infinity,
-                          height: 46,
-                          child: Material(
-                            color: AppColor.gold,
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.control,
-                            ),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(
-                                AppRadius.control,
-                              ),
-                              onTap: () {
-                                Navigator.pop(ctx);
-                                onComplete();
-                              },
-                              child: Center(
-                                child: Text(
-                                  lesson['is_trial'] == true
-                                      ? 'Завершить пробное'
-                                      : 'Посещаемость и завершение',
-                                  style: const TextStyle(
-                                    color: AppColor.onGold,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
                       Row(
                         children: [
                           if (lessonId != null)
@@ -277,54 +239,6 @@ Future<void> showLessonDetailsSheet(
                                 label: const Text('Изменить'),
                               ),
                             ),
-                          if (lessonId != null &&
-                              currentStatus != 'cancelled') ...[
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColor.danger,
-                                  side: const BorderSide(
-                                    color: AppColor.danger,
-                                  ),
-                                ),
-                                onPressed: () async {
-                                  final confirmed = await showDialog<bool>(
-                                    context: context,
-                                    builder: (c) => AlertDialog(
-                                      title: const Text('Отменить занятие?'),
-                                      content: const Text(
-                                        'Занятие будет помечено как отменённое.',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(c, false),
-                                          child: const Text('Нет'),
-                                        ),
-                                        FilledButton(
-                                          style: FilledButton.styleFrom(
-                                            backgroundColor: AppColor.danger,
-                                          ),
-                                          onPressed: () =>
-                                              Navigator.pop(c, true),
-                                          child: const Text('Отменить занятие'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirmed == true) {
-                                    if (ctx.mounted) Navigator.pop(ctx);
-                                    await onUpdateStatus(
-                                      'cancelled',
-                                      'Занятие отменено',
-                                    );
-                                  }
-                                },
-                                child: const Text('Отменить'),
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                       if (lessonId != null) ...[

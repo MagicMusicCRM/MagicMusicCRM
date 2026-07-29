@@ -87,8 +87,7 @@ class _LessonCard extends StatelessWidget {
 
   Color get _accent {
     if (entry.conflicts.isNotEmpty) return AppColor.danger;
-    if (entry.isTrial) return AppColor.success;
-    return AppColor.actionBlue;
+    return LessonStateProjection.fromMap(entry.lesson).token.accent;
   }
 
   @override
@@ -154,6 +153,10 @@ class _LessonCard extends StatelessWidget {
                   color: AppColor.danger,
                   size: 12,
                 ),
+              if (entry.isTrial && entry.durationMinutes >= 45) ...[
+                const SizedBox(width: 3),
+                const LessonTrialBadge(compact: true),
+              ],
             ],
           ),
           if (entry.durationMinutes >= 45 && entry.subtitle.isNotEmpty)

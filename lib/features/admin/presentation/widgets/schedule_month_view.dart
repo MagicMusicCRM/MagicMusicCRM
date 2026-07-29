@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'schedule_legends.dart';
 import 'schedule_shared.dart';
 
@@ -89,7 +91,8 @@ class ScheduleMonthView extends StatelessWidget {
                       final index = row * 7 + col;
                       if (index < prevDays) {
                         final day = prevMonthLastDay - prevDays + 1 + index;
-                        return _cellRich(context, 
+                        return _cellRich(
+                          context,
                           day,
                           isCurrentMonth: false,
                           date: null,
@@ -97,17 +100,20 @@ class ScheduleMonthView extends StatelessWidget {
                       }
                       final dayNum = index - prevDays + 1;
                       if (dayNum > daysInMonth) {
-                        return _cellRich(context, 
+                        return _cellRich(
+                          context,
                           dayNum - daysInMonth,
                           isCurrentMonth: false,
                           date: null,
                         );
                       }
                       final date = DateTime(year, month, dayNum);
-                      final isToday = date.year == now.year &&
+                      final isToday =
+                          date.year == now.year &&
                           date.month == now.month &&
                           date.day == now.day;
-                      return _cellRich(context, 
+                      return _cellRich(
+                        context,
                         dayNum,
                         isCurrentMonth: true,
                         date: date,
@@ -136,10 +142,7 @@ class ScheduleMonthView extends StatelessWidget {
                 children: [
                   Expanded(child: calendar),
                   const SizedBox(width: 10),
-                  SizedBox(
-                    width: 260,
-                    child: _sidePanel(context, focal),
-                  ),
+                  SizedBox(width: 260, child: _sidePanel(context, focal)),
                 ],
               );
             },
@@ -148,7 +151,6 @@ class ScheduleMonthView extends StatelessWidget {
       ],
     );
   }
-
 
   Widget _cellRich(
     BuildContext context,
@@ -163,7 +165,8 @@ class ScheduleMonthView extends StatelessWidget {
     final count = summary != null
         ? (summary['count'] as int? ?? 0)
         : lessons.length;
-    final isSelected = date != null &&
+    final isSelected =
+        date != null &&
         selectedDate.year == date.year &&
         selectedDate.month == date.month &&
         selectedDate.day == date.day;
@@ -222,8 +225,7 @@ class ScheduleMonthView extends StatelessWidget {
                             ? AppColor.text
                             : cs.onSurfaceVariant.withAlpha(90),
                         fontSize: 13,
-                        fontWeight:
-                            isToday ? FontWeight.w700 : FontWeight.w600,
+                        fontWeight: isToday ? FontWeight.w700 : FontWeight.w600,
                       ),
                     ),
                   ),
@@ -247,8 +249,7 @@ class ScheduleMonthView extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        for (final l in sorted.take(2))
-                          _chip(context, l),
+                        for (final l in sorted.take(2)) _chip(context, l),
                         if (count > sorted.take(2).length)
                           Padding(
                             padding: const EdgeInsets.only(top: 1, left: 2),
@@ -291,9 +292,7 @@ class ScheduleMonthView extends StatelessWidget {
     final conflicts = conflictTypes(lesson['conflict_types']);
     final color = conflicts.isNotEmpty
         ? AppColor.danger
-        : lesson['is_trial'] == true
-        ? AppColor.success
-        : AppColor.actionBlue;
+        : LessonStateProjection.fromMap(lesson).token.accent;
     final time = start == null
         ? ''
         : '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} ';
@@ -311,11 +310,21 @@ class ScheduleMonthView extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         border: Border(left: BorderSide(color: color, width: 2)),
       ),
-      child: Text(
-        '$time$name',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: cs.onSurface, fontSize: 9.5),
+      child: Row(
+        children: [
+          if (lesson['is_trial'] == true) ...[
+            const LessonTrialBadge(compact: true),
+            const SizedBox(width: 3),
+          ],
+          Expanded(
+            child: Text(
+              '$time$name',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: cs.onSurface, fontSize: 9.5),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -424,5 +433,4 @@ class ScheduleMonthView extends StatelessWidget {
       ),
     );
   }
-
 }

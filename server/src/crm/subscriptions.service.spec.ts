@@ -290,6 +290,7 @@ describe("SubscriptionsService", () => {
         { rows: [] }, // no existing student
         { rows: [{ profile_id: "profile-client" }] },
         { rows: [{ id: "student-a" }] },
+        { rows: [] }, // conversion link
         { rows: [] }, // copy user_crm_link
         { rows: [] }, // rebind administration chat
         { rows: [] }, // copy family membership

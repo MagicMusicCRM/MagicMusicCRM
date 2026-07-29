@@ -1,0 +1,183 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MagicMusicCRM v4 Actor-Aware Client Projections",
+    "version": "1.0.0"
+  },
+  "paths": {},
+  "x-projection-cache-partition": [
+    "projectionProfile",
+    "actorUserId",
+    "accessVersion",
+    "surface",
+    "resourceScope"
+  ],
+  "components": {
+    "schemas": {
+      "safe_client_base": {
+        "type": "object",
+        "required": ["id", "displayName", "lifecycleStatus"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "lifecycleStatus": {
+            "type": "string"
+          },
+          "lessons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/safe_lesson"
+            }
+          },
+          "homework": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/safe_homework"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "safe_lesson": {
+        "type": "object",
+        "required": ["id", "scheduledAt", "status"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "safe_homework": {
+        "type": "object",
+        "required": ["id", "title", "status"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "teacher_client_projection": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/safe_client_base"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sharedComments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "body"],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        ],
+        "x-resource-scope": "assigned"
+      },
+      "client_client_projection": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/safe_client_base"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "account": {
+                "type": "object"
+              }
+            }
+          }
+        ],
+        "x-resource-scope": "self"
+      },
+      "admin_client_projection": {
+        "$ref": "#/components/schemas/operational_client_projection",
+        "x-resource-scope": "branch"
+      },
+      "manager_client_projection": {
+        "$ref": "#/components/schemas/operational_client_projection",
+        "x-resource-scope": "branch"
+      },
+      "director_client_projection": {
+        "$ref": "#/components/schemas/full_client_projection",
+        "x-resource-scope": "branch"
+      },
+      "system_admin_client_projection": {
+        "$ref": "#/components/schemas/full_client_projection",
+        "x-resource-scope": "emergency"
+      },
+      "operational_client_projection": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/safe_client_base"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "branchId": {
+                "type": ["string", "null"]
+              },
+              "contacts": {
+                "type": "object"
+              },
+              "representatives": {
+                "type": "array"
+              },
+              "finance": {
+                "type": "object"
+              },
+              "subscriptions": {
+                "type": "array"
+              }
+            }
+          }
+        ]
+      },
+      "full_client_projection": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/operational_client_projection"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "comments": {
+                "type": "array"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

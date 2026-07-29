@@ -16,6 +16,8 @@ interface BranchRow {
   name: string;
   address: string | null;
   utc_offset_minutes: number | string;
+  timezone_name?: string;
+  schedule_reference_version?: number | string;
   created_at: Date | string;
 }
 
@@ -40,6 +42,8 @@ export class BranchesService {
       name: row.name,
       address: row.address,
       utcOffsetMinutes: Number(row.utc_offset_minutes ?? 180),
+      timezone: row.timezone_name ?? "Europe/Moscow",
+      scheduleReferenceVersion: Number(row.schedule_reference_version ?? 1),
       createdAt: row.created_at,
     };
   }
@@ -50,7 +54,8 @@ export class BranchesService {
     const q = query.q?.trim();
     const result = await this.database.query<BranchRow>(
       `
-        select id, name, address, utc_offset_minutes, created_at
+        select id, name, address, utc_offset_minutes, timezone_name,
+          schedule_reference_version, created_at
         from app.branches
         where deleted_at is null
           and (
@@ -72,15 +77,24 @@ export class BranchesService {
     if (!name) {
       throw new BadRequestException("Название филиала обязательно.");
     }
+    this.assertTimezone(dto.timezone);
     // Default to Moscow (UTC+3 / 180 minutes) when no offset is provided.
     const utcOffsetMinutes = dto.utcOffsetMinutes ?? 180;
     const result = await this.database.query<BranchRow>(
       `
-        insert into app.branches (name, address, utc_offset_minutes)
-        values ($1, $2, $3)
-        returning id, name, address, utc_offset_minutes, created_at
+        insert into app.branches (
+          name, address, utc_offset_minutes, timezone_name
+        )
+        values ($1, $2, $3, coalesce($4, 'Europe/Moscow'))
+        returning id, name, address, utc_offset_minutes, timezone_name,
+          schedule_reference_version, created_at
       `,
-      [name, dto.address?.trim() || null, utcOffsetMinutes],
+      [
+        name,
+        dto.address?.trim() || null,
+        utcOffsetMinutes,
+        dto.timezone?.trim() || null,
+      ],
     );
     const branch = result.rows[0];
     await this.audit.record({
@@ -88,7 +102,10 @@ export class BranchesService {
       action: "crm.branch_created",
       entityType: "branch",
       entityId: branch.id,
-      metadata: { utcOffsetMinutes },
+      metadata: {
+        utcOffsetMinutes,
+        timezone: branch.timezone_name ?? "Europe/Moscow",
+      },
     });
     return this.toBranchDto(branch);
   }
@@ -99,21 +116,25 @@ export class BranchesService {
     dto: UpdateBranchDto,
   ) {
     this.policy.assertCanWriteCrm(actor);
+    this.assertTimezone(dto.timezone);
     const result = await this.database.query<BranchRow>(
       `
         update app.branches
         set name = coalesce($2, name),
           address = coalesce($3, address),
           utc_offset_minutes = coalesce($4, utc_offset_minutes),
+          timezone_name = coalesce($5, timezone_name),
           updated_at = now()
         where id = $1 and deleted_at is null
-        returning id, name, address, utc_offset_minutes, created_at
+        returning id, name, address, utc_offset_minutes, timezone_name,
+          schedule_reference_version, created_at
       `,
       [
         branchId,
         dto.name?.trim() || null,
         dto.address?.trim() ?? null,
         dto.utcOffsetMinutes ?? null,
+        dto.timezone?.trim() || null,
       ],
     );
     const branch = result.rows[0];
@@ -123,8 +144,20 @@ export class BranchesService {
       action: "crm.branch_updated",
       entityType: "branch",
       entityId: branch.id,
-      metadata: { utcOffsetMinutes: dto.utcOffsetMinutes },
+      metadata: {
+        utcOffsetMinutes: dto.utcOffsetMinutes,
+        timezone: dto.timezone,
+      },
     });
     return this.toBranchDto(branch);
+  }
+
+  private assertTimezone(timezone?: string) {
+    if (!timezone) return;
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format();
+    } catch {
+      throw new BadRequestException("Неизвестный часовой пояс филиала.");
+    }
   }
 }

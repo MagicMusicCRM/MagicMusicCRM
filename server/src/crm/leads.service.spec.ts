@@ -1,7 +1,6 @@
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
-import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { LeadsService } from "./leads.service";
@@ -21,9 +20,6 @@ describe("LeadsService", () => {
       assertCanWriteCrm: jest.fn(),
       assertCanReadOperationalData: jest.fn(),
     };
-    const notifications = {
-      notifyNewLead: jest.fn().mockResolvedValue(undefined),
-    };
     const realtime = { emitCrmChanged: () => undefined };
     const chatWork = { listForEntity: jest.fn().mockResolvedValue([]) };
     const timeline = {
@@ -33,12 +29,11 @@ describe("LeadsService", () => {
       db as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      notifications as unknown as NotificationsService,
       chatWork as unknown as ChatWorkTimelineService,
       realtime as unknown as RealtimeBus,
       timeline as unknown as TimelineService,
     );
-    return { service, audit, policy, notifications, timeline };
+    return { service, audit, policy, timeline };
   };
 
   const createService = (rows: Record<string, unknown>[] = []) => {
@@ -1139,37 +1134,14 @@ describe("LeadsService", () => {
     });
   });
 
-  describe("new lead notifications (KVA-240)", () => {
-    it("createLead notifies staff about the new lead", async () => {
-      const { service, notifications } = createServiceWithQueryResults([
-        {
-          rows: [
-            {
-              id: "lead-1",
-              first_name: "Иван",
-              last_name: "Петров",
-              source: "site",
-            },
-          ],
-        },
-      ]);
-      await service.createLead(actor, { firstName: "Иван" } as never);
-      expect(notifications.notifyNewLead).toHaveBeenCalledWith({
-        leadId: "lead-1",
-        name: "Иван Петров",
-        source: "site",
-      });
-    });
-
-    it("createLead succeeds even when the notification fails", async () => {
-      const { service, notifications } = createServiceWithQueryResults([
+  describe("manual lead notifications (v4 T3.2.1)", () => {
+    it("createLead persists without producing an inbound notification", async () => {
+      const { service } = createServiceWithQueryResults([
         { rows: [{ id: "lead-1", first_name: "Иван" }] },
       ]);
-      notifications.notifyNewLead.mockRejectedValueOnce(new Error("boom"));
       await expect(
         service.createLead(actor, { firstName: "Иван" } as never),
       ).resolves.toMatchObject({ id: "lead-1" });
-      expect(notifications.notifyNewLead).toHaveBeenCalledTimes(1);
     });
   });
 });

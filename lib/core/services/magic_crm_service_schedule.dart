@@ -1,6 +1,6 @@
 part of 'magic_crm_service.dart';
 
-/// Schedule & lessons: matrix, lessons, attendance, tasks, comments,
+/// Schedule & lessons: matrix, lessons, tasks, comments,
 /// timeline, progress notes, subscriptions, ledger, schedule series.
 extension MagicCrmSchedule on MagicCrmService {
   Future<Map<String, dynamic>> getScheduleMatrix({
@@ -107,6 +107,26 @@ extension MagicCrmSchedule on MagicCrmService {
     return _items(response).map(_legacyLesson).toList();
   }
 
+  /// Actor-scoped, typed Lead/Student lookup used by every v4 lesson form.
+  ///
+  /// The discriminator is deliberately preserved in `ref`; UUIDs from the two
+  /// aggregates are never guessed from a legacy student/lead picker.
+  Future<List<Map<String, dynamic>>> searchClientRefs({
+    String? q,
+    String? type,
+    int limit = 25,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/clients/search',
+      queryParameters: {
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        if (type != null && type.trim().isNotEmpty) 'type': type.trim(),
+        'limit': limit,
+      },
+    );
+    return _items(response);
+  }
+
   Future<Map<String, dynamic>> createLesson({
     String? studentId,
     String? groupId,
@@ -165,6 +185,7 @@ extension MagicCrmSchedule on MagicCrmService {
 
   Future<Map<String, dynamic>> updateLesson(
     String id, {
+    required int expectedVersion,
     String? studentId,
     String? groupId,
     String? teacherId,
@@ -172,12 +193,11 @@ extension MagicCrmSchedule on MagicCrmService {
     String? roomId,
     String? scheduledAt,
     int? durationMinutes,
-    String? status,
     bool? isTrial,
     String? notes,
     num? teacherRate,
   }) async {
-    final data = <String, dynamic>{};
+    final data = <String, dynamic>{'expectedVersion': expectedVersion};
     if (studentId != null) data['studentId'] = studentId;
     if (groupId != null) data['groupId'] = groupId;
     if (teacherId != null) data['teacherId'] = teacherId;
@@ -185,7 +205,6 @@ extension MagicCrmSchedule on MagicCrmService {
     if (roomId != null) data['roomId'] = roomId;
     if (scheduledAt != null) data['scheduledAt'] = scheduledAt;
     if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
-    if (status != null) data['status'] = status;
     if (isTrial != null) data['isTrial'] = isTrial;
     if (notes != null) data['notes'] = notes.trim();
     if (teacherRate != null) data['teacherRate'] = teacherRate;
@@ -199,41 +218,6 @@ extension MagicCrmSchedule on MagicCrmService {
 
   Future<void> deleteLesson(String id) async {
     await _api.delete<Map<String, dynamic>>('/crm/lessons/$id');
-  }
-
-  Future<Map<String, dynamic>> getLessonAttendance(String lessonId) async {
-    final response = await _api.get<Map<String, dynamic>>(
-      '/crm/lessons/$lessonId/attendance',
-    );
-    return _legacyAttendance(response);
-  }
-
-  Future<Map<String, dynamic>> saveLessonAttendance(
-    String lessonId,
-    List<Map<String, dynamic>> participations, {
-    bool notifyClient = false,
-  }) async {
-    final response = await _api.patch<Map<String, dynamic>>(
-      '/crm/lessons/$lessonId/attendance',
-      data: {
-        'items': participations
-            .map(
-              (item) => {
-                'studentId': item['student_id'],
-                // KVA-237: kind — источник истины; status оставлен для
-                // обратной совместимости бекенда.
-                'kind': item['kind'] ?? 'attended',
-                if (item['kind'] == 'partially_paid')
-                  'chargeShare': item['charge_share'] ?? 0.5,
-                'status': item['is_present'] == false ? 'absent' : 'present',
-                'passReason': item['pass_reason']?.toString().trim() ?? '',
-              },
-            )
-            .toList(),
-        if (notifyClient) 'notifyClient': true,
-      },
-    );
-    return _legacyAttendance(response);
   }
 
   Future<List<Map<String, dynamic>>> listTasks({
@@ -464,6 +448,7 @@ extension MagicCrmSchedule on MagicCrmService {
     required String entityId,
     bool progressOnly = false,
     String? kind,
+
     /// Подмешать комментарии к занятиям этого ученика (только для 'student').
     bool includeLessonComments = false,
     int limit = 50,

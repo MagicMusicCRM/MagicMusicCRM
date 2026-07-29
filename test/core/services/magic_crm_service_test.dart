@@ -1361,6 +1361,8 @@ void main() {
                 'scheduledAt': '2026-06-12T12:00:00.000Z',
                 'durationMinutes': 60,
                 'status': 'completed',
+                'lifecycleState': 'successfully_completed',
+                'reservationState': 'reserved',
                 'isTrial': true,
                 'notes': null,
                 'studentName': 'Анна Иванова',
@@ -1385,6 +1387,8 @@ void main() {
       expect(leads.single['hollihop_id'], 'HH-LEAD-42');
       expect(leads.single['created_at'], '2026-06-12T00:00:00.000Z');
       expect(lessons.single['is_trial'], true);
+      expect(lessons.single['lifecycle_state'], 'successfully_completed');
+      expect(lessons.single['reservation_state'], 'reserved');
       expect(adapter.requests[0].queryParameters['limit'], 10);
       expect(adapter.requests[1].queryParameters['isTrial'], true);
     });
@@ -1879,67 +1883,6 @@ void main() {
       expect(adapter.requests.single.body['isTrial'], true);
       expect(lesson['lead_id'], 'lead-a');
       expect(lesson['is_trial'], true);
-    });
-
-    test('gets and saves lesson attendance through v3 API', () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/lessons/lesson-a/attendance',
-          statusCode: 200,
-          body: {
-            'lessonId': 'lesson-a',
-            'students': [
-              {
-                'studentId': 'student-a',
-                'studentName': 'Анна Иванова',
-                'status': 'present',
-                'passReason': '',
-              },
-              {
-                'studentId': 'student-b',
-                'studentName': 'Олег Петров',
-                'status': 'absent',
-                'passReason': 'Болеет',
-              },
-            ],
-          },
-        ),
-        _FakeResponse(
-          path: '/crm/lessons/lesson-a/attendance',
-          statusCode: 200,
-          body: {
-            'lessonId': 'lesson-a',
-            'students': [
-              {
-                'studentId': 'student-b',
-                'studentName': 'Олег Петров',
-                'status': 'absent',
-                'passReason': 'Болеет',
-              },
-            ],
-          },
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
-
-      final attendance = await service.getLessonAttendance('lesson-a');
-      final saved = await service.saveLessonAttendance('lesson-a', [
-        {
-          'student_id': 'student-b',
-          'is_present': false,
-          'pass_reason': 'Болеет',
-        },
-      ]);
-
-      expect(attendance['students'].first['name'], 'Анна Иванова');
-      expect(attendance['participations'][1]['is_present'], false);
-      expect(saved['participations'].single['pass_reason'], 'Болеет');
-      expect(
-        adapter.requests[1].body['items'].single['studentId'],
-        'student-b',
-      );
-      expect(adapter.requests[1].body['items'].single['status'], 'absent');
-      expect(adapter.requests[1].body['items'].single['passReason'], 'Болеет');
     });
 
     test('maps subscriptions to legacy keys', () async {

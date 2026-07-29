@@ -106,6 +106,25 @@ export class CrmPolicy {
     );
   }
 
+  /**
+   * Client schema is business-critical configuration. Unlike operational
+   * system settings, sources and required/custom client fields are changed
+   * only by Director or the hidden system administrator.
+   */
+  assertCanManageClientConfiguration(actor: ActorContext): void {
+    if (actor.role === "director" || actor.role === "system_admin") return;
+    throw new ForbiddenException(
+      "Настройка источников и полей клиентов доступна только директору.",
+    );
+  }
+
+  assertCanArchiveClient(actor: ActorContext): void {
+    if (actor.role === "director" || actor.role === "system_admin") return;
+    throw new ForbiddenException(
+      "Архивировать клиента может только директор.",
+    );
+  }
+
   // Operational CRM work: administrators must be able to cover each other's
   // shifts. Role management stays separate in ProfilePolicy/canAssignRole.
   assertManagerOnly(actor: ActorContext): void {

@@ -26,6 +26,11 @@ export interface CrmChangedPayload {
   affectedUserIds?: string[] | null;
 }
 
+export interface AccessInvalidatedPayload {
+  accessVersion: number;
+  scope: 'user' | 'role';
+}
+
 /**
  * Decouples CRM mutation code from the WebSocket gateway. MessengerModule already
  * imports CrmModule, so injecting the gateway into CrmService directly would be a
@@ -78,6 +83,39 @@ export class RealtimeBus {
       } satisfies CrmChangedPayload);
     } catch (err) {
       this.logger.warn(`Failed to emit setting change: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Invalidates every active tab/window for one account. The room already
+   * identifies the recipient, so the payload contains only a monotonic version
+   * and no account data.
+   */
+  emitUserAccessInvalidated(userId: string, accessVersion: number): void {
+    try {
+      this.server
+        ?.to(`user:${userId}`)
+        .emit('access.invalidated', { accessVersion, scope: 'user' });
+    } catch (err) {
+      this.logger.warn(`Failed to emit access.invalidated: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Invalidates all sessions that authenticated with an affected role package.
+   * This deliberately reaches every authenticated socket: a role-changing
+   * session may still carry an old JWT role until refresh. The payload does not
+   * expose the affected role, and a following REST request always reads current
+   * PostgreSQL access facts.
+   */
+  emitRoleAccessInvalidated(_role: string, accessVersion: number): void {
+    try {
+      this.server?.emit('access.invalidated', {
+        accessVersion,
+        scope: 'role',
+      } satisfies AccessInvalidatedPayload);
+    } catch (err) {
+      this.logger.warn(`Failed to emit access.invalidated: ${String(err)}`);
     }
   }
 }

@@ -1,16 +1,7 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsEmail, IsOptional, IsString, MaxLength } from "class-validator";
+import { StrictCreateLeadDto } from "./client-config.dto";
 
-export class LeadWebhookDto {
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(160)
-  name!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(40)
-  phone!: string;
-
+export class LeadWebhookDto extends StrictCreateLeadDto {
   @IsOptional()
   @IsEmail()
   email?: string;
@@ -24,9 +15,4 @@ export class LeadWebhookDto {
   @IsString()
   @MaxLength(3000)
   comment?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  source?: string;
 }

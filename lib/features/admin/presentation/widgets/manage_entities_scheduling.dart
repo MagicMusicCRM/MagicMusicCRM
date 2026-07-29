@@ -3,28 +3,6 @@ part of 'manage_entities_widget.dart';
 class _LessonsList extends ConsumerWidget {
   const _LessonsList();
 
-  String _statusLabel(String? s) {
-    switch (s) {
-      case 'completed':
-        return 'Завершено';
-      case 'cancelled':
-        return 'Отменено';
-      default:
-        return 'Запланировано';
-    }
-  }
-
-  Color _statusColor(String? s) {
-    switch (s) {
-      case 'completed':
-        return AppTheme.success;
-      case 'cancelled':
-        return AppTheme.danger;
-      default:
-        return AppTheme.primaryGold;
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(entitiesProvider('lessons'));
@@ -102,8 +80,6 @@ class _LessonsList extends ConsumerWidget {
                   l['room_name'] as String? ??
                   l['rooms']?['name'] as String? ??
                   '—';
-              final status = l['status'] as String?;
-
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: Padding(
@@ -152,23 +128,15 @@ class _LessonsList extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _statusColor(status).withAlpha(25),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          _statusLabel(status),
-                          style: TextStyle(
-                            color: _statusColor(status),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (l['is_trial'] == true) ...[
+                            const LessonTrialBadge(compact: true),
+                            const SizedBox(height: 4),
+                          ],
+                          LessonStateBadge.fromMap(l),
+                        ],
                       ),
                       SizedBox(width: 4),
                       PopupMenuButton<String>(
@@ -178,18 +146,17 @@ class _LessonsList extends ConsumerWidget {
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         onSelected: (val) {
-                          if (val == 'cancel') {
-                            _cancelLesson(context, ref, l['id']);
-                          }
                           if (val == 'reschedule') {
-                            _rescheduleLesson(context, ref, l['id'], dt);
+                            _rescheduleLesson(
+                              context,
+                              ref,
+                              l['id'],
+                              (l['version'] as num?)?.toInt() ?? 1,
+                              dt,
+                            );
                           }
                         },
                         itemBuilder: (ctx) => [
-                          const PopupMenuItem(
-                            value: 'cancel',
-                            child: Text('Отменить занятие'),
-                          ),
                           const PopupMenuItem(
                             value: 'reschedule',
                             child: Text('Перенести'),
@@ -207,51 +174,11 @@ class _LessonsList extends ConsumerWidget {
     );
   }
 
-  Future<void> _cancelLesson(
-    BuildContext context,
-    WidgetRef ref,
-    String lessonId,
-  ) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Отменить занятие?'),
-        content: Text('Статус занятия будет изменен на "Отменено".'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Назад'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Отменить', style: TextStyle(color: AppTheme.danger)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
-        await ref
-            .read(magicCrmServiceProvider)
-            .updateLesson(lessonId, status: 'cancelled');
-        ref.invalidate(entitiesProvider('lessons'));
-      } catch (e) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Не удалось отменить занятие: $e'),
-            backgroundColor: AppTheme.danger,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _rescheduleLesson(
     BuildContext context,
     WidgetRef ref,
     String lessonId,
+    int expectedVersion,
     DateTime? current,
   ) async {
     final date = await showDatePicker(
@@ -279,7 +206,11 @@ class _LessonsList extends ConsumerWidget {
     try {
       await ref
           .read(magicCrmServiceProvider)
-          .updateLesson(lessonId, scheduledAt: newDateTime.toIso8601String());
+          .updateLesson(
+            lessonId,
+            expectedVersion: expectedVersion,
+            scheduledAt: newDateTime.toIso8601String(),
+          );
       ref.invalidate(entitiesProvider('lessons'));
     } catch (e) {
       if (!context.mounted) return;

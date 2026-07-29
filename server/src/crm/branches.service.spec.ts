@@ -42,6 +42,8 @@ describe("BranchesService", () => {
           address: "Москва",
           // No utc_offset_minutes in the mock row → defaults to Moscow (180).
           utcOffsetMinutes: 180,
+          timezone: "Europe/Moscow",
+          scheduleReferenceVersion: 1,
           createdAt: "2026-06-12T00:00:00.000Z",
         },
       ],
@@ -71,7 +73,13 @@ describe("BranchesService", () => {
     });
     expect(policy.assertCanWriteCrm).toHaveBeenCalled();
     expect(query.mock.calls[0][0]).toContain("update app.branches");
-    expect(query.mock.calls[0][1]).toEqual(["branch-a", null, null, 240]);
+    expect(query.mock.calls[0][1]).toEqual([
+      "branch-a",
+      null,
+      null,
+      240,
+      null,
+    ]);
   });
 
   it("creates a branch through CRM write policy and audit", async () => {
@@ -96,18 +104,28 @@ describe("BranchesService", () => {
       name: "Сокол",
       address: "Москва, Сокол",
       utcOffsetMinutes: 240,
+      timezone: "Europe/Moscow",
+      scheduleReferenceVersion: 1,
       createdAt: "2026-06-12T00:00:00.000Z",
     });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("insert into app.branches");
-    expect(query.mock.calls[0][1]).toEqual(["Сокол", "Москва, Сокол", 240]);
+    expect(query.mock.calls[0][1]).toEqual([
+      "Сокол",
+      "Москва, Сокол",
+      240,
+      null,
+    ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.branch_created",
         entityType: "branch",
         entityId: "branch-b",
-        metadata: { utcOffsetMinutes: 240 },
+        metadata: {
+          utcOffsetMinutes: 240,
+          timezone: "Europe/Moscow",
+        },
       }),
     );
   });
@@ -132,7 +150,7 @@ describe("BranchesService", () => {
       utcOffsetMinutes: 180,
     });
 
-    expect(query.mock.calls[0][1]).toEqual(["Новый", null, 180]);
+    expect(query.mock.calls[0][1]).toEqual(["Новый", null, 180, null]);
   });
 
   it("rejects branch creation when name is blank", async () => {

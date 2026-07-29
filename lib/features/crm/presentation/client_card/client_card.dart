@@ -15,6 +15,8 @@ import 'package:magic_music_crm/features/auth/providers/release_gate_provider.da
 import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';

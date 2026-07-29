@@ -24,4 +24,25 @@ describe('RealtimeBus', () => {
       bus.emitCrmChanged({ entity: 'lead', action: 'deleted', id: 'x' })
     ).not.toThrow();
   });
+
+  it('publishes safe user-scoped and global package invalidation', () => {
+    const roomEmit = jest.fn();
+    const broadcastEmit = jest.fn();
+    const to = jest.fn(() => ({ emit: roomEmit }));
+    const bus = new RealtimeBus();
+    bus.setServer({ to, emit: broadcastEmit } as unknown as Server);
+
+    bus.emitUserAccessInvalidated('user-a', 2);
+    bus.emitRoleAccessInvalidated('manager', 3);
+
+    expect(to).toHaveBeenCalledWith('user:user-a');
+    expect(roomEmit).toHaveBeenCalledWith('access.invalidated', {
+      accessVersion: 2,
+      scope: 'user'
+    });
+    expect(broadcastEmit).toHaveBeenCalledWith('access.invalidated', {
+      accessVersion: 3,
+      scope: 'role'
+    });
+  });
 });

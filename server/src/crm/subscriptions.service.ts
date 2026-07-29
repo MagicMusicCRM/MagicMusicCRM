@@ -656,6 +656,17 @@ export class SubscriptionsService {
 
       await client.query(
         `
+          insert into app.client_conversion_links (
+            lead_id, student_id, converted_by
+          )
+          values ($1, $2, $3)
+          on conflict (lead_id) do nothing
+        `,
+        [leadId, studentId, actor.userId],
+      );
+
+      await client.query(
+        `
           insert into app.user_crm_links (
             user_id, entity_type, entity_id, matched_phone,
             link_source, created_by, confirmed_at

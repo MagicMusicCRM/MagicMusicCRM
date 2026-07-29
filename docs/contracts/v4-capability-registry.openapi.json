@@ -1,0 +1,74 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MagicMusicCRM v4 Capability Registry",
+    "version": "1.0.0"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "CapabilityKey": {
+        "type": "string",
+        "enum": [
+          "access.user.role.assign",
+          "access.user.override.manage",
+          "crm.client.read.basic",
+          "crm.client.read.contacts",
+          "crm.client.write",
+          "crm.comment.read.shared",
+          "schedule.lesson.read.assigned",
+          "schedule.lesson.write",
+          "schedule.attendance.write",
+          "schedule.lesson.complete",
+          "commerce.client_finance.read",
+          "commerce.school_finance.read",
+          "commerce.package.read",
+          "commerce.package.manage",
+          "commerce.subscription.issue",
+          "workflow.task.read",
+          "workflow.task.write",
+          "report.status.read",
+          "report.export.xlsx",
+          "system.settings.manage"
+        ]
+      },
+      "CapabilityEffect": {
+        "type": "string",
+        "enum": ["allow", "deny"]
+      },
+      "CapabilityOverrideMode": {
+        "type": "string",
+        "enum": ["allow_deny", "deny_only", "locked"]
+      },
+      "AccessRole": {
+        "type": "string",
+        "enum": [
+          "client",
+          "teacher",
+          "admin",
+          "manager",
+          "director",
+          "system_admin"
+        ]
+      },
+      "CapabilitySnapshot": {
+        "type": "object",
+        "required": ["accessVersion", "capabilities"],
+        "properties": {
+          "accessVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityKey"
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

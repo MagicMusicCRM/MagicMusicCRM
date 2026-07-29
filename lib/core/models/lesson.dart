@@ -26,6 +26,8 @@ class Lesson {
   String? get scheduledAt => _m['scheduled_at']?.toString();
   Object? get durationMinutesRaw => _m['duration_minutes'];
   String? get status => _m['status']?.toString();
+  String? get lifecycleState => _m['lifecycle_state']?.toString();
+  String? get reservationState => _m['reservation_state']?.toString();
   bool get isTrial => _m['is_trial'] == true;
   String? get notes => _m['notes']?.toString();
   Object? get teacherRateRaw => _m['teacher_rate'];
@@ -39,6 +41,7 @@ class Lesson {
     if (raw is num) return raw;
     return num.tryParse(raw?.toString() ?? '');
   }
+
   String? get studentName => _m['student_name']?.toString();
   String? get teacherName => _m['teacher_name']?.toString();
   String? get branchName => _m['branch_name']?.toString();

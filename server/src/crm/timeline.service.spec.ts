@@ -117,6 +117,7 @@ describe("TimelineService", () => {
       true,
       40,
       ["admin_comment", "teacher_note", "progress"],
+      false,
     ]);
   });
 
@@ -194,6 +195,7 @@ describe("TimelineService", () => {
       ["progress"],
       5,
       false,
+      false,
     ]);
   });
 
@@ -238,6 +240,8 @@ describe("TimelineService", () => {
       5,
       // Комментарии к занятиям не запрашивали — флаг false.
       false,
+      // Teacher projection requires the explicit per-comment share flag.
+      true,
     ]);
   });
 
@@ -293,6 +297,7 @@ describe("TimelineService", () => {
       ["admin_comment", "teacher_note", "progress"],
       5,
       true,
+      false,
     ]);
     // Дата занятия доехала до карточки: по ней лента и рисует «к занятию 11.07».
     expect(result.items[0]).toMatchObject({
@@ -379,6 +384,7 @@ describe("TimelineService", () => {
       "manager-a",
       "Позвонить родителю",
       "admin_comment",
+      false,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -452,6 +458,7 @@ describe("TimelineService", () => {
       "teacher-a",
       "Хорошая динамика",
       "progress",
+      true,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

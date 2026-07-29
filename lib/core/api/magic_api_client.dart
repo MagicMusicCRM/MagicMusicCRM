@@ -155,6 +155,7 @@ class MagicApiClient {
     ResponseType? responseType,
   }) async {
     _addApiBreadcrumb(method, path, authenticated: authenticated);
+    final requestHeaders = _mutationHeaders(method);
     try {
       return await _sendWithRetry<T>(
         method,
@@ -163,6 +164,7 @@ class MagicApiClient {
         queryParameters: queryParameters,
         authenticated: authenticated,
         responseType: responseType,
+        requestHeaders: requestHeaders,
       );
     } on DioException catch (error) {
       if (!authenticated || error.response?.statusCode != 401) {
@@ -184,6 +186,7 @@ class MagicApiClient {
           queryParameters: queryParameters,
           authenticated: authenticated,
           responseType: responseType,
+          requestHeaders: requestHeaders,
         );
       } on DioException catch (retryError) {
         await _captureApiException(retryError, method, path);
@@ -205,6 +208,7 @@ class MagicApiClient {
     Map<String, dynamic>? queryParameters,
     required bool authenticated,
     ResponseType? responseType,
+    Map<String, dynamic>? requestHeaders,
   }) async {
     const maxAttempts = 2;
     var attempt = 0;
@@ -218,6 +222,7 @@ class MagicApiClient {
           queryParameters: queryParameters,
           authenticated: authenticated,
           responseType: responseType,
+          requestHeaders: requestHeaders,
         );
       } on DioException catch (e) {
         if (attempt >= maxAttempts || !_isRetriableConnectionError(e, method)) {
@@ -247,8 +252,9 @@ class MagicApiClient {
     Map<String, dynamic>? queryParameters,
     required bool authenticated,
     ResponseType? responseType,
+    Map<String, dynamic>? requestHeaders,
   }) async {
-    final headers = <String, dynamic>{};
+    final headers = <String, dynamic>{...?requestHeaders};
     if (authenticated) {
       var tokens = await _tokenStore.read();
       // Proactively refresh an already-expired (or near-expiry) access token
@@ -283,6 +289,24 @@ class MagicApiClient {
       durationMs: stopwatch.elapsedMilliseconds,
     );
     return response.data as T;
+  }
+
+  static int _mutationSequence = 0;
+
+  /// Every mutating request carries stable metadata for the full retry cycle.
+  ///
+  /// The v4 command boundary requires both headers. They are generated once in
+  /// [request], then reused for connection and 401 retries, so a retry cannot
+  /// accidentally execute the same command under a different idempotency key.
+  static Map<String, dynamic>? _mutationHeaders(String method) {
+    if (method == 'GET' || method == 'HEAD' || method == 'OPTIONS') return null;
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final sequence = _mutationSequence++;
+    final suffix = '$stamp-$sequence';
+    return {
+      'Idempotency-Key': 'magiccrm-$suffix',
+      'X-Request-Id': 'flutter-$suffix',
+    };
   }
 
   /// Returns true when the JWT access token is expired or within

@@ -1,0 +1,361 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MagicMusicCRM v4 Access Mutations",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/access/role-packages": {
+      "get": {
+        "operationId": "listRolePackages",
+        "responses": {
+          "200": {
+            "description": "Active role packages"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/access/role-packages/{role}": {
+      "get": {
+        "operationId": "getRolePackage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Role"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active versioned role package"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "put": {
+        "operationId": "replaceRolePackage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Role"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceRolePackage"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/VersionedMutation"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvariantViolation"
+          }
+        }
+      }
+    },
+    "/api/access/users/{userId}": {
+      "get": {
+        "operationId": "getUserAccess",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User access snapshot"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/access/users/{userId}/role": {
+      "put": {
+        "operationId": "assignRole",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRole"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/VersionedMutation"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvariantViolation"
+          }
+        }
+      }
+    },
+    "/api/access/users/{userId}/overrides/{capabilityKey}": {
+      "put": {
+        "operationId": "setUserOverride",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/CapabilityKey"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOverride"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/VersionedMutation"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvariantViolation"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "Role": {
+        "name": "role",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./v4-capability-registry.openapi.json#/components/schemas/AccessRole"
+        }
+      },
+      "UserId": {
+        "name": "userId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "CapabilityKey": {
+        "name": "capabilityKey",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "./v4-capability-registry.openapi.json#/components/schemas/CapabilityKey"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{8,128}$"
+        }
+      },
+      "RequestId": {
+        "name": "x-request-id",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "schemas": {
+      "CommandBase": {
+        "type": "object",
+        "required": ["expectedVersion", "emergencySurface", "reasonCode"],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "emergencySurface": {
+            "type": "boolean"
+          },
+          "reasonCode": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{1,120}$"
+          }
+        }
+      },
+      "AssignRole": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CommandBase"
+          },
+          {
+            "type": "object",
+            "required": ["role", "resetOverridesConfirmed"],
+            "properties": {
+              "role": {
+                "$ref": "./v4-capability-registry.openapi.json#/components/schemas/AccessRole"
+              },
+              "resetOverridesConfirmed": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      "ReplaceRolePackage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CommandBase"
+          },
+          {
+            "type": "object",
+            "required": ["changes"],
+            "properties": {
+              "changes": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {
+                  "type": "object",
+                  "required": ["capabilityKey", "effect"],
+                  "properties": {
+                    "capabilityKey": {
+                      "$ref": "./v4-capability-registry.openapi.json#/components/schemas/CapabilityKey"
+                    },
+                    "effect": {
+                      "$ref": "./v4-capability-registry.openapi.json#/components/schemas/CapabilityEffect"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "SetOverride": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CommandBase"
+          },
+          {
+            "type": "object",
+            "required": ["effect"],
+            "properties": {
+              "effect": {
+                "$ref": "./v4-capability-registry.openapi.json#/components/schemas/CapabilityEffect"
+              }
+            }
+          }
+        ]
+      },
+      "MutationResult": {
+        "type": "object",
+        "required": [
+          "resultRef",
+          "version",
+          "replayed",
+          "auditId",
+          "eventId"
+        ],
+        "properties": {
+          "resultRef": {
+            "type": "object"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "auditId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    },
+    "responses": {
+      "VersionedMutation": {
+        "description": "Committed or idempotently replayed mutation",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MutationResult"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Actor is outside the access-management invariant"
+      },
+      "Conflict": {
+        "description": "Expected version or idempotency conflict"
+      },
+      "InvariantViolation": {
+        "description": "Requested state violates an immutable access invariant"
+      }
+    }
+  }
+}

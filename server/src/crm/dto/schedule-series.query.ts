@@ -1,9 +1,23 @@
 import { Transform } from "class-transformer";
-import { IsBoolean, IsDateString, IsOptional, IsUUID } from "class-validator";
+import {
+  IsBoolean,
+  IsDateString,
+  IsIn,
+  IsOptional,
+  IsUUID,
+} from "class-validator";
 
 /** Query for GET /crm/schedule-series — validated, whitelisted replacement for
  *  the raw @Query("studentId"/"groupId"/"includeExpired") strings. */
 export class ScheduleSeriesQuery {
+  @IsOptional()
+  @IsIn(["lead", "student"])
+  clientType?: "lead" | "student";
+
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
+
   @IsOptional()
   @IsUUID()
   studentId?: string;

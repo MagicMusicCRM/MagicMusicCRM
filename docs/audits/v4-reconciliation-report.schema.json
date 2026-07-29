@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://magicmusiccrm.local/schemas/v4-reconciliation-report.schema.json",
+  "title": "MagicMusicCRM v4 Reconciliation Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "task",
+    "generatedAt",
+    "mode",
+    "source",
+    "target",
+    "status",
+    "tolerancePolicy",
+    "summary",
+    "invariants",
+    "signature"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "task": { "const": "T8.1.5" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "mode": { "enum": ["fixture", "schema-compare"] },
+    "source": { "type": "string", "minLength": 1 },
+    "target": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["clean", "drift"] },
+    "tolerancePolicy": {
+      "type": "object",
+      "required": ["economicFacts", "unexplainedFacts"],
+      "properties": {
+        "economicFacts": { "const": 0 },
+        "unexplainedFacts": { "const": 0 }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "invariants",
+        "sourceFacts",
+        "targetFacts",
+        "invariantsWithDrift",
+        "unexplainedDiff"
+      ],
+      "properties": {
+        "invariants": { "type": "integer", "minimum": 1 },
+        "sourceFacts": { "type": "integer", "minimum": 0 },
+        "targetFacts": { "type": "integer", "minimum": 0 },
+        "invariantsWithDrift": { "type": "integer", "minimum": 0 },
+        "unexplainedDiff": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "invariants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "owner",
+          "economic",
+          "tolerance",
+          "description",
+          "sourceCount",
+          "targetCount",
+          "sourceDigestSha256",
+          "targetDigestSha256",
+          "unexplainedDiff"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "owner": {
+            "enum": [
+              "SYS-ACCESS",
+              "SYS-SCHEDULE",
+              "SYS-COMMERCE",
+              "SYS-WORKFLOW"
+            ]
+          },
+          "economic": { "type": "boolean" },
+          "tolerance": { "const": 0 },
+          "description": { "type": "string", "minLength": 1 },
+          "sourceCount": { "type": "integer", "minimum": 0 },
+          "targetCount": { "type": "integer", "minimum": 0 },
+          "sourceDigestSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "targetDigestSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "unexplainedDiff": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "entityId",
+                "factHashSha256",
+                "sourceCount",
+                "targetCount"
+              ],
+              "properties": {
+                "entityId": { "type": "string", "minLength": 1 },
+                "factHashSha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "sourceCount": { "type": "integer", "minimum": 0 },
+                "targetCount": { "type": "integer", "minimum": 0 }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "signature": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "contentSha256",
+        "publicKeyPem",
+        "valueBase64",
+        "verified"
+      ],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "contentSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "publicKeyPem": { "type": "string", "minLength": 1 },
+        "valueBase64": { "type": "string", "minLength": 1 },
+        "verified": { "const": true }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

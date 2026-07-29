@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -8,34 +8,22 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
-import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
-import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
-import 'package:intl/intl.dart';
+import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 
-/// Итог предсейв-проверки занятости (контракт 1): продолжать, продолжать с
-/// `force: true` (админ подтвердил «Всё равно назначить») или отменить.
-enum _ConflictDecision { proceed, force, cancel }
-
+/// Unified v4 create/edit form.
+///
+/// A lesson always points at exactly one typed ClientRef. Trial is an
+/// independent marker, while the completion/financial/compensation snapshot is
+/// chosen explicitly on create and becomes read-only on edit.
 class CreateLessonDialog extends ConsumerStatefulWidget {
   final DateTime? initialDate;
   final String? initialRoomId;
   final String? initialBranchId;
   final int? initialDurationMinutes;
-  // When provided, the dialog edits this existing lesson instead of creating a
-  // new one (pre-filled fields, "Сохранить" updates via PATCH).
   final Map<String, dynamic>? lesson;
-
-  /// Пробное занятие по лиду (✔ решение владельца 17.07: «это просто готовый
-  /// пресет под создание нового занятия, поэтому можно не дублировать
-  /// функционал»). Когда задан — занятие вешается на лида, а не на ученика или
-  /// группу, и пикеры «Группа»/«Ученик» уступают место строке с именем лида.
   final String? leadId;
   final String? leadName;
-
-  /// Предустановка «это пробное». ✔ Владелец 17.07: индивидуальный пробный —
-  /// это обычное занятие с пометкой «пробное»; списание с личного счёта админ
-  /// или менеджер назначает сам.
   final bool initialIsTrial;
 
   const CreateLessonDialog({
@@ -85,134 +73,152 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   bool _saving = false;
 
   List<Map<String, dynamic>> _teachers = [];
-  List<Map<String, dynamic>> _groups = [];
-  List<Map<String, dynamic>> _students = [];
+  List<Map<String, dynamic>> _clients = [];
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _rooms = [];
+  List<Map<String, dynamic>> _subscriptions = [];
 
+  Map<String, dynamic>? _selectedClient;
   String? _selectedTeacherId;
-  String? _selectedGroupId;
-  String? _selectedStudentId;
-  // Лид, выбранный прямо в диалоге (из расписания, а не через пресет карточки).
-  // Лид приходит только на пробное, поэтому выбор лида форсит _isTrial.
-  String? _selectedLeadId;
-  String? _selectedLeadName;
-  List<Map<String, dynamic>> _leads = [];
-  bool _leadsLoaded = false;
   String? _selectedBranchId;
   String? _selectedRoomId;
+  String? _selectedSubscriptionId;
+
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   int _durationMinutes = 60;
-  // Поурочная ставка педагога (₽/астр.ч.): null — по умолчанию (ставка группы/
-  // педагога), 0 — «входит в оклад», иначе фикс за это занятие.
-  num? _teacherRate;
-
-  /// «Это пробное занятие». Влияет только на пометку `is_trial`: списание с
-  /// личного счёта за пробное админ/менеджер назначает руками (✔ владелец
-  /// 17.07), автоматики здесь нет и не задумано.
   bool _isTrial = false;
 
+  String _completionType = 'standard.success';
+  String _clientChargeType = 'none';
+  String _teacherCompensationType = 'none';
+  final _clientChargeController = TextEditingController(text: '0');
+  final _teacherCompensationController = TextEditingController(text: '0');
+
   bool get _isEdit => widget.lesson != null;
+  bool get _snapshotLocked => _isEdit;
+  MagicCrmService get _crm => ref.read(magicCrmServiceProvider);
 
-  /// Занятие вешается на лида (пресет пробного), а не на ученика/группу.
-  bool get _isLeadLesson => widget.leadId != null;
+  String? get _clientType {
+    final ref = _selectedClient?['ref'];
+    return ref is Map ? ref['type']?.toString() : null;
+  }
 
-  /// Редактируется существующее занятие лида: перевесить его здесь не на кого,
-  /// показываем лида строкой только для чтения (сервер сохраняет привязку).
-  bool get _isEditingLeadLesson => _isEdit && widget.lesson?['lead_id'] != null;
+  String? get _clientId {
+    final ref = _selectedClient?['ref'];
+    return ref is Map ? ref['id']?.toString() : null;
+  }
 
-  /// Кому разрешена кнопка «Всё равно назначить» при конфликте (admin+).
-  bool get _canForceConflicts {
-    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
-    return kScheduleForceRoles.contains(role);
+  String get _clientKey {
+    final type = _clientType;
+    final id = _clientId;
+    return type == null || id == null ? '' : '$type:$id';
   }
 
   @override
   void initState() {
     super.initState();
-    // Прогреваем статус роли: к моменту показа диалога конфликтов
-    // releaseGateStatusProvider уже должен быть разрешён, иначе admin+ не
-    // увидит кнопку «Всё равно назначить» при первом же конфликте.
-    ref.read(releaseGateStatusProvider);
     _isTrial = widget.initialIsTrial;
     if (widget.initialDate != null) {
       _selectedDate = widget.initialDate!;
-      // У пресета пробного дата — «завтра», но время из неё брать нельзя:
-      // получилось бы «завтра в момент, когда открыли диалог». Прежнее окно
-      // пробного предлагало 10:00 — оставляем его.
       _selectedTime = widget.initialIsTrial
           ? const TimeOfDay(hour: 10, minute: 0)
           : TimeOfDay.fromDateTime(widget.initialDate!);
     }
-    if (widget.initialRoomId != null) {
-      _selectedRoomId = widget.initialRoomId;
+    _selectedRoomId = widget.initialRoomId;
+    _selectedBranchId = widget.initialBranchId;
+    if (widget.initialDurationMinutes case final minutes? when minutes > 0) {
+      _durationMinutes = minutes;
     }
-    if (widget.initialBranchId != null) {
-      _selectedBranchId = widget.initialBranchId;
-      _loadRooms(widget.initialBranchId!);
+
+    if (widget.leadId != null) {
+      _selectedClient = _clientRow(
+        type: 'lead',
+        id: widget.leadId!,
+        label: widget.leadName ?? 'Лид без имени',
+      );
     }
-    if (widget.initialDurationMinutes != null &&
-        widget.initialDurationMinutes! > 0) {
-      _durationMinutes = widget.initialDurationMinutes!;
-    }
-    // Pre-fill from the lesson being edited.
+
     final lesson = widget.lesson;
     if (lesson != null) {
+      final leadId = lesson['lead_id']?.toString();
+      final studentId = lesson['student_id']?.toString();
+      if (leadId != null && leadId.isNotEmpty) {
+        _selectedClient = _clientRow(
+          type: 'lead',
+          id: leadId,
+          label: lesson['lead_name']?.toString() ?? 'Лид без имени',
+        );
+      } else if (studentId != null && studentId.isNotEmpty) {
+        _selectedClient = _clientRow(
+          type: 'student',
+          id: studentId,
+          label: lesson['student_name']?.toString() ?? 'Ученик без имени',
+        );
+      }
       _selectedTeacherId = lesson['teacher_id']?.toString();
-      _selectedGroupId = lesson['group_id']?.toString();
-      _selectedStudentId = lesson['student_id']?.toString();
       _selectedBranchId = lesson['branch_id']?.toString() ?? _selectedBranchId;
       _selectedRoomId = lesson['room_id']?.toString() ?? _selectedRoomId;
+      _durationMinutes =
+          (lesson['duration_minutes'] as num?)?.toInt() ?? _durationMinutes;
       final raw = lesson['scheduled_at']?.toString();
       final parsed = raw == null ? null : DateTime.tryParse(raw);
       if (parsed != null) {
-        // Stored as UTC; show in Moscow time (UTC+3) to match the schedule.
         final local = parsed.toUtc().add(const Duration(hours: 3));
         _selectedDate = DateTime(local.year, local.month, local.day);
         _selectedTime = TimeOfDay(hour: local.hour, minute: local.minute);
       }
-      if (_selectedBranchId != null) _loadRooms(_selectedBranchId!);
-      _isTrial = lesson['is_trial'] == true;
-      final rawRate = lesson['teacher_rate'];
-      if (rawRate is num) {
-        _teacherRate = rawRate;
-      } else if (rawRate != null) {
-        _teacherRate = num.tryParse(rawRate.toString());
-      }
+      _isTrial = lesson['snapshot_trial'] == true || lesson['is_trial'] == true;
+      _completionType =
+          lesson['completion_type']?.toString() ?? _completionType;
+      _clientChargeType =
+          lesson['client_charge_type']?.toString() ?? _clientChargeType;
+      _teacherCompensationType =
+          lesson['teacher_compensation_type']?.toString() ??
+          _teacherCompensationType;
+      _clientChargeController.text =
+          lesson['client_charge_value']?.toString() ?? '0';
+      _teacherCompensationController.text =
+          lesson['teacher_compensation_value']?.toString() ?? '0';
+      _selectedSubscriptionId = lesson['subscription_id']?.toString();
     }
     _loadData();
   }
 
-  MagicCrmService get _crm => ref.read(magicCrmServiceProvider);
-
-  String get _dialogTitle {
-    if (_isEdit) return 'Редактировать занятие';
-    if (_isLeadLesson) return 'Пробное занятие';
-    return 'Новое занятие';
+  @override
+  void dispose() {
+    _clientChargeController.dispose();
+    _teacherCompensationController.dispose();
+    super.dispose();
   }
 
-  String get _savedMessage {
-    if (_isEdit) return 'Занятие обновлено';
-    if (_isLeadLesson) return 'Пробное занятие назначено';
-    return 'Занятие создано';
-  }
+  String get _dialogTitle => _isEdit
+      ? 'Редактировать занятие'
+      : widget.leadId != null
+      ? 'Пробное занятие'
+      : 'Новое занятие';
+
+  String get _savedMessage => _isEdit ? 'Занятие обновлено' : 'Занятие создано';
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
       final results = await Future.wait([
         _crm.listTeachers(limit: 100),
-        _crm.listGroups(limit: 100),
-        _crm.listStudents(limit: 100),
         _crm.listBranches(limit: 100),
+        _crm.searchClientRefs(limit: 50),
       ]);
-
+      if (!mounted) return;
       setState(() {
         _teachers = results[0];
-        _groups = results[1];
-        _students = results[2];
-        _branches = results[3];
+        _branches = results[1];
+        _clients = results[2];
+        if (_selectedClient case final selected?
+            when !_clients.any(
+              (row) => _clientKeyFor(row) == _clientKeyFor(selected),
+            )) {
+          _clients = [selected, ..._clients];
+        }
         _loading = false;
       });
       final branchId =
@@ -221,19 +227,20 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         if (mounted) setState(() => _selectedBranchId ??= branchId);
         await _loadRooms(branchId);
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка загрузки данных: $e')));
-        Navigator.pop(context);
-      }
+      await _loadSubscriptions();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Ошибка загрузки данных: $error')));
+      Navigator.pop(context);
     }
   }
 
   Future<void> _loadRooms(String branchId) async {
     try {
       final rooms = await _crm.listRooms(branchId: branchId, limit: 100);
+      if (!mounted) return;
       setState(() {
         _rooms = rooms;
         if (_selectedRoomId != null &&
@@ -241,206 +248,198 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           _selectedRoomId = null;
         }
       });
-    } catch (e) {
-      debugPrint('Error loading rooms: $e');
+    } catch (error) {
+      debugPrint('Error loading rooms: $error');
+    }
+  }
+
+  Future<void> _loadSubscriptions() async {
+    final studentId = _clientType == 'student' ? _clientId : null;
+    if (studentId == null) {
+      if (mounted) {
+        setState(() {
+          _subscriptions = [];
+          _selectedSubscriptionId = null;
+          if (_clientChargeType == 'subscription') {
+            _clientChargeType = 'none';
+            _clientChargeController.text = '0';
+          }
+        });
+      }
+      return;
+    }
+    try {
+      final rows = await _crm.listSubscriptions(
+        studentId: studentId,
+        limit: 50,
+      );
+      if (!mounted) return;
+      setState(() {
+        _subscriptions = rows;
+        if (_selectedSubscriptionId != null &&
+            !rows.any(
+              (row) => row['id']?.toString() == _selectedSubscriptionId,
+            )) {
+          _selectedSubscriptionId = null;
+        }
+      });
+    } catch (error) {
+      debugPrint('Error loading subscriptions: $error');
     }
   }
 
   Future<void> _save() async {
-    // Занятие всегда чьё-то: группы, ученика или — у пробного — лида (пресет
-    // из карточки, выбор в диалоге или уже привязанный при редактировании).
-    final hasSubject =
-        _isLeadLesson ||
-        _isEditingLeadLesson ||
-        _selectedGroupId != null ||
-        _selectedStudentId != null ||
-        _selectedLeadId != null;
-    if (_selectedTeacherId == null ||
-        !hasSubject ||
-        _selectedBranchId == null) {
+    final clientId = _clientId;
+    final clientType = _clientType;
+    final chargeValue = _parseAmount(_clientChargeController.text);
+    final compensationValue = _parseAmount(_teacherCompensationController.text);
+    final missingSubscription =
+        _clientChargeType == 'subscription' && _selectedSubscriptionId == null;
+    final version = (widget.lesson?['version'] as num?)?.toInt();
+
+    if (clientId == null ||
+        clientType == null ||
+        _selectedTeacherId == null ||
+        _selectedBranchId == null ||
+        _selectedRoomId == null ||
+        chargeValue == null ||
+        compensationValue == null ||
+        missingSubscription ||
+        (_isEdit && version == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Заполните обязательные поля')),
+        SnackBar(
+          content: Text(
+            _isEdit && version == null
+                ? 'Обновите расписание: версия занятия не получена'
+                : 'Заполните обязательные поля корректно',
+          ),
+        ),
       );
       return;
     }
 
     setState(() => _saving = true);
     try {
-      // We want to save this as a timestamp with the correct offset (+03:00)
-      // or convert to UTC. Given the user wants UTC+3, let's treat selected time as Moscow time.
-      // If we use DateTime.toIso8601String() on a local time, it's missing the offset.
-      // Let's create a UTC time that represents the same instant.
-      final moscowTime = DateTime.utc(
+      final startsAt = DateTime.utc(
         _selectedDate.year,
         _selectedDate.month,
         _selectedDate.day,
-        _selectedTime.hour - 3, // Subtract 3 to get UTC
+        _selectedTime.hour - 3,
         _selectedTime.minute,
       );
+      final canSave = await _checkConflictsBeforeSave(startsAt);
+      if (!canSave || !mounted) return;
 
-      final scheduledAt = moscowTime.toIso8601String();
-
-      // Контракт 1: предсейв-проверка «занят ли педагог/аудитория». При
-      // конфликте — блок со списком (кто/когда/где); «Всё равно назначить»
-      // доступно только admin+ и уходит на сервер с force: true.
-      final decision = await _checkConflictsBeforeSave(
-        slotStartUtc: moscowTime,
+      final payload = _lessonPayload(
+        scheduledAt: startsAt.toIso8601String(),
+        chargeValue: chargeValue,
+        compensationValue: compensationValue,
+        expectedVersion: version,
       );
-      if (decision == _ConflictDecision.cancel) {
-        if (mounted) setState(() => _saving = false);
+      final api = ref.read(magicApiClientProvider);
+      try {
+        if (_isEdit) {
+          await api.updateLessonRaw(widget.lesson!['id'].toString(), payload);
+        } else {
+          await api.createLessonRaw(payload);
+        }
+      } on MagicApiException catch (error) {
+        final violations = lessonConstraintViolations(error);
+        if (violations == null || violations.isEmpty) rethrow;
+        if (mounted) await _showConstraintViolations(violations);
         return;
       }
 
-      final payload = _lessonPayload(scheduledAt);
-      final api = ref.read(magicApiClientProvider);
-      final lessonId = widget.lesson?['id']?.toString();
-      try {
-        await _sendSave(
-          api,
-          lessonId,
-          payload,
-          force: decision == _ConflictDecision.force,
-        );
-      } on MagicApiException catch (e) {
-        // Контракт 2: гонка между проверкой и записью — сервер всё равно
-        // ответил 409 со списком конфликтов. Показываем тот же диалог и по
-        // подтверждению повторяем один раз с force: true.
-        final conflicts = scheduleConflictsFrom409(e);
-        if (conflicts == null) rethrow;
-        if (!mounted) return;
-        final retry = await _showConflictDialog(conflicts: conflicts);
-        if (retry != true) {
-          if (mounted) setState(() => _saving = false);
-          return;
-        }
-        await _sendSave(api, lessonId, payload, force: true);
-      }
-
-      if (mounted) {
-        Navigator.pop(context, true);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_savedMessage)));
-      }
-    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context, true);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_savedMessage)));
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e')));
+        ).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $error')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _sendSave(
-    MagicApiClient api,
-    String? lessonId,
-    Map<String, dynamic> payload, {
-    required bool force,
-  }) async {
-    if (_isEdit) {
-      await api.updateLessonRaw(lessonId!, payload, force: force);
-    } else {
-      await api.createLessonRaw(payload, force: force);
-    }
+  num? _parseAmount(String raw) {
+    final value = num.tryParse(raw.trim().replaceAll(',', '.'));
+    return value == null || value < 0 ? null : value;
   }
 
-  /// Тело POST/PATCH /crm/lessons — то же, что раньше собирал
-  /// MagicCrmService.createLesson/updateLesson, но в одном месте, чтобы
-  /// force-повтор после 409 гарантированно слал ровно тот же запрос.
-  Map<String, dynamic> _lessonPayload(String scheduledAt) {
-    final leadId = widget.leadId ?? _selectedLeadId;
-    final leadName = widget.leadName ?? _selectedLeadName;
-    final notes = leadId != null
-        ? 'Пробное занятие по лиду: ${leadName ?? ''}'.trim()
-        : null;
-    return {
+  Map<String, dynamic> _lessonPayload({
+    required String scheduledAt,
+    required num chargeValue,
+    required num compensationValue,
+    required int? expectedVersion,
+  }) {
+    final mutable = <String, dynamic>{
+      'teacherId': _selectedTeacherId,
+      'branchId': _selectedBranchId,
+      'roomId': _selectedRoomId,
       'scheduledAt': scheduledAt,
       'durationMinutes': _durationMinutes,
+    };
+    if (_isEdit) {
+      return {...mutable, 'expectedVersion': expectedVersion};
+    }
+    return {
+      ...mutable,
+      'clientRef': {'type': _clientType, 'id': _clientId},
       'isTrial': _isTrial,
-      if (_selectedTeacherId != null) 'teacherId': _selectedTeacherId,
-      if (_selectedGroupId != null) 'groupId': _selectedGroupId,
-      if (_selectedStudentId != null) 'studentId': _selectedStudentId,
-      if (_selectedBranchId != null) 'branchId': _selectedBranchId,
-      if (_selectedRoomId != null) 'roomId': _selectedRoomId,
-      if (_teacherRate != null) 'teacherRate': _teacherRate,
-      if (!_isEdit) 'status': 'scheduled',
-      // Лид привязывается только при создании; при редактировании сервер
-      // сохраняет существующую привязку (coalesce).
-      if (!_isEdit && leadId != null) 'leadId': leadId,
-      if (!_isEdit && notes != null && notes.isNotEmpty) 'notes': notes,
+      'completionType': _completionType,
+      'clientChargeType': _clientChargeType,
+      'clientChargeValue': chargeValue,
+      'teacherCompensationType': _teacherCompensationType,
+      'teacherCompensationValue': compensationValue,
+      if (_clientChargeType == 'subscription')
+        'subscriptionId': _selectedSubscriptionId,
+      if (_clientType == 'lead' && widget.leadName?.trim().isNotEmpty == true)
+        'notes': 'Занятие по лиду: ${widget.leadName!.trim()}',
     };
   }
 
-  // Контракт 1: спрашиваем /crm/schedule/conflicts, занят ли выбранный педагог
-  // и/или аудитория в этом окне. Любая ошибка чтения (в т.ч. 404 до ребилда
-  // сервера) трактуется как «проверить нельзя — не блокируем»: предпроверка не
-  // должна останавливать создание занятий при недоступном бекенде.
-  Future<_ConflictDecision> _checkConflictsBeforeSave({
-    required DateTime slotStartUtc,
-  }) async {
-    final teacherId = _selectedTeacherId;
-    final roomId = _selectedRoomId;
-    final hasTeacher = teacherId != null && teacherId.isNotEmpty;
-    final hasRoom = roomId != null && roomId.isNotEmpty;
-    // Ни педагога, ни аудитории — конфликтовать нечему.
-    if (!hasTeacher && !hasRoom) return _ConflictDecision.proceed;
-
-    final editedLessonId = _isEdit ? widget.lesson!['id']?.toString() : null;
-    ScheduleConflictCheck check;
+  Future<bool> _checkConflictsBeforeSave(DateTime startsAt) async {
     try {
-      check = await ref
+      final check = await ref
           .read(magicApiClientProvider)
           .checkScheduleConflicts(
-            teacherId: hasTeacher ? teacherId : null,
-            roomId: hasRoom ? roomId : null,
-            startsAt: slotStartUtc.toIso8601String(),
-            endsAt: slotStartUtc
+            teacherId: _selectedTeacherId,
+            roomId: _selectedRoomId,
+            startsAt: startsAt.toIso8601String(),
+            endsAt: startsAt
                 .add(Duration(minutes: _durationMinutes))
                 .toIso8601String(),
-            excludeLessonId: editedLessonId,
+            excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
           );
-    } catch (e) {
-      debugPrint('Schedule conflicts pre-check failed: $e');
-      return _ConflictDecision.proceed; // soft-fail open.
+      if (!check.hasConflicts) return true;
+      if (!mounted) return false;
+      await _showBusySlot(check);
+      return false;
+    } catch (error) {
+      // The authoritative create/edit command still runs the complete v4
+      // engine. A read-only preview outage must not turn into a bypass because
+      // the mutation itself fails closed with structured violations.
+      debugPrint('Schedule conflicts preview failed: $error');
+      return true;
     }
-
-    if (!check.hasConflicts) return _ConflictDecision.proceed;
-    if (!mounted) return _ConflictDecision.cancel;
-
-    final confirmed = await _showConflictDialog(
-      conflicts: check.conflicts,
-      teacherBusy: check.teacherBusy,
-      roomBusy: check.roomBusy,
-    );
-    return confirmed == true
-        ? _ConflictDecision.force
-        : _ConflictDecision.cancel;
   }
 
-  /// Диалог конфликтов: кто/когда/где уже стоит в слоте. «Всё равно назначить»
-  /// строится ТОЛЬКО для admin+ (контракт 2) — остальным остаётся «Отмена».
-  Future<bool?> _showConflictDialog({
-    required List<ScheduleConflictInfo> conflicts,
-    bool? teacherBusy,
-    bool? roomBusy,
-  }) {
+  Future<void> _showBusySlot(ScheduleConflictCheck check) {
     final headers = <String>[
-      if (teacherBusy == true) 'Преподаватель занят в это время',
-      if (roomBusy == true) 'Аудитория занята в это время',
+      if (check.teacherBusy) 'Преподаватель занят в это время',
+      if (check.roomBusy) 'Аудитория занята в это время',
     ];
     if (headers.isEmpty) headers.add('В выбранное время слот уже занят');
-    final canForce = _canForceConflicts;
-
-    return showDialog<bool>(
+    return showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.card),
-        ),
         icon: const Icon(Icons.warning_amber_rounded, color: AppColor.danger),
-        title: const Text('Время занято'),
+        title: const Text('Конфликт расписания'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -454,71 +453,119 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
-              if (conflicts.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                for (final conflict in conflicts)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColor.dangerSoft,
-                        borderRadius: BorderRadius.circular(AppRadius.control),
-                        border: Border.all(color: const Color(0x52E53935)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.error_outline_rounded,
-                            size: 16,
-                            color: AppColor.danger,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              conflict.label(),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-              const SizedBox(height: 4),
-              Text(
-                canForce
-                    ? 'Назначить занятие всё равно?'
-                    : 'Выберите другое время или аудиторию.',
-              ),
+              for (final conflict in check.conflicts)
+                _legacyConflictCard(ctx, conflict),
+              const SizedBox(height: 8),
+              const Text('Измените время, преподавателя или аудиторию.'),
             ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Вернуться к форме'),
           ),
-          if (canForce)
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColor.gold,
-                foregroundColor: AppColor.onGold,
+        ],
+      ),
+    );
+  }
+
+  Widget _legacyConflictCard(
+    BuildContext dialogContext,
+    ScheduleConflictInfo conflict,
+  ) {
+    return _violationCard(
+      title: conflict.label(),
+      resource: 'Занятие в выбранном интервале',
+      lessonIds: [?conflict.lessonId],
+      dialogContext: dialogContext,
+    );
+  }
+
+  Future<void> _showConstraintViolations(
+    List<LessonConstraintViolation> violations,
+  ) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.rule_rounded, color: AppColor.danger),
+        title: const Text('Занятие не сохранено'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Исправьте все ограничения расписания перед сохранением:',
               ),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Всё равно назначить'),
+              const SizedBox(height: 12),
+              for (final violation in violations)
+                _violationCard(
+                  title: violation.title,
+                  resource:
+                      '${violation.resourceLabel}: ${violation.resourceId}',
+                  lessonIds: violation.conflictingLessonIds,
+                  dialogContext: ctx,
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Исправить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _violationCard({
+    required String title,
+    required String resource,
+    required List<String> lessonIds,
+    required BuildContext dialogContext,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColor.dangerSoft,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: AppColor.danger.withValues(alpha: 0.32)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text(resource, style: const TextStyle(fontSize: 12)),
+          if (lessonIds.isNotEmpty)
+            Wrap(
+              spacing: 4,
+              children: [
+                for (final lessonId in lessonIds)
+                  TextButton.icon(
+                    key: ValueKey('conflict-lesson-$lessonId'),
+                    onPressed: () {
+                      ref
+                          .read(scheduleNavigationProvider.notifier)
+                          .focus(_selectedDate, lessonId);
+                      Navigator.pop(dialogContext);
+                      Navigator.pop(context);
+                    },
+                    icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                    label: Text('Занятие ${_shortId(lessonId)}'),
+                  ),
+              ],
             ),
         ],
       ),
     );
   }
+
+  String _shortId(String id) => id.length <= 8 ? id : id.substring(0, 8);
 
   @override
   Widget build(BuildContext context) {
@@ -535,310 +582,262 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       );
     }
 
+    final width = MediaQuery.sizeOf(context).width;
     return AlertDialog(
       title: Text(_dialogTitle),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Пробное по лиду: «кто» уже известен и менять его здесь нечем —
-            // диалог открыт из карточки именно этого лида. При редактировании
-            // занятия лида привязку тоже не перевешивают — строка read-only.
-            if (_isLeadLesson || _isEditingLeadLesson) ...[
-              InputDecorator(
-                decoration: const InputDecoration(labelText: 'Лид'),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _presetLeadName ?? 'Без имени',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    _leadBadge(),
-                  ],
-                ),
+      content: SizedBox(
+        width: width > 760 ? 680 : width - 80,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildSelectionField(
+                key: const ValueKey('lesson-client-field'),
+                label: 'Клиент *',
+                value: _selectedClient?['label']?.toString() ?? 'Не выбран',
+                badge: _clientType == null ? null : _clientBadge(_clientType!),
+                enabled: !_snapshotLocked && widget.leadId == null,
+                onTap: _pickClient,
               ),
               const SizedBox(height: 16),
-            ],
-            // Teacher Selection
-            _buildSelectionField(
-              label: 'Преподаватель *',
-              value: _getTeacherName(_selectedTeacherId),
-              onTap: () {
-                final items = _teachers.map((t) {
-                  final name = _getTeacherNameFromData(t);
-                  return SearchableSelectItem(
-                    id: t['id'].toString(),
-                    label: name,
-                  );
-                }).toList();
-
-                SearchableSelect.show(
-                  context: context,
-                  title: 'Выберите преподавателя',
-                  hintText: 'Поиск по имени...',
-                  items: items,
-                  selectedId: _selectedTeacherId,
-                  isNullable: false,
-                  onSelected: (item) =>
-                      setState(() => _selectedTeacherId = item?.id),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // У пробного по лиду занятие уже привязано к нему — группы и
-            // ученика у него нет.
-            if (!_isLeadLesson && !_isEditingLeadLesson) ...[
-              // Group Selection
-              SearchablePickerField(
-                label: 'Группа',
-                placeholder: 'Индивидуально',
-                selectedId: _selectedGroupId,
-                items: [
-                  for (final g in _groups)
-                    SearchableSelectItem(
-                      id: g['id'].toString(),
-                      label: g['name']?.toString() ?? 'Без названия',
-                    ),
-                ],
-                onSelected: (item) => setState(() {
-                  _selectedGroupId = item?.id;
-                  // A group lesson has no single student (and no lead).
-                  if (item != null) {
-                    _selectedStudentId = null;
-                    _clearSelectedLead();
-                  }
-                }),
+              _buildSelectionField(
+                key: const ValueKey('lesson-teacher-field'),
+                label: 'Преподаватель *',
+                value: _getTeacherName(_selectedTeacherId),
+                onTap: _pickTeacher,
               ),
-
-              if (_selectedGroupId == null) ...[
-                const SizedBox(height: 16),
-                // Student Selection
-                _buildSelectionField(
-                  label: 'Ученик *',
-                  value: _getStudentName(_selectedStudentId),
-                  onTap: () {
-                    final items = _students.map((s) {
-                      final name = _getStudentNameFromData(s);
-                      return SearchableSelectItem(
-                        id: s['id'].toString(),
-                        label: name,
-                        data: s,
-                      );
-                    }).toList();
-
-                    SearchableSelect.show(
-                      context: context,
-                      title: 'Выберите ученика',
-                      hintText: 'Поиск по ФИО...',
-                      // [_students] is only the pre-loaded first page (100 of
-                      // ~1000). Filtering it locally made every student past
-                      // that page unfindable, however exactly the name was
-                      // typed — so a real query goes to the server instead.
-                      items: items,
-                      onSearch: (query) async {
-                        final response = await _crm.searchStudents(
-                          q: query,
-                          limit: 50,
-                        );
-                        final rows = response['items'];
-                        if (rows is! List) {
-                          return const <SearchableSelectItem>[];
-                        }
-                        return [
-                          for (final row
-                              in rows.whereType<Map<String, dynamic>>())
-                            SearchableSelectItem(
-                              id: row['id'].toString(),
-                              label: _getStudentNameFromData(row),
-                              data: row,
-                            ),
-                        ];
-                      },
-                      selectedId: _selectedStudentId,
-                      isNullable: false,
-                      onSelected: (item) => setState(() {
-                        _selectedStudentId = item?.id;
-                        // Ученик и лид взаимоисключающи: занятие либо
-                        // ученика, либо пробное лида.
-                        if (item != null) _clearSelectedLead();
-                        // A student found by the server search is not in the
-                        // pre-loaded page, and _getStudentName only reads that
-                        // page — without this the field would keep saying «Не
-                        // выбран» for the student just picked.
-                        final row = item?.data;
-                        if (row != null &&
-                            !_students.any(
-                              (s) => s['id'].toString() == item!.id,
-                            )) {
-                          _students = [..._students, row];
-                        }
-                      }),
-                    );
+              const SizedBox(height: 16),
+              _responsivePair(
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedBranchId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Филиал *'),
+                  items: [
+                    for (final branch in _branches)
+                      DropdownMenuItem(
+                        value: branch['id'].toString(),
+                        child: Text(branch['name']?.toString() ?? '—'),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedBranchId = value;
+                      _selectedRoomId = null;
+                      _rooms = [];
+                    });
+                    if (value != null) _loadRooms(value);
                   },
                 ),
-                // #6: лид доступен и из расписания, а не только через пресет
-                // карточки. Выбор лида = пробное занятие (галочка форсится).
-                if (!_isEdit) ...[
-                  const SizedBox(height: 16),
-                  _buildSelectionField(
-                    label: 'Лид (на пробное)',
-                    value: _selectedLeadName ?? 'Не выбран',
-                    badge: _selectedLeadId != null ? _leadBadge() : null,
-                    onTap: _pickLead,
-                  ),
-                ],
-              ],
-              const SizedBox(height: 16),
-            ],
-
-            // Branch & Room
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _selectedBranchId,
-                    isExpanded: true,
-                    dropdownColor: Theme.of(context).colorScheme.surface,
-                    decoration: const InputDecoration(labelText: 'Филиал *'),
-                    items: _branches
-                        .map(
-                          (b) => DropdownMenuItem(
-                            value: b['id'].toString(),
-                            child: Text(b['name']?.toString() ?? ''),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedBranchId = val;
-                        _selectedRoomId = null;
-                        _rooms = [];
-                      });
-                      if (val != null) _loadRooms(val);
-                    },
-                  ),
-                ),
-                if (_selectedBranchId != null) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SearchablePickerField(
-                      label: 'Аудитория',
-                      placeholder: _rooms.isEmpty
-                          ? 'Нет доступных'
-                          : 'Выберите аудиторию',
-                      enabled: _rooms.isNotEmpty,
-                      selectedId: _selectedRoomId,
-                      items: [
-                        for (final r in _rooms)
-                          SearchableSelectItem(
-                            id: r['id'].toString(),
-                            label: r['name']?.toString() ?? '—',
-                          ),
-                      ],
-                      onSelected: (item) =>
-                          setState(() => _selectedRoomId = item?.id),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final d = await showDatePicker(
-                        context: context,
-                        initialDate: _selectedDate,
-                        firstDate: DateTime.now().subtract(
-                          const Duration(days: 30),
-                        ),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (d != null) setState(() => _selectedDate = d);
-                    },
-                    icon: const Icon(Icons.calendar_today_rounded, size: 18),
-                    label: Text(
-                      DateFormat('dd.MM.yyyy', 'ru').format(_selectedDate),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final t = await showTimePicker(
-                        context: context,
-                        initialTime: _selectedTime,
-                        builder: (BuildContext context, Widget? child) {
-                          return MediaQuery(
-                            data: MediaQuery.of(
-                              context,
-                            ).copyWith(alwaysUse24HourFormat: true),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (t != null) setState(() => _selectedTime = t);
-                    },
-                    icon: const Icon(Icons.access_time_rounded, size: 18),
-                    label: Text(_selectedTime.format(context)),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // ✔ Решение владельца 17.07: «индивидуальный пробный» — это не
-            // отдельный тип занятия, а пометка «пробное» на обычном занятии.
-            // Списание с личного счёта за него админ/менеджер назначает сам:
-            // автоматики здесь нет, и она не задумана.
-            SwitchListTile(
-              value: _isTrial,
-              activeThumbColor: AppTheme.primaryGold,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Пробное занятие'),
-              subtitle: Text(
-                _isTrial
-                    ? 'Списание с личного счёта назначается вручную'
-                    : 'Обычное занятие',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                SearchablePickerField(
+                  key: const ValueKey('lesson-room-field'),
+                  label: 'Аудитория *',
+                  placeholder: _rooms.isEmpty
+                      ? 'Нет доступных'
+                      : 'Выберите аудиторию',
+                  enabled: _rooms.isNotEmpty,
+                  selectedId: _selectedRoomId,
+                  items: [
+                    for (final room in _rooms)
+                      SearchableSelectItem(
+                        id: room['id'].toString(),
+                        label: room['name']?.toString() ?? '—',
+                      ),
+                  ],
+                  onSelected: (item) =>
+                      setState(() => _selectedRoomId = item?.id),
                 ),
               ),
-              // У пресета пробного галочку не снимают: диалог открыт кнопкой
-              // «На пробный», и снятая пометка сделала бы её ложью. То же при
-              // выбранном в диалоге лиде — лид приходит только на пробное.
-              onChanged: (_isLeadLesson || _selectedLeadId != null)
-                  ? null
-                  : (value) => setState(() => _isTrial = value),
-            ),
-            const SizedBox(height: 8),
-            // #6: поурочная ставка педагога (по умолчанию — ставка группы/
-            // педагога, «Входит в оклад» = 0 для пробных).
-            TeacherRateSelector(
-              label: 'Ставка за занятие (₽/астр.ч.)',
-              allowInherit: true,
-              initialRate: _teacherRate,
-              onChanged: (v) => setState(() => _teacherRate = v),
-            ),
-          ],
+              const SizedBox(height: 16),
+              _responsivePair(_dateButton(), _timeButton()),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                key: const ValueKey('lesson-duration-field'),
+                initialValue: _durationMinutes,
+                decoration: const InputDecoration(labelText: 'Длительность *'),
+                items: [
+                  for (final minutes in const [30, 45, 60, 90, 120])
+                    DropdownMenuItem(
+                      value: minutes,
+                      child: Text('$minutes мин'),
+                    ),
+                ],
+                onChanged: (value) =>
+                    setState(() => _durationMinutes = value ?? 60),
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                key: const ValueKey('lesson-trial-toggle'),
+                value: _isTrial,
+                activeThumbColor: AppTheme.primaryGold,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Пробное занятие'),
+                subtitle: Text(
+                  _snapshotLocked
+                      ? 'Маркер зафиксирован при создании'
+                      : 'Не зависит от типа клиента и способа списания',
+                ),
+                onChanged: _snapshotLocked
+                    ? null
+                    : (value) => setState(() => _isTrial = value),
+              ),
+              const Divider(height: 28),
+              Text(
+                'Результат и расчёты',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              if (_snapshotLocked)
+                InputDecorator(
+                  key: const ValueKey('lesson-completion-type-field'),
+                  decoration: const InputDecoration(
+                    labelText: 'Автозавершение *',
+                    enabled: false,
+                    helperText: 'Результат зафиксирован при создании',
+                  ),
+                  child: Text(
+                    _completionType == 'standard.success'
+                        ? 'Успешно завершить'
+                        : _completionType,
+                  ),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('lesson-completion-type-field'),
+                  initialValue: _completionType,
+                  decoration: const InputDecoration(
+                    labelText: 'Автозавершение *',
+                    helperText:
+                        'Результат формируется сервером после окончания',
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'standard.success',
+                      child: Text('Успешно завершить'),
+                    ),
+                  ],
+                  onChanged: (value) => setState(
+                    () => _completionType = value ?? 'standard.success',
+                  ),
+                ),
+              const SizedBox(height: 16),
+              _responsivePair(
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('lesson-charge-type-field'),
+                  initialValue: _clientChargeType,
+                  decoration: const InputDecoration(
+                    labelText: 'Списание клиента *',
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: 'none',
+                      child: Text('Без списания'),
+                    ),
+                    const DropdownMenuItem(
+                      value: 'personal_account',
+                      child: Text('Личный счёт'),
+                    ),
+                    if (_clientType == 'student')
+                      const DropdownMenuItem(
+                        value: 'subscription',
+                        child: Text('Абонемент'),
+                      ),
+                  ],
+                  onChanged: _snapshotLocked
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _clientChargeType = value ?? 'none';
+                            if (_clientChargeType == 'none') {
+                              _clientChargeController.text = '0';
+                              _selectedSubscriptionId = null;
+                            }
+                          });
+                        },
+                ),
+                _amountField(
+                  key: const ValueKey('lesson-charge-value-field'),
+                  controller: _clientChargeController,
+                  label: _clientChargeType == 'subscription'
+                      ? 'Единиц списания *'
+                      : 'Стоимость / списание *',
+                  enabled: !_snapshotLocked && _clientChargeType != 'none',
+                ),
+              ),
+              if (_clientChargeType == 'subscription') ...[
+                const SizedBox(height: 16),
+                SearchablePickerField(
+                  label: 'Абонемент *',
+                  placeholder: _subscriptions.isEmpty
+                      ? 'Нет активных абонементов'
+                      : 'Выберите абонемент',
+                  enabled: !_snapshotLocked && _subscriptions.isNotEmpty,
+                  selectedId: _selectedSubscriptionId,
+                  items: [
+                    for (final subscription in _subscriptions)
+                      SearchableSelectItem(
+                        id: subscription['id'].toString(),
+                        label: _subscriptionLabel(subscription),
+                      ),
+                  ],
+                  onSelected: (item) =>
+                      setState(() => _selectedSubscriptionId = item?.id),
+                ),
+              ],
+              const SizedBox(height: 16),
+              _responsivePair(
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('lesson-compensation-type-field'),
+                  initialValue: _teacherCompensationType,
+                  decoration: const InputDecoration(
+                    labelText: 'Оплата преподавателя *',
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'none',
+                      child: Text('Без начисления'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'fixed',
+                      child: Text('Фиксированная'),
+                    ),
+                    DropdownMenuItem(value: 'hourly', child: Text('Почасовая')),
+                  ],
+                  onChanged: _snapshotLocked
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _teacherCompensationType = value ?? 'none';
+                            if (_teacherCompensationType == 'none') {
+                              _teacherCompensationController.text = '0';
+                            }
+                          });
+                        },
+                ),
+                _amountField(
+                  key: const ValueKey('lesson-compensation-value-field'),
+                  controller: _teacherCompensationController,
+                  label: 'Сумма / ставка *',
+                  enabled:
+                      !_snapshotLocked && _teacherCompensationType != 'none',
+                ),
+              ),
+              if (_snapshotLocked) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Клиент, пробный маркер и расчётный snapshot неизменяемы. '
+                  'Для переноса меняются только ресурсы и время.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Отмена',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
+          child: const Text('Отмена'),
         ),
         FilledButton(
           onPressed: _saving ? null : _save,
@@ -854,213 +853,234 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     );
   }
 
-  // ── Лид в диалоге ─────────────────────────────────────────────────────────
-
-  /// Имя лида для read-only строки: пресет карточки или редактируемое занятие
-  /// (lead_name приходит с бекенда вместе с уроком).
-  String? get _presetLeadName {
-    final name = widget.leadName ?? widget.lesson?['lead_name']?.toString();
-    final trimmed = name?.trim();
-    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
-  }
-
-  void _clearSelectedLead() {
-    _selectedLeadId = null;
-    _selectedLeadName = null;
-  }
-
-  /// Визуальная пометка «лид» — чтобы пробное по лиду не читалось как занятие
-  /// ученика.
-  Widget _leadBadge() {
-    return Container(
-      margin: const EdgeInsets.only(left: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColor.gold.withAlpha(36),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColor.gold.withAlpha(120)),
-      ),
-      child: const Text(
-        'лид',
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: AppColor.gold,
-        ),
-      ),
+  Widget _responsivePair(Widget first, Widget second) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 520) {
+          return Column(children: [first, const SizedBox(height: 12), second]);
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: first),
+            const SizedBox(width: 12),
+            Expanded(child: second),
+          ],
+        );
+      },
     );
   }
 
-  String _leadLabelFromData(Map<String, dynamic> lead) {
-    final name = '${lead['first_name'] ?? ''} ${lead['last_name'] ?? ''}'
-        .trim();
-    final phone = lead['phone']?.toString().trim() ?? '';
-    if (name.isEmpty && phone.isEmpty) return 'Без имени';
-    if (name.isEmpty) return phone;
-    return phone.isEmpty ? name : '$name · $phone';
+  Widget _dateButton() {
+    return OutlinedButton.icon(
+      onPressed: () async {
+        final date = await showDatePicker(
+          context: context,
+          initialDate: _selectedDate,
+          firstDate: DateTime.now().subtract(const Duration(days: 30)),
+          lastDate: DateTime.now().add(const Duration(days: 365)),
+        );
+        if (date != null) setState(() => _selectedDate = date);
+      },
+      icon: const Icon(Icons.calendar_today_rounded, size: 18),
+      label: Text(DateFormat('dd.MM.yyyy', 'ru').format(_selectedDate)),
+    );
   }
 
-  String _leadNameFromData(Map<String, dynamic> lead) {
-    final name = '${lead['first_name'] ?? ''} ${lead['last_name'] ?? ''}'
-        .trim();
-    if (name.isNotEmpty) return name;
-    final phone = lead['phone']?.toString().trim() ?? '';
-    return phone.isEmpty ? 'Без имени' : phone;
+  Widget _timeButton() {
+    return OutlinedButton.icon(
+      onPressed: () async {
+        final time = await showTimePicker(
+          context: context,
+          initialTime: _selectedTime,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+            child: child!,
+          ),
+        );
+        if (time != null) setState(() => _selectedTime = time);
+      },
+      icon: const Icon(Icons.access_time_rounded, size: 18),
+      label: Text(_selectedTime.format(context)),
+    );
   }
 
-  Future<void> _pickLead() async {
-    // Первая страница подгружается лениво — лид в диалоге нужен нечасто.
-    if (!_leadsLoaded) {
-      try {
-        final leads = await _crm.listLeads(limit: 100);
-        if (!mounted) return;
-        setState(() {
-          _leads = leads;
-          _leadsLoaded = true;
-        });
-      } catch (e) {
-        debugPrint('Error loading leads: $e');
-      }
-    }
-    if (!mounted) return;
+  Widget _amountField({
+    required Key key,
+    required TextEditingController controller,
+    required String label,
+    required bool enabled,
+  }) {
+    return TextField(
+      key: key,
+      controller: controller,
+      enabled: enabled,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(labelText: label),
+    );
+  }
 
+  Future<void> _pickClient() async {
     SearchableSelect.show(
       context: context,
-      title: 'Выберите лида',
-      hintText: 'Поиск по имени или телефону...',
+      title: 'Выберите клиента',
+      hintText: 'Поиск Lead или Student по ФИО...',
+      items: [for (final row in _clients) _clientItem(row)],
+      onSearch: (query) async {
+        final rows = await _crm.searchClientRefs(q: query, limit: 50);
+        return [for (final row in rows) _clientItem(row)];
+      },
+      selectedId: _clientKey,
+      isNullable: false,
+      onSelected: (item) async {
+        final row = item?.data;
+        if (row == null) return;
+        setState(() => _selectedClient = row);
+        await _loadSubscriptions();
+      },
+    );
+  }
+
+  SearchableSelectItem _clientItem(Map<String, dynamic> row) {
+    final type = _clientTypeFor(row);
+    return SearchableSelectItem(
+      id: _clientKeyFor(row),
+      label: row['label']?.toString() ?? 'Клиент без имени',
+      subtitle: type == 'lead' ? 'Lead' : 'Student',
+      data: row,
+    );
+  }
+
+  void _pickTeacher() {
+    SearchableSelect.show(
+      context: context,
+      title: 'Выберите преподавателя',
+      hintText: 'Поиск по имени...',
       items: [
-        for (final lead in _leads)
+        for (final teacher in _teachers)
           SearchableSelectItem(
-            id: lead['id'].toString(),
-            label: _leadLabelFromData(lead),
-            data: lead,
+            id: teacher['id'].toString(),
+            label: _getTeacherNameFromData(teacher),
           ),
       ],
-      // Предзагружена только первая страница — настоящий поиск идёт на сервер
-      // (тот же серверный q, что и у канбана лидов).
-      onSearch: (query) async {
-        final rows = await _crm.listLeads(q: query, limit: 50);
-        return [
-          for (final row in rows)
-            SearchableSelectItem(
-              id: row['id'].toString(),
-              label: _leadLabelFromData(row),
-              data: row,
-            ),
-        ];
-      },
-      selectedId: _selectedLeadId,
-      onSelected: (item) => setState(() {
-        if (item == null) {
-          _clearSelectedLead();
-          return;
-        }
-        _selectedLeadId = item.id;
-        final row = item.data;
-        _selectedLeadName = row is Map<String, dynamic>
-            ? _leadNameFromData(row)
-            : item.label;
-        // Лид приходит только на пробное: ученик снимается, пометка форсится.
-        _selectedStudentId = null;
-        _isTrial = true;
-      }),
+      selectedId: _selectedTeacherId,
+      isNullable: false,
+      onSelected: (item) => setState(() => _selectedTeacherId = item?.id),
     );
-  }
-
-  String _getTeacherName(String? id) {
-    if (id == null) return 'Не выбран';
-    final t = _teachers.firstWhere(
-      (element) => element['id'].toString() == id,
-      orElse: () => {},
-    );
-    if (t.isEmpty) return 'Не выбран';
-    return _getTeacherNameFromData(t);
-  }
-
-  String _getTeacherNameFromData(Map<String, dynamic> t) {
-    final fn = t['first_name']?.toString() ?? '';
-    final ln = t['last_name']?.toString() ?? '';
-    final p = t['profiles'] as Map<String, dynamic>?;
-
-    var name = '$fn $ln'.trim();
-    if (name.isEmpty && p != null) {
-      name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-    }
-    return name.isEmpty ? 'Без имени' : name;
-  }
-
-  String _getStudentName(String? id) {
-    if (id == null) return 'Не выбран';
-    final s = _students.firstWhere(
-      (element) => element['id'].toString() == id,
-      orElse: () => {},
-    );
-    if (s.isEmpty) return 'Не выбран';
-    return _getStudentNameFromData(s);
-  }
-
-  String _getStudentNameFromData(Map<String, dynamic> s) {
-    final fn = s['first_name']?.toString() ?? '';
-    final ln = s['last_name']?.toString() ?? '';
-    final p = s['profiles'] as Map<String, dynamic>?;
-
-    var name = '$fn $ln'.trim();
-    if (name.isEmpty && p != null) {
-      name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-    }
-    return name.isEmpty ? 'Без имени' : name;
   }
 
   Widget _buildSelectionField({
+    Key? key,
     required String label,
     required String value,
     required VoidCallback onTap,
     Widget? badge,
+    bool enabled = true,
   }) {
     return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.transparent),
+      key: key,
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          enabled: enabled,
+          suffixIcon: enabled
+              ? const Icon(Icons.arrow_drop_down)
+              : const Icon(Icons.lock_outline_rounded, size: 18),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 12,
+            Expanded(
+              child: Text(
+                value,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: value == 'Не выбран'
+                      ? Theme.of(context).colorScheme.onSurfaceVariant
+                      : null,
+                ),
               ),
             ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      color: value == 'Не выбран'
-                          ? Theme.of(context).colorScheme.onSurfaceVariant
-                          : Theme.of(context).colorScheme.onSurface,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                ?badge,
-                Icon(
-                  Icons.arrow_drop_down,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ],
-            ),
+            ?badge,
           ],
         ),
       ),
     );
+  }
+
+  Widget _clientBadge(String type) {
+    final isLead = type == 'lead';
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: (isLead ? AppColor.gold : AppColor.infoViolet).withValues(
+          alpha: 0.12,
+        ),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        isLead ? 'Lead' : 'Student',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: isLead ? AppColor.gold : AppColor.infoViolet,
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _clientRow({
+    required String type,
+    required String id,
+    required String label,
+  }) => {
+    'ref': {'type': type, 'id': id},
+    'label': label,
+    'lifecycleState': 'active',
+    'tombstone': false,
+  };
+
+  String _clientTypeFor(Map<String, dynamic> row) {
+    final ref = row['ref'];
+    return ref is Map ? ref['type']?.toString() ?? '' : '';
+  }
+
+  String _clientKeyFor(Map<String, dynamic> row) {
+    final ref = row['ref'];
+    if (ref is! Map) return '';
+    return '${ref['type']}:${ref['id']}';
+  }
+
+  String _getTeacherName(String? id) {
+    if (id == null) return 'Не выбран';
+    final teacher = _teachers.firstWhere(
+      (row) => row['id'].toString() == id,
+      orElse: () => const {},
+    );
+    return teacher.isEmpty ? 'Не выбран' : _getTeacherNameFromData(teacher);
+  }
+
+  String _getTeacherNameFromData(Map<String, dynamic> teacher) {
+    final profile = teacher['profiles'];
+    var name = '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'
+        .trim();
+    if (name.isEmpty && profile is Map) {
+      name = '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'
+          .trim();
+    }
+    return name.isEmpty ? 'Без имени' : name;
+  }
+
+  String _subscriptionLabel(Map<String, dynamic> subscription) {
+    final name = subscription['package_name']?.toString().trim();
+    final total = subscription['lessons_total'];
+    final used = subscription['lessons_used'];
+    final balance = total is num && used is num ? total - used : null;
+    return [
+      if (name != null && name.isNotEmpty) name else 'Абонемент',
+      if (balance != null) 'остаток $balance',
+    ].join(' · ');
   }
 }

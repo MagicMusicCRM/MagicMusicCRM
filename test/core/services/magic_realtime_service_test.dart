@@ -7,8 +7,11 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_api_tokens.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/services/access_invalidation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
+import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
 void main() {
   group('MagicRealtimeService', () {
@@ -88,12 +91,19 @@ void main() {
 
         final messengerEvents = <Map<String, dynamic>>[];
         final crmEvents = <Map<String, dynamic>>[];
+        final accessEvents = <Map<String, dynamic>>[];
         messenger.onCrmChanged(messengerEvents.add);
         crm.onCrmChanged(crmEvents.add);
+        crm.onAccessInvalidated(accessEvents.add);
 
         fakeFactory.transport.fire('crm.changed', {'entity': 'lesson'});
+        fakeFactory.transport.fire('access.invalidated', {
+          'accessVersion': 2,
+          'scope': 'user',
+        });
         expect(messengerEvents, hasLength(1));
         expect(crmEvents, hasLength(1));
+        expect(accessEvents.single['accessVersion'], 2);
 
         // Disposing one view removes ONLY its handlers and keeps the socket.
         messenger.dispose();
@@ -328,6 +338,70 @@ void main() {
 
       await expectLater(service.connect(), throwsStateError);
     });
+
+    test(
+      'access invalidation refetches the current session projection',
+      () async {
+        final tokenStore = MemoryMagicTokenStore(
+          MagicApiTokens(
+            accessToken: _jwt('user-a'),
+            refreshToken: 'refresh-a',
+            tokenType: 'Bearer',
+            expiresIn: 900,
+          ),
+        );
+        final fakeFactory = _FakeTransportFactory();
+        final realtime = MagicRealtimeService(
+          api: _client(tokenStore),
+          apiBaseUrl: 'https://api.phantom-net.ru/api',
+          transportFactory: fakeFactory.call,
+        );
+        var gateLoads = 0;
+        final container = ProviderContainer(
+          overrides: [
+            magicRealtimeServiceProvider.overrideWithValue(realtime),
+            releaseGateStatusProvider.overrideWith((ref) async {
+              gateLoads++;
+              return const ReleaseGateStatus(
+                role: 'manager',
+                profileComplete: true,
+                legalAccepted: true,
+                deletionPending: false,
+              );
+            }),
+          ],
+        );
+        final gateSubscription = container.listen(
+          releaseGateStatusProvider,
+          (_, _) {},
+          fireImmediately: true,
+        );
+        final accessSubscription = container.listen(
+          accessInvalidationProvider,
+          (_, _) {},
+          fireImmediately: true,
+        );
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+        expect(gateLoads, 1);
+
+        fakeFactory.transport.fire('access.invalidated', {
+          'accessVersion': 2,
+          'scope': 'user',
+        });
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(gateLoads, 2);
+        expect(
+          container.read(accessInvalidationProvider).value?.accessVersion,
+          2,
+        );
+        accessSubscription.close();
+        gateSubscription.close();
+        container.dispose();
+      },
+    );
   });
 }
 

@@ -4,7 +4,6 @@ import { AuditService } from "../audit/audit.service";
 import { LeadIntakePort } from "../common/lead-intake.port";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
-import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { normalizePhoneRu, normalizedPhoneExpr } from "./phone.util";
@@ -31,7 +30,6 @@ export class LeadIntakeService implements LeadIntakePort {
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
-    private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeBus,
   ) {}
 
@@ -466,7 +464,7 @@ export class LeadIntakeService implements LeadIntakePort {
     type Sentinel =
       | { linkedLeadId: string | null }
       | { noProfile: true }
-      | { createdLeadId: string; leadName: string };
+      | { createdLeadId: string };
 
     const sentinel = await this.database.transaction<Sentinel>(async (client) => {
       // 1. Acquire an advisory lock scoped to this transaction — serializes
@@ -557,12 +555,7 @@ export class LeadIntakeService implements LeadIntakePort {
          on conflict do nothing`,
         [senderUserId, createdLeadId, matchedPhone, actor.userId],
       );
-      return {
-        createdLeadId,
-        leadName:
-          [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() ||
-          "Без имени",
-      };
+      return { createdLeadId };
     });
 
     if ("linkedLeadId" in sentinel) {
@@ -593,72 +586,7 @@ export class LeadIntakeService implements LeadIntakePort {
       action: "created",
       id: sentinel.createdLeadId,
     });
-    this.notifyNewLeadSafe(sentinel.createdLeadId, sentinel.leadName, "Через приложение");
     return { leadId: sentinel.createdLeadId, created: true };
-  }
-
-  // Public site form → lead. No actor: the caller is the webhook endpoint
-  // authenticated by a shared secret, so created_by stays null and the funnel
-  // entry status «Новый» is stamped like the chat-created leads do.
-  async createLeadFromSiteWebhook(dto: {
-    name: string;
-    phone: string;
-    email?: string;
-    discipline?: string;
-    comment?: string;
-    source?: string;
-  }): Promise<{ leadId: string }> {
-    // Keep the canonical +7 form when the phone normalizes, otherwise store
-    // the raw value — losing a site lead over formatting is worse than a
-    // messy phone that a manager can fix by hand.
-    const phone = normalizePhoneRu(dto.phone).canonical ?? dto.phone.trim();
-    const source = dto.source?.trim() || "site";
-    const notes =
-      [
-        dto.discipline?.trim() ? `Дисциплина: ${dto.discipline.trim()}` : null,
-        dto.comment?.trim() || null,
-      ]
-        .filter(Boolean)
-        .join("\n") || null;
-    const statusRow = await this.database.query<{ id: string }>(
-      `select min(id::text)::uuid as id
-       from app.lead_statuses
-       where lower(btrim(name)) = 'новый'
-       having count(*) = 1`,
-    );
-    const inserted = await this.database.query<{ id: string }>(
-      `
-        insert into app.leads (first_name, phone, email, source, notes, status_id)
-        values ($1, $2, $3, $4, $5, $6)
-        returning id
-      `,
-      [
-        dto.name.trim(),
-        phone,
-        dto.email?.trim().toLowerCase() || null,
-        source,
-        notes,
-        statusRow.rows[0]?.id ?? null,
-      ],
-    );
-    const leadId = inserted.rows[0].id;
-    try {
-      await this.audit.record({
-        action: "crm.lead_created",
-        entityType: "lead",
-        entityId: leadId,
-        metadata: { fromSiteWebhook: true, source },
-      });
-    } catch (error) {
-      // The webhook has no caller-supplied idempotency key. Returning 5xx after
-      // the lead insert committed would invite a retry and duplicate the lead.
-      this.logger.error(
-        `Audit write failed for site lead ${leadId}: ${String(error)}`,
-      );
-    }
-    this.realtime.emitCrmChanged({ entity: "lead", action: "created", id: leadId });
-    this.notifyNewLeadSafe(leadId, dto.name.trim(), source);
-    return { leadId };
   }
 
   async countAppLeads(actor: ActorContext): Promise<{ count: number }> {
@@ -667,24 +595,6 @@ export class LeadIntakeService implements LeadIntakePort {
       `select count(*)::text as count from app.leads where source = 'Через приложение' and deleted_at is null`,
     );
     return { count: Number(result.rows[0]?.count ?? 0) };
-  }
-
-  // ponytail: fire-and-forget notify, copied from LeadsService (updateLead
-  // keeps its own copy); a notification failure must never break creation.
-  private notifyNewLeadSafe(leadId: string, name: string, source: string): void {
-    try {
-      void this.notifications
-        .notifyNewLead({ leadId, name, source })
-        .catch((error: unknown) => {
-          this.logger.warn(
-            `New lead notification failed for ${leadId}: ${String(error)}`,
-          );
-        });
-    } catch (error: unknown) {
-      this.logger.warn(
-        `New lead notification failed for ${leadId}: ${String(error)}`,
-      );
-    }
   }
 
   /**

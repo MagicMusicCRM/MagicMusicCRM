@@ -155,6 +155,11 @@ export class StaffService {
           and ($4::text is null or sm.status = $4)
           and ($5::text is null or u.role::text = $5)
           and (
+            $9::text = 'system_admin'
+            or u.role is null
+            or u.role <> 'system_admin'::app.user_role
+          )
+          and (
             $6::text is null
             or ($6 = 'app' and coalesce(u.is_app_account, false) = true)
             or ($6 = 'technical' and coalesce(u.is_app_account, false) = false)
@@ -199,6 +204,7 @@ export class StaffService {
         query.authorization ?? null,
         query.birthdayMonth ?? null,
         limit,
+        actor.role,
       ],
     );
 

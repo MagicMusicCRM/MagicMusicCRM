@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "task": "T8.1.5",
+  "generatedAt": "2026-07-25T16:15:52.911Z",
+  "mode": "schema-compare",
+  "source": "app",
+  "target": "app",
+  "status": "clean",
+  "tolerancePolicy": {
+    "economicFacts": 0,
+    "unexplainedFacts": 0
+  },
+  "summary": {
+    "invariants": 8,
+    "sourceFacts": 11,
+    "targetFacts": 11,
+    "invariantsWithDrift": 0,
+    "unexplainedDiff": 0
+  },
+  "invariants": [
+    {
+      "id": "finance.payment-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Append-only active payment facts remain identical.",
+      "sourceCount": 2,
+      "targetCount": 2,
+      "sourceDigestSha256": "18377945e7a7add5a68c86314738c638698f2f156d6a51021a29feeafe0771a4",
+      "targetDigestSha256": "18377945e7a7add5a68c86314738c638698f2f156d6a51021a29feeafe0771a4",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "finance.adjustment-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Account adjustment facts and lifecycle remain identical.",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "sourceDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "targetDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "finance.balance-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Materialized student balances remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "b30b92dd23ed85e9f82d0f19023d7f6ca27f71b411a312f1f442b6efdd9bccc4",
+      "targetDigestSha256": "b30b92dd23ed85e9f82d0f19023d7f6ca27f71b411a312f1f442b6efdd9bccc4",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.subscription-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Issued subscription ownership, usage, and links remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "ce9f031b43fe20e233b28b8d8f95d6a58bb648a8ef55546f97bdcff7363df6ad",
+      "targetDigestSha256": "ce9f031b43fe20e233b28b8d8f95d6a58bb648a8ef55546f97bdcff7363df6ad",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "schedule.lesson-facts",
+      "owner": "SYS-SCHEDULE",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Lesson lifecycle, resources, and audience remain identical.",
+      "sourceCount": 3,
+      "targetCount": 3,
+      "sourceDigestSha256": "a94d9c11ea69fb1afd9bb7d4a6b375bef5caadc84782da3147691a5796daefa9",
+      "targetDigestSha256": "a94d9c11ea69fb1afd9bb7d4a6b375bef5caadc84782da3147691a5796daefa9",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "schedule.participation-facts",
+      "owner": "SYS-SCHEDULE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Attendance and charge participation facts remain identical.",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "sourceDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "targetDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "workflow.task-facts",
+      "owner": "SYS-WORKFLOW",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Task target, audience, lifecycle, and version inputs remain identical.",
+      "sourceCount": 2,
+      "targetCount": 2,
+      "sourceDigestSha256": "5672880a71e2dc8338dcf0a489fc9a5b2b406c997913b7e9941e25bae1803c76",
+      "targetDigestSha256": "5672880a71e2dc8338dcf0a489fc9a5b2b406c997913b7e9941e25bae1803c76",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "access.role-mappings",
+      "owner": "SYS-ACCESS",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Application role and CRM entity mappings remain identical.",
+      "sourceCount": 2,
+      "targetCount": 2,
+      "sourceDigestSha256": "9faad52c1125be7c32145ac651b3155240ea9e872f2b58f6bb6d4ed211ea0704",
+      "targetDigestSha256": "9faad52c1125be7c32145ac651b3155240ea9e872f2b58f6bb6d4ed211ea0704",
+      "unexplainedDiff": []
+    }
+  ],
+  "signature": {
+    "algorithm": "Ed25519",
+    "contentSha256": "1e8cc0d7ddb057c32bae66b26b92a5555b5ade032f626f311d7747838b11ff96",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAzH7AiEkweS5wU9Qv6yFSUks4jpxdr7Rpydf+gCiO5eo=\n-----END PUBLIC KEY-----\n",
+    "valueBase64": "sHXQDomo3iV+GkdsLxn8o2lEEVRwsTllBExcpIlqIZzzm9uDFA8AHbsK5zGgrceUTmIObwG14ZwK9YR+bMUCDA==",
+    "verified": true
+  }
+}

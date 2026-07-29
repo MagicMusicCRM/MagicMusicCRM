@@ -515,8 +515,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  // Notify staff about a freshly created lead (site webhook, CRM form or chat
-  // auto-lead). Never called with an actor: the trigger is the lead itself.
+  // Materialize an inbound.lead.created outbox event for eligible staff.
+  // Manual CRM and chat/app Lead creation never call this method.
   async notifyNewLead(input: {
     leadId: string;
     name: string;

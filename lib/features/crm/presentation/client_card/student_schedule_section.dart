@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_attendance_dialog.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 
@@ -12,7 +12,7 @@ import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 /// расписания (UX HolliHop image2/3: строка «день · время · педагог ·
 /// аудитория · период» с карандашом) + лента дат-квадратиков (прошедшие
 /// серые, будущие зелёные, пропуски тёмные с красным уголком; tooltip со
-/// статусом и заметкой; клик — модалка посещаемости).
+/// статусом и заметкой).
 class StudentScheduleSection extends ConsumerStatefulWidget {
   final String studentId;
   final List<Map<String, dynamic>> lessons;
@@ -273,33 +273,17 @@ class _StudentScheduleSectionState
           for (final (dt, lesson) in window)
             Padding(
               padding: const EdgeInsets.only(right: 4),
-              child: _dateSquare(cs, dt, lesson, isPast: dt.isBefore(now)),
+              child: _dateSquare(dt, lesson),
             ),
         ],
       ),
     );
   }
 
-  Widget _dateSquare(
-    ColorScheme cs,
-    DateTime dt,
-    Map<String, dynamic> lesson, {
-    required bool isPast,
-  }) {
-    final status = (lesson['status'] ?? 'scheduled').toString();
-    final missed = status == 'missed' || status == 'cancelled';
-    final Color bg;
-    final Color fg;
-    if (missed) {
-      bg = const Color(0xFF3A3A3E);
-      fg = Colors.white;
-    } else if (isPast) {
-      bg = cs.surfaceContainerHighest;
-      fg = cs.onSurfaceVariant;
-    } else {
-      bg = const Color(0xFF8BC34A);
-      fg = Colors.white;
-    }
+  Widget _dateSquare(DateTime dt, Map<String, dynamic> lesson) {
+    final projection = LessonStateProjection.fromMap(lesson);
+    final accent = projection.token.accent;
+    final isTrial = lesson['is_trial'] == true;
     final notes = (lesson['notes'] ?? '').toString().trim();
     // ✔ Владелец 17.07: «оплаты по дням в расписании». Считает сервер — сумма
     // платежей, привязанных к этому занятию. null означает «за этот день
@@ -309,7 +293,8 @@ class _StudentScheduleSectionState
     final paid = (lesson['paid_amount'] as num?)?.toDouble();
     final tooltip = [
       DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt.toLocal()),
-      _statusLabel(status),
+      projection.label,
+      if (isTrial) 'Пробное занятие',
       if (paid != null) 'Оплачено: ${_money(paid)} ₽',
       if (notes.isNotEmpty) notes,
     ].join('\n');
@@ -318,10 +303,7 @@ class _StudentScheduleSectionState
       waitDuration: const Duration(milliseconds: 300),
       child: InkWell(
         borderRadius: BorderRadius.circular(4),
-        onTap: () async {
-          await LessonAttendanceDialog.show(context, lesson);
-          widget.onChanged();
-        },
+        onTap: null,
         child: Stack(
           children: [
             Container(
@@ -329,19 +311,20 @@ class _StudentScheduleSectionState
               height: 30,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: bg,
+                color: projection.token.soft,
                 borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: accent.withValues(alpha: 0.45)),
               ),
               child: Text(
                 DateFormat('d.MM').format(dt.toLocal()),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: fg,
+                  color: accent,
                 ),
               ),
             ),
-            if (missed)
+            if (isTrial)
               Positioned(
                 top: 0,
                 right: 0,
@@ -349,10 +332,20 @@ class _StudentScheduleSectionState
                   width: 8,
                   height: 8,
                   decoration: const BoxDecoration(
-                    color: AppColor.danger,
+                    color: AppColor.gold,
                     borderRadius: BorderRadius.only(
                       topRight: Radius.circular(4),
                       bottomLeft: Radius.circular(4),
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'П',
+                    style: TextStyle(
+                      fontSize: 6,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -395,15 +388,6 @@ class _StudentScheduleSectionState
   String _money(double value) {
     final rounded = value.roundToDouble() == value ? value.round() : value;
     return NumberFormat.decimalPattern('ru').format(rounded);
-  }
-
-  String _statusLabel(String status) {
-    return switch (status) {
-      'completed' || 'done' => 'Проведено',
-      'missed' => 'Пропуск',
-      'cancelled' => 'Отменено',
-      _ => 'Запланировано',
-    };
   }
 
   String _formatDate(Object? value) {

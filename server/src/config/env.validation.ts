@@ -39,7 +39,7 @@ export const envValidationSchema = Joi.object({
   NOTIFICATION_TOKEN_ENCRYPTION_KEY: Joi.string().allow('').default(''),
   LESSON_REMINDERS_ENABLED: Joi.boolean().default(false),
   TASK_REMINDERS_ENABLED: Joi.boolean().default(false),
-  LEAD_WEBHOOK_SECRET: Joi.string().allow('').default(''),
+  LEAD_WEBHOOK_SECRET: Joi.string().allow('').min(32).default(''),
   HOLLIHOP_BASE_URL: Joi.string().uri().default('https://sokol.t8s.ru/Api/V2/'),
   HOLLIHOP_AUTH_KEY: Joi.string().allow('').default(''),
   HOLLIHOP_TIMEOUT_MS: Joi.number().integer().min(100).max(30000).default(5000)

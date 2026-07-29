@@ -1,8 +1,7 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
-import { NotificationsService } from "../notifications/notifications.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { TimelineService } from "./timeline.service";
 import { resolveAge } from "./age";
@@ -129,18 +128,15 @@ interface CommentRow {
 
 /**
  * Lead pipeline (app.leads): board/card/list, CRUD, status history,
- * applications. Inbound capture (chat/app/site → lead) lives in
- * LeadIntakeService. Extracted from CrmService (B5).
+ * applications. Chat/app capture lives in LeadIntakeService; signed external
+ * ingestion lives in InboundLeadService. Extracted from CrmService (B5).
  */
 @Injectable()
 export class LeadsService {
-  private readonly logger = new Logger(LeadsService.name);
-
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
-    private readonly notifications: NotificationsService,
     private readonly chatWork: ChatWorkTimelineService,
     private readonly realtime: RealtimeBus,
     // Field-edit audit for the lead card. TimelineService depends only on
@@ -756,12 +752,6 @@ export class LeadsService {
       id: lead.id,
       branchId: branchId ?? null,
     });
-    this.notifyNewLeadSafe(
-      lead.id,
-      [lead.first_name, lead.last_name].filter(Boolean).join(" ").trim() ||
-        "Без имени",
-      lead.source?.trim() || "CRM",
-    );
     return this.toLeadDto(lead);
   }
 
@@ -946,28 +936,6 @@ export class LeadsService {
   // Uses a pg advisory lock (per-user) to serialize concurrent first messages
   // so that both the check and the create happen inside a single transaction,
   // preventing duplicate leads from a race between two rapid chat messages.
-
-  // Fire-and-forget staff notification about a new lead. A notification
-  // failure (sync or async) must NEVER break lead creation — log and move on.
-  private notifyNewLeadSafe(
-    leadId: string,
-    name: string,
-    source: string,
-  ): void {
-    try {
-      void this.notifications
-        .notifyNewLead({ leadId, name, source })
-        .catch((error: unknown) => {
-          this.logger.warn(
-            `New lead notification failed for ${leadId}: ${String(error)}`,
-          );
-        });
-    } catch (error: unknown) {
-      this.logger.warn(
-        `New lead notification failed for ${leadId}: ${String(error)}`,
-      );
-    }
-  }
 
   private buildLeadBoardFilter(query: LeadBoardQuery) {
     const params: unknown[] = [];
