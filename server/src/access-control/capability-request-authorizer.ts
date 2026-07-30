@@ -48,6 +48,13 @@ export class CapabilityRequestAuthorizer {
     path: string,
   ): Promise<CapabilityAuthorizationResult> {
     const routePolicy = resolveCapabilityRoutePolicy(method, path);
+    if (routePolicy.authenticatedOnly) {
+      return {
+        policy: routePolicy,
+        source: "actor",
+        reason: "authenticated_self_snapshot",
+      };
+    }
     const definition = definitionsByKey.get(routePolicy.capabilityKey);
     if (!definition) {
       throw new ForbiddenException({

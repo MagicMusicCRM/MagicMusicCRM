@@ -41,6 +41,28 @@ describe("CapabilityRequestAuthorizer", () => {
     );
   });
 
+  it("keeps the actor's own access snapshot available after authentication", async () => {
+    const { authorizer, query } = authorizerWith({
+      role: "teacher",
+      active: true,
+      definition_active: true,
+      role_effect: "deny",
+      override_effect: "deny",
+    });
+
+    await expect(
+      authorizer.authorize(actor, "GET", "/api/access/me"),
+    ).resolves.toMatchObject({
+      policy: {
+        scope: "self",
+        authenticatedOnly: true,
+      },
+      source: "actor",
+      reason: "authenticated_self_snapshot",
+    });
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("fails closed for a denied package or personal deny", async () => {
     const packageDenied = authorizerWith({
       role: "teacher",

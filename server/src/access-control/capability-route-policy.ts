@@ -17,6 +17,7 @@ export interface CapabilityRoutePolicy {
   scope: CapabilityResourceScope;
   legacyAllowedRoles: readonly AccessRole[];
   legacyPolicy: string;
+  authenticatedOnly?: boolean;
 }
 
 const allRoles = [...USER_ROLES] as readonly AccessRole[];
@@ -100,12 +101,15 @@ export function resolveCapabilityRoutePolicy(
   const read = isRead(method);
 
   if (read && path === "/access/me") {
-    return policy(
-      "crm.client.read.basic",
-      "self",
-      allRoles,
-      "Authenticated actor reads own effective capability snapshot",
-    );
+    return {
+      ...policy(
+        "crm.client.read.basic",
+        "self",
+        allRoles,
+        "Authenticated actor reads own effective capability snapshot",
+      ),
+      authenticatedOnly: true,
+    };
   }
 
   if (path.startsWith("/access/")) {
