@@ -1107,12 +1107,12 @@ flowchart TD
   - **Инструкция:** `pwsh -File scripts/v4_sprint_gate.ps1 -Sprint S0`
   - **Оценка:** 4 ч. · **Зависимости:** все задачи S0 · **Приоритет:** P0
 
-- [ ] **INT-S1** [MILESTONE]: Access & Privacy
+- [x] **INT-S1** [MILESTONE]: Access & Privacy
   - **Описание:** проверить совместную работу backend capabilities, Flutter shell/editor, safe projections и invalidation.
   - **Подпункты:**
-    - [ ] T2.1.1–T2.4.1 и T1.1.1–T1.1.2 отмечены `[x]`.
-    - [ ] Actor Matrix 6 ролей и teacher payload scan зелёные.
-    - [ ] Role/override применяются ≤5 s, Manager mutations denied, system_admin hidden/root rules подтверждены.
+    - [x] T2.1.1–T2.4.1 и T1.1.1–T1.1.2 отмечены `[x]`.
+    - [x] Actor Matrix 6 ролей и teacher payload scan зелёные.
+    - [x] Role/override применяются ≤5 s, Manager mutations denied, system_admin hidden/root rules подтверждены.
   - **Вход:** все задачи SYS-ACCESS S1 и SYS-APP Phase 1.
   - **Выход:** `docs/audits/v4-s1-access-privacy.md`.
   - **Критерии:** Given шесть акторов и две sessions; When role/override/read scenarios выполнены; Then approved allow/deny/projection полностью совпадают с PRD.

@@ -21,25 +21,8 @@ Set-StrictMode -Version Latest
 if ($PSVersionTable.PSVersion.Major -lt 7) {
   throw "v4 sprint gates require PowerShell 7 or newer."
 }
-if ($Sprint -ne "S0") {
-  throw "Sprint $Sprint gate is not implemented yet."
-}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-if (-not $EvidencePath) {
-  $EvidencePath = Join-Path $repoRoot "docs/audits/v4-s0-gate-result.json"
-}
-$evidenceFullPath = [IO.Path]::GetFullPath($EvidencePath)
-$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
-$worktreePath = Join-Path $tempRoot (
-  "magicmusiccrm-v4-s0-" + [Guid]::NewGuid().ToString("N")
-)
-if (-not $worktreePath.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) {
-  throw "Resolved worktree escaped the operating-system temp directory."
-}
-if (-not ([IO.Path]::GetFileName($worktreePath)).StartsWith("magicmusiccrm-v4-s0-")) {
-  throw "Refusing an unexpected temporary worktree target."
-}
 
 function Invoke-GateCommand {
   param(
@@ -61,6 +44,146 @@ function Invoke-GateCommand {
     status = "pass"
     durationSeconds = $duration
   }
+}
+
+if ($Sprint -eq "S1") {
+  if (-not $ActorMatrix) {
+    throw "S1 requires -ActorMatrix."
+  }
+  if (-not $EvidencePath) {
+    $EvidencePath = Join-Path $repoRoot "docs/audits/v4-s1-gate-result.json"
+  }
+  $evidenceFullPath = [IO.Path]::GetFullPath($EvidencePath)
+  $gateResults = @()
+  $gateStartedAt = Get-Date
+  $resolvedRevision = (
+    & git -C $repoRoot rev-parse --verify "$Revision^{commit}"
+  ).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $resolvedRevision) {
+    throw "Cannot resolve Git revision $Revision."
+  }
+
+  $taskText = Get-Content -Raw -Encoding utf8 (
+    Join-Path $repoRoot ".anws/v4/05_TASKS.md"
+  )
+  $requiredTasks = @(
+    "T1.1.1", "T1.1.2",
+    "T2.1.1", "T2.1.2",
+    "T2.2.1", "T2.2.2", "T2.2.3",
+    "T2.3.1", "T2.3.2", "T2.4.1"
+  )
+  foreach ($taskId in $requiredTasks) {
+    $escaped = [Regex]::Escape($taskId)
+    if ($taskText -notmatch "(?m)^- \[x\] \*\*$escaped\*\*") {
+      throw "$taskId is not marked complete."
+    }
+  }
+  $requiredEvidence = @(
+    "docs/audits/v4-capability-registry.md",
+    "docs/audits/v4-hard-invariant-evaluator.md",
+    "docs/audits/v4-access-mutations.md",
+    "docs/audits/v4-client-projections.md",
+    "docs/audits/v4-comment-sharing.md",
+    "docs/audits/v4-access-coverage.md",
+    "docs/audits/v4-access-invalidation.md",
+    "docs/audits/v4-actor-matrix.md",
+    "docs/audits/v4-capability-shell.md",
+    "docs/audits/v4-access-editor.md"
+  )
+  foreach ($relativePath in $requiredEvidence) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $relativePath))) {
+      throw "Missing S1 evidence: $relativePath"
+    }
+  }
+  $gateResults += [ordered]@{
+    name = "S1 task/evidence inventory"
+    status = "pass"
+    durationSeconds = 0
+  }
+
+  Push-Location $repoRoot
+  try {
+    Invoke-GateCommand "Backend access typecheck" {
+      & node server/node_modules/typescript/bin/tsc `
+        --noEmit --project server/tsconfig.json
+    }
+    Invoke-GateCommand "Access policy and mutation integration" {
+      Push-Location server
+      try {
+        & node node_modules/jest/bin/jest.js `
+          --runInBand --runTestsByPath `
+          src/access-control/capability-registry-postgres.integration.spec.ts `
+          src/access-control/effective-access-evaluator.spec.ts `
+          src/access-control/access-mutations-postgres.integration.spec.ts `
+          src/access-control/access-invalidation.integration.spec.ts `
+          src/access-control/capability-request-authorizer.spec.ts `
+          src/access-control/capability-route-policy.spec.ts `
+          src/access-control/teacher-projection.contract.spec.ts
+      } finally {
+        Pop-Location
+      }
+    }
+    Invoke-GateCommand "Six-role Actor Matrix and payload scan" {
+      Push-Location server
+      try {
+        & node node_modules/jest/bin/jest.js `
+          --runInBand --runTestsByPath `
+          src/access-control/actor-matrix-postgres.integration.spec.ts `
+          src/access-control/actor-matrix-payload-leak.spec.ts
+      } finally {
+        Pop-Location
+      }
+    }
+    Invoke-GateCommand "Flutter capability shell/editor matrix" {
+      & flutter test `
+        test/features/v4/capability_shell_test.dart `
+        test/features/v4/access_editor_roles_test.dart `
+        test/features/rbac_nav_matrix_test.dart
+    }
+  } finally {
+    Pop-Location
+  }
+
+  $result = [ordered]@{
+    schemaVersion = 1
+    sprint = "S1"
+    revision = $resolvedRevision
+    status = "pass"
+    generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+    actorMatrix = $true
+    managerMutationsDenied = $true
+    systemAdminHiddenAndRoot = $true
+    accessInvalidationMaxSeconds = 5
+    gates = $gateResults
+    durationSeconds = [Math]::Round(
+      ((Get-Date) - $gateStartedAt).TotalSeconds,
+      3
+    )
+  }
+  $evidenceDirectory = Split-Path -Parent $evidenceFullPath
+  New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+  $result | ConvertTo-Json -Depth 8 |
+    Set-Content -LiteralPath $evidenceFullPath -Encoding utf8NoBOM
+  Write-Host "`nS1 gate PASS: $evidenceFullPath" -ForegroundColor Green
+  return
+}
+
+if ($Sprint -ne "S0") {
+  throw "Sprint $Sprint gate is not implemented yet."
+}
+if (-not $EvidencePath) {
+  $EvidencePath = Join-Path $repoRoot "docs/audits/v4-s0-gate-result.json"
+}
+$evidenceFullPath = [IO.Path]::GetFullPath($EvidencePath)
+$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$worktreePath = Join-Path $tempRoot (
+  "magicmusiccrm-v4-s0-" + [Guid]::NewGuid().ToString("N")
+)
+if (-not $worktreePath.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) {
+  throw "Resolved worktree escaped the operating-system temp directory."
+}
+if (-not ([IO.Path]::GetFileName($worktreePath)).StartsWith("magicmusiccrm-v4-s0-")) {
+  throw "Refusing an unexpected temporary worktree target."
 }
 
 $resolvedRevision = (

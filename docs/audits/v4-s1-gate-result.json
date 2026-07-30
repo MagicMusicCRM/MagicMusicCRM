@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "sprint": "S1",
+  "revision": "9a871d1703c9b25692d8c6960329d0b79fa2fbe1",
+  "status": "pass",
+  "generatedAt": "2026-07-30T10:08:51.6426523Z",
+  "actorMatrix": true,
+  "managerMutationsDenied": true,
+  "systemAdminHiddenAndRoot": true,
+  "accessInvalidationMaxSeconds": 5,
+  "gates": [
+    {
+      "name": "S1 task/evidence inventory",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Backend access typecheck",
+      "status": "pass",
+      "durationSeconds": 6.079
+    },
+    {
+      "name": "Access policy and mutation integration",
+      "status": "pass",
+      "durationSeconds": 18.533
+    },
+    {
+      "name": "Six-role Actor Matrix and payload scan",
+      "status": "pass",
+      "durationSeconds": 17.077
+    },
+    {
+      "name": "Flutter capability shell/editor matrix",
+      "status": "pass",
+      "durationSeconds": 16.988
+    }
+  ],
+  "durationSeconds": 58.821
+}
