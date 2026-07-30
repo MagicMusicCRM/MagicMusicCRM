@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "T8.1.2",
-  "source_digest_sha256": "87bcb6d38d2fb3c56983cd5c1ae3af2fdcbdc1f622423896c48dca284f4a9c9a",
-  "source_file_count": 672,
+  "source_digest_sha256": "fa7442a4e573ff8b52b8197dcdd3073630b9031e0afa86c9e69378e3872d7900",
+  "source_file_count": 675,
   "systems": [
     "SYS-APP",
     "SYS-ACCESS",
@@ -19,7 +19,7 @@
     "policy_calls": 225,
     "dto_fields": 641,
     "flutter_role_checks": 121,
-    "flutter_navigation_sources": 312,
+    "flutter_navigation_sources": 317,
     "schedule_entry_points": 36,
     "attendance_mutations": 0,
     "finance_writes": 43,
@@ -59,7 +59,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 46
+      "line": 47
     },
     {
       "id": "GET /crm/students",
@@ -70,7 +70,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 51
+      "line": 52
     },
     {
       "id": "GET /crm/students/search",
@@ -81,7 +81,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 59
+      "line": 60
     },
     {
       "id": "POST /crm/students",
@@ -92,7 +92,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 67
+      "line": 68
     },
     {
       "id": "GET /crm/student-balances",
@@ -103,7 +103,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 80
+      "line": 87
     },
     {
       "id": "GET /crm/students/:id/groups",
@@ -114,7 +114,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 88
+      "line": 95
     },
     {
       "id": "GET /crm/students/:id/card",
@@ -125,7 +125,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 97
+      "line": 104
     },
     {
       "id": "GET /crm/students/:id/ledger",
@@ -136,7 +136,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 105
+      "line": 112
     },
     {
       "id": "POST /crm/students/:id/adjustments",
@@ -147,7 +147,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 117
+      "line": 124
     },
     {
       "id": "PATCH /crm/students/:id/adjustments/:adjustmentId",
@@ -158,7 +158,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 126
+      "line": 133
     },
     {
       "id": "DELETE /crm/students/:id/adjustments/:adjustmentId",
@@ -169,7 +169,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 138
+      "line": 145
     },
     {
       "id": "POST /crm/students/:id/transfer",
@@ -180,7 +180,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 147
+      "line": 154
     },
     {
       "id": "PATCH /crm/students/:id/blacklist",
@@ -191,7 +191,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 159
+      "line": 166
     },
     {
       "id": "GET /crm/students/:id",
@@ -202,7 +202,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 168
+      "line": 175
     },
     {
       "id": "PATCH /crm/students/:id",
@@ -213,7 +213,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 176
+      "line": 183
     },
     {
       "id": "DELETE /crm/students/:id",
@@ -224,7 +224,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 185
+      "line": 192
     },
     {
       "id": "GET /crm/me/commerce",
@@ -367,7 +367,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 201
+      "line": 208
     },
     {
       "id": "POST /crm/students/:id/return-to-lead",
@@ -378,7 +378,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 193
+      "line": 200
     },
     {
       "id": "POST /crm/shared-tasks/:taskId/close",
@@ -2541,7 +2541,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 44
+      "line": 47
     },
     {
       "id": "PATCH /crm/duplicates/:id",
@@ -2552,7 +2552,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 52
+      "line": 55
     },
     {
       "id": "GET /crm/leads",
@@ -2563,7 +2563,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 61
+      "line": 64
     },
     {
       "id": "GET /crm/leads/board",
@@ -2574,7 +2574,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 66
+      "line": 69
     },
     {
       "id": "GET /crm/leads/:id/card",
@@ -2585,7 +2585,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 74
+      "line": 77
     },
     {
       "id": "GET /crm/leads/:id/applications",
@@ -2596,7 +2596,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 82
+      "line": 85
     },
     {
       "id": "GET /crm/leads/:leadId/status-history",
@@ -2607,7 +2607,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 90
+      "line": 93
     },
     {
       "id": "POST /crm/leads",
@@ -2618,7 +2618,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 98
+      "line": 101
     },
     {
       "id": "PATCH /crm/teachers/:id",
@@ -2673,7 +2673,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 181
+      "line": 197
     },
     {
       "id": "POST /crm/leads/:winnerId/merge/:loserId",
@@ -2684,7 +2684,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 172
+      "line": 188
     },
     {
       "id": "POST /crm/payments",
@@ -2706,7 +2706,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 164
+      "line": 180
     },
     {
       "id": "GET /crm/phone-review-queue/count",
@@ -2717,7 +2717,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 151
+      "line": 167
     },
     {
       "id": "DELETE /crm/leads/:id",
@@ -2728,7 +2728,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 143
+      "line": 159
     },
     {
       "id": "PATCH /crm/leads/:id",
@@ -2739,7 +2739,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 134
+      "line": 150
     },
     {
       "id": "PATCH /crm/leads/:id/blacklist",
@@ -2750,7 +2750,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 125
+      "line": 141
     },
     {
       "id": "POST /crm/leads/:id/link-student",
@@ -2761,7 +2761,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 114
+      "line": 130
     },
     {
       "id": "POST /crm/leads/:leadId/subscriptions/issue",
@@ -2772,7 +2772,7 @@
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 103
+      "line": 119
     },
     {
       "id": "GET /crm/phone-review-queue",
@@ -2783,7 +2783,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 156
+      "line": 172
     },
     {
       "id": "GET /crm/subscriptions",
@@ -4519,7 +4519,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 830
+      "line": 848
     },
     {
       "kind": "policy-call",
@@ -4528,7 +4528,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 867
+      "line": 885
     },
     {
       "kind": "policy-call",
@@ -4618,7 +4618,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 788
+      "line": 806
     },
     {
       "kind": "policy-call",
@@ -4753,7 +4753,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 750
+      "line": 768
     },
     {
       "kind": "policy-call",
@@ -4762,7 +4762,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 539
+      "line": 557
     },
     {
       "kind": "policy-call",
@@ -4870,7 +4870,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 575
+      "line": 593
     },
     {
       "kind": "policy-call",
@@ -4942,7 +4942,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 146
+      "line": 148
     },
     {
       "kind": "policy-call",
@@ -4951,7 +4951,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 180
+      "line": 182
     },
     {
       "kind": "policy-call",
@@ -4960,7 +4960,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 262
+      "line": 268
     },
     {
       "kind": "policy-call",
@@ -4969,7 +4969,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 435
+      "line": 453
     },
     {
       "kind": "policy-call",
@@ -4978,7 +4978,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 445
+      "line": 463
     },
     {
       "kind": "policy-call",
@@ -5410,7 +5410,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
-      "line": 149
+      "line": 151
     },
     {
       "kind": "policy-call",
@@ -5419,7 +5419,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
-      "line": 358
+      "line": 360
     },
     {
       "kind": "policy-call",
@@ -5428,7 +5428,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
-      "line": 484
+      "line": 486
     },
     {
       "kind": "policy-call",
@@ -5437,7 +5437,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
-      "line": 533
+      "line": 535
     },
     {
       "kind": "policy-call",
@@ -5446,7 +5446,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
-      "line": 563
+      "line": 565
     },
     {
       "kind": "policy-call",
@@ -5455,7 +5455,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
-      "line": 623
+      "line": 625
     },
     {
       "kind": "policy-call",
@@ -5464,7 +5464,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
-      "line": 684
+      "line": 690
     },
     {
       "kind": "policy-call",
@@ -5473,7 +5473,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
-      "line": 759
+      "line": 779
     },
     {
       "kind": "policy-call",
@@ -5482,7 +5482,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/leads.service.ts",
-      "line": 898
+      "line": 918
     },
     {
       "kind": "policy-call",
@@ -15162,6 +15162,46 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(context).pop(),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 637
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.of(context).pop(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 546
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(context).pop(),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 470
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.of(context).pop(_SourceDraft(canonical, display));",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 442
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: _busy ? null : () => Navigator.of(context).pop(),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 306
+    },
+    {
+      "kind": "navigation-source",
       "expression": "_busy ? null : () => Navigator.pop(context, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -15242,107 +15282,35 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context, _dirty ? true : null);",
+      "expression": "Navigator.of(context).pop(result);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 250
+      "file": "lib/features/crm/presentation/client_forms/client_create_dialogs.dart",
+      "line": 128
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "expression": "onPressed: _saving ? null : () => Navigator.of(context).pop(),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 243
+      "file": "lib/features/crm/presentation/client_forms/client_create_dialogs.dart",
+      "line": 158
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "expression": "Navigator.of(context).pop(result);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 238
+      "file": "lib/features/crm/presentation/client_forms/client_create_dialogs.dart",
+      "line": 353
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context, _dirty ? true : null);",
+      "expression": "onPressed: _saving ? null : () => Navigator.of(context).pop(),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 226
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 629
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/access_editor_sheet.dart",
-      "line": 286
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ".read(messengerNavigationProvider.notifier)",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
-      "line": 73
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ".navigateTo(MessengerNavigationState(partnerId: userId));",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
-      "line": 74
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "context.go('/');",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
-      "line": 78
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_dialog.dart",
-      "line": 60
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ".navigateTo(const CrmNavigationRequest(tabIndex: 2));",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 620
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ".read(crmNavigationRequestProvider.notifier)",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 619
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ".read(scheduleNavigationProvider.notifier)",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 616
+      "file": "lib/features/crm/presentation/client_forms/client_create_dialogs.dart",
+      "line": 380
     },
     {
       "kind": "navigation-source",
@@ -15370,19 +15338,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 624
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/lead_card.dart",
       "line": 545
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, controller.text),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
+      "line": 499
     },
     {
       "kind": "navigation-source",
@@ -15402,19 +15370,19 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "Navigator.pop(context, _dirty ? true : null);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card.dart",
+      "line": 250
+    },
+    {
+      "kind": "navigation-source",
       "expression": "Navigator.of(context).maybePop(false);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/lead_board_filters.dart",
       "line": 359
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(context, {",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/finance_widget_widgets.dart",
-      "line": 703
     },
     {
       "kind": "navigation-source",
@@ -15442,35 +15410,107 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, controller.text),",
+      "expression": "context.go('/');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 499
+      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
+      "line": 78
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ".navigateTo(MessengerNavigationState(partnerId: userId));",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
+      "line": 74
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ".read(messengerNavigationProvider.notifier)",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
+      "line": 73
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/access_editor_sheet.dart",
+      "line": 286
     },
     {
       "kind": "navigation-source",
       "expression": "Navigator.pop(context, {",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_dialog.dart",
-      "line": 66
+      "file": "lib/features/manager/presentation/widgets/finance_widget_widgets.dart",
+      "line": 703
     },
     {
       "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 550
+      "file": "lib/features/crm/presentation/client_card/client_card.dart",
+      "line": 243
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card.dart",
+      "line": 238
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context, _dirty ? true : null);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card.dart",
+      "line": 226
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(ctx).pop(true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
+      "line": 342
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(ctx).pop(false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
+      "line": 337
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
+      "line": 288
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
+      "line": 283
     },
     {
       "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 494
+      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
+      "line": 145
     },
     {
       "kind": "navigation-source",
@@ -15490,19 +15530,19 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
+      "line": 1015
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
       "line": 43
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_data.dart",
-      "line": 621
     },
     {
       "kind": "navigation-source",
@@ -15562,67 +15602,75 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "if (mounted) context.go('/legal-consent');",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
-      "line": 96
+      "file": "lib/features/crm/presentation/client_card/client_card_data.dart",
+      "line": 621
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => context.push('/register'),",
+      "expression": ".read(scheduleNavigationProvider.notifier)",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/login_screen.dart",
-      "line": 262
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ": () => context.push('/password-reset'),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/login_screen.dart",
-      "line": 214
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "context.go(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/login_screen.dart",
-      "line": 70
+      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
+      "line": 616
     },
     {
       "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
-      "line": 145
+      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
+      "line": 1020
     },
     {
       "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(context, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
-      "line": 283
+      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
+      "line": 294
     },
     {
       "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(context, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
-      "line": 288
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 629
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(ctx).pop(false),",
+      "expression": "onPressed: () => Navigator.pop(context, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
-      "line": 337
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 624
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 550
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 545
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 494
     },
     {
       "kind": "navigation-source",
@@ -15642,19 +15690,19 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "onTap: () => Navigator.pop(sheetContext, pkg),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
+      "line": 36
+    },
+    {
+      "kind": "navigation-source",
       "expression": "context.go('/admin');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
       "line": 169
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.of(context).pop(_dirty ? true : null);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
-      "line": 166
     },
     {
       "kind": "navigation-source",
@@ -15682,19 +15730,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 545
-    },
-    {
-      "kind": "navigation-source",
       "expression": "ref.read(scheduleNavigationProvider.notifier).focus(scheduledAt, lessonId);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
       "line": 159
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context, true);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
+      "line": 462
     },
     {
       "kind": "navigation-source",
@@ -15714,59 +15762,27 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "expression": "Navigator.of(context).pop(_dirty ? true : null);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 294
+      "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
+      "line": 166
     },
     {
       "kind": "navigation-source",
-      "expression": "onTap: () => Navigator.pop(sheetContext, pkg),",
+      "expression": ".read(crmNavigationRequestProvider.notifier)",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 36
+      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
+      "line": 619
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "expression": ".navigateTo(const CrmNavigationRequest(tabIndex: 2));",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
-      "line": 1020
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
-      "line": 1015
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(ctx).pop(true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
-      "line": 342
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(context, true);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 462
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "context.go(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/login_screen.dart",
-      "line": 53
+      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
+      "line": 620
     },
     {
       "kind": "navigation-source",
@@ -15775,14 +15791,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
       "line": 89
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
-      "line": 133
     },
     {
       "kind": "navigation-source",
@@ -15842,11 +15850,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "ref.read(messengerNavigationProvider.notifier).clear();",
+      "expression": "if (context.mounted) context.go('/login');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
-      "line": 106
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "line": 462
     },
     {
       "kind": "navigation-source",
@@ -15854,7 +15862,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
-      "line": 68
+      "line": 106
     },
     {
       "kind": "navigation-source",
@@ -15906,11 +15914,27 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "if (context.mounted) context.go('/login');",
+      "expression": "onPressed: _saving ? null : () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 462
+      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
+      "line": 918
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "ref.read(messengerNavigationProvider.notifier).clear();",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
+      "line": 68
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "if (mounted) Navigator.pop(context, true);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
+      "line": 891
     },
     {
       "kind": "navigation-source",
@@ -15919,14 +15943,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
       "line": 478
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.of(context).push(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_b.dart",
-      "line": 233
     },
     {
       "kind": "navigation-source",
@@ -15994,11 +16010,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: _saving ? null : () => Navigator.pop(context),",
+      "expression": "Navigator.of(context).push(",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 918
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_b.dart",
+      "line": 233
     },
     {
       "kind": "navigation-source",
@@ -16074,35 +16090,27 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(sheetContext).pop(true),",
+      "expression": "if (mounted) context.go('/legal-consent');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
-      "line": 102
+      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
+      "line": 96
     },
     {
       "kind": "navigation-source",
-      "expression": "if (mounted) Navigator.pop(context, true);",
+      "expression": "onPressed: touched ? () => Navigator.pop(ctx, true) : null,",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 891
+      "line": 248
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "expression": "onPressed: touched ? () => Navigator.pop(ctx, true) : null,",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 244
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "const _DayNavigator({",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
-      "line": 10
+      "line": 179
     },
     {
       "kind": "navigation-source",
@@ -16162,19 +16170,19 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "const _DayNavigator({",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
+      "line": 10
+    },
+    {
+      "kind": "navigation-source",
       "expression": "context.push('/lessons/$entityId');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/reports_widget_widgets.dart",
       "line": 452
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/notification_preferences_dialog.dart",
-      "line": 110
     },
     {
       "kind": "navigation-source",
@@ -16221,16 +16229,40 @@
       "expression": "onPressed: () => Navigator.pop(ctx, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
-      "line": 586
+      "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
+      "line": 133
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "expression": "onPressed: () => Navigator.of(sheetContext).pop(true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
+      "line": 102
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/notification_preferences_dialog.dart",
+      "line": 110
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
+      "line": 244
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
-      "line": 593
+      "line": 586
     },
     {
       "kind": "navigation-source",
@@ -16239,22 +16271,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
       "line": 615
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
-      "line": 622
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: touched ? () => Navigator.pop(ctx, true) : null,",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 179
     },
     {
       "kind": "navigation-source",
@@ -16306,14 +16322,6 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: touched ? () => Navigator.pop(ctx, true) : null,",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 248
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -16322,11 +16330,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
+      "line": 593
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ": () => Navigator.pop(context, _selectedUserId),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_sheets.dart",
-      "line": 789
+      "line": 795
     },
     {
       "kind": "navigation-source",
@@ -16378,35 +16394,51 @@
     },
     {
       "kind": "navigation-source",
-      "expression": ": () => Navigator.pop(context, _selectedUserId),",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
+      "line": 622
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_sheets.dart",
-      "line": 795
+      "line": 789
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => context.go('/login'),",
+      "expression": "onPressed: () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/legal_consent_screen.dart",
-      "line": 256
+      "file": "lib/features/teacher/presentation/widgets/teacher_schedule_widget.dart",
+      "line": 313
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => context.go('/login'),",
+      "expression": "onPressed: () => context.push('/register'),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/legal_consent_screen.dart",
-      "line": 161
+      "file": "lib/features/auth/presentation/screens/login_screen.dart",
+      "line": 262
     },
     {
       "kind": "navigation-source",
-      "expression": "if (mounted) context.go('/');",
+      "expression": "context.go(",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/legal_consent_screen.dart",
-      "line": 35
+      "file": "lib/features/auth/presentation/screens/login_screen.dart",
+      "line": 70
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/searchable_select.dart",
+      "line": 226
     },
     {
       "kind": "navigation-source",
@@ -16522,22 +16554,6 @@
     },
     {
       "kind": "navigation-source",
-      "expression": ".read(messengerNavigationProvider.notifier)",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/services/notification_service.dart",
-      "line": 318
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(context);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/searchable_select.dart",
-      "line": 226
-    },
-    {
-      "kind": "navigation-source",
       "expression": "Navigator.pop(context);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -16559,6 +16575,22 @@
       "status": "workspace-migration-pending",
       "file": "lib/core/widgets/telegram/chat_info_dialog_dialogs.dart",
       "line": 247
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ": () => Navigator.pop(context, _selectedUserIds),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/telegram/chat_info_dialog_dialogs.dart",
+      "line": 254
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 554
     },
     {
       "kind": "navigation-source",
@@ -16610,6 +16642,14 @@
     },
     {
       "kind": "navigation-source",
+      "expression": ".read(messengerNavigationProvider.notifier)",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/services/notification_service.dart",
+      "line": 318
+    },
+    {
+      "kind": "navigation-source",
       "expression": "if (Navigator.canPop(context)) Navigator.pop(context);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -16618,19 +16658,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "context.go(_deepLinkHomeRoute(ref));",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/router/app_router.dart",
-      "line": 617
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(context);",
+      "expression": "} else if (Navigator.canPop(context)) {",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/widgets/telegram/chat_info_dialog.dart",
-      "line": 410
+      "line": 409
     },
     {
       "kind": "navigation-source",
@@ -16682,27 +16714,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": ": () => Navigator.pop(context, _selectedUserIds),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/chat_info_dialog_dialogs.dart",
-      "line": 254
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "} else if (Navigator.canPop(context)) {",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/chat_info_dialog.dart",
-      "line": 409
-    },
-    {
-      "kind": "navigation-source",
       "expression": "Navigator.pop(context);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 554
+      "file": "lib/core/widgets/telegram/chat_info_dialog.dart",
+      "line": 410
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "context.go(_deepLinkHomeRoute(ref));",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/router/app_router.dart",
+      "line": 617
     },
     {
       "kind": "navigation-source",
@@ -16714,11 +16738,19 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "context.go(_deepLinkHomeRoute(ref));",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/router/app_router.dart",
+      "line": 542
+    },
+    {
+      "kind": "navigation-source",
       "expression": "GoRoute(",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/router/app_router.dart",
-      "line": 320
+      "line": 221
     },
     {
       "kind": "navigation-source",
@@ -16770,19 +16802,19 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/router/app_router.dart",
+      "line": 225
+    },
+    {
+      "kind": "navigation-source",
       "expression": "void navigateTo(CrmNavigationRequest? request) => state = request;",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/providers/crm_navigation_provider.dart",
       "line": 18
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "CrmNavigationRequest? build() => null;",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 16
     },
     {
       "kind": "navigation-source",
@@ -16842,19 +16874,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "GoRoute(",
+      "expression": "CrmNavigationRequest? build() => null;",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/core/router/app_router.dart",
-      "line": 221
+      "file": "lib/core/providers/crm_navigation_provider.dart",
+      "line": 16
     },
     {
       "kind": "navigation-source",
-      "expression": "GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),",
+      "expression": "Navigator.pop(context);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/core/router/app_router.dart",
-      "line": 225
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 563
     },
     {
       "kind": "navigation-source",
@@ -16870,7 +16902,15 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/router/app_router.dart",
-      "line": 230
+      "line": 243
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "GoRoute(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/router/app_router.dart",
+      "line": 320
     },
     {
       "kind": "navigation-source",
@@ -16926,15 +16966,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/router/app_router.dart",
-      "line": 282
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "context.go(_deepLinkHomeRoute(ref));",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/router/app_router.dart",
-      "line": 542
+      "line": 230
     },
     {
       "kind": "navigation-source",
@@ -16942,7 +16974,15 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/router/app_router.dart",
-      "line": 278
+      "line": 282
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "GoRoute(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/router/app_router.dart",
+      "line": 274
     },
     {
       "kind": "navigation-source",
@@ -16998,23 +17038,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/router/app_router.dart",
-      "line": 243
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "GoRoute(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/router/app_router.dart",
-      "line": 274
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(context);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 563
+      "line": 278
     },
     {
       "kind": "navigation-source",
@@ -17031,6 +17055,46 @@
       "status": "workspace-migration-pending",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
       "line": 587
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 602
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "ref.listen(scheduleNavigationProvider, (prev, next) {",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
+      "line": 205
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "final focus = ref.read(scheduleNavigationProvider);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
+      "line": 162
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
+      "line": 285
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
+      "line": 252
     },
     {
       "kind": "navigation-source",
@@ -17058,19 +17122,19 @@
     },
     {
       "kind": "navigation-source",
+      "expression": ".read(crmNavigationRequestProvider.notifier)",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
+      "line": 112
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.of(ctx).pop(controller.text),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
       "line": 26
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(ctx).pop(),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
-      "line": 22
     },
     {
       "kind": "navigation-source",
@@ -17130,6 +17194,14 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(ctx).pop(),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
+      "line": 22
+    },
+    {
+      "kind": "navigation-source",
       "expression": "if (ctx.mounted) Navigator.pop(ctx);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -17138,51 +17210,51 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(c, true),",
+      "expression": ".navigateTo(CrmNavigationRequest.userRolesSearch(value));",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 267
+      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
+      "line": 113
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(c, false),",
+      "expression": "Navigator.of(context).pop(true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 260
+      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
+      "line": 147
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "expression": "context.go(",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 252
+      "file": "lib/features/auth/presentation/screens/login_screen.dart",
+      "line": 53
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "expression": "onPressed: () => context.go('/login'),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 285
+      "file": "lib/features/auth/presentation/screens/legal_consent_screen.dart",
+      "line": 256
     },
     {
       "kind": "navigation-source",
-      "expression": "final focus = ref.read(scheduleNavigationProvider);",
+      "expression": "onPressed: () => context.go('/login'),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
-      "line": 162
+      "file": "lib/features/auth/presentation/screens/legal_consent_screen.dart",
+      "line": 161
     },
     {
       "kind": "navigation-source",
-      "expression": "ref.listen(scheduleNavigationProvider, (prev, next) {",
+      "expression": "if (mounted) context.go('/');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
-      "line": 205
+      "file": "lib/features/auth/presentation/screens/legal_consent_screen.dart",
+      "line": 35
     },
     {
       "kind": "navigation-source",
@@ -17210,19 +17282,19 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "Navigator.of(context, rootNavigator: true).pop(false);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
+      "line": 114
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/top_up_dialog.dart",
       "line": 124
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "if (mounted) Navigator.pop(context, true);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/top_up_dialog.dart",
-      "line": 72
     },
     {
       "kind": "navigation-source",
@@ -17242,19 +17314,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(ctx);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 235
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: _saving ? null : () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
       "line": 447
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
+      "line": 298
     },
     {
       "kind": "navigation-source",
@@ -17282,67 +17354,43 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.of(context).pop(true);",
+      "expression": "if (mounted) Navigator.pop(context, true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 147
+      "file": "lib/features/admin/presentation/widgets/top_up_dialog.dart",
+      "line": 72
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.of(context, rootNavigator: true).pop(false);",
+      "expression": ": () => context.push('/password-reset'),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 114
+      "file": "lib/features/auth/presentation/screens/login_screen.dart",
+      "line": 214
     },
     {
       "kind": "navigation-source",
-      "expression": ".navigateTo(CrmNavigationRequest.userRolesSearch(value));",
+      "expression": "onPressed: () => Navigator.pop(c, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 113
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 267
     },
     {
       "kind": "navigation-source",
-      "expression": ".read(crmNavigationRequestProvider.notifier)",
+      "expression": "Navigator.pop(ctx);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 112
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 298
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 235
     },
     {
       "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 165
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, _changed),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 271
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 115
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 465
     },
     {
       "kind": "navigation-source",
@@ -17394,6 +17442,14 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 515
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: _saving ? null : () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -17402,19 +17458,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "expression": "final scheduleNavigationProvider =",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 465
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "if (mounted) Navigator.pop(context, true);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/branch_form_dialog.dart",
-      "line": 88
+      "file": "lib/features/admin/presentation/providers/schedule_navigation_provider.dart",
+      "line": 60
     },
     {
       "kind": "navigation-source",
@@ -17466,43 +17514,59 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "if (mounted) Navigator.pop(context, true);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/branch_form_dialog.dart",
+      "line": 88
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(c, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 260
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ".read(scheduleNavigationProvider.notifier)",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 553
+    },
+    {
+      "kind": "navigation-source",
       "expression": "Navigator.pop(context);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 602
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "final scheduleNavigationProvider =",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/providers/schedule_navigation_provider.dart",
-      "line": 60
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/teacher/presentation/widgets/teacher_schedule_widget.dart",
-      "line": 313
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 556
     },
     {
       "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 515
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 165
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(dialogContext);",
+      "expression": "onPressed: () => Navigator.pop(context, _changed),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 555
+      "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
+      "line": 271
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
+      "line": 115
     },
     {
       "kind": "navigation-source",
@@ -17538,6 +17602,14 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "Navigator.pop(dialogContext);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 555
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -17546,35 +17618,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
-      "line": 107
-    },
-    {
-      "kind": "navigation-source",
       "expression": "if (mounted) Navigator.pop(context, true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
       "line": 56
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ".read(scheduleNavigationProvider.notifier)",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 553
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_student_dialog.dart",
-      "line": 242
     },
     {
       "kind": "navigation-source",
@@ -17626,19 +17674,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context);",
+      "expression": "onPressed: () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 556
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "if (mounted) Navigator.pop(context, true);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_student_dialog.dart",
-      "line": 130
+      "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
+      "line": 107
     },
     {
       "kind": "navigation-source",
@@ -18187,7 +18227,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 103
+      "line": 119
     },
     {
       "kind": "backend-route",
@@ -18219,7 +18259,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 117
+      "line": 124
     },
     {
       "kind": "backend-route",
@@ -18227,7 +18267,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 126
+      "line": 133
     },
     {
       "kind": "backend-route",
@@ -18235,7 +18275,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 138
+      "line": 145
     },
     {
       "kind": "backend-route",
@@ -18243,7 +18283,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 147
+      "line": 154
     },
     {
       "kind": "backend-route",

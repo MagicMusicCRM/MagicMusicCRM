@@ -21,6 +21,8 @@ import { CrmListQuery } from "./dto/crm-list.query";
 import { LeadBoardQuery } from "./dto/lead-board.query";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { StudentRow } from "./student-read";
+import { ValidatedLeadCreate } from "./clients/client-write.validator";
+import { saveTypedClientValues } from "./clients/client-config.repository";
 import {
   LessonRow,
   TaskRow,
@@ -680,7 +682,11 @@ export class LeadsService {
     return byName.rows[0]?.id ?? null;
   }
 
-  async createLead(actor: ActorContext, dto: UpsertLeadDto) {
+  async createLead(
+    actor: ActorContext,
+    dto: UpsertLeadDto,
+    validated?: ValidatedLeadCreate,
+  ) {
     this.policy.assertCanWriteCrm(actor);
     const branchId = extractBranchId(dto.customDataPatch);
     const statusId = await this.resolveStatusId(dto.statusId);
@@ -705,13 +711,14 @@ export class LeadsService {
         delete customData.responsibleUserId;
         delete customData.responsibleName;
       }
-      return client.query<LeadRow>(
+      const inserted = await client.query<LeadRow>(
         `
         insert into app.leads (
           status_id, first_name, last_name, phone, email,
-          source, notes, assigned_to, custom_data, created_by, branch_id
+          source, notes, assigned_to, custom_data, created_by, branch_id,
+          source_id
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         returning id, status_id, null::text as status_name, first_name,
           last_name, phone, email, source, notes, assigned_to,
           blacklisted, blacklist_reason, custom_data, created_by, created_at,
@@ -729,8 +736,18 @@ export class LeadsService {
           customData,
           actor.userId,
           branchId,
+          validated?.sourceId ?? null,
         ],
       );
+      if (validated) {
+        await saveTypedClientValues(
+          client,
+          "lead",
+          inserted.rows[0]!.id,
+          validated.customFields,
+        );
+      }
+      return inserted;
     });
     const lead = result.rows[0];
     // Contract 5: the creating admin/manager/director becomes «Ответственный»
@@ -752,7 +769,10 @@ export class LeadsService {
       id: lead.id,
       branchId: branchId ?? null,
     });
-    return this.toLeadDto(lead);
+    return {
+      ...this.toLeadDto(lead),
+      ...(validated ? { warnings: validated.warnings } : {}),
+    };
   }
 
   async updateLead(actor: ActorContext, leadId: string, dto: UpsertLeadDto) {

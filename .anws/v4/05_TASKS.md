@@ -460,12 +460,12 @@ flowchart TD
 
 ## Phase 3 — Flutter integration (S4)
 
-- [ ] **T3.3.1** [REQ-LEAD-001, REQ-CFG-001, REQ-CLIENT-001]: Перешить Lead/Student/config forms
+- [x] **T3.3.1** [REQ-LEAD-001, REQ-CFG-001, REQ-CLIENT-001]: Перешить Lead/Student/config forms
   - **Описание:** привести mobile/desktop формы к required fields, source selector и Director-only configuration.
   - **Подпункты:**
-    - [ ] Добавить inline/server error mapping и inactive-source refresh.
-    - [ ] Реализовать source/custom-field editor только Director/sysadmin.
-    - [ ] Покрыть narrow mobile layouts и loading/empty/error states.
+    - [x] Добавить inline/server error mapping и inactive-source refresh.
+    - [x] Реализовать source/custom-field editor только Director/sysadmin.
+    - [x] Покрыть narrow mobile layouts и loading/empty/error states.
   - **Вход:** T3.1.2, T3.2.1.
   - **Выход:** Flutter forms/screens/widget tests.
   - **📎 Ссылка:** `client_crm.md §5/§11`.

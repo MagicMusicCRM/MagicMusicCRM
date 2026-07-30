@@ -28,6 +28,8 @@ import { LinkStudentDto } from "./dto/link-student.dto";
 import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { SetBlacklistDto } from "./dto/set-blacklist.dto";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
+import { StrictCreateLeadDto } from "./dto/client-config.dto";
+import { ClientWriteValidator } from "./clients/client-write.validator";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -39,6 +41,7 @@ export class CrmLeadsController {
     private readonly merge: MergeService,
     private readonly phoneReview: PhoneReviewService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly clientWrites: ClientWriteValidator,
   ) {}
 
   @Get("duplicates")
@@ -96,8 +99,21 @@ export class CrmLeadsController {
   }
 
   @Post("leads")
-  createLead(@CurrentActor() actor: ActorContext, @Body() dto: UpsertLeadDto) {
-    return this.leads.createLead(actor, dto);
+  async createLead(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: StrictCreateLeadDto,
+  ) {
+    const validated = await this.clientWrites.validateLeadCreate(dto);
+    return this.leads.createLead(
+      actor,
+      {
+        firstName: validated.firstName,
+        lastName: validated.lastName,
+        phone: validated.phone,
+        source: validated.sourceDisplayName,
+      },
+      validated,
+    );
   }
 
   @Post("leads/:leadId/subscriptions/issue")

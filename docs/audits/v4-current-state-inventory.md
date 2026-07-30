@@ -1,7 +1,7 @@
 # MagicMusicCRM v4 — Current-State Inventory
 
 **Task:** T8.1.2
-**Source digest:** `87bcb6d38d2fb3c56983cd5c1ae3af2fdcbdc1f622423896c48dca284f4a9c9a`
+**Source digest:** `fa7442a4e573ff8b52b8197dcdd3073630b9031e0afa86c9e69378e3872d7900`
 **Validation:** PASS
 
 ## Coverage
@@ -13,7 +13,7 @@
 | policy calls | 225 |
 | dto fields | 641 |
 | flutter role checks | 121 |
-| flutter navigation sources | 312 |
+| flutter navigation sources | 317 |
 | schedule entry points | 36 |
 | attendance mutations | 0 |
 | finance writes | 43 |
@@ -95,14 +95,14 @@ Indexes: `users_app_accounts_role_created_idx`, `users_email_lower_unique`, `use
 | backend-route | PATCH /crm/subscription-packages/:id | `server/src/crm/crm-finance.controller.ts:128` | commerce-migration-pending |
 | backend-route | DELETE /crm/subscription-packages/:id | `server/src/crm/crm-finance.controller.ts:142` | commerce-migration-pending |
 | backend-route | POST /crm/subscription-packages/:id/restore | `server/src/crm/crm-finance.controller.ts:156` | commerce-migration-pending |
-| backend-route | POST /crm/leads/:leadId/subscriptions/issue | `server/src/crm/crm-leads.controller.ts:103` | commerce-migration-pending |
+| backend-route | POST /crm/leads/:leadId/subscriptions/issue | `server/src/crm/crm-leads.controller.ts:119` | commerce-migration-pending |
 | backend-route | POST /crm/teachers/:id/payouts | `server/src/crm/crm-people.controller.ts:81` | commerce-migration-pending |
 | backend-route | POST /crm/teachers/:id/rates | `server/src/crm/crm-people.controller.ts:90` | commerce-migration-pending |
 | backend-route | PATCH /crm/lessons/teacher-rate | `server/src/crm/crm-schedule.controller.ts:144` | commerce-migration-pending |
-| backend-route | POST /crm/students/:id/adjustments | `server/src/crm/crm-students.controller.ts:117` | commerce-migration-pending |
-| backend-route | PATCH /crm/students/:id/adjustments/:adjustmentId | `server/src/crm/crm-students.controller.ts:126` | commerce-migration-pending |
-| backend-route | DELETE /crm/students/:id/adjustments/:adjustmentId | `server/src/crm/crm-students.controller.ts:138` | commerce-migration-pending |
-| backend-route | POST /crm/students/:id/transfer | `server/src/crm/crm-students.controller.ts:147` | commerce-migration-pending |
+| backend-route | POST /crm/students/:id/adjustments | `server/src/crm/crm-students.controller.ts:124` | commerce-migration-pending |
+| backend-route | PATCH /crm/students/:id/adjustments/:adjustmentId | `server/src/crm/crm-students.controller.ts:133` | commerce-migration-pending |
+| backend-route | DELETE /crm/students/:id/adjustments/:adjustmentId | `server/src/crm/crm-students.controller.ts:145` | commerce-migration-pending |
+| backend-route | POST /crm/students/:id/transfer | `server/src/crm/crm-students.controller.ts:154` | commerce-migration-pending |
 | backend-route | POST /crm/students/:studentId/subscriptions/issue | `server/src/crm/subscription-commerce.controller.ts:36` | commerce-migration-pending |
 | backend-route | POST /crm/students/:studentId/subscription-payments | `server/src/crm/subscription-commerce.controller.ts:50` | commerce-migration-pending |
 | backend-route | POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace/preview | `server/src/crm/subscription-commerce.controller.ts:64` | commerce-migration-pending |

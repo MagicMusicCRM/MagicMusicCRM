@@ -26,6 +26,7 @@ export interface ValidatedLeadCreate {
   phone: string;
   sourceId: string;
   sourceCanonicalName: string;
+  sourceDisplayName: string;
   customFields: TypedClientCustomValue[];
   warnings: ClientValidationWarning[];
 }
@@ -64,6 +65,7 @@ export class ClientWriteValidator {
       phone: phone.value,
       sourceId: source.id,
       sourceCanonicalName: source.canonical_name,
+      sourceDisplayName: source.display_name,
       customFields: custom.values,
       warnings: [...phone.warnings, ...custom.warnings],
     };

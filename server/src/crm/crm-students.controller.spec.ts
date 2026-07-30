@@ -1,44 +1,58 @@
-import { BadRequestException } from "@nestjs/common";
 import { BlacklistService } from "./blacklist.service";
 import { CrmStudentsController } from "./crm-students.controller";
 import { CrmService } from "./crm.service";
 import { FinanceService } from "./finance.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { ClientCardReadService } from "./clients/client-card-read.service";
+import { ClientWriteValidator } from "./clients/client-write.validator";
 
 describe("CrmStudentsController", () => {
-  it("rejects direct lead conversion and points callers to subscription issuance", () => {
-    const crm = { createStudent: jest.fn() };
+  it("validates ordinary student creation before delegating", async () => {
+    const crm = {
+      createStudent: jest.fn().mockResolvedValue({ id: "student-a" }),
+    };
+    const clientWrites = {
+      validateStudentCreate: jest.fn().mockResolvedValue({
+        firstName: "Анна",
+        lastName: "Иванова",
+        phone: "+79990000000",
+        branchId: "branch-a",
+        status: "active",
+        customFields: [],
+        warnings: [],
+      }),
+    };
     const controller = new CrmStudentsController(
       crm as unknown as CrmService,
       {} as FinanceService,
       {} as SubscriptionsService,
       {} as BlacklistService,
       {} as ClientCardReadService,
-    );
-
-    expect(() =>
-      controller.createStudent(
-        { userId: "admin-a", role: "admin" },
-        { firstName: "Анна", leadId: "lead-a" },
-      ),
-    ).toThrow(BadRequestException);
-    expect(crm.createStudent).not.toHaveBeenCalled();
-  });
-
-  it("keeps ordinary student creation on the existing service contract", () => {
-    const crm = { createStudent: jest.fn().mockReturnValue({ id: "student-a" }) };
-    const controller = new CrmStudentsController(
-      crm as unknown as CrmService,
-      {} as FinanceService,
-      {} as SubscriptionsService,
-      {} as BlacklistService,
-      {} as ClientCardReadService,
+      clientWrites as unknown as ClientWriteValidator,
     );
     const actor = { userId: "admin-a", role: "admin" as const };
-    const dto = { firstName: "Анна" };
+    const dto = {
+      firstName: "Анна",
+      lastName: "Иванова",
+      phone: "+79990000000",
+      branchId: "branch-a",
+      status: "active",
+    };
 
-    expect(controller.createStudent(actor, dto)).toEqual({ id: "student-a" });
-    expect(crm.createStudent).toHaveBeenCalledWith(actor, dto);
+    await expect(controller.createStudent(actor, dto)).resolves.toEqual({
+      id: "student-a",
+    });
+    expect(clientWrites.validateStudentCreate).toHaveBeenCalledWith(dto);
+    expect(crm.createStudent).toHaveBeenCalledWith(
+      actor,
+      {
+        firstName: "Анна",
+        lastName: "Иванова",
+        phone: "+79990000000",
+        status: "active",
+        customDataPatch: { branchId: "branch-a" },
+      },
+      expect.objectContaining({ branchId: "branch-a" }),
+    );
   });
 });

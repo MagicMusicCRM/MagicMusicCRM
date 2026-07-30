@@ -282,32 +282,11 @@ extension _LeadsActions on _LeadsWidgetState {
   }
 
   Future<void> _addLead() async {
-    // On a failed create the dialog reopens pre-filled with what was typed,
-    // so an API error never discards the manager's input.
-    Map<String, String>? draft;
-    while (true) {
-      if (!mounted) return;
-      final result = await showDialog<Map<String, String>>(
-        context: context,
-        builder: (_) => _LeadDialog(initial: draft),
-      );
-      if (result == null) return;
-      try {
-        await ref
-            .read(magicCrmServiceProvider)
-            .createLead(
-              firstName: result['name']!,
-              phone: result['phone']!,
-              source: result['source']!,
-            );
-        if (mounted) _refreshBoard();
-        return;
-      } catch (e) {
-        if (!mounted) return;
-        draft = result;
-        _showError('Не удалось создать лид: $e');
-      }
-    }
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => const LeadCreateDialog(),
+    );
+    if (result != null && mounted) _refreshBoard();
   }
 
   Future<void> _moveStatus(String id, String newStatus) async {
@@ -512,6 +491,9 @@ extension _LeadsActions on _LeadsWidgetState {
                   icon: const Icon(Icons.settings_rounded, size: 16),
                   label: const Text('Колонки'),
                 ),
+              if (_canManageClientConfiguration)
+                const SizedBox(width: AppSpace.sm),
+              ClientConfigurationButton(allowed: _canManageClientConfiguration),
             ],
           ),
           const SizedBox(height: 10),

@@ -41,6 +41,49 @@ export interface TypedClientCustomValue {
   valueDate: string | null;
 }
 
+export async function saveTypedClientValues(
+  client: PoolClient,
+  entityType: ClientEntityType,
+  entityId: string,
+  values: TypedClientCustomValue[],
+): Promise<void> {
+  for (const value of values) {
+    await client.query(
+      `
+        insert into app.client_custom_field_values (
+          definition_id,
+          entity_type,
+          entity_id,
+          value_text,
+          value_number,
+          value_boolean,
+          value_date,
+          validation_state
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, 'valid')
+        on conflict (definition_id, entity_type, entity_id)
+        do update set
+          value_text = excluded.value_text,
+          value_number = excluded.value_number,
+          value_boolean = excluded.value_boolean,
+          value_date = excluded.value_date,
+          value_json = null,
+          validation_state = 'valid',
+          updated_at = now()
+      `,
+      [
+        value.definitionId,
+        entityType,
+        entityId,
+        value.valueText,
+        value.valueNumber,
+        value.valueBoolean,
+        value.valueDate,
+      ],
+    );
+  }
+}
+
 @Injectable()
 export class ClientConfigRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -346,40 +389,6 @@ export class ClientConfigRepository {
     entityId: string,
     values: TypedClientCustomValue[],
   ): Promise<void> {
-    for (const value of values) {
-      await client.query(
-        `
-          insert into app.client_custom_field_values (
-            definition_id,
-            entity_type,
-            entity_id,
-            value_text,
-            value_number,
-            value_boolean,
-            value_date,
-            validation_state
-          )
-          values ($1, $2, $3, $4, $5, $6, $7, 'valid')
-          on conflict (definition_id, entity_type, entity_id)
-          do update set
-            value_text = excluded.value_text,
-            value_number = excluded.value_number,
-            value_boolean = excluded.value_boolean,
-            value_date = excluded.value_date,
-            value_json = null,
-            validation_state = 'valid',
-            updated_at = now()
-        `,
-        [
-          value.definitionId,
-          entityType,
-          entityId,
-          value.valueText,
-          value.valueNumber,
-          value.valueBoolean,
-          value.valueDate,
-        ],
-      );
-    }
+    await saveTypedClientValues(client, entityType, entityId, values);
   }
 }

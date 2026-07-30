@@ -18,8 +18,9 @@ import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 import 'manage_statuses_dialog.dart';
 import 'package:magic_music_crm/core/models/lead.dart';
@@ -31,7 +32,6 @@ part 'kanban_column.dart';
 part 'lead_card.dart';
 part 'filters_button.dart';
 part 'lead_badges.dart';
-part 'lead_dialog.dart';
 part 'leads_actions.dart';
 
 class LeadsWidget extends ConsumerStatefulWidget {
@@ -102,6 +102,14 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     final role = ref.watch(releaseGateStatusProvider).asData?.value.role;
     return role == 'manager' || role == 'director' || role == 'system_admin';
   }
+
+  bool get _canManageClientConfiguration =>
+      ref
+          .watch(capabilitySnapshotProvider)
+          .asData
+          ?.value
+          .allows('system.settings.manage') ==
+      true;
 
   @override
   void initState() {

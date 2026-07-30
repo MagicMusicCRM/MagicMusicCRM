@@ -30,6 +30,8 @@ import {
   presentableEmail,
   toTimelineDto,
 } from "./crm-mappers";
+import { ValidatedStudentCreate } from "./clients/client-write.validator";
+import { saveTypedClientValues } from "./clients/client-config.repository";
 
 /**
  * Student fields worth an audit entry. Name/phone/email live on
@@ -258,7 +260,11 @@ export class CrmService {
     };
   }
 
-  async createStudent(actor: ActorContext, dto: CreateStudentDto) {
+  async createStudent(
+    actor: ActorContext,
+    dto: CreateStudentDto,
+    validated?: ValidatedStudentCreate,
+  ) {
     this.policy.assertCanWriteCrm(actor);
     const firstName = requiredTrim(
       dto.firstName,
@@ -336,7 +342,7 @@ export class CrmService {
             responsible,
           );
         }
-        return client.query<StudentRow>(
+        const inserted = await client.query<StudentRow>(
         `
           with identity as (
             select coalesce($3::text, 'student-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid') as email
@@ -400,6 +406,15 @@ export class CrmService {
           branchId,
         ],
         );
+        if (validated) {
+          await saveTypedClientValues(
+            client,
+            "student",
+            inserted.rows[0]!.id,
+            validated.customFields,
+          );
+        }
+        return inserted;
       });
       const student = result.rows[0];
       // Chat re-bucketing is part of the insert CTE above, so conversion and
@@ -422,7 +437,10 @@ export class CrmService {
         id: student.id,
         branchId: branchId ?? null,
       });
-      return this.toStudentDto(student);
+      return {
+        ...this.toStudentDto(student),
+        ...(validated ? { warnings: validated.warnings } : {}),
+      };
     } catch (error) {
       rethrowCreatePersonError(error);
     }

@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -24,13 +23,14 @@ import {
   UpdateAdjustmentDto,
 } from "./dto/create-adjustment.dto";
 import { CreateTransferDto } from "./dto/create-transfer.dto";
-import { CreateStudentDto } from "./dto/create-student.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { StudentBalanceQuery } from "./dto/student-balance.query";
 import { StudentLedgerQuery } from "./dto/student-ledger.query";
 import { StudentSearchQuery } from "./dto/student-search.query";
 import { UpdateStudentDto } from "./dto/update-student.dto";
 import { ClientCardReadService } from "./clients/client-card-read.service";
+import { StrictCreateStudentDto } from "./dto/client-config.dto";
+import { ClientWriteValidator } from "./clients/client-write.validator";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -41,6 +41,7 @@ export class CrmStudentsController {
     private readonly subscriptions: SubscriptionsService,
     private readonly blacklist: BlacklistService,
     private readonly clientCards: ClientCardReadService,
+    private readonly clientWrites: ClientWriteValidator,
   ) {}
 
   @Get("me")
@@ -65,16 +66,22 @@ export class CrmStudentsController {
   }
 
   @Post("students")
-  createStudent(
+  async createStudent(
     @CurrentActor() actor: ActorContext,
-    @Body() dto: CreateStudentDto,
+    @Body() dto: StrictCreateStudentDto,
   ) {
-    if (dto.leadId) {
-      throw new BadRequestException(
-        "Лид становится учеником только при выдаче абонемента через /crm/leads/:leadId/subscriptions/issue.",
-      );
-    }
-    return this.crm.createStudent(actor, dto);
+    const validated = await this.clientWrites.validateStudentCreate(dto);
+    return this.crm.createStudent(
+      actor,
+      {
+        firstName: validated.firstName,
+        lastName: validated.lastName,
+        phone: validated.phone,
+        status: validated.status,
+        customDataPatch: { branchId: validated.branchId },
+      },
+      validated,
+    );
   }
 
   @Get("student-balances")
