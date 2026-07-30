@@ -21,6 +21,7 @@ class DesktopWorkspaceShell extends StatelessWidget {
       listenable: controller,
       builder: (context, _) {
         final state = controller.state;
+        if (state.loggedOut) return const SizedBox.shrink();
         return Column(
           children: [
             Material(

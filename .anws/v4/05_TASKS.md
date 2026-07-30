@@ -1016,12 +1016,12 @@ flowchart TD
   - **Инструкция:** `flutter test test/features/v4/desktop_workspace_controller_test.dart`
   - **Оценка:** 8 ч. · **Зависимости:** T1.2.1 · **Приоритет:** P0 · **Sprint:** S5
 
-- [ ] **T1.2.4** [REQ-NAV-002, REQ-RBAC-001]: Реализовать account-scoped restore и global logout
+- [x] **T1.2.4** [REQ-NAV-002, REQ-RBAC-001]: Реализовать account-scoped restore и global logout
   - **Описание:** сохранять route refs/filters/dates/order отдельно по account/schemaVersion и очищать все окна ≤2 s при logout.
   - **Подпункты:**
-    - [ ] Создать versioned persistence без DTO/tokens/dirty values.
-    - [ ] Валидировать routes/capabilities при restore и safe fallback.
-    - [ ] Реализовать cross-window logout/session event.
+    - [x] Создать versioned persistence без DTO/tokens/dirty values.
+    - [x] Валидировать routes/capabilities при restore и safe fallback.
+    - [x] Реализовать cross-window logout/session event.
   - **Вход:** T1.2.3, T1.1.1, `app_workspace.md §5/§7–8`.
   - **Выход:** workspace store/migrations/logout sync/tests.
   - **📎 Ссылка:** ADR-010.

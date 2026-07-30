@@ -53,6 +53,21 @@ class WorkspaceController extends ChangeNotifier {
 
   WorkspaceState get state => _state;
 
+  void restore(WorkspaceState restored) {
+    if (restored.accountId != _state.accountId) {
+      throw StateError('Cannot restore another account workspace.');
+    }
+    _state = restored;
+    _nextTabNumber = _nextAvailableTabNumber(restored.tabs);
+    notifyListeners();
+  }
+
+  void handleGlobalLogout() {
+    if (_state.loggedOut) return;
+    _state = WorkspaceState.loggedOut(_state.accountId);
+    notifyListeners();
+  }
+
   void selectTab(String tabId) {
     _tabIndex(tabId);
     if (_state.activeTabId == tabId) return;
@@ -208,5 +223,15 @@ class WorkspaceController extends ChangeNotifier {
     if (!link.isSupported) {
       throw const FormatException('Unsupported workspace route.');
     }
+  }
+
+  static int _nextAvailableTabNumber(List<WorkspaceTabState> tabs) {
+    var maximum = 0;
+    for (final tab in tabs) {
+      final match = RegExp(r'^tab-(\d+)$').firstMatch(tab.tabId);
+      final value = int.tryParse(match?.group(1) ?? '');
+      if (value != null && value > maximum) maximum = value;
+    }
+    return maximum + 1;
   }
 }

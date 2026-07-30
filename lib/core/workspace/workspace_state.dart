@@ -69,11 +69,12 @@ class WorkspaceState {
     required this.activeTabId,
     required List<WorkspaceTabState> tabs,
     this.schemaVersion = currentSchemaVersion,
+    this.loggedOut = false,
   }) : tabs = List.unmodifiable(tabs) {
-    if (tabs.isEmpty) {
+    if (tabs.isEmpty && !loggedOut) {
       throw ArgumentError.value(tabs, 'tabs', 'Workspace requires one tab.');
     }
-    if (!tabs.any((tab) => tab.tabId == activeTabId)) {
+    if (tabs.isNotEmpty && !tabs.any((tab) => tab.tabId == activeTabId)) {
       throw ArgumentError.value(
         activeTabId,
         'activeTabId',
@@ -82,12 +83,22 @@ class WorkspaceState {
     }
   }
 
+  factory WorkspaceState.loggedOut(String accountId) {
+    return WorkspaceState(
+      accountId: accountId,
+      activeTabId: '',
+      tabs: const [],
+      loggedOut: true,
+    );
+  }
+
   static const currentSchemaVersion = 1;
 
   final int schemaVersion;
   final String accountId;
   final String activeTabId;
   final List<WorkspaceTabState> tabs;
+  final bool loggedOut;
 
   WorkspaceTabState get activeTab =>
       tabs.firstWhere((tab) => tab.tabId == activeTabId);
@@ -101,6 +112,7 @@ class WorkspaceState {
       activeTabId: activeTabId ?? this.activeTabId,
       tabs: tabs ?? this.tabs,
       schemaVersion: schemaVersion,
+      loggedOut: loggedOut,
     );
   }
 }
