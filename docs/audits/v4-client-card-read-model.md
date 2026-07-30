@@ -31,4 +31,6 @@
 - Actor Matrix + payload leak + Client Card: 3/3 suites, 13/13 tests.
 - Actor Matrix: 268 private routes × 6 actors = 1608/1608 decisions.
 - Inventory: 280 routes, 641 DTO fields, 0 unowned.
-- Backend typecheck: clean.
+- Full package regression: backend 141/141 suites, 1133/1133 tests;
+  Flutter 441/441 tests.
+- Backend typecheck/build и Flutter analyze: clean.
