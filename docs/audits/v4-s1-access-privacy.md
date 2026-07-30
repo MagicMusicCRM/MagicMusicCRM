@@ -10,6 +10,8 @@
 - Actor Matrix и teacher payload scan: 2/2 suites, 9/9 tests.
 - Flutter capability shell/editor/RBAC: 25/25 tests.
 - Backend typecheck: clean.
+- Финальный backend regression: 140/140 suites, 1128/1128 tests; build/typecheck clean.
+- Финальный Flutter regression: 441/441 tests; analyze clean.
 
 ## Инварианты
 
@@ -19,6 +21,7 @@
 - `system_admin` скрыт из business surface и получает root только через emergency surface.
 - Две сессии получают committed access invalidation, control/route исчезает не позднее 5 секунд.
 - Teacher payload содержит 0 contact/finance/subscription/private-comment leaks.
+- Собственный `/access/me` остаётся доступен после аутентификации даже при
+  personal deny: снимок прав не может заблокировать собственное обновление.
 
 Machine-readable result: `docs/audits/v4-s1-gate-result.json`.
-
