@@ -185,6 +185,8 @@ _Актуализация 2026-07-30: `T1.1.2` закрыта: access editor д�
 
 _Актуализация 2026-07-30: `INT-S1` закрыт: новый S1 sprint gate проверил task/evidence inventory, access policy/mutations/invalidation 7/7 suites и 103/103 tests, Actor Matrix + teacher payload scan 2/2 suites и 9/9 tests, Flutter capability shell/editor/RBAC 25/25; Manager mutations denied, Director lower-only, system_admin hidden/emergency root, invalidation≤5 s. Финальный пакетный regression: backend 140/140 suites и 1128/1128 tests, Flutter 441/441, analyze/typecheck/build clean; authenticated-only `/access/me` не блокируется personal deny (`docs/audits/v4-s1-access-privacy.md`). Следующий шаг `/forge`: `INT-S2` Lesson Integrity._
 
+_Актуализация 2026-07-30: `INT-S2` закрыт: S2 gate подтвердил task/evidence inventory, schedule lifecycle/concurrency 9/9 suites и 25/25 tests, Actor Matrix/payload leak 2/2 suites и 9/9 tests, Flutter lesson/conflict/palette/Teacher surfaces 16/16; attendance mutation routes/controls=0, two-worker completion создаёт один settlement/audit не позднее 60 s, typecheck clean (`docs/audits/v4-s2-lesson-integrity.md`). Следующий шаг `/forge`: `INT-S3` Subscription Integrity._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 

@@ -1120,12 +1120,12 @@ flowchart TD
   - **Инструкция:** `pwsh -File scripts/v4_sprint_gate.ps1 -Sprint S1 -ActorMatrix`
   - **Оценка:** 4 ч. · **Зависимости:** INT-S0, T2.4.1, T1.1.2 · **Приоритет:** P0
 
-- [ ] **INT-S2** [MILESTONE]: Lesson Integrity
+- [x] **INT-S2** [MILESTONE]: Lesson Integrity
   - **Описание:** проверить unified Client lesson, constraints, series/reschedule, settlement, worker, colors и read-only Teacher.
   - **Подпункты:**
-    - [ ] T3.1.1, T4.1.1–T4.4.1, T5.1.1, T8.2.1 отмечены `[x]`.
-    - [ ] Attendance controls/routes=0; create/edit/drag/series violations parity.
-    - [ ] Two-worker completion даёт один charge/pay/audit ≤60 s.
+    - [x] T3.1.1, T4.1.1–T4.4.1, T5.1.1, T8.2.1 отмечены `[x]`.
+    - [x] Attendance controls/routes=0; create/edit/drag/series violations parity.
+    - [x] Two-worker completion даёт один charge/pay/audit ≤60 s.
   - **Вход:** все задачи S2.
   - **Выход:** `docs/audits/v4-s2-lesson-integrity.md`.
   - **Критерии:** Given production-shaped schedule и 6 roles; When critical scenarios выполнены; Then conflicts блокируют writes, Teacher read-only, lifecycle/finance atomic.

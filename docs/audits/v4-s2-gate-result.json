@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "sprint": "S2",
+  "revision": "b3a1448786a56b317615d7983b75a30d0003c98e",
+  "status": "pass",
+  "generatedAt": "2026-07-30T10:29:18.5275456Z",
+  "concurrency": true,
+  "attendanceMutationRoutes": 0,
+  "attendanceMutationControls": 0,
+  "twoWorkerSingleSettlement": true,
+  "completionLatencyMaxSeconds": 60,
+  "gates": [
+    {
+      "name": "S2 task/evidence inventory",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Backend schedule typecheck",
+      "status": "pass",
+      "durationSeconds": 7.224
+    },
+    {
+      "name": "Schedule concurrency and lifecycle",
+      "status": "pass",
+      "durationSeconds": 19.551
+    },
+    {
+      "name": "Schedule six-role boundary",
+      "status": "pass",
+      "durationSeconds": 12.964
+    },
+    {
+      "name": "Flutter lesson integrity surfaces",
+      "status": "pass",
+      "durationSeconds": 19.412
+    }
+  ],
+  "durationSeconds": 59.414
+}
