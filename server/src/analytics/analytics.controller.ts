@@ -7,6 +7,7 @@ import { AnalyticsRangeQuery } from "./dto/analytics-range.query";
 import { ClientStatusFilterQuery } from "./dto/client-status-filter.query";
 import { AnalyticsService } from "./analytics.service";
 import { ClientStatusReadService } from "./client-status-read.service";
+import { ReportingReadService } from "./reporting-read.service";
 
 @Controller("analytics")
 @UseGuards(JwtAuthGuard)
@@ -14,6 +15,7 @@ export class AnalyticsController {
   constructor(
     private readonly analytics: AnalyticsService,
     private readonly clientStatus: ClientStatusReadService,
+    private readonly reporting: ReportingReadService,
   ) {}
 
   @Get("v4/client-status/summary")
@@ -30,6 +32,22 @@ export class AnalyticsController {
     @Query() query: ClientStatusFilterQuery,
   ) {
     return this.clientStatus.list(actor, query);
+  }
+
+  @Get("v4/lesson-success")
+  lessonSuccess(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
+    return this.reporting.lessonSuccess(actor, query);
+  }
+
+  @Get("v4/school-finance")
+  schoolFinance(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
+    return this.reporting.schoolFinance(actor, query);
   }
 
   @Get("overview")

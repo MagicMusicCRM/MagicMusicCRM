@@ -894,12 +894,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/analytics/client-status-postgres.integration.spec.ts`
   - **Оценка:** 8 ч. · **Зависимости:** T2.3.1, T3.2.4 · **Приоритет:** P1 · **Sprint:** S5
 
-- [ ] **T7.1.2** [REQ-REPORT-002, REQ-LESSON-002, REQ-SUB-005]: Реализовать lesson/finance read models и hard scope
+- [x] **T7.1.2** [REQ-REPORT-002, REQ-LESSON-002, REQ-SUB-005]: Реализовать lesson/finance read models и hard scope
   - **Описание:** считать success из terminal lessons, revenue из ActualPayment и закрыть school finance от Admin/Manager.
   - **Подпункты:**
-    - [ ] Перевести attendance metrics на `successfully_completed`.
-    - [ ] Разделить client-finance и school-finance query policies.
-    - [ ] Добавить allowed finance-row links только Director/sysadmin.
+    - [x] Перевести attendance metrics на `successfully_completed`.
+    - [x] Разделить client-finance и school-finance query policies.
+    - [x] Добавить allowed finance-row links только Director/sysadmin.
   - **Вход:** INT-S2, INT-S3, T2.3.1, `reporting.md §2/§4`.
   - **Выход:** reporting queries/actor tests.
   - **📎 Ссылка:** ADR-009.

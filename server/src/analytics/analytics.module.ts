@@ -8,6 +8,7 @@ import { AnalyticsController } from "./analytics.controller";
 import { AnalyticsService } from "./analytics.service";
 import { AnalyticsRefreshWorker } from "./analytics-refresh.worker";
 import { ClientStatusReadService } from "./client-status-read.service";
+import { ReportingReadService } from "./reporting-read.service";
 
 @Module({
   imports: [DatabaseModule, AuditModule, CrmModule, JwtModule.register({})],
@@ -16,6 +17,7 @@ import { ClientStatusReadService } from "./client-status-read.service";
     AnalyticsService,
     AnalyticsRefreshWorker,
     ClientStatusReadService,
+    ReportingReadService,
     JwtAuthGuard,
   ],
 })
