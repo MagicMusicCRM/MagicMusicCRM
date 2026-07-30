@@ -61,6 +61,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Финансы школы'), findsOneWidget);
+    await tester.tap(find.text('2026-07-01'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('reporting-finance-detail')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('К отчёту'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.widgetWithText(OutlinedButton, 'XLSX'));
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pumpAndSettle();

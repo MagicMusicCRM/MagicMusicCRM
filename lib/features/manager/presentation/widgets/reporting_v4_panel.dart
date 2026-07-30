@@ -61,6 +61,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   Map<String, dynamic>? _schoolFinance;
   EntityLink? _drilldownLink;
   Map<String, dynamic>? _drilldown;
+  Map<String, dynamic>? _financeDetail;
   bool _drilldownLoading = false;
   Object? _drilldownError;
   String? _exportStatus;
@@ -231,6 +232,8 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   }
 
   CapabilitySnapshot get _snapshot {
+    final serverSnapshot = ref.read(capabilitySnapshotProvider).value;
+    if (serverSnapshot != null) return serverSnapshot;
     return CapabilitySnapshot(
       accountId: 'active',
       role: widget.role,
@@ -261,6 +264,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     if (_error != null) {
       return _ReportingError(error: _error!, onRetry: _load);
     }
+    if (_financeDetail != null) return _buildFinanceDetail(context);
     if (_drilldownLink != null) return _buildDrilldown(context);
 
     final statusItems = _mapList(_statusSummary['items']);
@@ -408,9 +412,60 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
           final link = EntityLink.fromJson(_stringMap(row['link']));
-          widget.onOpenEntity?.call(link);
+          if (widget.onOpenEntity != null) {
+            widget.onOpenEntity!(link);
+          } else {
+            setState(() => _financeDetail = row);
+          }
         },
       ),
+    );
+  }
+
+  Widget _buildFinanceDetail(BuildContext context) {
+    final row = _financeDetail!;
+    final revenue =
+        BigInt.tryParse(row['revenueMinor']?.toString() ?? '') ?? BigInt.zero;
+    final expenses =
+        BigInt.tryParse(row['expensesMinor']?.toString() ?? '') ?? BigInt.zero;
+    final formatter = NumberFormat.currency(
+      locale: 'ru',
+      symbol: '₽',
+      decimalDigits: 2,
+    );
+    return ListView(
+      key: const ValueKey('reporting-finance-detail'),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => setState(() => _financeDetail = null),
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('К отчёту'),
+          ),
+        ),
+        Text(
+          'Финансы за ${row['monthStart'] ?? ''}',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 16),
+        ListTile(
+          leading: const Icon(Icons.trending_up),
+          title: const Text('Фактическая выручка'),
+          trailing: Text(formatter.format(revenue.toDouble() / 100)),
+        ),
+        ListTile(
+          leading: const Icon(Icons.trending_down),
+          title: const Text('Расходы'),
+          trailing: Text(formatter.format(expenses.toDouble() / 100)),
+        ),
+        ListTile(
+          leading: const Icon(Icons.event_available_outlined),
+          title: const Text('Успешно завершённые занятия'),
+          trailing: Text('${_int(row['successfulLessons'])}'),
+        ),
+      ],
     );
   }
 
