@@ -573,6 +573,9 @@ Map<String, dynamic> _legacyComment(Map<String, dynamic> item) {
     'content': content,
     'kind': item['kind'],
     'progress': item['progress'],
+    'shared_with_teacher':
+        item['sharedWithTeacher'] ?? item['shared_with_teacher'] ?? false,
+    'version': item['version'] ?? 1,
     'created_at': item['createdAt'],
     // Заполнено только у комментариев к занятиям — см. Comment.isAboutLesson.
     'lesson_at': item['lessonAt'],

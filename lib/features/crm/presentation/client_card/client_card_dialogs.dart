@@ -310,4 +310,3 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
     isPrimaryContact: isPrimaryContact,
   );
 }
-

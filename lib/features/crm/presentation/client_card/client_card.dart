@@ -31,6 +31,8 @@ import 'package:magic_music_crm/core/models/lesson.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'client_card_aggregation.dart';
 import 'client_card_staff_api.dart';
+import 'client_archive_button.dart';
+import 'comment_share_button.dart';
 import 'client_card_dialogs.dart';
 import 'client_card_sheets.dart';
 import 'client_card_ui.dart';

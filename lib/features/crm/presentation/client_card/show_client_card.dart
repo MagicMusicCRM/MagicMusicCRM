@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'client_card.dart';
+import 'teacher_client_card.dart';
 
 /// Responsive launcher for the unified «Карточка клиента».
 ///
@@ -22,18 +25,16 @@ Future<bool?> showClientCard(
   required String entityId,
   Map<String, dynamic>? seed,
 }) {
-  final lead = <String, dynamic>{
-    ...?seed,
-    'id': entityId,
-  };
-  final card = ClientCard(lead: lead, entityType: entityType);
+  final lead = <String, dynamic>{...?seed, 'id': entityId};
+  final card = _ClientCardEntry(
+    lead: lead,
+    entityType: entityType,
+    entityId: entityId,
+  );
   final isDesktop = MediaQuery.of(context).size.width >= 720;
 
   if (isDesktop) {
-    return showDialog<bool>(
-      context: context,
-      builder: (_) => card,
-    );
+    return showDialog<bool>(context: context, builder: (_) => card);
   }
 
   return showModalBottomSheet<bool>(
@@ -58,4 +59,38 @@ Future<bool?> showClientCard(
       );
     },
   );
+}
+
+class _ClientCardEntry extends ConsumerWidget {
+  const _ClientCardEntry({
+    required this.lead,
+    required this.entityType,
+    required this.entityId,
+  });
+
+  final Map<String, dynamic> lead;
+  final String entityType;
+  final String entityId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gate = ref.watch(releaseGateStatusProvider);
+    return gate.when(
+      data: (status) => status.role == 'teacher'
+          ? TeacherClientCard(entityType: entityType, entityId: entityId)
+          : ClientCard(lead: lead, entityType: entityType),
+      loading: () => const Dialog(
+        child: SizedBox.square(
+          dimension: 160,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+      error: (error, _) => Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.xl),
+          child: Text('Не удалось определить доступ: $error'),
+        ),
+      ),
+    );
+  }
 }

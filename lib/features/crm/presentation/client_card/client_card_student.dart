@@ -247,6 +247,14 @@ extension _ClientCardStudent on _ClientCardState {
           runSpacing: AppSpace.sm,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            ClientArchiveButton(
+              entityType: 'student',
+              entityId: _studentId,
+              allowed: clientRoleCanArchive(
+                ref.read(releaseGateStatusProvider).asData?.value.role ?? '',
+              ),
+              onArchived: () => Navigator.of(context).pop(true),
+            ),
             PopupMenuButton<String>(
               enabled: !busy,
               tooltip: 'Действия',

@@ -254,6 +254,14 @@ extension _ClientCardTabsA on _ClientCardState {
           runSpacing: AppSpace.sm,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            ClientArchiveButton(
+              entityType: 'lead',
+              entityId: _leadId,
+              allowed: clientRoleCanArchive(
+                ref.read(releaseGateStatusProvider).asData?.value.role ?? '',
+              ),
+              onArchived: () => Navigator.of(context).pop(true),
+            ),
             // Product rule: a trial, its homework and feedback all belong to
             // the lead. Conversion happens only when a paid package is chosen,
             // so there is no standalone «Создать ученика» mutation here.

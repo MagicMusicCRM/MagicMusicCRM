@@ -152,50 +152,20 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
         role == 'system_admin';
   }
 
-  // Flip a comment between admin-only (`admin_comment`) and teacher-visible
-  // (`teacher_note`). Default is admin-only; this is the «показать преподавателю»
-  // toggle from the client card.
-  Future<void> _toggleCommentVisibility(Map<String, dynamic> c) async {
-    final id = c['id']?.toString();
-    if (id == null) return;
-    final showToTeacher = c['kind'] != 'teacher_note';
-    try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .setCommentVisibility(commentId: id, visibleToTeacher: showToTeacher);
-      if (mounted) setState(() => _future = _loadMerged());
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось изменить видимость: $e')),
-        );
-      }
-    }
-  }
-
   Widget _visibilityToggle(Map<String, dynamic> c) {
-    final visible = c['kind'] == 'teacher_note';
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: () => _toggleCommentVisibility(c),
-        style: TextButton.styleFrom(
-          foregroundColor: visible
-              ? AppColor.gold
-              : Theme.of(context).colorScheme.onSurfaceVariant,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          minimumSize: const Size(0, 28),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        icon: Icon(
-          visible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-          size: 14,
-        ),
-        label: Text(
-          visible ? 'Виден преподавателю' : 'Показать преподавателю',
-          style: const TextStyle(fontSize: 10),
-        ),
-      ),
+    final id = c['id']?.toString() ?? '';
+    final rawVersion = c['version'];
+    final version = rawVersion is num
+        ? rawVersion.toInt()
+        : int.tryParse('$rawVersion') ?? 1;
+    return CommentShareButton(
+      commentId: id,
+      version: version,
+      sharedWithTeacher: c['shared_with_teacher'] == true,
+      allowed: _isStaff && id.isNotEmpty,
+      onChanged: () {
+        if (mounted) setState(() => _future = _loadMerged());
+      },
     );
   }
 

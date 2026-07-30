@@ -193,6 +193,8 @@ _Актуализация 2026-07-30: `T3.2.4` закрыта: единый `GET
 
 _Актуализация 2026-07-30: `T3.3.1` закрыта: manual Lead/Student write-boundary подключён к strict validators T3.1.2 и атомарному typed-value persistence; Flutter формы требуют ФИО/телефон/source либо branch/status, показывают field-level 422 без потери ввода и обновляют inactive source. Director/system_admin configuration UI поддерживает versioned source/custom-field CRUD/archive, без capability control отсутствует, 403 остаётся внутри экрана. Exact Flutter 4/4, backend 3/3 suites и 9/9 tests, typecheck/analyze clean (`docs/audits/v4-client-forms.md`). Следующий шаг `/forge`: `T3.3.2` Client Card/archive/comment UX._
 
+_Актуализация 2026-07-30: `T3.3.2` закрыта: production launcher маршрутизирует Teacher в отдельную actor-scoped read-only карточку с горизонтальными tabs Lesson/Homework/shared Comments; запрещённые contacts/finance/tasks не строятся даже из лишнего payload. Staff-карточка получила Director/system_admin-only archive preview с impact/links/versioned confirm и tombstone contract. Comment share использует независимый `sharedWithTeacher` + expectedVersion, не меняя kind. Exact role UX 4/4, затронутые legacy card/finance 18/18, Flutter analyze clean (`docs/audits/v4-client-card-ux.md`). Следующий шаг `/forge`: `INT-S4` CRM & Shared Work._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 

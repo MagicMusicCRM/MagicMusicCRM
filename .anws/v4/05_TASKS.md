@@ -474,12 +474,12 @@ flowchart TD
   - **Инструкция:** `flutter test test/features/v4/client_forms_test.dart`
   - **Оценка:** 8 ч. · **Зависимости:** T3.1.2, T3.2.1 · **Приоритет:** P1 · **Sprint:** S4
 
-- [ ] **T3.3.2** [REQ-CLIENT-002, REQ-CLIENT-003, REQ-PRIV-001]: Перешить Client Card/archive/comment UX
+- [x] **T3.3.2** [REQ-CLIENT-002, REQ-CLIENT-003, REQ-PRIV-001]: Перешить Client Card/archive/comment UX
   - **Описание:** показать role sections, indicators, archive warning и per-comment share без утечки Teacher.
   - **Подпункты:**
-    - [ ] Собрать adaptive tabs/sections с linked EntityLink actions.
-    - [ ] Реализовать archive preview/confirm/tombstone.
-    - [ ] Реализовать comment share toggle и teacher-limited card.
+    - [x] Собрать adaptive tabs/sections с linked EntityLink actions.
+    - [x] Реализовать archive preview/confirm/tombstone.
+    - [x] Реализовать comment share toggle и teacher-limited card.
   - **Вход:** T2.2.3, T3.2.3, T3.2.4.
   - **Выход:** Flutter card screens/widget tests.
   - **📎 Ссылка:** `client_crm.md §6–11`.

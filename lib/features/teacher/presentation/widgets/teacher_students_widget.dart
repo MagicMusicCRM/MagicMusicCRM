@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 
 class TeacherStudentsWidget extends ConsumerStatefulWidget {
   const TeacherStudentsWidget({super.key});
@@ -140,36 +141,35 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
   }
 }
 
-class _StudentCard extends StatefulWidget {
+class _StudentCard extends StatelessWidget {
   final Map<String, dynamic> student;
   const _StudentCard({required this.student});
 
   @override
-  State<_StudentCard> createState() => _StudentCardState();
-}
-
-class _StudentCardState extends State<_StudentCard> {
-  bool _expanded = false;
-
-  @override
   Widget build(BuildContext context) {
-    final student = widget.student;
+    final student = this.student;
     final firstName = student['first_name'] ?? '';
     final lastName = student['last_name'] ?? '';
     final fullName = '$firstName $lastName'.trim().isEmpty
         ? 'Без имени'
         : '$firstName $lastName'.trim();
-    final phone = student['phone'] ?? '—';
-    final lessonCount = widget.student['_lesson_count'] as int;
-    final customData =
-        widget.student['custom_data'] as Map<String, dynamic>? ?? {};
-    final notes = customData['notes'] as String? ?? '';
+    final lessonCount = student['_lesson_count'] as int;
+    final customData = student['custom_data'] as Map<String, dynamic>? ?? {};
     final level = customData['level'] as String? ?? '';
+    final id = student['id']?.toString() ?? '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onTap: () => setState(() => _expanded = !_expanded),
+        key: ValueKey('teacher-student-$id'),
+        onTap: id.isEmpty
+            ? null
+            : () => showClientCard(
+                context,
+                entityType: 'student',
+                entityId: id,
+                seed: student,
+              ),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -234,70 +234,13 @@ class _StudentCardState extends State<_StudentCard> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Icon(
-                    _expanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                  const Icon(Icons.chevron_right_rounded),
                 ],
               ),
-              if (_expanded) ...[
-                const SizedBox(height: 12),
-                const Divider(),
-                const SizedBox(height: 8),
-                _InfoRow(
-                  icon: Icons.phone_rounded,
-                  label: 'Телефон',
-                  value: phone,
-                ),
-                if (notes.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  _InfoRow(
-                    icon: Icons.notes_rounded,
-                    label: 'Заметки',
-                    value: notes,
-                  ),
-                ],
-              ],
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          icon,
-          size: 16,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 13,
-          ),
-        ),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
-      ],
     );
   }
 }

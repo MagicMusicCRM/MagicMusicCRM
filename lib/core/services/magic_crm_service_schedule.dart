@@ -545,16 +545,20 @@ extension MagicCrmSchedule on MagicCrmService {
     return _legacyComment(response);
   }
 
-  /// Toggle whether a comment is visible to the assigned teacher. Default
-  /// comments are admin-only; showing to the teacher flips kind to `teacher_note`
-  /// (and back to `admin_comment` hides it again). Staff only.
+  /// Versioned toggle for the explicit Teacher-sharing flag. Comment kind is
+  /// preserved; visibility is an independent audited fact.
   Future<Map<String, dynamic>> setCommentVisibility({
     required String commentId,
     required bool visibleToTeacher,
+    required int expectedVersion,
   }) async {
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/comments/$commentId/visibility',
-      data: {'visibleToTeacher': visibleToTeacher},
+      data: {
+        'sharedWithTeacher': visibleToTeacher,
+        'expectedVersion': expectedVersion,
+        'reasonCode': 'crm.comment.teacher-sharing',
+      },
     );
     return _legacyComment(response);
   }
