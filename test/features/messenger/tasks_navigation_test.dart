@@ -3,12 +3,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/tasks_widget.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 
 import 'messenger_test_api.dart';
+
+CapabilitySnapshot _staffSnapshot(String role) {
+  final capabilities = <String>{
+    'crm.client.read.basic',
+    'crm.client.write',
+    'schedule.lesson.read.assigned',
+    'schedule.lesson.write',
+    'workflow.task.read',
+    'workflow.task.write',
+  };
+  if (role == 'manager') {
+    capabilities.addAll({'report.status.read', 'system.settings.manage'});
+  }
+  return CapabilitySnapshot(
+    accountId: 'test-$role',
+    role: role,
+    accessVersion: 1,
+    capabilities: capabilities,
+    scopes: const {'client': 'branch', 'schedule': 'branch'},
+  );
+}
 
 Future<void> _pumpStaffMessenger(
   WidgetTester tester, {
@@ -23,6 +45,9 @@ Future<void> _pumpStaffMessenger(
       overrides: [
         magicApiClientProvider.overrideWithValue(
           RecordingFakeApiClient(profileRole: role),
+        ),
+        capabilitySnapshotProvider.overrideWith(
+          (ref) async => _staffSnapshot(role),
         ),
       ],
       child: MaterialApp(home: MessengerScreen(role: role)),

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_schedule_widget.dart';
@@ -303,7 +304,18 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          capabilitySnapshotProvider.overrideWith(
+            (ref) async => const CapabilitySnapshot(
+              accountId: 'teacher-1',
+              role: 'teacher',
+              accessVersion: 1,
+              capabilities: {'schedule.lesson.read.assigned'},
+              scopes: {'client': 'assigned', 'schedule': 'assigned'},
+            ),
+          ),
+        ],
         child: const MaterialApp(home: MessengerScreen(role: 'teacher')),
       ),
     );
