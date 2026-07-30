@@ -1,6 +1,6 @@
 # V4 Lead, Student and configuration forms — T3.3.1
 
-Дата: 2026-07-30  
+Дата: 2026-07-30
 Статус: PASS
 
 ## Реализация

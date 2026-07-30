@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
@@ -87,6 +88,15 @@ Widget _host({
     overrides: [
       magicApiClientProvider.overrideWithValue(api),
       crmRealtimeProvider.overrideWith((ref) => realtime),
+      capabilitySnapshotProvider.overrideWith(
+        (ref) async => const CapabilitySnapshot(
+          accountId: 'manager-test',
+          role: 'manager',
+          accessVersion: 1,
+          capabilities: <String>{},
+          scopes: <String, String>{},
+        ),
+      ),
     ],
     child: MaterialApp(home: Scaffold(body: child)),
   );

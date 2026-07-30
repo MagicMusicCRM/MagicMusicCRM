@@ -23,4 +23,11 @@ Sprint gate `S4` завершён со статусом `PASS` за 36.275 с. �
 - Flutter CRM/task mobile+desktop: 12/12 tests.
 - Backend TypeScript: clean.
 
+## Пакетный regression
+
+- Единственный review-проход: блокирующих дефектов реализации не найдено.
+- Старый realtime widget fixture дополнен новым capability source; точечная проверка 4/4.
+- Backend: 141/141 suites, 1135/1135 tests, typecheck/build clean.
+- Flutter: 449/449 tests, analyze clean.
+
 Машиночитаемый результат: `docs/audits/v4-s4-gate-result.json`.
