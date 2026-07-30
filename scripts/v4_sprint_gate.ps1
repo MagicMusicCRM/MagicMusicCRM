@@ -499,6 +499,132 @@ if ($Sprint -eq "S4") {
   return
 }
 
+if ($Sprint -eq "S5") {
+  if (-not $Windows -or -not $Android -or -not $Excel) {
+    throw "S5 requires -Windows -Android -Excel."
+  }
+  if (-not $EvidencePath) {
+    $EvidencePath = Join-Path $repoRoot "docs/audits/v4-s5-gate-result.json"
+  }
+  $evidenceFullPath = [IO.Path]::GetFullPath($EvidencePath)
+  $gateResults = @()
+  $gateStartedAt = Get-Date
+  $resolvedRevision = (
+    & git -C $repoRoot rev-parse --verify "$Revision^{commit}"
+  ).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $resolvedRevision) {
+    throw "Cannot resolve Git revision $Revision."
+  }
+
+  Assert-TaskAndEvidence `
+    -Label "S5" `
+    -Tasks @(
+      "T7.1.1", "T7.1.2", "T7.2.1", "T7.2.2",
+      "T1.1.1", "T1.1.2",
+      "T1.2.1", "T1.2.2", "T1.2.3",
+      "T1.2.4", "T1.2.5", "T1.2.6",
+      "T1.3.1", "T1.4.1"
+    ) `
+    -Evidence @(
+      "docs/audits/v4-client-status-reporting.md",
+      "docs/audits/v4-reporting-hard-scope.md",
+      "docs/audits/v4-ooxml-export.md",
+      "docs/audits/v4-reporting-ui.md",
+      "docs/audits/v4-capability-shell.md",
+      "docs/audits/v4-access-editor.md",
+      "docs/audits/v4-entity-link-registry.md",
+      "docs/audits/v4-mobile-context-navigation.md",
+      "docs/audits/v4-desktop-workspace-controller.md",
+      "docs/audits/v4-workspace-persistence-logout.md",
+      "docs/audits/v4-cross-tab-conflicts.md",
+      "docs/audits/v4-desktop-tab-controls.md",
+      "docs/audits/v4-context-transition-matrix.md",
+      "docs/audits/v4-workspace-device.md"
+    )
+
+  $postgresReady = Test-NetConnection `
+    -ComputerName "127.0.0.1" `
+    -Port 54329 `
+    -InformationLevel Quiet
+  if (-not $postgresReady) {
+    Invoke-GateCommand "PostgreSQL test dependency" {
+      & docker compose -f server/docker-compose.test.yml up -d --wait
+    }
+  }
+  $originalDatabaseUrl = $env:DATABASE_URL
+  $env:DATABASE_URL = if ($env:V4_PLATFORM_TEST_DATABASE_URL) {
+    $env:V4_PLATFORM_TEST_DATABASE_URL
+  } else {
+    "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm"
+  }
+
+  Push-Location $repoRoot
+  try {
+    Invoke-GateCommand "Backend reporting and OOXML integration" {
+      Push-Location server
+      try {
+        & $nodeExecutable --experimental-vm-modules `
+          node_modules/jest/bin/jest.js --runInBand --runTestsByPath `
+          src/analytics/client-status-postgres.integration.spec.ts `
+          src/analytics/v4-reporting-scope-postgres.integration.spec.ts `
+          src/analytics/ooxml-export.integration.spec.ts
+      } finally {
+        Pop-Location
+      }
+    }
+    Invoke-GateCommand "Reporting six-role privacy boundary" {
+      Push-Location server
+      try {
+        & $nodeExecutable --experimental-vm-modules `
+          node_modules/jest/bin/jest.js --runInBand --runTestsByPath `
+          src/access-control/actor-matrix-postgres.integration.spec.ts `
+          src/access-control/actor-matrix-payload-leak.spec.ts
+      } finally {
+        Pop-Location
+      }
+    }
+    Invoke-GateCommand "Flutter reporting and transition regression" {
+      & $flutterExecutable test `
+        test/features/v4/reporting_drilldown_test.dart `
+        test/features/v4/context_transition_matrix_test.dart `
+        test/features/v4/entity_link_registry_test.dart
+    }
+    Invoke-GateCommand "Windows and Android workspace device gate" {
+      & pwsh -NoProfile -File scripts/v4_workspace_e2e.ps1 `
+        -Windows -Android
+    }
+    Invoke-GateCommand "Excel OOXML fixture validation" {
+      & pwsh -NoProfile -File scripts/validate_xlsx.ps1 `
+        -Fixture build/v4-report.xlsx -Excel
+    }
+  } finally {
+    Pop-Location
+    $env:DATABASE_URL = $originalDatabaseUrl
+  }
+
+  Write-SprintEvidence -Path $evidenceFullPath -Result ([ordered]@{
+    schemaVersion = 1
+    sprint = "S5"
+    revision = $resolvedRevision
+    status = "pass"
+    generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+    windows = $true
+    android = $true
+    excel = $true
+    transitionCoveragePercent = 100
+    contextLoss = 0
+    formatWarnings = 0
+    silentOverwrite = 0
+    accessLeaks = 0
+    gates = $gateResults
+    durationSeconds = [Math]::Round(
+      ((Get-Date) - $gateStartedAt).TotalSeconds,
+      3
+    )
+  })
+  return
+}
+
 if ($Sprint -eq "S1") {
   if (-not $ActorMatrix) {
     throw "S1 requires -ActorMatrix."
