@@ -1,6 +1,7 @@
 import { ClientReferenceService } from "./clients/client-reference.service";
 import { ClientConversionService } from "./clients/client-conversion.service";
 import { ClientArchiveService } from "./clients/client-archive.service";
+import { ClientCardReadService } from "./clients/client-card-read.service";
 import { CrmClientsController } from "./crm-clients.controller";
 
 describe("CrmClientsController", () => {
@@ -14,12 +15,14 @@ describe("CrmClientsController", () => {
     archive: jest.fn(),
     archiveConvertedLead: jest.fn(),
   };
+  const clientCards = { load: jest.fn() };
   const controller = new CrmClientsController(
     clientReferences as unknown as ClientReferenceService,
     {
       convert: jest.fn(),
     } as unknown as ClientConversionService,
     archives as unknown as ClientArchiveService,
+    clientCards as unknown as ClientCardReadService,
   );
 
   beforeEach(() => {
@@ -45,6 +48,23 @@ describe("CrmClientsController", () => {
       items: [],
     });
     expect(clientReferences.search).toHaveBeenCalledWith(actor, query);
+  });
+
+  it("forwards an explicit ClientRef to the card read model", async () => {
+    const id = "2208d64d-3eca-4a5c-9417-e763582fce11";
+    clientCards.load.mockResolvedValue({
+      ref: { type: "student", id },
+      projection: "teacher",
+    });
+
+    await expect(controller.getCard(actor, "student", id)).resolves.toEqual({
+      ref: { type: "student", id },
+      projection: "teacher",
+    });
+    expect(clientCards.load).toHaveBeenCalledWith(actor, {
+      type: "student",
+      id,
+    });
   });
 
   it("forwards preview and versioned archive commands", async () => {

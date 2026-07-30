@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Param,
@@ -14,6 +15,7 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { ClientReferenceService } from "./clients/client-reference.service";
 import { ClientConversionService } from "./clients/client-conversion.service";
 import { ClientArchiveService } from "./clients/client-archive.service";
+import { ClientCardReadService } from "./clients/client-card-read.service";
 import {
   ArchiveClientCommandDto,
   ArchiveClientPreviewDto,
@@ -21,8 +23,10 @@ import {
 } from "./dto/client-archive.dto";
 import { ConvertLeadDto } from "./dto/client-conversion.dto";
 import {
+  CLIENT_REF_TYPES,
   ClientRefDto,
   ClientRefSearchQuery,
+  ClientRefType,
 } from "./dto/client-ref.dto";
 
 @UseGuards(JwtAuthGuard)
@@ -32,6 +36,7 @@ export class CrmClientsController {
     private readonly clientReferences: ClientReferenceService,
     private readonly conversions: ClientConversionService,
     private readonly archives: ClientArchiveService,
+    private readonly clientCards: ClientCardReadService,
   ) {}
 
   @Get("resolve")
@@ -48,6 +53,18 @@ export class CrmClientsController {
     @Query() query: ClientRefSearchQuery,
   ) {
     return this.clientReferences.search(actor, query);
+  }
+
+  @Get(":type/:id/card")
+  getCard(
+    @CurrentActor() actor: ActorContext,
+    @Param("type") type: string,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    if (!(CLIENT_REF_TYPES as readonly string[]).includes(type)) {
+      throw new BadRequestException("Неизвестный тип клиента.");
+    }
+    return this.clientCards.load(actor, { type: type as ClientRefType, id });
   }
 
   @Post("leads/:leadId/convert")

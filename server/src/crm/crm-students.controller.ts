@@ -30,6 +30,7 @@ import { StudentBalanceQuery } from "./dto/student-balance.query";
 import { StudentLedgerQuery } from "./dto/student-ledger.query";
 import { StudentSearchQuery } from "./dto/student-search.query";
 import { UpdateStudentDto } from "./dto/update-student.dto";
+import { ClientCardReadService } from "./clients/client-card-read.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -39,6 +40,7 @@ export class CrmStudentsController {
     private readonly finance: FinanceService,
     private readonly subscriptions: SubscriptionsService,
     private readonly blacklist: BlacklistService,
+    private readonly clientCards: ClientCardReadService,
   ) {}
 
   @Get("me")
@@ -97,7 +99,7 @@ export class CrmStudentsController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.crm.getStudentCard(actor, id);
+    return this.clientCards.load(actor, { type: "student", id });
   }
 
   @Get("students/:id/ledger")

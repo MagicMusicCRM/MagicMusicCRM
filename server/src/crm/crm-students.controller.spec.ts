@@ -4,6 +4,7 @@ import { CrmStudentsController } from "./crm-students.controller";
 import { CrmService } from "./crm.service";
 import { FinanceService } from "./finance.service";
 import { SubscriptionsService } from "./subscriptions.service";
+import { ClientCardReadService } from "./clients/client-card-read.service";
 
 describe("CrmStudentsController", () => {
   it("rejects direct lead conversion and points callers to subscription issuance", () => {
@@ -13,6 +14,7 @@ describe("CrmStudentsController", () => {
       {} as FinanceService,
       {} as SubscriptionsService,
       {} as BlacklistService,
+      {} as ClientCardReadService,
     );
 
     expect(() =>
@@ -31,6 +33,7 @@ describe("CrmStudentsController", () => {
       {} as FinanceService,
       {} as SubscriptionsService,
       {} as BlacklistService,
+      {} as ClientCardReadService,
     );
     const actor = { userId: "admin-a", role: "admin" as const };
     const dto = { firstName: "Анна" };

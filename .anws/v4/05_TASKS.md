@@ -444,12 +444,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/crm/clients/archive-postgres.integration.spec.ts`
   - **Оценка:** 6 ч. · **Зависимости:** T3.2.2 · **Приоритет:** P0 · **Sprint:** S4
 
-- [ ] **T3.2.4** [REQ-CLIENT-003, REQ-SUB-005]: Собрать role-aware Client Card read model
+- [x] **T3.2.4** [REQ-CLIENT-003, REQ-SUB-005]: Собрать role-aware Client Card read model
   - **Описание:** вернуть status, next lesson, lesson/task/homework/comment sections и допустимый subscription balance без N+1.
   - **Подпункты:**
-    - [ ] Реализовать batched composition и stable section contracts.
-    - [ ] Удалить дублирующий future menu и вычислять indicators из source systems.
-    - [ ] Подключить full/teacher/client projections.
+    - [x] Реализовать batched composition и stable section contracts.
+    - [x] Удалить дублирующий future menu и вычислять indicators из source systems.
+    - [x] Подключить full/teacher/client projections.
   - **Вход:** T2.2.2, T3.2.3, INT-S3; `client_crm.md §6`.
   - **Выход:** client-card API/read model/performance test.
   - **📎 Ссылка:** `commerce.md §9`, `reporting.md §4`.

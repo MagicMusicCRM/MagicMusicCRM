@@ -57,6 +57,7 @@ import { ClientWriteValidator } from './clients/client-write.validator';
 import { InboundLeadService } from './clients/inbound-lead.service';
 import { ClientConversionService } from './clients/client-conversion.service';
 import { ClientArchiveService } from './clients/client-archive.service';
+import { ClientCardReadService } from './clients/client-card-read.service';
 import { LessonLifecycleRepository } from './schedule/lesson-lifecycle.repository';
 import { AvailabilityController } from './schedule/availability.controller';
 import { AvailabilityRepository } from './schedule/availability.repository';
@@ -159,6 +160,7 @@ import { SharedTaskReminderWorker } from './tasks/shared-task-reminder.worker';
     InboundLeadService,
     ClientConversionService,
     ClientArchiveService,
+    ClientCardReadService,
     LessonLifecycleRepository,
     AvailabilityRepository,
     AvailabilityService,
