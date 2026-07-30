@@ -181,6 +181,8 @@ _Актуализация 2026-07-29: `T6.4.1` закрыта: единый `tes
 ### 🌊 Wave v4/S1 — Flutter Access Integration
 _Актуализация 2026-07-30: `T1.1.1` закрыта: authenticated `/access/me` отдаёт effective capability snapshot с account/accessVersion/scopes; Flutter shell key-ит snapshot по account/version, вычисляет destinations из capabilities и после `access.invalidated` пересоздаёт boundary без старого чувствительного UI. Exact Flutter 3/3, backend route policy 34/34, typecheck clean (`docs/audits/v4-capability-shell.md`). Следующий шаг `/forge`: `T1.1.2` Director access editor/emergency root surface._
 
+_Актуализация 2026-07-30: `T1.1.2` закрыта: access editor доступен только Director/system_admin, показывает package/effective/override, требует reason и reset confirmation, а stale `409` перечитывает server truth без partial UI. Director видит/назначает только lower roles и не получает `system_admin` account/filter/option; root использует отдельный emergency surface. Exact Flutter 4/4, PostgreSQL 6/6, typecheck clean (`docs/audits/v4-access-editor.md`). Следующий шаг `/forge`: `INT-S1` Access & Privacy gate._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 

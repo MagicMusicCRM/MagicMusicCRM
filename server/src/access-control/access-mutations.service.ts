@@ -167,7 +167,43 @@ export class AccessMutationsService {
     const rolePackage = await this.repository.getActivePackage(
       snapshot.user.role,
     );
-    return { ...snapshot, rolePackage };
+    const overrides = new Map(
+      snapshot.overrides.map((override) => [
+        override.capabilityKey,
+        override.effect,
+      ]),
+    );
+    const evaluator = new EffectiveAccessEvaluator(this.hardInvariants);
+    const definitions = CAPABILITY_DEFINITIONS.map((definition) => {
+      const packageEffect = rolePackage.effects[definition.key] ?? "deny";
+      const overrideEffect = overrides.get(definition.key) ?? null;
+      const decision = evaluator.evaluate({
+        actor: {
+          userId: snapshot.user.id,
+          role: snapshot.user.role,
+          active: snapshot.user.active,
+        },
+        capability: {
+          key: definition.key,
+          active: true,
+          overrideMode: definition.overrideMode,
+        },
+        roleEffect: packageEffect,
+        overrideEffect,
+        resourceAllowed: true,
+      });
+      return {
+        key: definition.key,
+        domain: definition.domain,
+        riskLevel: definition.riskLevel,
+        overrideMode: definition.overrideMode,
+        packageEffect,
+        overrideEffect,
+        effectiveAllowed: decision.allowed,
+        decisionSource: decision.source,
+      };
+    });
+    return { ...snapshot, rolePackage, definitions };
   }
 
   async assignRole(actor: ActorContext, command: AssignRoleCommand) {

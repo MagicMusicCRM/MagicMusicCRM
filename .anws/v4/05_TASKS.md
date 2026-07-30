@@ -958,12 +958,12 @@ flowchart TD
   - **Инструкция:** `flutter test test/features/v4/capability_shell_test.dart`
   - **Оценка:** 8 ч. · **Зависимости:** T2.3.2 · **Приоритет:** P0 · **Sprint:** S1
 
-- [ ] **T1.1.2** [REQ-RBAC-001, REQ-RBAC-002]: Создать Director access editor и emergency root surface
+- [x] **T1.1.2** [REQ-RBAC-001, REQ-RBAC-002]: Создать Director access editor и emergency root surface
   - **Описание:** показывать package value, effective checkbox/override, role reset warning и строгую actor hierarchy.
   - **Подпункты:**
-    - [ ] Реализовать user role/package/override form только Director/sysadmin.
-    - [ ] Добавить confirmation reason/reset-overrides и 409 refresh UX.
-    - [ ] Скрыть system_admin account/option в Director business UI.
+    - [x] Реализовать user role/package/override form только Director/sysadmin.
+    - [x] Добавить confirmation reason/reset-overrides и 409 refresh UX.
+    - [x] Скрыть system_admin account/option в Director business UI.
   - **Вход:** T2.2.1, T1.1.1.
   - **Выход:** Flutter access management screens/tests.
   - **📎 Ссылка:** `access_control.md §6/§9`.
