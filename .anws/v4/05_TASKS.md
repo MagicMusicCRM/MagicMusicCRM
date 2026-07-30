@@ -1044,12 +1044,12 @@ flowchart TD
   - **Инструкция:** `flutter test test/features/v4/cross_tab_conflict_test.dart`
   - **Оценка:** 8 ч. · **Зависимости:** T1.2.3, T8.1.4 · **Приоритет:** P0 · **Sprint:** S5
 
-- [ ] **T1.2.6** [REQ-NAV-002]: Добавить tab controls, D&D, limit и dirty-close
+- [x] **T1.2.6** [REQ-NAV-002]: Добавить tab controls, D&D, limit и dirty-close
   - **Описание:** реализовать hover `⋯`, open-new/close/close-others, reorder и безопасное закрытие формы.
   - **Подпункты:**
-    - [ ] Добавить hover menu и linked-element open-new action.
-    - [ ] Реализовать drag-and-drop order persistence.
-    - [ ] Ограничить 10 tabs и добавить Save/Discard/Cancel dirty guard.
+    - [x] Добавить hover menu и linked-element open-new action.
+    - [x] Реализовать drag-and-drop order persistence.
+    - [x] Ограничить 10 tabs и добавить Save/Discard/Cancel dirty guard.
   - **Вход:** T1.2.3, T1.2.4.
   - **Выход:** desktop tab widgets/interactions/tests.
   - **📎 Ссылка:** `app_workspace.md §4/§7`.

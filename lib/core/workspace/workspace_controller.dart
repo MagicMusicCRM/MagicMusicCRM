@@ -22,6 +22,12 @@ class WorkspaceLimitReached implements Exception {
   String toString() => 'WorkspaceLimitReached(maxTabs: 10)';
 }
 
+enum DirtyCloseDecision { save, discard, cancel }
+
+typedef DirtyCloseResolver =
+    Future<DirtyCloseDecision> Function(WorkspaceTabState tab);
+typedef DirtyTabSaver = Future<void> Function(WorkspaceTabState tab);
+
 class WorkspaceController extends ChangeNotifier {
   WorkspaceController({
     required String accountId,
@@ -131,6 +137,72 @@ class WorkspaceController extends ChangeNotifier {
       );
     });
     return removed;
+  }
+
+  void reorderTab(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _state.tabs.length) {
+      throw RangeError.index(oldIndex, _state.tabs, 'oldIndex');
+    }
+    if (newIndex < 0 || newIndex > _state.tabs.length) {
+      throw RangeError.range(newIndex, 0, _state.tabs.length, 'newIndex');
+    }
+    final tabs = [..._state.tabs];
+    if (newIndex > oldIndex) newIndex -= 1;
+    final tab = tabs.removeAt(oldIndex);
+    tabs.insert(newIndex, tab);
+    _state = _state.copyWith(tabs: tabs);
+    notifyListeners();
+  }
+
+  String duplicateTab(String tabId) {
+    final tab = _state.tabs[_tabIndex(tabId)];
+    return open(
+      tab.currentRoute.link,
+      titleHint: tab.titleHint,
+      explicitNew: true,
+    );
+  }
+
+  Future<bool> closeTab(
+    String tabId, {
+    required DirtyCloseResolver resolveDirty,
+    required DirtyTabSaver saveDirty,
+  }) async {
+    if (_state.tabs.length == 1) return false;
+    final index = _tabIndex(tabId);
+    final tab = _state.tabs[index];
+    if (tab.hasDirtyForms) {
+      final decision = await resolveDirty(tab);
+      if (decision == DirtyCloseDecision.cancel) return false;
+      if (decision == DirtyCloseDecision.save) {
+        await saveDirty(tab);
+      }
+    }
+
+    final tabs = [..._state.tabs]..removeAt(index);
+    var activeTabId = _state.activeTabId;
+    if (activeTabId == tabId) {
+      activeTabId = tabs[index.clamp(0, tabs.length - 1)].tabId;
+    }
+    _state = _state.copyWith(activeTabId: activeTabId, tabs: tabs);
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> closeOtherTabs(
+    String tabId, {
+    required DirtyCloseResolver resolveDirty,
+    required DirtyTabSaver saveDirty,
+  }) async {
+    _tabIndex(tabId);
+    final otherIds = _state.tabs
+        .where((tab) => tab.tabId != tabId)
+        .map((tab) => tab.tabId)
+        .toList(growable: false);
+    for (final otherId in otherIds) {
+      await closeTab(otherId, resolveDirty: resolveDirty, saveDirty: saveDirty);
+    }
+    selectTab(tabId);
   }
 
   void updateCurrentView(String tabId, ContextViewState viewState) {
