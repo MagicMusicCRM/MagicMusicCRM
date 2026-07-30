@@ -1,20 +1,20 @@
 # MagicMusicCRM v4 — Current-State Inventory
 
 **Task:** T8.1.2
-**Source digest:** `fa7442a4e573ff8b52b8197dcdd3073630b9031e0afa86c9e69378e3872d7900`
+**Source digest:** `afffed4eb265fed6e6f99cd1dd43214d81fc02ab7b630e31590f03aac0a71a4a`
 **Validation:** PASS
 
 ## Coverage
 
 | Slice | Count |
 |---|---:|
-| backend routes | 280 |
+| backend routes | 287 |
 | role guards | 22 |
-| policy calls | 225 |
-| dto fields | 641 |
-| flutter role checks | 121 |
-| flutter navigation sources | 317 |
-| schedule entry points | 36 |
+| policy calls | 226 |
+| dto fields | 658 |
+| flutter role checks | 123 |
+| flutter navigation sources | 322 |
+| schedule entry points | 37 |
 | attendance mutations | 0 |
 | finance writes | 43 |
 | schema tables | 5 |

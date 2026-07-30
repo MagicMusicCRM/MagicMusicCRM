@@ -124,6 +124,19 @@ export function resolveCapabilityRoutePolicy(
   }
 
   if (
+    path.includes("/export") ||
+    path.endsWith(".xlsx") ||
+    path.endsWith(".csv")
+  ) {
+    return policy(
+      "report.export.xlsx",
+      "branch",
+      managementRoles,
+      "Reporting export capability intersected with source report policy",
+    );
+  }
+
+  if (
     path.includes("/reports/finance") ||
     path.startsWith("/analytics/finance") ||
     path.includes("/expenses")
@@ -291,9 +304,7 @@ export function resolveCapabilityRoutePolicy(
 
   if (path.startsWith("/analytics") || path.includes("/reports")) {
     return policy(
-      path.includes("export")
-        ? "report.export.xlsx"
-        : "report.status.read",
+      "report.status.read",
       "branch",
       managementRoles,
       "Analytics/Reporting management policy",

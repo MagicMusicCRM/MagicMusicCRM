@@ -910,12 +910,12 @@ flowchart TD
 
 ## Phase 2 — Export/Flutter integration (S5)
 
-- [ ] **T7.2.1** [REQ-REPORT-001]: Реализовать валидный OOXML export
+- [x] **T7.2.1** [REQ-REPORT-001]: Реализовать валидный OOXML export
   - **Описание:** генерировать настоящий `.xlsx`, корректные MIME/types/Unicode/dates/money/formulas и async job для 10k–100k rows.
   - **Подпункты:**
-    - [ ] Выбрать/подключить server-side OOXML builder и structural validator.
-    - [ ] Реализовать sync/async/row-limit contracts и private download.
-    - [ ] Исправить extensions/MIME legacy export façade.
+    - [x] Выбрать/подключить server-side OOXML builder и structural validator.
+    - [x] Реализовать sync/async/row-limit contracts и private download.
+    - [x] Исправить extensions/MIME legacy export façade.
   - **Вход:** T7.1.1, T7.1.2, `reporting.md §5–7/§9`.
   - **Выход:** export service/API/validator fixtures.
   - **📎 Ссылка:** ADR-012.

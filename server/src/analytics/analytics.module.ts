@@ -9,6 +9,8 @@ import { AnalyticsService } from "./analytics.service";
 import { AnalyticsRefreshWorker } from "./analytics-refresh.worker";
 import { ClientStatusReadService } from "./client-status-read.service";
 import { ReportingReadService } from "./reporting-read.service";
+import { OoxmlWorkbookBuilder } from "./ooxml-workbook.builder";
+import { ReportExportService } from "./report-export.service";
 
 @Module({
   imports: [DatabaseModule, AuditModule, CrmModule, JwtModule.register({})],
@@ -18,6 +20,8 @@ import { ReportingReadService } from "./reporting-read.service";
     AnalyticsRefreshWorker,
     ClientStatusReadService,
     ReportingReadService,
+    OoxmlWorkbookBuilder,
+    ReportExportService,
     JwtAuthGuard,
   ],
 })

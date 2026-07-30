@@ -1,4 +1,14 @@
-import { Controller, Get, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from "@nestjs/common";
 import { Response } from "express";
 import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
@@ -8,6 +18,8 @@ import { ClientStatusFilterQuery } from "./dto/client-status-filter.query";
 import { AnalyticsService } from "./analytics.service";
 import { ClientStatusReadService } from "./client-status-read.service";
 import { ReportingReadService } from "./reporting-read.service";
+import { ReportExportRequestDto } from "./dto/report-export.dto";
+import { ReportExportService } from "./report-export.service";
 
 @Controller("analytics")
 @UseGuards(JwtAuthGuard)
@@ -16,6 +28,7 @@ export class AnalyticsController {
     private readonly analytics: AnalyticsService,
     private readonly clientStatus: ClientStatusReadService,
     private readonly reporting: ReportingReadService,
+    private readonly exports: ReportExportService,
   ) {}
 
   @Get("v4/client-status/summary")
@@ -48,6 +61,37 @@ export class AnalyticsController {
     @Query() query: AnalyticsRangeQuery,
   ) {
     return this.reporting.schoolFinance(actor, query);
+  }
+
+  @Post("v4/exports")
+  async requestExport(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: ReportExportRequestDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.exports.request(actor, dto);
+    if (result.mode === "async") return result;
+    this.setDownloadHeaders(res, result.mimeType, result.filename);
+    return new StreamableFile(result.content);
+  }
+
+  @Get("v4/exports/:jobId")
+  exportJob(
+    @CurrentActor() actor: ActorContext,
+    @Param("jobId") jobId: string,
+  ) {
+    return this.exports.getJob(actor, jobId);
+  }
+
+  @Get("v4/exports/:jobId/download")
+  async downloadExport(
+    @CurrentActor() actor: ActorContext,
+    @Param("jobId") jobId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.exports.download(actor, jobId);
+    this.setDownloadHeaders(res, result.mimeType, result.filename);
+    return new StreamableFile(result.content);
   }
 
   @Get("overview")
@@ -135,10 +179,13 @@ export class AnalyticsController {
     @Query() query: AnalyticsRangeQuery,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const xlsx = await this.analytics.financeMonthlyXlsx(actor, query);
-    res.setHeader("Content-Type", "application/vnd.ms-excel");
-    res.setHeader("Content-Disposition", 'attachment; filename="finance-monthly.xls"');
-    return new StreamableFile(Buffer.from(xlsx, "utf-8"));
+    const xlsx = await this.exports.financeWorkbook(actor, query);
+    this.setDownloadHeaders(
+      res,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "finance-monthly.xlsx",
+    );
+    return new StreamableFile(xlsx);
   }
 
   @Get("sources")
@@ -160,5 +207,17 @@ export class AnalyticsController {
     @Query() query: AnalyticsRangeQuery,
   ) {
     return this.analytics.responsibleDistribution(actor, query);
+  }
+
+  private setDownloadHeaders(
+    res: Response,
+    mimeType: string,
+    filename: string,
+  ): void {
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}"`,
+    );
   }
 }
