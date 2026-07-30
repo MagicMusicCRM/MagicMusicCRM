@@ -4,12 +4,33 @@ import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { AnalyticsRangeQuery } from "./dto/analytics-range.query";
+import { ClientStatusFilterQuery } from "./dto/client-status-filter.query";
 import { AnalyticsService } from "./analytics.service";
+import { ClientStatusReadService } from "./client-status-read.service";
 
 @Controller("analytics")
 @UseGuards(JwtAuthGuard)
 export class AnalyticsController {
-  constructor(private readonly analytics: AnalyticsService) {}
+  constructor(
+    private readonly analytics: AnalyticsService,
+    private readonly clientStatus: ClientStatusReadService,
+  ) {}
+
+  @Get("v4/client-status/summary")
+  clientStatusSummary(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: ClientStatusFilterQuery,
+  ) {
+    return this.clientStatus.summary(actor, query);
+  }
+
+  @Get("v4/client-status/clients")
+  clientStatusClients(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: ClientStatusFilterQuery,
+  ) {
+    return this.clientStatus.list(actor, query);
+  }
 
   @Get("overview")
   overview(@CurrentActor() actor: ActorContext) {

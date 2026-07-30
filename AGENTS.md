@@ -197,6 +197,9 @@ _Актуализация 2026-07-30: `T3.3.2` закрыта: Teacher откр�
 
 _Пакетный regression 2026-07-30: backend 141/141 suites и 1135/1135 tests, Flutter 449/449, typecheck/build/analyze clean. Единственная найденная регрессия была в старом realtime test fixture без нового capability source; fixture исправлен и точечно прошёл 4/4._
 
+### 🌊 Wave v4/S5 — Connected Workspace
+_Актуализация 2026-07-30: `T7.1.1` закрыта: versioned Client Status filter применяется одним actor-scoped SQL predicate к summary и drilldown; Manager видит только назначенные филиалы, Director/system_admin — business scope, Admin и Manager с Director-disabled `report.status.read` получают 403. Ответы содержат typed EntityLink/filter и safe ClientRef rows. Exact PostgreSQL 1/1 suite и 2/2 tests, typecheck clean (`docs/audits/v4-client-status-reporting.md`). Следующий шаг `/forge`: `T7.1.2` lesson/finance read models и hard scope._
+
 _Актуализация 2026-07-30: `T3.3.2` закрыта: production launcher маршрутизирует Teacher в отдельную actor-scoped read-only карточку с горизонтальными tabs Lesson/Homework/shared Comments; запрещённые contacts/finance/tasks не строятся даже из лишнего payload. Staff-карточка получила Director/system_admin-only archive preview с impact/links/versioned confirm и tombstone contract. Comment share использует независимый `sharedWithTeacher` + expectedVersion, не меняя kind. Exact role UX 4/4, затронутые legacy card/finance 18/18, Flutter analyze clean (`docs/audits/v4-client-card-ux.md`). Следующий шаг `/forge`: `INT-S4` CRM & Shared Work._
 
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog

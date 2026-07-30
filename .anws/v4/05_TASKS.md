@@ -880,12 +880,12 @@ flowchart TD
 
 ## Phase 1 — Foundation/Core (S5)
 
-- [ ] **T7.1.1** [REQ-REPORT-002, REQ-CLIENT-003]: Реализовать status summary и общий filter spec
+- [x] **T7.1.1** [REQ-REPORT-002, REQ-CLIENT-003]: Реализовать status summary и общий filter spec
   - **Описание:** строить counts и drilldown из одного actor-scoped filter, включая Director override Manager capability.
   - **Подпункты:**
-    - [ ] Создать versioned filter schema и query-level scope.
-    - [ ] Реализовать summary/list с одинаковыми predicates.
-    - [ ] Вернуть typed drilldown EntityLink/filter.
+    - [x] Создать versioned filter schema и query-level scope.
+    - [x] Реализовать summary/list с одинаковыми predicates.
+    - [x] Вернуть typed drilldown EntityLink/filter.
   - **Вход:** T2.3.1, T3.2.4, `reporting.md §3–5`.
   - **Выход:** analytics endpoints/SQL tests.
   - **📎 Ссылка:** ADR-007, ADR-012.

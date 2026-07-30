@@ -7,10 +7,16 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { AnalyticsController } from "./analytics.controller";
 import { AnalyticsService } from "./analytics.service";
 import { AnalyticsRefreshWorker } from "./analytics-refresh.worker";
+import { ClientStatusReadService } from "./client-status-read.service";
 
 @Module({
   imports: [DatabaseModule, AuditModule, CrmModule, JwtModule.register({})],
   controllers: [AnalyticsController],
-  providers: [AnalyticsService, AnalyticsRefreshWorker, JwtAuthGuard],
+  providers: [
+    AnalyticsService,
+    AnalyticsRefreshWorker,
+    ClientStatusReadService,
+    JwtAuthGuard,
+  ],
 })
 export class AnalyticsModule {}
