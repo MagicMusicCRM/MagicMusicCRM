@@ -39,7 +39,7 @@ describe("SharedTask conservative migration (PostgreSQL)", () => {
 
   it("merges only proven exact copies and preserves ambiguous rows separately", async () => {
     await cleanupStaleRuntimeFixtures(pool);
-    await runner.down();
+    await rollbackThrough(runner, "0092_shared_tasks_audience_schema");
     let migrationApplied = false;
     const fixture = await createLegacyFixture(pool);
     try {
@@ -150,7 +150,7 @@ describe("SharedTask conservative migration (PostgreSQL)", () => {
     } finally {
       if (migrationApplied) {
         await cleanupFixture(pool, fixture);
-        await runner.down();
+        await rollbackThrough(runner, "0092_shared_tasks_audience_schema");
       } else {
         await cleanupLegacyFixture(pool, fixture);
       }
@@ -158,6 +158,16 @@ describe("SharedTask conservative migration (PostgreSQL)", () => {
     }
   });
 });
+
+async function rollbackThrough(runner: MigrationRunner, targetId: string) {
+  while (true) {
+    const reverted = await runner.down();
+    if (!reverted) {
+      throw new Error(`Migration ${targetId} is not applied.`);
+    }
+    if (reverted === targetId) return;
+  }
+}
 
 async function cleanupStaleRuntimeFixtures(pool: Pool) {
   const client = await pool.connect();
