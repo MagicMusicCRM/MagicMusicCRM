@@ -1002,12 +1002,12 @@ flowchart TD
   - **Инструкция:** `flutter test test/features/v4/mobile_context_navigation_test.dart`
   - **Оценка:** 8 ч. · **Зависимости:** T1.2.1 · **Приоритет:** P1 · **Sprint:** S5
 
-- [ ] **T1.2.3** [REQ-NAV-002]: Реализовать desktop WorkspaceController и tab-local stacks
+- [x] **T1.2.3** [REQ-NAV-002]: Реализовать desktop WorkspaceController и tab-local stacks
   - **Описание:** создать верхнюю tab strip, 1–10 вкладок и независимые route/form scopes при общей session/cache.
   - **Подпункты:**
-    - [ ] Реализовать WorkspaceState/TabState/active selection.
-    - [ ] Изолировать route stack/form registry каждой вкладки.
-    - [ ] Обычный open фокусирует existing entity; explicit new допускает второй context.
+    - [x] Реализовать WorkspaceState/TabState/active selection.
+    - [x] Изолировать route stack/form registry каждой вкладки.
+    - [x] Обычный open фокусирует existing entity; explicit new допускает второй context.
   - **Вход:** T1.2.1, `app_workspace.md §2–5`.
   - **Выход:** `lib/core/workspace` shell/controller/tests.
   - **📎 Ссылка:** ADR-010.
