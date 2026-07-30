@@ -206,6 +206,8 @@ _Актуализация 2026-07-30: `T7.2.1` закрыта: ExcelJS созд�
 
 _Пакетный regression 2026-07-30: backend 144/144 suites и 1140/1140 tests, Flutter 449/449, typecheck/build/analyze clean. Единственный блокер — legacy SharedTask migration fixture откатывал последнюю миграцию вместо целевой `0092`; fixture сделан version-aware и точечно прошёл 1/1._
 
+_Актуализация 2026-07-30: `T1.2.1` закрыта: versioned EntityLink v1 типизирует Client/Lesson/Task/Subscription/Payment/User/Homework/Chat/Report и server report variants, registry строит один canonical target через capability/projection policy. Teacher Client route limited; forbidden/deleted/archived/unknown завершаются safe state без infinite load. Exact Flutter 4/4, targeted analyze clean (`docs/audits/v4-entity-link-registry.md`). `T7.2.2` разблокирована; следующий шаг `/forge`: reports/drilldown/export UI._
+
 _Актуализация 2026-07-30: `T3.3.2` закрыта: production launcher маршрутизирует Teacher в отдельную actor-scoped read-only карточку с горизонтальными tabs Lesson/Homework/shared Comments; запрещённые contacts/finance/tasks не строятся даже из лишнего payload. Staff-карточка получила Director/system_admin-only archive preview с impact/links/versioned confirm и tombstone contract. Comment share использует независимый `sharedWithTeacher` + expectedVersion, не меняя kind. Exact role UX 4/4, затронутые legacy card/finance 18/18, Flutter analyze clean (`docs/audits/v4-client-card-ux.md`). Следующий шаг `/forge`: `INT-S4` CRM & Shared Work._
 
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog

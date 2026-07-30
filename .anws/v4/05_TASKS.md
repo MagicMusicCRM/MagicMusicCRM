@@ -974,12 +974,12 @@ flowchart TD
 
 ## Phase 2 — Navigation/workspace core (S5)
 
-- [ ] **T1.2.1** [REQ-NAV-001, REQ-NAV-003]: Создать EntityLink registry
+- [x] **T1.2.1** [REQ-NAV-001, REQ-NAV-003]: Создать EntityLink registry
   - **Описание:** типизировать Client/Lesson/Task/Subscription/Payment/User/Homework/Chat/Report links и единый target route.
   - **Подпункты:**
-    - [ ] Определить versioned EntityLink/optionalFocus/filter schema.
-    - [ ] Зарегистрировать route builder + capability/projection policy.
-    - [ ] Добавить safe forbidden/deleted/archived states.
+    - [x] Определить versioned EntityLink/optionalFocus/filter schema.
+    - [x] Зарегистрировать route builder + capability/projection policy.
+    - [x] Добавить safe forbidden/deleted/archived states.
   - **Вход:** INT-S4, `app_workspace.md §3–5`, PRD §8.
   - **Выход:** `lib/core/navigation` registry/contracts/tests.
   - **📎 Ссылка:** ADR-010.
