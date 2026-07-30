@@ -988,12 +988,12 @@ flowchart TD
   - **Инструкция:** `flutter test test/features/v4/entity_link_registry_test.dart`
   - **Оценка:** 8 ч. · **Зависимости:** INT-S4 · **Приоритет:** P0 · **Sprint:** S5
 
-- [ ] **T1.2.2** [REQ-NAV-001, REQ-NAV-003]: Реализовать mobile context stack/restoration
+- [x] **T1.2.2** [REQ-NAV-001, REQ-NAV-003]: Реализовать mobile context stack/restoration
   - **Описание:** проходить связанные записи без вкладок и возвращать filters/date/scroll/selected column.
   - **Подпункты:**
-    - [ ] Создать restorable ContextRouteState для source screens.
-    - [ ] Поддержать 4-level drilldown и back.
-    - [ ] Реализовать authenticated deep link с правильным обратным путём.
+    - [x] Создать restorable ContextRouteState для source screens.
+    - [x] Поддержать 4-level drilldown и back.
+    - [x] Реализовать authenticated deep link с правильным обратным путём.
   - **Вход:** T1.2.1, `app_workspace.md §4/§6`.
   - **Выход:** mobile router/state restoration/tests.
   - **📎 Ссылка:** ADR-010.
