@@ -122,6 +122,7 @@ void main() {
       expect(second.state.loggedOut, isTrue);
       expect(backend.values, isEmpty);
       expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+      expect(() => first.open(link('late-event')), throwsA(isA<StateError>()));
     },
   );
 }

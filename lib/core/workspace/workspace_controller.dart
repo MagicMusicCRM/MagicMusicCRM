@@ -82,6 +82,9 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   String open(EntityLink link, {String? titleHint, bool explicitNew = false}) {
+    if (_state.loggedOut) {
+      throw StateError('Cannot open a route after global logout.');
+    }
     _requireSupported(link);
     if (!explicitNew) {
       final existing = _state.tabs
@@ -179,10 +182,12 @@ class WorkspaceController extends ChangeNotifier {
       }
     }
 
-    final tabs = [..._state.tabs]..removeAt(index);
+    final currentIndex = _state.tabs.indexWhere((item) => item.tabId == tabId);
+    if (currentIndex < 0) return true;
+    final tabs = [..._state.tabs]..removeAt(currentIndex);
     var activeTabId = _state.activeTabId;
     if (activeTabId == tabId) {
-      activeTabId = tabs[index.clamp(0, tabs.length - 1)].tabId;
+      activeTabId = tabs[currentIndex.clamp(0, tabs.length - 1)].tabId;
     }
     _state = _state.copyWith(activeTabId: activeTabId, tabs: tabs);
     notifyListeners();
@@ -200,7 +205,12 @@ class WorkspaceController extends ChangeNotifier {
         .map((tab) => tab.tabId)
         .toList(growable: false);
     for (final otherId in otherIds) {
-      await closeTab(otherId, resolveDirty: resolveDirty, saveDirty: saveDirty);
+      final closed = await closeTab(
+        otherId,
+        resolveDirty: resolveDirty,
+        saveDirty: saveDirty,
+      );
+      if (!closed) break;
     }
     selectTab(tabId);
   }

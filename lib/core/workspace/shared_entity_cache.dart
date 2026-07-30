@@ -84,6 +84,17 @@ class SharedEntityCache {
   }
 
   void invalidate(EntityLink link, {required int serverVersion}) {
+    final staleKeys = _entries.keys
+        .where(
+          (key) =>
+              key.entityType == link.rawEntityType &&
+              key.entityId == link.entityId &&
+              key.version < serverVersion,
+        )
+        .toList(growable: false);
+    for (final key in staleKeys) {
+      _entries.remove(key);
+    }
     final identities = _latest.keys
         .where((identity) => identity.startsWith(_entityPrefix(link)))
         .toList(growable: false);
@@ -142,32 +153,40 @@ class WorkspaceInvalidationCoordinator {
       _seenEventIds.remove(_seenEventIds.first);
     }
 
-    cache.invalidate(event.link, serverVersion: event.version);
-    final matchingTabs = workspace.state.tabs
-        .where(
-          (tab) =>
-              tab.currentRoute.link.rawEntityType == event.link.rawEntityType &&
-              tab.currentRoute.link.entityId == event.link.entityId,
-        )
-        .toList(growable: false);
-    for (final tab in matchingTabs) {
-      final dirtyForms = tab.forms.values
-          .where((form) => form.dirty)
+    try {
+      cache.invalidate(event.link, serverVersion: event.version);
+      final matchingTabs = workspace.state.tabs
+          .where(
+            (tab) =>
+                tab.currentRoute.link.rawEntityType ==
+                    event.link.rawEntityType &&
+                tab.currentRoute.link.entityId == event.link.entityId,
+          )
           .toList(growable: false);
-      if (dirtyForms.isNotEmpty) {
-        for (final form in dirtyForms) {
-          workspace.markFormConflict(
-            tab.tabId,
-            form.formKey,
-            serverVersion: event.version,
-            source: 'realtime',
-          );
+      final refetches = <Future<void>>[];
+      for (final tab in matchingTabs) {
+        final dirtyForms = tab.forms.values
+            .where((form) => form.dirty)
+            .toList(growable: false);
+        if (dirtyForms.isNotEmpty) {
+          for (final form in dirtyForms) {
+            workspace.markFormConflict(
+              tab.tabId,
+              form.formKey,
+              serverVersion: event.version,
+              source: 'realtime',
+            );
+          }
+        } else {
+          refetches.add(refetch(tab.tabId, event.link, event.version));
         }
-      } else {
-        await refetch(tab.tabId, event.link, event.version);
       }
+      await Future.wait(refetches);
+      return true;
+    } catch (_) {
+      _seenEventIds.remove(event.eventId);
+      rethrow;
     }
-    return true;
   }
 
   bool handleWriteError({

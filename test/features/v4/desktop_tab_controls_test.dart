@@ -135,6 +135,19 @@ void main() {
       );
       expect(workspace.state.tabs.any((tab) => tab.tabId == cancelTab), isTrue);
 
+      final untouchedTab = dirtyTab('untouched');
+      await workspace.closeOtherTabs(
+        workspace.state.tabs.first.tabId,
+        resolveDirty: (tab) async => tab.tabId == cancelTab
+            ? DirtyCloseDecision.cancel
+            : DirtyCloseDecision.discard,
+        saveDirty: (_) async {},
+      );
+      expect(
+        workspace.state.tabs.any((tab) => tab.tabId == untouchedTab),
+        isTrue,
+      );
+
       final saved = <String>[];
       final saveTab = dirtyTab('save');
       expect(

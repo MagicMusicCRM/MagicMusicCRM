@@ -80,9 +80,14 @@ class AccountWorkspaceStore {
         return fallback;
       }
       final rawTabs = decoded['tabs'];
-      if (rawTabs is! List || rawTabs.isEmpty) return fallback;
+      if (rawTabs is! List ||
+          rawTabs.isEmpty ||
+          rawTabs.length > WorkspaceController.maxTabs) {
+        return fallback;
+      }
 
       final tabs = <WorkspaceTabState>[];
+      final tabIds = <String>{};
       for (final rawTab in rawTabs) {
         if (rawTab is! Map) return fallback;
         final tab = rawTab.map((key, value) => MapEntry(key.toString(), value));
@@ -100,7 +105,7 @@ class AccountWorkspaceStore {
           routes.add(route);
         }
         final tabId = tab['tabId']?.toString() ?? '';
-        if (tabId.isEmpty) return fallback;
+        if (tabId.isEmpty || !tabIds.add(tabId)) return fallback;
         tabs.add(
           WorkspaceTabState(
             tabId: tabId,
@@ -167,7 +172,9 @@ class WorkspacePersistenceBinding {
   void _scheduleSave() {
     if (_disposed) return;
     final snapshot = _controller.state;
-    _pending = _pending.then((_) => _store.save(snapshot));
+    _pending = _pending
+        .catchError((Object _) {})
+        .then((_) => _store.save(snapshot));
   }
 
   Future<void> flush() => _pending;
