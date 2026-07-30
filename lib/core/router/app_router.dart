@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/access_invalidation_provider.dart';
+import 'package:magic_music_crm/core/security/capability_shell.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_shimmer.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/login_screen.dart';
@@ -118,6 +120,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     final previousAccessToken = previous?.asData?.value?.accessToken;
     final nextAccessToken = next.asData?.value?.accessToken;
     if (previousAccessToken != nextAccessToken) {
+      ref.invalidate(capabilitySnapshotProvider);
       ref.invalidate(releaseGateStatusProvider);
     }
     refreshRouter();
@@ -260,7 +263,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/client',
-        builder: (context, state) => const ClientDashboardScreen(),
+        builder: (context, state) => CapabilityShellGate(
+          builder: (_, _) => const ClientDashboardScreen(),
+        ),
       ),
       GoRoute(
         path: '/admin',

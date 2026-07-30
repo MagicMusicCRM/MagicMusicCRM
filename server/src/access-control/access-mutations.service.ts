@@ -25,6 +25,7 @@ import {
   InvariantDecision,
 } from "./hard-invariant.policy";
 import { RealtimeBus } from "../realtime/realtime-bus";
+import { EffectiveAccessEvaluator } from "./effective-access-evaluator";
 
 interface MutationMetadata {
   idempotencyKey: string;
@@ -83,6 +84,57 @@ export class AccessMutationsService {
     return actor.role === "system_admin"
       ? packages
       : packages.filter((rolePackage) => rolePackage.role !== "system_admin");
+  }
+
+  async getMyAccessSnapshot(actor: ActorContext) {
+    const rows = await this.repository.getEffectiveAccessSnapshot(actor.userId);
+    const first = rows[0];
+    const evaluator = new EffectiveAccessEvaluator(this.hardInvariants);
+    const capabilities = rows
+      .filter((row) => {
+        const decision = evaluator.evaluate({
+          actor: {
+            userId: row.userId,
+            role: row.role,
+            active: row.active,
+          },
+          capability: {
+            key: row.capabilityKey,
+            active: row.capabilityActive,
+            overrideMode: row.overrideMode,
+          },
+          roleEffect: row.roleEffect,
+          overrideEffect: row.overrideEffect,
+          resourceAllowed: true,
+        });
+        return decision.allowed;
+      })
+      .map((row) => row.capabilityKey);
+
+    return {
+      accountId: first.userId,
+      role: first.role,
+      accessVersion: first.accessVersion,
+      capabilities,
+      scopes: {
+        client:
+          first.role === "client"
+            ? "self"
+            : first.role === "teacher"
+              ? "assigned"
+              : first.role === "admin" || first.role === "manager"
+                ? "branch"
+                : "allBranches",
+        schedule:
+          first.role === "client"
+            ? "self"
+            : first.role === "teacher"
+              ? "assigned"
+              : first.role === "admin" || first.role === "manager"
+                ? "branch"
+                : "allBranches",
+      },
+    };
   }
 
   async getRolePackage(

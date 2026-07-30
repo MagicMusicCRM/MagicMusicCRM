@@ -47,6 +47,18 @@ interface PackageRow {
   effect: CapabilityEffect;
 }
 
+export interface EffectiveAccessSnapshotRow {
+  userId: string;
+  role: AccessRole;
+  active: boolean;
+  accessVersion: number;
+  capabilityKey: CapabilityKey;
+  capabilityActive: boolean;
+  overrideMode: CapabilityOverrideMode;
+  roleEffect: CapabilityEffect | null;
+  overrideEffect: CapabilityEffect | null;
+}
+
 @Injectable()
 export class AccessMutationsRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -139,6 +151,72 @@ export class AccessMutationsRepository {
         reasonCode: override.reason_code,
       })),
     };
+  }
+
+  async getEffectiveAccessSnapshot(
+    userId: string,
+  ): Promise<EffectiveAccessSnapshotRow[]> {
+    const result = await this.database.query<{
+      user_id: string;
+      role: AccessRole;
+      active: boolean;
+      access_version: number | string | null;
+      capability_key: CapabilityKey;
+      capability_active: boolean;
+      override_mode: CapabilityOverrideMode;
+      role_effect: CapabilityEffect | null;
+      override_effect: CapabilityEffect | null;
+    }>(
+      `
+        select
+          user_row.id as user_id,
+          user_row.role,
+          (user_row.deleted_at is null) as active,
+          coalesce(access_version.version, 1) as access_version,
+          definition.capability_key,
+          definition.active as capability_active,
+          definition.override_mode,
+          package_entry.effect as role_effect,
+          personal_override.effect as override_effect
+        from app.users user_row
+        cross join app.capability_definitions definition
+        left join app.user_access_versions access_version
+          on access_version.user_id = user_row.id
+        left join app.role_packages package
+          on package.role = user_row.role
+         and package.active
+        left join app.role_package_capabilities package_entry
+          on package_entry.package_id = package.id
+         and package_entry.capability_key = definition.capability_key
+         and package_entry.capability_version = definition.version
+        left join app.user_capability_overrides personal_override
+          on personal_override.user_id = user_row.id
+         and personal_override.capability_key = definition.capability_key
+         and personal_override.capability_version = definition.version
+         and personal_override.active
+        where user_row.id = $1
+          and definition.active
+        order by definition.capability_key
+      `,
+      [userId],
+    );
+    if (result.rows.length === 0) {
+      throw new NotFoundException({
+        code: "ACCESS_USER_NOT_FOUND",
+        message: "Access subject or active capability registry was not found.",
+      });
+    }
+    return result.rows.map((row) => ({
+      userId: row.user_id,
+      role: row.role,
+      active: row.active,
+      accessVersion: Number(row.access_version ?? 1),
+      capabilityKey: row.capability_key,
+      capabilityActive: row.capability_active,
+      overrideMode: row.override_mode,
+      roleEffect: row.role_effect,
+      overrideEffect: row.override_effect,
+    }));
   }
 
   async lockUser(

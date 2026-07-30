@@ -6,6 +6,7 @@ import { CAPABILITY_DEFINITIONS } from "./capability-registry";
 
 describe("capability route policy", () => {
   it.each([
+    ["GET", "/access/me", "crm.client.read.basic"],
     ["PUT", "/access/users/id/role", "access.user.role.assign"],
     ["PUT", "/access/users/id/overrides/key", "access.user.override.manage"],
     ["GET", "/crm/students/id", "crm.client.read.basic"],

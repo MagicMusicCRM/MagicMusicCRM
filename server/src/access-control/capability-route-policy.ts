@@ -99,6 +99,15 @@ export function resolveCapabilityRoutePolicy(
   const path = normalizePath(pathInput).toLowerCase();
   const read = isRead(method);
 
+  if (read && path === "/access/me") {
+    return policy(
+      "crm.client.read.basic",
+      "self",
+      allRoles,
+      "Authenticated actor reads own effective capability snapshot",
+    );
+  }
+
   if (path.startsWith("/access/")) {
     return policy(
       path.includes("/overrides/")

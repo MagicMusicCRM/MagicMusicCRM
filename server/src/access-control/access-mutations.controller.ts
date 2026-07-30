@@ -43,17 +43,23 @@ function commandHeaders(
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("director", "system_admin")
 @Controller("access")
 export class AccessMutationsController {
   constructor(private readonly access: AccessMutationsService) {}
 
+  @Get("me")
+  getMyAccess(@CurrentActor() actor: ActorContext) {
+    return this.access.getMyAccessSnapshot(actor);
+  }
+
   @Get("role-packages")
+  @Roles("director", "system_admin")
   listRolePackages(@CurrentActor() actor: ActorContext) {
     return this.access.listRolePackages(actor);
   }
 
   @Get("role-packages/:role")
+  @Roles("director", "system_admin")
   getRolePackage(
     @CurrentActor() actor: ActorContext,
     @Param("role") role: string,
@@ -62,6 +68,7 @@ export class AccessMutationsController {
   }
 
   @Put("role-packages/:role")
+  @Roles("director", "system_admin")
   replaceRolePackage(
     @CurrentActor() actor: ActorContext,
     @Param("role") role: string,
@@ -77,6 +84,7 @@ export class AccessMutationsController {
   }
 
   @Get("users/:userId")
+  @Roles("director", "system_admin")
   getUserAccess(
     @CurrentActor() actor: ActorContext,
     @Param("userId", ParseUUIDPipe) userId: string,
@@ -85,6 +93,7 @@ export class AccessMutationsController {
   }
 
   @Put("users/:userId/role")
+  @Roles("director", "system_admin")
   assignRole(
     @CurrentActor() actor: ActorContext,
     @Param("userId", ParseUUIDPipe) userId: string,
@@ -100,6 +109,7 @@ export class AccessMutationsController {
   }
 
   @Put("users/:userId/overrides/:capabilityKey")
+  @Roles("director", "system_admin")
   setUserOverride(
     @CurrentActor() actor: ActorContext,
     @Param("userId", ParseUUIDPipe) userId: string,

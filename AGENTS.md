@@ -178,6 +178,9 @@ _Актуализация 2026-07-29: `T6.3.1` закрыта: Flutter экра�
 
 _Актуализация 2026-07-29: `T6.4.1` закрыта: единый `test:tasks-v4` gate покрывает conservative migration, user/users/branch/allBranches, matched-selector audit, permission loss before close, concurrent two-close, reminder outage/fallback и overlapping workers. Backend gate 3/3 suites и 5/5 tests; Flutter desktop/mobile 4/4, filter=56 px, duplicate close/audit/outbox=0, unauthorized close=0, reminder blocking=0. Один review-проход устранил N+1 projections и сохранил reminder при edit; полный batch regression: backend 140/140 suites и 1126/1126 tests, Flutter 434/434, typecheck/build/analyze clean (`docs/audits/v4-task-audience-regression.md`). Следующий доступный шаг `/forge`: `T3.3.1` Lead/Student/config forms; `T3.2.4` остаётся заблокирована до `INT-S3`._
 
+### 🌊 Wave v4/S1 — Flutter Access Integration
+_Актуализация 2026-07-30: `T1.1.1` закрыта: authenticated `/access/me` отдаёт effective capability snapshot с account/accessVersion/scopes; Flutter shell key-ит snapshot по account/version, вычисляет destinations из capabilities и после `access.invalidated` пересоздаёт boundary без старого чувствительного UI. Exact Flutter 3/3, backend route policy 34/34, typecheck clean (`docs/audits/v4-capability-shell.md`). Следующий шаг `/forge`: `T1.1.2` Director access editor/emergency root surface._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/alert_policy.dart';
 import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
@@ -192,12 +193,21 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       widget.role == 'director' ||
       widget.role == 'system_admin';
 
-  /// Operational CRM access. Role editing itself remains backend-limited to
-  /// manager/system_admin via canAssignRole/ProfilePolicy.
-  bool get _hasManagerAccess => crmHasManagerAccess(widget.role);
+  CapabilitySnapshot? get _accessSnapshot =>
+      ref.read(capabilitySnapshotProvider).asData?.value;
 
-  /// KVA-239: общешкольные финансы (таб «Финансы») — только director/system_admin.
-  bool get _hasSchoolFinanceAccess => crmHasSchoolFinanceAccess(widget.role);
+  /// Operational affordances come from the effective server snapshot. The
+  /// body guards remain a second UI boundary behind the visible tab list.
+  bool get _hasManagerAccess {
+    final access = _accessSnapshot;
+    return access?.allows('crm.client.write') == true ||
+        access?.allows('workflow.task.write') == true ||
+        access?.allows('system.settings.manage') == true ||
+        access?.allows('report.status.read') == true;
+  }
+
+  bool get _hasSchoolFinanceAccess =>
+      _accessSnapshot?.allows('commerce.school_finance.read') == true;
 
   bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';
   String _currentUserDisplayName = 'Пользователь';
@@ -233,6 +243,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild immediately when the account/accessVersion-keyed snapshot is
+    // dropped or replaced after access.invalidated.
+    ref.watch(capabilitySnapshotProvider);
     // Listen for notification navigation events
     ref.listen(messengerNavigationProvider, (previous, next) {
       if (next != null) {

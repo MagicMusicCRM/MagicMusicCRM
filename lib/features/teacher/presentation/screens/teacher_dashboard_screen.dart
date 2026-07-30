@@ -1,24 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 
-class TeacherDashboardScreen extends ConsumerStatefulWidget {
+class TeacherDashboardScreen extends StatelessWidget {
   const TeacherDashboardScreen({super.key});
 
   @override
-  ConsumerState<TeacherDashboardScreen> createState() => _TeacherDashboardScreenState();
-}
-
-class _TeacherDashboardScreenState extends ConsumerState<TeacherDashboardScreen> {
-  @override
-  void initState() {
-    super.initState();
-
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return const MessengerScreen(role: 'teacher');
+    return CapabilityShellGate(
+      builder: (_, snapshot) => MessengerScreen(role: snapshot.role),
+    );
   }
 }

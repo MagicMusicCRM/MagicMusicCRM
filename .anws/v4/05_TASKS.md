@@ -944,12 +944,12 @@ flowchart TD
 
 ## Phase 1 — Access integration (S1)
 
-- [ ] **T1.1.1** [REQ-RBAC-001, REQ-RBAC-002]: Подключить capability snapshot к Flutter shell
+- [x] **T1.1.1** [REQ-RBAC-001, REQ-RBAC-002]: Подключить capability snapshot к Flutter shell
   - **Описание:** заменить role-name nav/affordance checks на server-sourced snapshot и обработать invalidation.
   - **Подпункты:**
-    - [ ] Создать snapshot provider/cache keyed by account/accessVersion.
-    - [ ] Закрывать/заменять forbidden routes после invalidation.
-    - [ ] Не показывать system_admin surfaces/role обычным business users.
+    - [x] Создать snapshot provider/cache keyed by account/accessVersion.
+    - [x] Закрывать/заменять forbidden routes после invalidation.
+    - [x] Не показывать system_admin surfaces/role обычным business users.
   - **Вход:** T2.3.2, `app_workspace.md §3/§8`.
   - **Выход:** security providers/route guards/widget tests.
   - **📎 Ссылка:** ADR-007, ADR-010.

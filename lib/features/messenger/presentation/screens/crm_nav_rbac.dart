@@ -19,6 +19,8 @@
 /// стоит «Задачи» (6) — админ живёт в задачах, а не в сводке.
 library;
 
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+
 /// Operational CRM tab indices shared by admin/manager/director/system_admin.
 const List<int> kManagerOnlyCrmTabs = [1, 4, 6, 7];
 
@@ -86,6 +88,41 @@ List<int> crmVisibleTabs(String role, {required bool isDesktop}) {
   return crmHasSchoolFinanceAccess(role)
       ? const [0, 1, 2, 3, 4, 5, 6, 7]
       : const [0, 1, 2, 3, 4, 6, 7];
+}
+
+/// Server-sourced destination matrix used by the live shell. Role-based
+/// helpers above remain only as compatibility utilities for older widgets.
+List<int> crmVisibleTabsForCapabilities(
+  CapabilitySnapshot snapshot, {
+  required bool isDesktop,
+}) {
+  final assignedReadOnly =
+      snapshot.scopes['schedule'] == 'assigned' &&
+      snapshot.allows('schedule.lesson.read.assigned') &&
+      !snapshot.allows('schedule.lesson.write');
+  if (assignedReadOnly) return const [0, 1, 2];
+
+  final tabs = <int>[0];
+  final canReadOverview =
+      snapshot.allows('report.status.read') ||
+      snapshot.allows('system.settings.manage');
+  final canReadTasks = snapshot.allows('workflow.task.read');
+  if (canReadOverview) {
+    tabs.add(1);
+  } else if (canReadTasks) {
+    // Front-desk users start from their work queue instead of management
+    // overview; the order is still derived from effective capabilities.
+    tabs.add(6);
+  }
+  if (snapshot.allows('schedule.lesson.read.assigned')) tabs.add(2);
+  if (snapshot.allows('crm.client.read.basic')) tabs.add(3);
+  if (snapshot.allows('system.settings.manage')) tabs.add(4);
+  if (isDesktop && snapshot.allows('commerce.school_finance.read')) {
+    tabs.add(5);
+  }
+  if (canReadTasks && !tabs.contains(6)) tabs.add(6);
+  if (isDesktop && snapshot.allows('report.status.read')) tabs.add(7);
+  return tabs;
 }
 
 /// Resolves a canonical navigation request without ever crossing the role's

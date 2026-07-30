@@ -187,10 +187,12 @@ extension _MessengerBuildersA on _MessengerScreenState {
     }
   }
 
-  /// Canonical CRM tab indices visible to the current role (see
-  /// [crmVisibleTabs] for the index legend + A1 hierarchy rules).
-  List<int> _visibleCrmTabs(bool isDesktop) =>
-      crmVisibleTabs(widget.role, isDesktop: isDesktop);
+  /// Canonical destinations are derived from the server effective snapshot.
+  List<int> _visibleCrmTabs(bool isDesktop) {
+    final snapshot = _accessSnapshot;
+    if (snapshot == null) return const [0];
+    return crmVisibleTabsForCapabilities(snapshot, isDesktop: isDesktop);
+  }
 
   void _handleOverviewTabChange(
     int index,

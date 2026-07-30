@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
 class AccessInvalidatedEvent {
@@ -44,6 +45,7 @@ final accessInvalidationProvider = StreamProvider<AccessInvalidatedEvent>((
       conn.onAccessInvalidated((payload) {
         final event = AccessInvalidatedEvent.fromMap(payload);
         if (event.accessVersion < 1 || controller.isClosed) return;
+        ref.invalidate(capabilitySnapshotProvider);
         ref.invalidate(releaseGateStatusProvider);
         controller.add(event);
       });
