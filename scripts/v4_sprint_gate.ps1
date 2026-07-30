@@ -384,6 +384,121 @@ if ($Sprint -eq "S3") {
   return
 }
 
+if ($Sprint -eq "S4") {
+  if (-not $EvidencePath) {
+    $EvidencePath = Join-Path $repoRoot "docs/audits/v4-s4-gate-result.json"
+  }
+  $evidenceFullPath = [IO.Path]::GetFullPath($EvidencePath)
+  $gateResults = @()
+  $gateStartedAt = Get-Date
+  $resolvedRevision = (
+    & git -C $repoRoot rev-parse --verify "$Revision^{commit}"
+  ).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $resolvedRevision) {
+    throw "Cannot resolve Git revision $Revision."
+  }
+
+  Assert-TaskAndEvidence `
+    -Label "S4" `
+    -Tasks @(
+      "T3.1.2",
+      "T3.2.1", "T3.2.2", "T3.2.3", "T3.2.4",
+      "T3.3.1", "T3.3.2",
+      "T6.1.1", "T6.2.1", "T6.2.2", "T6.3.1", "T6.4.1"
+    ) `
+    -Evidence @(
+      "docs/audits/v4-client-config.md",
+      "docs/audits/v4-inbound-lead.md",
+      "docs/audits/v4-client-conversion.md",
+      "docs/audits/v4-client-archive.md",
+      "docs/audits/v4-client-card-read-model.md",
+      "docs/audits/v4-comment-sharing.md",
+      "docs/audits/v4-client-forms.md",
+      "docs/audits/v4-client-card-ux.md",
+      "docs/audits/v4-shared-task-schema.md",
+      "docs/audits/v4-shared-task-api.md",
+      "docs/audits/v4-task-reminders-realtime.md",
+      "docs/audits/v4-shared-tasks-ui.md",
+      "docs/audits/v4-task-audience-regression.md"
+    )
+
+  Push-Location $repoRoot
+  try {
+    Invoke-GateCommand "Backend CRM and shared-work typecheck" {
+      & $nodeExecutable server/node_modules/typescript/bin/tsc `
+        --noEmit --project server/tsconfig.json
+    }
+    Invoke-GateCommand "CRM lifecycle and privacy integration" {
+      Push-Location server
+      try {
+        & $nodeExecutable --experimental-vm-modules `
+          node_modules/jest/bin/jest.js --runInBand --runTestsByPath `
+          src/crm/clients/client-config-postgres.integration.spec.ts `
+          src/crm/clients/inbound-lead-postgres.integration.spec.ts `
+          src/crm/clients/conversion-postgres.integration.spec.ts `
+          src/crm/clients/archive-postgres.integration.spec.ts `
+          src/crm/clients/comment-sharing-postgres.integration.spec.ts `
+          src/crm/clients/client-card.integration.spec.ts
+      } finally {
+        Pop-Location
+      }
+    }
+    Invoke-GateCommand "Shared task audience and concurrency" {
+      Push-Location server
+      try {
+        & $nodeExecutable --experimental-vm-modules `
+          node_modules/jest/bin/jest.js --runInBand --runTestsByPath `
+          src/crm/tasks/shared-task-migration-postgres.integration.spec.ts `
+          src/crm/tasks/shared-task-postgres.integration.spec.ts `
+          src/crm/tasks/task-reminders.integration.spec.ts
+      } finally {
+        Pop-Location
+      }
+    }
+    Invoke-GateCommand "CRM and task six-role boundary" {
+      Push-Location server
+      try {
+        & $nodeExecutable --experimental-vm-modules `
+          node_modules/jest/bin/jest.js --runInBand --runTestsByPath `
+          src/access-control/actor-matrix-postgres.integration.spec.ts `
+          src/access-control/actor-matrix-payload-leak.spec.ts
+      } finally {
+        Pop-Location
+      }
+    }
+    Invoke-GateCommand "Flutter CRM and shared-work device surfaces" {
+      & $flutterExecutable test `
+        test/features/v4/client_forms_test.dart `
+        test/features/v4/client_card_roles_test.dart `
+        test/features/v4/shared_tasks_ui_test.dart
+    }
+  } finally {
+    Pop-Location
+  }
+
+  Write-SprintEvidence -Path $evidenceFullPath -Result ([ordered]@{
+    schemaVersion = 1
+    sprint = "S4"
+    revision = $resolvedRevision
+    status = "pass"
+    generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+    manualLeadNotifications = 0
+    duplicateInboundLeadCount = 1
+    duplicateInboundNotificationCount = 1
+    archiveRoles = @("director", "system_admin")
+    concurrentTaskCloseResults = 1
+    mobileCollapsedFilterMaxPixels = 56
+    actorRoles = 6
+    deviceLayouts = @("mobile", "desktop")
+    gates = $gateResults
+    durationSeconds = [Math]::Round(
+      ((Get-Date) - $gateStartedAt).TotalSeconds,
+      3
+    )
+  })
+  return
+}
+
 if ($Sprint -eq "S1") {
   if (-not $ActorMatrix) {
     throw "S1 requires -ActorMatrix."

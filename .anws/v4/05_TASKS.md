@@ -1146,12 +1146,12 @@ flowchart TD
   - **Инструкция:** `pwsh -File scripts/v4_sprint_gate.ps1 -Sprint S3 -RequireZeroDrift`
   - **Оценка:** 4 ч. · **Зависимости:** INT-S2, T5.4.1 · **Приоритет:** P0
 
-- [ ] **INT-S4** [MILESTONE]: CRM & Shared Work
+- [x] **INT-S4** [MILESTONE]: CRM & Shared Work
   - **Описание:** проверить Lead/Student/config/card/archive/comments и single-state shared tasks на mobile/desktop.
   - **Подпункты:**
-    - [ ] T3.1.2–T3.3.2 и T6.1.1–T6.4.1 отмечены `[x]`.
-    - [ ] Manual Lead не уведомляет; duplicate inbound создаёт одну заявку/notification.
-    - [ ] Archive только Director/sysadmin; two-close task даёт один result; mobile filter≤56 px.
+    - [x] T3.1.2–T3.3.2 и T6.1.1–T6.4.1 отмечены `[x]`.
+    - [x] Manual Lead не уведомляет; duplicate inbound создаёт одну заявку/notification.
+    - [x] Archive только Director/sysadmin; two-close task даёт один result; mobile filter≤56 px.
   - **Вход:** все задачи S4.
   - **Выход:** `docs/audits/v4-s4-crm-tasks.md`.
   - **Критерии:** Given actor/device matrix; When CRM/task flows выполнены; Then data/links/privacy/audience states сохраняются и UI не блокируется.

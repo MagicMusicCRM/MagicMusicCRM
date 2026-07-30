@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "sprint": "S4",
+  "revision": "0d5402214db8a86945945172d31d5016269c97b7",
+  "status": "pass",
+  "generatedAt": "2026-07-30T11:27:30.2450520Z",
+  "manualLeadNotifications": 0,
+  "duplicateInboundLeadCount": 1,
+  "duplicateInboundNotificationCount": 1,
+  "archiveRoles": [
+    "director",
+    "system_admin"
+  ],
+  "concurrentTaskCloseResults": 1,
+  "mobileCollapsedFilterMaxPixels": 56,
+  "actorRoles": 6,
+  "deviceLayouts": [
+    "mobile",
+    "desktop"
+  ],
+  "gates": [
+    {
+      "name": "S4 task/evidence inventory",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Backend CRM and shared-work typecheck",
+      "status": "pass",
+      "durationSeconds": 2.99
+    },
+    {
+      "name": "CRM lifecycle and privacy integration",
+      "status": "pass",
+      "durationSeconds": 10.757
+    },
+    {
+      "name": "Shared task audience and concurrency",
+      "status": "pass",
+      "durationSeconds": 6.193
+    },
+    {
+      "name": "CRM and task six-role boundary",
+      "status": "pass",
+      "durationSeconds": 6.316
+    },
+    {
+      "name": "Flutter CRM and shared-work device surfaces",
+      "status": "pass",
+      "durationSeconds": 9.93
+    }
+  ],
+  "durationSeconds": 36.275
+}

@@ -1,6 +1,6 @@
 # V4 Client Card, archive and comment UX — T3.3.2
 
-Дата: 2026-07-30  
+Дата: 2026-07-30
 Статус: PASS
 
 ## Role-aware card
