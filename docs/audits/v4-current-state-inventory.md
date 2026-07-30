@@ -1,7 +1,7 @@
 # MagicMusicCRM v4 — Current-State Inventory
 
 **Task:** T8.1.2
-**Source digest:** `afffed4eb265fed6e6f99cd1dd43214d81fc02ab7b630e31590f03aac0a71a4a`
+**Source digest:** `b3c873ebd531965ed5bafbf15b2e1c61754d0589cbff299580451e82f1254765`
 **Validation:** PASS
 
 ## Coverage
@@ -12,8 +12,8 @@
 | role guards | 22 |
 | policy calls | 226 |
 | dto fields | 658 |
-| flutter role checks | 123 |
-| flutter navigation sources | 322 |
+| flutter role checks | 132 |
+| flutter navigation sources | 325 |
 | schedule entry points | 37 |
 | attendance mutations | 0 |
 | finance writes | 43 |

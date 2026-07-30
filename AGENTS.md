@@ -212,6 +212,8 @@ _Актуализация 2026-07-30: `T7.2.2` закрыта: role-safe Reports
 
 _Актуализация 2026-07-30: `T1.2.2` закрыта: restorable ContextRouteState хранит только EntityLink и filters/date/scroll/column; 4-level mobile drilldown последовательно восстанавливает каждый source screen и не рендерит desktop tabs. Pending authenticated deep link после входа строит `home → target` с корректным Back. Exact Flutter 4/4, targeted analyze clean (`docs/audits/v4-mobile-context-navigation.md`). Следующий шаг `/forge`: `T1.2.3` desktop WorkspaceController._
 
+_Пакетный regression 2026-07-30: `T1.2.1`, `T7.2.2`, `T1.2.2` закрыты атомарно; backend 144/144 suites и 1140/1140 tests, Flutter 461/461, typecheck/build/analyze clean. Inventory 287 routes/658 DTO fields/0 unowned, access coverage 275/275. Один review-проход закрыл finance-row production detail target; unresolved blockers=0._
+
 _Актуализация 2026-07-30: `T3.3.2` закрыта: production launcher маршрутизирует Teacher в отдельную actor-scoped read-only карточку с горизонтальными tabs Lesson/Homework/shared Comments; запрещённые contacts/finance/tasks не строятся даже из лишнего payload. Staff-карточка получила Director/system_admin-only archive preview с impact/links/versioned confirm и tombstone contract. Comment share использует независимый `sharedWithTeacher` + expectedVersion, не меняя kind. Exact role UX 4/4, затронутые legacy card/finance 18/18, Flutter analyze clean (`docs/audits/v4-client-card-ux.md`). Следующий шаг `/forge`: `INT-S4` CRM & Shared Work._
 
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
