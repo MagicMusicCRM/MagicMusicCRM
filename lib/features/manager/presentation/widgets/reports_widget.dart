@@ -16,6 +16,7 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/show_clien
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/subscription_catalog_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 
@@ -63,6 +64,11 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   // только director/system_admin.
   bool get _canSeeFinance => crmHasSchoolFinanceAccess(widget.role);
 
+  bool get _canSeeStatus =>
+      widget.role == 'manager' ||
+      widget.role == 'director' ||
+      widget.role == 'system_admin';
+
   // Поразрезные финансы: ставки/ЗП педагогов. ✔ Решение владельца 16.07 —
   // доступны и Администратору, и Управляющему.
   bool get _canSeeTeacherRates => crmHasTeacherRatesAccess(widget.role);
@@ -75,15 +81,17 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   /// проставить «входит в оклад» Управляющий мог, а открыть отчёт, из которого
   /// это делается, — нет.
   List<int> get _visibleReportTabs => [
-    if (_canSeeFinance) ...[0, 1],
+    if (_canSeeStatus) 0,
+    if (_canSeeFinance) 1,
     2,
     3,
     4,
     if (_canSeeTeacherRates) 5,
+    if (_canSeeFinance) 6,
   ];
 
   int _positionForCanonicalTab(int canonical) {
-    final pos = _visibleReportTabs.indexOf(canonical.clamp(0, 5));
+    final pos = _visibleReportTabs.indexOf(canonical.clamp(0, 6));
     return pos < 0 ? 0 : pos;
   }
 
@@ -254,15 +262,6 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
         _loadReports(background: true);
       });
     });
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColor.gold),
-      );
-    }
-    if (_loadError != null) {
-      return _ReportsError(error: _loadError, onRetry: _loadReports);
-    }
-
     return Column(
       children: [
         TabBar(
@@ -273,7 +272,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
           indicatorColor: AppColor.gold,
           tabs: [
-            if (_canSeeFinance) const Tab(text: 'Аналитика'),
+            if (_canSeeStatus) const Tab(text: 'Отчёты'),
             if (_canSeeFinance) const Tab(text: 'Финансы'),
             const Tab(text: 'Активность'),
             const Tab(text: 'Управление'),
@@ -281,23 +280,37 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             // KVA-238 «Статистика преподавателей» — ставки конкретных
             // педагогов, не обще-суммарная сводка → админ и управляющий тоже.
             if (_canSeeTeacherRates) const Tab(text: 'Преподаватели'),
+            if (_canSeeFinance) const Tab(text: 'Сводка'),
           ],
         ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
             children: [
-              if (_canSeeFinance) _buildOverviewTab(),
+              if (_canSeeStatus) ReportingV4Panel(role: widget.role),
               if (_canSeeFinance) const FinancialDashboardWidget(),
               const _ActivityLogTab(),
               ManagementDashboardWidget(role: widget.role),
               SubscriptionCatalogWidget(role: widget.role),
               if (_canSeeTeacherRates) const TeacherStatsWidget(),
+              if (_canSeeFinance) _buildLegacyOverviewTab(),
             ],
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildLegacyOverviewTab() {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColor.gold),
+      );
+    }
+    if (_loadError != null) {
+      return _ReportsError(error: _loadError, onRetry: _loadReports);
+    }
+    return _buildOverviewTab();
   }
 
   Widget _buildOverviewTab() {

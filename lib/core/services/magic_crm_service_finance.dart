@@ -729,6 +729,128 @@ BigInt _replacementMinor(Object? value) => BigInt.parse(value.toString());
 /// Finance: adjustments, payments, expenses, subscription packages,
 /// homework, task status, analytics.
 extension MagicCrmFinance on MagicCrmService {
+  Future<Map<String, dynamic>> getV4ClientStatusSummary({
+    String? clientType,
+    String? status,
+    String? branchId,
+    String? from,
+    String? to,
+    String? q,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/client-status/summary',
+      queryParameters: _v4ReportQuery(
+        clientType: clientType,
+        status: status,
+        branchId: branchId,
+        from: from,
+        to: to,
+        q: q,
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> getV4ClientStatusList({
+    required Map<String, dynamic> filter,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/client-status',
+      queryParameters: {
+        ..._v4ReportQuery(
+          clientType: filter['clientType']?.toString(),
+          status: filter['status']?.toString(),
+          branchId: filter['branchId']?.toString(),
+          from: filter['from']?.toString(),
+          to: filter['to']?.toString(),
+          q: filter['q']?.toString(),
+        ),
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> getV4LessonSuccess({
+    String? branchId,
+    String? from,
+    String? to,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/lesson-success',
+      queryParameters: _v4ReportQuery(
+        branchId: branchId,
+        from: from,
+        to: to,
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> getV4SchoolFinance({
+    String? branchId,
+    String? from,
+    String? to,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/school-finance',
+      queryParameters: _v4ReportQuery(
+        branchId: branchId,
+        from: from,
+        to: to,
+      ),
+    );
+  }
+
+  Future<V4ReportExportResult> requestV4ReportExport({
+    required String reportKey,
+    required String format,
+    Map<String, dynamic> filter = const {},
+  }) async {
+    final bytes = await _api.postBytes(
+      '/analytics/v4/exports',
+      data: {
+        'reportKey': reportKey,
+        'format': format,
+        ..._v4ReportQuery(
+          clientType: filter['clientType']?.toString(),
+          status: filter['status']?.toString(),
+          branchId: filter['branchId']?.toString(),
+          from: filter['from']?.toString(),
+          to: filter['to']?.toString(),
+          q: filter['q']?.toString(),
+        ),
+      },
+    );
+    final json = _tryV4ExportJson(bytes);
+    if (json != null && json['mode'] == 'async') {
+      return V4ReportExportResult.async(
+        jobId: json['jobId'].toString(),
+        status: json['status']?.toString() ?? 'queued',
+        rowCount: (json['rowCount'] as num?)?.toInt() ?? 0,
+      );
+    }
+    final stamp = DateTime.now().toIso8601String().substring(0, 10);
+    final base = reportKey == 'school_finance'
+        ? 'school-finance'
+        : 'client-status';
+    return V4ReportExportResult.sync(
+      bytes: bytes,
+      filename: '$base-$stamp.$format',
+    );
+  }
+
+  Future<V4ReportExportJob> getV4ReportExportJob(String jobId) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/analytics/v4/exports/$jobId',
+    );
+    return V4ReportExportJob.fromJson(json);
+  }
+
+  Future<List<int>> downloadV4ReportExport(String jobId) {
+    return _api.downloadBytes('/analytics/v4/exports/$jobId/download');
+  }
+
   /// Downloads the monthly finance report (`csv`/`xlsx`) as raw bytes through
   /// the shared authenticated client. The caller only persists the bytes — the
   /// Bearer token, base URL and refresh handling stay inside [MagicApiClient].
@@ -1366,6 +1488,103 @@ extension MagicCrmFinance on MagicCrmService {
       queryParameters: q,
     );
   }
+}
+
+Map<String, dynamic> _v4ReportQuery({
+  String? clientType,
+  String? status,
+  String? branchId,
+  String? from,
+  String? to,
+  String? q,
+}) {
+  final result = <String, dynamic>{};
+  void add(String key, String? value) {
+    final normalized = value?.trim();
+    if (normalized != null && normalized.isNotEmpty) result[key] = normalized;
+  }
+
+  add('clientType', clientType);
+  add('status', status);
+  add('branchId', branchId);
+  add('from', from);
+  add('to', to);
+  add('q', q);
+  return result;
+}
+
+Map<String, dynamic>? _tryV4ExportJson(List<int> bytes) {
+  if (bytes.isEmpty) return null;
+  final text = utf8.decode(bytes, allowMalformed: true).trimLeft();
+  if (!text.startsWith('{')) return null;
+  final decoded = jsonDecode(text);
+  if (decoded is! Map) return null;
+  return decoded.map((key, value) => MapEntry(key.toString(), value));
+}
+
+class V4ReportExportResult {
+  const V4ReportExportResult._({
+    required this.mode,
+    this.bytes,
+    this.filename,
+    this.jobId,
+    this.status,
+    this.rowCount = 0,
+  });
+
+  const V4ReportExportResult.sync({
+    required List<int> bytes,
+    required String filename,
+  }) : this._(mode: 'sync', bytes: bytes, filename: filename);
+
+  const V4ReportExportResult.async({
+    required String jobId,
+    required String status,
+    required int rowCount,
+  }) : this._(
+         mode: 'async',
+         jobId: jobId,
+         status: status,
+         rowCount: rowCount,
+       );
+
+  final String mode;
+  final List<int>? bytes;
+  final String? filename;
+  final String? jobId;
+  final String? status;
+  final int rowCount;
+
+  bool get isAsync => mode == 'async';
+}
+
+class V4ReportExportJob {
+  const V4ReportExportJob({
+    required this.id,
+    required this.status,
+    required this.rowCount,
+    required this.downloadReady,
+    this.filename,
+    this.errorCode,
+  });
+
+  factory V4ReportExportJob.fromJson(Map<String, dynamic> json) {
+    return V4ReportExportJob(
+      id: json['id'].toString(),
+      status: json['status']?.toString() ?? 'failed',
+      rowCount: (json['rowCount'] as num?)?.toInt() ?? 0,
+      downloadReady: json['downloadReady'] == true,
+      filename: json['filename']?.toString(),
+      errorCode: json['errorCode']?.toString(),
+    );
+  }
+
+  final String id;
+  final String status;
+  final int rowCount;
+  final bool downloadReady;
+  final String? filename;
+  final String? errorCode;
 }
 
 String subscriptionPriceMinor(num rubles) {

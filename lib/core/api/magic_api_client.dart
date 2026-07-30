@@ -208,6 +208,20 @@ class MagicApiClient {
     );
   }
 
+  Future<List<int>> postBytes(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+  }) {
+    return request<List<int>>(
+      'POST',
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      responseType: ResponseType.bytes,
+    );
+  }
+
   Future<T> request<T>(
     String method,
     String path, {

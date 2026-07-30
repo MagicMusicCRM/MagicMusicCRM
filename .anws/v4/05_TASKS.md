@@ -924,12 +924,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server run test:export-v4 && pwsh -File scripts/validate_xlsx.ps1 -Fixture build/v4-report.xlsx`
   - **Оценка:** 8 ч. · **Зависимости:** T7.1.1, T7.1.2 · **Приоритет:** P1 · **Sprint:** S5
 
-- [ ] **T7.2.2** [REQ-REPORT-001, REQ-REPORT-002, REQ-NAV-001]: Перешить reports/drilldown/export UI
+- [x] **T7.2.2** [REQ-REPORT-001, REQ-REPORT-002, REQ-NAV-001]: Перешить reports/drilldown/export UI
   - **Описание:** показывать role-safe metrics, переходить к filtered lists/records и корректно обрабатывать export job/download.
   - **Подпункты:**
-    - [ ] Реализовать loading/empty/error/forbidden states.
-    - [ ] Подключить EntityLink/filter и восстановление исходного контекста.
-    - [ ] Добавить download progress/error и platform file open.
+    - [x] Реализовать loading/empty/error/forbidden states.
+    - [x] Подключить EntityLink/filter и восстановление исходного контекста.
+    - [x] Добавить download progress/error и platform file open.
   - **Вход:** T7.1.1, T7.1.2, T7.2.1, T1.2.1.
   - **Выход:** Flutter report screens/widget tests.
   - **📎 Ссылка:** `reporting.md §5/§10`.
