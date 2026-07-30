@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "sprint": "S3",
+  "revision": "be42eec2c8db2656372c1120e2fb7c07763a7343",
+  "status": "pass",
+  "generatedAt": "2026-07-30T10:32:07.3885203Z",
+  "requireZeroDrift": true,
+  "cleanUnexplainedDiff": 0,
+  "negativeFixtureDiff": 1,
+  "signaturesVerified": true,
+  "gates": [
+    {
+      "name": "S3 task/evidence inventory",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Backend commerce typecheck",
+      "status": "pass",
+      "durationSeconds": 5.985
+    },
+    {
+      "name": "Commerce actor and concurrency regression",
+      "status": "pass",
+      "durationSeconds": 15.757
+    },
+    {
+      "name": "Commerce privacy boundary",
+      "status": "pass",
+      "durationSeconds": 12.409
+    },
+    {
+      "name": "Commerce zero-drift fixture",
+      "status": "pass",
+      "durationSeconds": 3.919
+    },
+    {
+      "name": "Commerce negative drift detection",
+      "status": "pass",
+      "durationSeconds": 3.782
+    },
+    {
+      "name": "Commerce reconciliation assertions",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Flutter subscription integrity surfaces",
+      "status": "pass",
+      "durationSeconds": 21.925
+    }
+  ],
+  "durationSeconds": 64.849
+}

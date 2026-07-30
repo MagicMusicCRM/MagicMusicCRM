@@ -187,6 +187,8 @@ _Актуализация 2026-07-30: `INT-S1` закрыт: новый S1 sprin
 
 _Актуализация 2026-07-30: `INT-S2` закрыт: S2 gate подтвердил task/evidence inventory, schedule lifecycle/concurrency 9/9 suites и 25/25 tests, Actor Matrix/payload leak 2/2 suites и 9/9 tests, Flutter lesson/conflict/palette/Teacher surfaces 16/16; attendance mutation routes/controls=0, two-worker completion создаёт один settlement/audit не позднее 60 s, typecheck clean (`docs/audits/v4-s2-lesson-integrity.md`). Следующий шаг `/forge`: `INT-S3` Subscription Integrity._
 
+_Актуализация 2026-07-30: `INT-S3` закрыт: S3 gate подтвердил commerce actor/concurrency 8/8 suites и 35/35 tests, Actor Matrix/payload leak 2/2 suites и 9/9 tests, Flutter catalog/issue/replace/cancel/finance 17/17, clean reconciliation 10/10 invariants с drift=0 и negative fixture с ровно одним signed diff; typecheck clean (`docs/audits/v4-s3-subscription-integrity.md`). Следующий шаг `/forge`: `T3.2.4` role-aware Client Card read model._
+
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
 _Текущая фаза: `.anws/v3` создана для перехода с Supabase Cloud на собственный NestJS/PostgreSQL backend. Следующий шаг: завести Linear project `MagicMusicCRM v3 Backend Independence`, подтвердить INT-S0 и перейти к инфраструктурной волне._
 

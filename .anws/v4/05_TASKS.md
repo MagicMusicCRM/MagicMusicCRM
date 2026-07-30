@@ -1133,12 +1133,12 @@ flowchart TD
   - **Инструкция:** `pwsh -File scripts/v4_sprint_gate.ps1 -Sprint S2 -Concurrency`
   - **Оценка:** 4 ч. · **Зависимости:** INT-S1, T4.4.1, T8.2.1 · **Приоритет:** P0
 
-- [ ] **INT-S3** [MILESTONE]: Subscription Integrity
+- [x] **INT-S3** [MILESTONE]: Subscription Integrity
   - **Описание:** проверить catalog, issue, discount/installment/payment, replace/cancel, reservations и role projections.
   - **Подпункты:**
-    - [ ] T5.1.2–T5.4.1 отмечены `[x]`.
-    - [ ] Catalog/manage и issue/replace/cancel права совпадают с role matrix.
-    - [ ] Payments/revenue/history неизменны при replace/cancel; reconciliation drift=0.
+    - [x] T5.1.2–T5.4.1 отмечены `[x]`.
+    - [x] Catalog/manage и issue/replace/cancel права совпадают с role matrix.
+    - [x] Payments/revenue/history неизменны при replace/cancel; reconciliation drift=0.
   - **Вход:** все задачи SYS-COMMERCE S3.
   - **Выход:** `docs/audits/v4-s3-subscription-integrity.md`.
   - **Критерии:** Given paid/used/future lesson fixtures; When все lifecycle operations выполнены; Then snapshots/facts/balance/coverage детерминированы без дублей.

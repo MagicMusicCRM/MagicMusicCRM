@@ -257,6 +257,22 @@ if ($Sprint -eq "S3") {
       "docs/audits/v4-commerce-concurrency-reconciliation.md"
     )
 
+  $postgresReady = Test-NetConnection `
+    -ComputerName "127.0.0.1" `
+    -Port 54329 `
+    -InformationLevel Quiet
+  if (-not $postgresReady) {
+    Invoke-GateCommand "PostgreSQL test dependency" {
+      & docker compose -f server/docker-compose.test.yml up -d --wait
+    }
+  }
+  $originalDatabaseUrl = $env:DATABASE_URL
+  $env:DATABASE_URL = if ($env:V4_PLATFORM_TEST_DATABASE_URL) {
+    $env:V4_PLATFORM_TEST_DATABASE_URL
+  } else {
+    "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm"
+  }
+
   Push-Location $repoRoot
   try {
     Invoke-GateCommand "Backend commerce typecheck" {
@@ -346,6 +362,7 @@ if ($Sprint -eq "S3") {
     }
   } finally {
     Pop-Location
+    $env:DATABASE_URL = $originalDatabaseUrl
   }
 
   Write-SprintEvidence -Path $evidenceFullPath -Result ([ordered]@{

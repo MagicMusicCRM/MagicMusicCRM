@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "task": "T8.1.5",
-  "generatedAt": "2026-07-29T19:08:38.949Z",
+  "generatedAt": "2026-07-30T10:31:45.343Z",
   "mode": "fixture",
   "source": "drift:source",
   "target": "drift:target",
@@ -148,9 +148,9 @@
   ],
   "signature": {
     "algorithm": "Ed25519",
-    "contentSha256": "706f39ad0daeb0585bacfd3a147d5aa0ed41a2bdd6d33961c26d86b5030e44f3",
-    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPOJVE3LaGnMyVDA+8Ox1iCh7R0gN+VPnPq4SQxRj3PY=\n-----END PUBLIC KEY-----\n",
-    "valueBase64": "4rvkAhJtN2NwAkKHBPaimi3bP4CJ8TNkZU+aipPIZSRKqZGnab4LpbcrY20GagI8DInfJUIdhAEctNUmDVLtBQ==",
+    "contentSha256": "c80958ff06bc3e052336b8245f4406d63660e14adffe047298326e955ca234a7",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAlcXzv7HAjWUhVoQGWDZ4Iy7GD+fAgns5Njq+3zkfOXc=\n-----END PUBLIC KEY-----\n",
+    "valueBase64": "wsqtjkFaDWefXHNal4m/2qymV1gG7tIfAa+K8rV6nvJyZANxMYMBIqfZPjex1mysRGzNAu2p6v7keLJvP4I+BQ==",
     "verified": true
   }
 }
