@@ -22,3 +22,9 @@
 - Access coverage: 275/275 private routes, missing scope/unexplained allow = 0/0.
 - Actor Matrix/payload leak: 2/2 suites, 9/9 tests.
 - TypeScript typecheck: clean.
+- Full backend regression/build: 144/144 suites, 1140/1140 tests, PASS.
+- Full Flutter regression/analyze: 449/449 tests, PASS.
+
+Один финальный regression выявил stale assumption в тесте миграции SharedTask:
+он откатывал просто последнюю миграцию вместо целевой `0092`. Fixture сделан
+version-aware и после точечного исправления весь пакет прошёл без ошибок.

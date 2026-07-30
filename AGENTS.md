@@ -204,6 +204,8 @@ _Актуализация 2026-07-30: `T7.1.2` закрыта: Lesson Success с
 
 _Актуализация 2026-07-30: `T7.2.1` закрыта: ExcelJS создаёт настоящий `.xlsx` с Unicode/date/money/formula types и обязательным structural validation. До 10 000 строк export синхронный, 10 001–100 000 — private async job с owner-only download и TTL, свыше 100 000 отклоняется; CSV/XLSX и legacy finance façade имеют корректные extension/MIME. Exact PostgreSQL/OOXML 1/1 suite и 3/3 tests, streaming fixture 10 001 строк, validator PASS, migration `0093` down→up PASS, inventory 287 routes/658 DTO fields/0 unowned, access coverage 275/275 (`docs/audits/v4-ooxml-export.md`). `T7.2.2` ждёт `T1.2.1`; следующий доступный шаг `/forge`: `T1.2.1` desktop workspace shell._
 
+_Пакетный regression 2026-07-30: backend 144/144 suites и 1140/1140 tests, Flutter 449/449, typecheck/build/analyze clean. Единственный блокер — legacy SharedTask migration fixture откатывал последнюю миграцию вместо целевой `0092`; fixture сделан version-aware и точечно прошёл 1/1._
+
 _Актуализация 2026-07-30: `T3.3.2` закрыта: production launcher маршрутизирует Teacher в отдельную actor-scoped read-only карточку с горизонтальными tabs Lesson/Homework/shared Comments; запрещённые contacts/finance/tasks не строятся даже из лишнего payload. Staff-карточка получила Director/system_admin-only archive preview с impact/links/versioned confirm и tombstone contract. Comment share использует независимый `sharedWithTeacher` + expectedVersion, не меняя kind. Exact role UX 4/4, затронутые legacy card/finance 18/18, Flutter analyze clean (`docs/audits/v4-client-card-ux.md`). Следующий шаг `/forge`: `INT-S4` CRM & Shared Work._
 
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
