@@ -443,29 +443,20 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
     final entityId = item['entity_id']?.toString();
     if (entityId == null || entityId.trim().isEmpty) return;
     try {
-      switch (entityType) {
-        case 'student':
-          showClientCard(context, entityType: 'student', entityId: entityId);
-        case 'lead':
-          showClientCard(context, entityType: 'lead', entityId: entityId);
-        case 'lesson':
-          context.push('/lessons/$entityId');
-        case 'profile':
-        case 'staff':
-          context.push('/admin/profiles/$entityId');
-        case 'group':
-          final group = await ref
-              .read(magicCrmServiceProvider)
-              .getGroup(entityId);
-          if (!mounted) return;
-          await GroupDetailDialog.show(context, group);
-        case 'teacher':
-          final teacher = await ref
-              .read(magicCrmServiceProvider)
-              .getTeacher(entityId);
-          if (!mounted) return;
-          await TeacherDetailDialog.show(context, teacher);
-      }
+      final transition = const ContextTransitionRegistry().create(
+        source: ContextSourceType.audit,
+        target: ContextTargetType.changedEntity,
+        entityId: entityId,
+        sourceState: ContextViewState(
+          filters: {
+            'period': _period,
+            'entityType': _entityType,
+            'query': _searchCtrl.text,
+          },
+        ),
+        rawEntityType: entityType,
+      );
+      await openEntityLink(context, ref, transition.target);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -618,98 +609,103 @@ class _ActivityLogTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.card),
         onTap: onOpen,
         child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant.withAlpha(90),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: _activityColor(action).withAlpha(28),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                _activityIcon(action),
-                color: _activityColor(action),
-                size: 19,
-              ),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant.withAlpha(90),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          description == null || description.isEmpty
-                              ? _activityLabel(action)
-                              : description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _activityColor(action).withAlpha(28),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  _activityIcon(action),
+                  color: _activityColor(action),
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            description == null || description.isEmpty
+                                ? _activityLabel(action)
+                                : description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
                         ),
-                      ),
-                      if (dateText.isNotEmpty) ...[
-                        const SizedBox(width: 10),
-                        Text(
-                          dateText,
-                          style: TextStyle(
+                        if (dateText.isNotEmpty) ...[
+                          const SizedBox(width: 10),
+                          Text(
+                            dateText,
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        if (actor != null && actor.isNotEmpty)
+                          _ReportTag(
+                            label: actor,
+                            color: AppTheme.secondaryGold,
+                          ),
+                        if (role != null && role.isNotEmpty)
+                          _ReportTag(
+                            label: _activityRoleLabel(role),
                             color: Theme.of(
                               context,
                             ).colorScheme.onSurfaceVariant,
-                            fontSize: 11,
                           ),
-                        ),
+                        if (entityType != null && entityType.isNotEmpty)
+                          _ReportTag(
+                            label: _activityEntityLabel(entityType),
+                            color: AppColor.gold,
+                          ),
+                        if (historyType != null && historyType.isNotEmpty)
+                          _ReportTag(
+                            label: _activityHistoryLabel(historyType),
+                            color: AppColor.success,
+                          ),
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      if (actor != null && actor.isNotEmpty)
-                        _ReportTag(label: actor, color: AppTheme.secondaryGold),
-                      if (role != null && role.isNotEmpty)
-                        _ReportTag(
-                          label: _activityRoleLabel(role),
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      if (entityType != null && entityType.isNotEmpty)
-                        _ReportTag(
-                          label: _activityEntityLabel(entityType),
-                          color: AppColor.gold,
-                        ),
-                      if (historyType != null && historyType.isNotEmpty)
-                        _ReportTag(
-                          label: _activityHistoryLabel(historyType),
-                          color: AppColor.success,
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            if (onOpen != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 6, top: 2),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ],
                 ),
               ),
-          ],
-        ),
+              if (onOpen != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6, top: 2),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

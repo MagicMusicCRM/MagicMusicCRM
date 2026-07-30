@@ -10,23 +10,28 @@ enum EntityLinkType {
   homework,
   chat,
   report,
+  teacher,
+  group,
+  room,
+  branch,
+  scheduleSeries,
+  comment,
+  clientSource,
+  clientStatus,
+  subscriptionPackage,
   unknown,
 }
 
 class EntityLinkFocus {
-  EntityLinkFocus({
-    this.focus,
-    Map<String, dynamic> filter = const {},
-  }) : filter = UnmodifiableMapView(Map<String, dynamic>.from(filter));
+  EntityLinkFocus({this.focus, Map<String, dynamic> filter = const {}})
+    : filter = UnmodifiableMapView(Map<String, dynamic>.from(filter));
 
   factory EntityLinkFocus.fromJson(Map<String, dynamic> json) {
     final rawFilter = json['filter'];
     return EntityLinkFocus(
       focus: json['focus']?.toString(),
       filter: rawFilter is Map
-          ? rawFilter.map(
-              (key, value) => MapEntry(key.toString(), value),
-            )
+          ? rawFilter.map((key, value) => MapEntry(key.toString(), value))
           : const {},
     );
   }
@@ -73,9 +78,7 @@ class EntityLink {
       entityId: json['entityId']?.toString().trim() ?? '',
       optionalFocus: rawFocus is Map
           ? EntityLinkFocus.fromJson(
-              rawFocus.map(
-                (key, value) => MapEntry(key.toString(), value),
-              ),
+              rawFocus.map((key, value) => MapEntry(key.toString(), value)),
             )
           : null,
     );
@@ -108,13 +111,22 @@ class EntityLink {
       'task' => EntityLinkType.task,
       'subscription' => EntityLinkType.subscription,
       'payment' => EntityLinkType.payment,
-      'user' || 'profile' => EntityLinkType.user,
+      'user' || 'profile' || 'staff' => EntityLinkType.user,
       'homework' => EntityLinkType.homework,
       'chat' => EntityLinkType.chat,
       'report' ||
       'client_status_list' ||
       'lesson_list' ||
       'school_finance_month' => EntityLinkType.report,
+      'teacher' => EntityLinkType.teacher,
+      'group' => EntityLinkType.group,
+      'room' => EntityLinkType.room,
+      'branch' => EntityLinkType.branch,
+      'schedule_series' => EntityLinkType.scheduleSeries,
+      'comment' => EntityLinkType.comment,
+      'client_source' => EntityLinkType.clientSource,
+      'client_status' => EntityLinkType.clientStatus,
+      'subscription_package' => EntityLinkType.subscriptionPackage,
       _ => EntityLinkType.unknown,
     };
   }
@@ -130,6 +142,15 @@ class EntityLink {
       EntityLinkType.homework => 'homework',
       EntityLinkType.chat => 'chat',
       EntityLinkType.report => 'report',
+      EntityLinkType.teacher => 'teacher',
+      EntityLinkType.group => 'group',
+      EntityLinkType.room => 'room',
+      EntityLinkType.branch => 'branch',
+      EntityLinkType.scheduleSeries => 'schedule_series',
+      EntityLinkType.comment => 'comment',
+      EntityLinkType.clientSource => 'client_source',
+      EntityLinkType.clientStatus => 'client_status',
+      EntityLinkType.subscriptionPackage => 'subscription_package',
       EntityLinkType.unknown => 'unknown',
     };
   }

@@ -160,7 +160,9 @@ extension _ClientCardStudent on _ClientCardState {
     // Select the schedule destination (tab 2) once the dashboard renders.
     ref
         .read(crmNavigationRequestProvider.notifier)
-        .navigateTo(const CrmNavigationRequest(tabIndex: 2));
+        .navigateTo(
+          CrmNavigationRequest.schedule(date: scheduledAt, lessonId: lessonId),
+        );
     // Close the card (dialog on desktop / bottom sheet on mobile).
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop(_dirty ? true : null);

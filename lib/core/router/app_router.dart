@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/services/access_invalidation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
@@ -269,7 +270,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/admin',
-        builder: (context, state) => const AdminDashboardScreen(),
+        builder: (context, state) =>
+            AdminDashboardScreen(initialLink: _dashboardEntityLink(state)),
       ),
       GoRoute(
         path: '/teacher',
@@ -277,7 +279,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/manager',
-        builder: (context, state) => const ManagerDashboardScreen(),
+        builder: (context, state) =>
+            ManagerDashboardScreen(initialLink: _dashboardEntityLink(state)),
       ),
       GoRoute(
         path: '/student/:id',
@@ -324,6 +327,18 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+EntityLink? _dashboardEntityLink(GoRouterState state) {
+  final type = state.uri.queryParameters['entityType'];
+  final id = state.uri.queryParameters['entityId'];
+  if (type == null || id == null || id.isEmpty) return null;
+  final link = EntityLink.fromJson({
+    'version': EntityLink.schemaVersion,
+    'entityType': type,
+    'entityId': id,
+  });
+  return link.isSupported ? link : null;
+}
 
 class _AppGateLoadingScreen extends ConsumerStatefulWidget {
   const _AppGateLoadingScreen();

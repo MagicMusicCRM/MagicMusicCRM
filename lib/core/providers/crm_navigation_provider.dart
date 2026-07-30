@@ -1,14 +1,54 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
 
 class CrmNavigationRequest {
-  final int tabIndex;
-  final String? userSearch;
+  const CrmNavigationRequest({
+    required this.link,
+    required this.sourceState,
+    this.openInNewTab = false,
+  });
 
-  const CrmNavigationRequest({required this.tabIndex, this.userSearch});
+  factory CrmNavigationRequest.schedule({
+    required DateTime date,
+    String? lessonId,
+    String? leadId,
+  }) {
+    return CrmNavigationRequest(
+      link: EntityLink.typed(
+        entityType: EntityLinkType.report,
+        entityId: date.toUtc().toIso8601String(),
+        variant: 'lesson_list',
+        optionalFocus: EntityLinkFocus(
+          focus: lessonId == null ? 'date' : 'lesson',
+          filter: {
+            'date': date.toUtc().toIso8601String(),
+            if (lessonId != null && lessonId.isNotEmpty) 'lessonId': lessonId,
+            if (leadId != null && leadId.isNotEmpty) 'leadId': leadId,
+          },
+        ),
+      ),
+      sourceState: ContextViewState(date: date),
+    );
+  }
 
-  const CrmNavigationRequest.userRolesSearch(String query)
-    : tabIndex = 4,
-      userSearch = query;
+  factory CrmNavigationRequest.userRolesSearch(String query) {
+    return CrmNavigationRequest(
+      link: EntityLink.typed(
+        entityType: EntityLinkType.user,
+        entityId: 'user-search',
+        optionalFocus: EntityLinkFocus(
+          focus: 'permissions',
+          filter: {'query': query},
+        ),
+      ),
+      sourceState: ContextViewState(filters: {'query': query}),
+    );
+  }
+
+  final EntityLink link;
+  final ContextViewState sourceState;
+  final bool openInNewTab;
 }
 
 class CrmNavigationRequestNotifier extends Notifier<CrmNavigationRequest?> {
@@ -24,3 +64,54 @@ final crmNavigationRequestProvider =
     NotifierProvider<CrmNavigationRequestNotifier, CrmNavigationRequest?>(
       CrmNavigationRequestNotifier.new,
     );
+
+int? crmTabForEntityLink(EntityLink link, String role) {
+  if (link.entityType == EntityLinkType.chat) return 0;
+  final isScheduleReport =
+      link.entityType == EntityLinkType.report &&
+      link.rawEntityType == 'lesson_list' &&
+      const {
+        'date',
+        'lesson',
+        'schedule',
+        'conflictList',
+      }.contains(link.optionalFocus?.focus);
+  if (isScheduleReport) {
+    return role == 'teacher' ? 1 : 2;
+  }
+  if (role == 'teacher') {
+    return switch (link.entityType) {
+      EntityLinkType.lesson ||
+      EntityLinkType.teacher ||
+      EntityLinkType.group ||
+      EntityLinkType.room ||
+      EntityLinkType.branch ||
+      EntityLinkType.scheduleSeries ||
+      EntityLinkType.report => 1,
+      EntityLinkType.client ||
+      EntityLinkType.homework ||
+      EntityLinkType.comment => 2,
+      _ => null,
+    };
+  }
+  return switch (link.entityType) {
+    EntityLinkType.lesson ||
+    EntityLinkType.teacher ||
+    EntityLinkType.group ||
+    EntityLinkType.room ||
+    EntityLinkType.branch ||
+    EntityLinkType.scheduleSeries => 2,
+    EntityLinkType.client ||
+    EntityLinkType.subscription ||
+    EntityLinkType.homework ||
+    EntityLinkType.comment ||
+    EntityLinkType.clientSource ||
+    EntityLinkType.clientStatus ||
+    EntityLinkType.subscriptionPackage => 3,
+    EntityLinkType.user => 4,
+    EntityLinkType.payment => 5,
+    EntityLinkType.task => 6,
+    EntityLinkType.report => 7,
+    _ => null,
+  };
+}

@@ -52,10 +52,7 @@ class EntityRouteRegistry {
   }) {
     final registration = _registrations[link.entityType];
     if (!link.isSupported || registration == null) {
-      return EntityRouteResolution(
-        link: link,
-        state: EntityRouteState.unknown,
-      );
+      return EntityRouteResolution(link: link, state: EntityRouteState.unknown);
     }
     if (!registration.isAllowed(link, snapshot)) {
       return EntityRouteResolution(
@@ -64,10 +61,7 @@ class EntityRouteRegistry {
       );
     }
     if (lifecycle == EntityLifecycleState.deleted) {
-      return EntityRouteResolution(
-        link: link,
-        state: EntityRouteState.deleted,
-      );
+      return EntityRouteResolution(link: link, state: EntityRouteState.deleted);
     }
     if (lifecycle == EntityLifecycleState.archived) {
       return EntityRouteResolution(
@@ -101,15 +95,32 @@ class EntityRouteRegistry {
     return capabilities.any(snapshot.allows);
   }
 
-  static String _managerSection(EntityLink link, String section) {
+  static String _staffSection(EntityLink link, String section, String home) {
     return Uri(
-      path: '/manager',
+      path: home,
       queryParameters: {
         'section': section,
         'entityId': link.entityId,
         'entityType': link.rawEntityType,
       },
     ).toString();
+  }
+
+  static String _staffHome(CapabilitySnapshot snapshot) {
+    return switch (snapshot.role) {
+      'teacher' => '/teacher',
+      'client' => '/client',
+      'admin' || 'system_admin' => '/admin',
+      _ => '/manager',
+    };
+  }
+
+  static String _staffRoute(
+    EntityLink link,
+    CapabilitySnapshot snapshot,
+    String section,
+  ) {
+    return _staffSection(link, section, _staffHome(snapshot));
   }
 
   static final Map<EntityLinkType, EntityRouteRegistration>
@@ -131,38 +142,33 @@ class EntityRouteRegistry {
     ),
     EntityLinkType.task: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.allows('workflow.task.read'),
-      buildLocation: (link, _) => _managerSection(link, 'tasks'),
+      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'tasks'),
     ),
     EntityLinkType.subscription: EntityRouteRegistration(
       isAllowed: (_, snapshot) =>
           snapshot.allows('commerce.client_finance.read'),
-      buildLocation: (link, _) => _managerSection(link, 'clients'),
+      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'clients'),
     ),
     EntityLinkType.payment: EntityRouteRegistration(
       isAllowed: (_, snapshot) =>
           snapshot.allows('commerce.client_finance.read'),
-      buildLocation: (link, _) => _managerSection(link, 'finance'),
+      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'finance'),
     ),
     EntityLinkType.user: EntityRouteRegistration(
-      isAllowed: (_, snapshot) =>
-          snapshot.allows('system.settings.manage'),
+      isAllowed: (_, snapshot) => snapshot.allows('system.settings.manage'),
       buildLocation: (link, _) =>
           '/admin/profiles/${Uri.encodeComponent(link.entityId)}',
     ),
     EntityLinkType.homework: EntityRouteRegistration(
-      isAllowed: (_, snapshot) =>
-          snapshot.allows('crm.client.read.basic'),
+      isAllowed: (_, snapshot) => snapshot.allows('crm.client.read.basic'),
       buildLocation: (link, snapshot) {
         if (snapshot.role == 'teacher') {
           return Uri(
             path: '/teacher',
-            queryParameters: {
-              'section': 'homework',
-              'entityId': link.entityId,
-            },
+            queryParameters: {'section': 'homework', 'entityId': link.entityId},
           ).toString();
         }
-        return _managerSection(link, 'clients');
+        return _staffRoute(link, snapshot, 'clients');
       },
     ),
     EntityLinkType.chat: EntityRouteRegistration(
@@ -176,10 +182,7 @@ class EntityRouteRegistry {
         };
         return Uri(
           path: home,
-          queryParameters: {
-            'section': 'chat',
-            'entityId': link.entityId,
-          },
+          queryParameters: {'section': 'chat', 'entityId': link.entityId},
         ).toString();
       },
     ),
@@ -188,9 +191,92 @@ class EntityRouteRegistry {
         if (link.rawEntityType == 'school_finance_month') {
           return snapshot.allows('commerce.school_finance.read');
         }
+        if (link.rawEntityType == 'lesson_list' &&
+            const {
+              'date',
+              'lesson',
+              'schedule',
+              'conflictList',
+            }.contains(link.optionalFocus?.focus)) {
+          return _hasAny(snapshot, const {
+            'schedule.lesson.read.assigned',
+            'schedule.lesson.write',
+            'crm.client.read.basic',
+          });
+        }
         return snapshot.allows('report.status.read');
       },
-      buildLocation: (link, _) => _managerSection(link, 'reports'),
+      buildLocation: (link, snapshot) {
+        final isSchedule =
+            link.rawEntityType == 'lesson_list' &&
+            const {
+              'date',
+              'lesson',
+              'schedule',
+              'conflictList',
+            }.contains(link.optionalFocus?.focus);
+        return _staffRoute(link, snapshot, isSchedule ? 'schedule' : 'reports');
+      },
+    ),
+    EntityLinkType.teacher: EntityRouteRegistration(
+      isAllowed: (_, snapshot) => _hasAny(snapshot, const {
+        'schedule.lesson.read.assigned',
+        'schedule.lesson.write',
+      }),
+      buildLocation: (link, snapshot) =>
+          _staffRoute(link, snapshot, 'schedule'),
+    ),
+    EntityLinkType.group: EntityRouteRegistration(
+      isAllowed: (_, snapshot) => _hasAny(snapshot, const {
+        'schedule.lesson.read.assigned',
+        'schedule.lesson.write',
+      }),
+      buildLocation: (link, snapshot) =>
+          _staffRoute(link, snapshot, 'schedule'),
+    ),
+    EntityLinkType.room: EntityRouteRegistration(
+      isAllowed: (_, snapshot) => _hasAny(snapshot, const {
+        'schedule.lesson.read.assigned',
+        'schedule.lesson.write',
+      }),
+      buildLocation: (link, snapshot) =>
+          _staffRoute(link, snapshot, 'schedule'),
+    ),
+    EntityLinkType.branch: EntityRouteRegistration(
+      isAllowed: (_, snapshot) => _hasAny(snapshot, const {
+        'schedule.lesson.read.assigned',
+        'schedule.lesson.write',
+        'workflow.task.read',
+      }),
+      buildLocation: (link, snapshot) =>
+          _staffRoute(link, snapshot, 'schedule'),
+    ),
+    EntityLinkType.scheduleSeries: EntityRouteRegistration(
+      isAllowed: (_, snapshot) => _hasAny(snapshot, const {
+        'schedule.lesson.read.assigned',
+        'schedule.lesson.write',
+      }),
+      buildLocation: (link, snapshot) =>
+          _staffRoute(link, snapshot, 'schedule'),
+    ),
+    EntityLinkType.comment: EntityRouteRegistration(
+      isAllowed: (_, snapshot) => _hasAny(snapshot, const {
+        'crm.comment.read.shared',
+        'crm.client.read.basic',
+      }),
+      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'clients'),
+    ),
+    EntityLinkType.clientSource: EntityRouteRegistration(
+      isAllowed: (_, snapshot) => snapshot.allows('crm.client.write'),
+      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'clients'),
+    ),
+    EntityLinkType.clientStatus: EntityRouteRegistration(
+      isAllowed: (_, snapshot) => snapshot.allows('crm.client.read.basic'),
+      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'clients'),
+    ),
+    EntityLinkType.subscriptionPackage: EntityRouteRegistration(
+      isAllowed: (_, snapshot) => snapshot.allows('commerce.package.read'),
+      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'clients'),
     ),
   };
 }

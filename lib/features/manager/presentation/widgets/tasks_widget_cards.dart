@@ -421,6 +421,7 @@ class _TaskCard extends StatelessWidget {
   final Future<void> Function(Map<String, dynamic>) onReassignTap;
   final Future<void> Function(Map<String, dynamic>) onRescheduleTap;
   final Future<void> Function(Map<String, dynamic>) onOpenEntity;
+  final Future<void> Function(EntityLink) onOpenLink;
   final Future<void> Function(Map<String, dynamic>) onEditTap;
   final Future<void> Function(Map<String, dynamic>) onDeleteTap;
 
@@ -432,6 +433,7 @@ class _TaskCard extends StatelessWidget {
     required this.onReassignTap,
     required this.onRescheduleTap,
     required this.onOpenEntity,
+    required this.onOpenLink,
     required this.onEditTap,
     required this.onDeleteTap,
   });
@@ -706,8 +708,14 @@ class _TaskCard extends StatelessWidget {
                       onTap:
                           (assignedProfileId != null &&
                               assignedProfileId.isNotEmpty)
-                          ? () => context.push(
-                              '/admin/profiles/$assignedProfileId',
+                          ? () => onOpenLink(
+                              EntityLink.typed(
+                                entityType: EntityLinkType.user,
+                                entityId: assignedProfileId,
+                                optionalFocus: EntityLinkFocus(
+                                  focus: 'assignee',
+                                ),
+                              ),
                             )
                           : null,
                     ),
@@ -718,8 +726,14 @@ class _TaskCard extends StatelessWidget {
                       onTap:
                           (creatorProfileId != null &&
                               creatorProfileId.isNotEmpty)
-                          ? () => context.push(
-                              '/admin/profiles/$creatorProfileId',
+                          ? () => onOpenLink(
+                              EntityLink.typed(
+                                entityType: EntityLinkType.user,
+                                entityId: creatorProfileId,
+                                optionalFocus: EntityLinkFocus(
+                                  focus: 'creator',
+                                ),
+                              ),
                             )
                           : null,
                     ),

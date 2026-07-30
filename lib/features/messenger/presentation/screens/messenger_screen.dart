@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/alert_policy.dart';
 import 'package:magic_music_crm/core/services/section_unseen_service.dart';
@@ -71,7 +72,8 @@ void _logMessenger(String message) {
 /// Unified Telegram-style messenger screen used by all roles.
 class MessengerScreen extends ConsumerStatefulWidget {
   final String role; // 'client', 'admin', 'system_admin', 'manager', 'teacher'
-  const MessengerScreen({super.key, required this.role});
+  final EntityLink? initialLink;
+  const MessengerScreen({super.key, required this.role, this.initialLink});
 
   @override
   ConsumerState<MessengerScreen> createState() => _MessengerScreenState();
@@ -217,6 +219,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   @override
   void initState() {
     super.initState();
+    final initialLink = widget.initialLink;
+    if (initialLink != null) {
+      _selectedCrmTab = crmTabForEntityLink(initialLink, widget.role) ?? 0;
+      _userRolesInitialSearch = initialLink.optionalFocus?.filter['query']
+          ?.toString();
+    }
     _bootstrapMessenger();
 
     // Check for pending navigation from notifications
@@ -295,13 +303,20 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       next,
     ) {
       if (next == null || !mounted) return;
-      final requested = next.tabIndex.toInt();
+      final requested = crmTabForEntityLink(next.link, widget.role);
+      if (requested == null) {
+        Future.microtask(() {
+          ref.read(crmNavigationRequestProvider.notifier).clear();
+        });
+        return;
+      }
       _emitState(() {
         // Only honour deep-links to a destination this role can see.
         if (_visibleCrmTabs(isDesktop).contains(requested)) {
           _selectedCrmTab = requested;
         }
-        _userRolesInitialSearch = next.userSearch;
+        _userRolesInitialSearch = next.link.optionalFocus?.filter['query']
+            ?.toString();
       });
       Future.microtask(() {
         ref.read(crmNavigationRequestProvider.notifier).clear();

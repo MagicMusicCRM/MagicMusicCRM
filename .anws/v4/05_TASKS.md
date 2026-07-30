@@ -1060,12 +1060,12 @@ flowchart TD
 
 ## Phase 3 — Context coverage (S5)
 
-- [ ] **T1.3.1** [REQ-NAV-001, REQ-NAV-003]: Подключить полную матрицу связанных переходов
+- [x] **T1.3.1** [REQ-NAV-001, REQ-NAV-003]: Подключить полную матрицу связанных переходов
   - **Описание:** заменить ad-hoc dialogs/navigation на EntityLink во всех source screens PRD §8.
   - **Подпункты:**
-    - [ ] Schedule↔Client/Lesson/Teacher/Room/Branch.
-    - [ ] Client↔Lessons/Subscription/Payment/Task/Homework/Comments.
-    - [ ] Tasks/Reports/Users/Chat↔linked entity с actor-safe target.
+    - [x] Schedule↔Client/Lesson/Teacher/Room/Branch.
+    - [x] Client↔Lessons/Subscription/Payment/Task/Homework/Comments.
+    - [x] Tasks/Reports/Users/Chat↔linked entity с actor-safe target.
   - **Вход:** T1.2.1…T1.2.6, T7.2.2.
   - **Выход:** completed transition inventory 100% + route tests.
   - **📎 Ссылка:** `app_workspace.md §11`, PRD §8.

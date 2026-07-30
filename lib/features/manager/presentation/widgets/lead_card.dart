@@ -617,7 +617,9 @@ class _LeadCard extends ConsumerWidget {
         .createForLead(DateTime.now(), leadId: lead.id, leadName: lead.name);
     ref
         .read(crmNavigationRequestProvider.notifier)
-        .navigateTo(const CrmNavigationRequest(tabIndex: 2));
+        .navigateTo(
+          CrmNavigationRequest.schedule(date: DateTime.now(), leadId: lead.id),
+        );
   }
 }
 

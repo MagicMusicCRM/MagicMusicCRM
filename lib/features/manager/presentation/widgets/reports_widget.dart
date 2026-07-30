@@ -3,16 +3,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/context_transition_registry.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
-
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';

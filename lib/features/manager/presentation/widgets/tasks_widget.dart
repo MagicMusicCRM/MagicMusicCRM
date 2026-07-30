@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -13,8 +13,6 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
@@ -587,34 +585,22 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     if (entityId == null || entityId.trim().isEmpty) return;
 
     try {
-      switch (entityType) {
-        case 'student':
-          showClientCard(context, entityType: 'student', entityId: entityId);
-        case 'lead':
-          showClientCard(context, entityType: 'lead', entityId: entityId);
-        case 'lesson':
-          context.push('/lessons/$entityId');
-        case 'profile':
-          context.push('/admin/profiles/$entityId');
-        case 'group':
-          final group = await ref
-              .read(magicCrmServiceProvider)
-              .getGroup(entityId);
-          if (!mounted) return;
-          await GroupDetailDialog.show(context, group);
-        case 'teacher':
-          final teacher = await ref
-              .read(magicCrmServiceProvider)
-              .getTeacher(entityId);
-          if (!mounted) return;
-          await TeacherDetailDialog.show(context, teacher);
-      }
+      final link = EntityLink.fromJson({
+        'version': EntityLink.schemaVersion,
+        'entityType': entityType,
+        'entityId': entityId,
+      });
+      await _openLink(link);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Не удалось открыть: $e')));
     }
+  }
+
+  Future<void> _openLink(EntityLink link) async {
+    await openEntityLink(context, ref, link);
   }
 
   /// Moves a task's deadline. A plain PATCH — the server logs who moved it from
@@ -900,6 +886,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
           onRescheduleTap: _rescheduleTask,
           onReassignTap: _reassignTask,
           onOpenEntity: _openTaskEntity,
+          onOpenLink: _openLink,
           onEditTap: _editTask,
           onDeleteTap: _deleteTask,
         ),
