@@ -191,6 +191,85 @@ class WorkspaceController extends ChangeNotifier {
     });
   }
 
+  void markFormConflict(
+    String tabId,
+    String formKey, {
+    required int serverVersion,
+    required String source,
+  }) {
+    _updateTab(tabId, (tab) {
+      final current = tab.forms[formKey];
+      if (current == null || !current.dirty) return tab;
+      return tab.copyWith(
+        forms: {
+          ...tab.forms,
+          formKey: current.copyWith(
+            conflict: WorkspaceFormConflict(
+              serverVersion: serverVersion,
+              source: source,
+            ),
+          ),
+        },
+      );
+    });
+  }
+
+  void reloadConflictedForm(
+    String tabId,
+    String formKey, {
+    required int serverVersion,
+    Map<String, Object?> serverDraft = const {},
+  }) {
+    _resolveFormConflict(
+      tabId,
+      formKey,
+      serverVersion: serverVersion,
+      draft: serverDraft,
+      dirty: false,
+    );
+  }
+
+  void mergeConflictedForm(
+    String tabId,
+    String formKey, {
+    required int serverVersion,
+    required Map<String, Object?> mergedDraft,
+  }) {
+    _resolveFormConflict(
+      tabId,
+      formKey,
+      serverVersion: serverVersion,
+      draft: mergedDraft,
+      dirty: true,
+    );
+  }
+
+  void _resolveFormConflict(
+    String tabId,
+    String formKey, {
+    required int serverVersion,
+    required Map<String, Object?> draft,
+    required bool dirty,
+  }) {
+    _updateTab(tabId, (tab) {
+      final current = tab.forms[formKey];
+      if (current == null || current.conflict == null) {
+        throw StateError('Form "$formKey" has no active conflict.');
+      }
+      return tab.copyWith(
+        forms: {
+          ...tab.forms,
+          formKey: current.copyWith(
+            dirty: dirty,
+            expectedVersion: serverVersion,
+            clearConflict: true,
+            draft: draft,
+          ),
+        },
+      );
+    });
+  }
+
   void _updateTab(
     String tabId,
     WorkspaceTabState Function(WorkspaceTabState tab) update,

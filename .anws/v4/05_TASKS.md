@@ -1030,12 +1030,12 @@ flowchart TD
   - **Инструкция:** `flutter test test/features/v4/workspace_persistence_logout_test.dart`
   - **Оценка:** 8 ч. · **Зависимости:** T1.2.3, T1.1.1 · **Приоритет:** P0 · **Sprint:** S5
 
-- [ ] **T1.2.5** [REQ-NAV-002]: Реализовать shared cache invalidation и conflict UX
+- [x] **T1.2.5** [REQ-NAV-002]: Реализовать shared cache invalidation и conflict UX
   - **Описание:** синхронизировать saved entity≤2 s, не затирая dirty form и не применяя silent last-write-wins.
   - **Подпункты:**
-    - [ ] Key-ить cache по entity+projection scope+version.
-    - [ ] Дедуплицировать event id и refetch clean tabs.
-    - [ ] Показать dirty conflict/reload/merge-cancel flow на 409.
+    - [x] Key-ить cache по entity+projection scope+version.
+    - [x] Дедуплицировать event id и refetch clean tabs.
+    - [x] Показать dirty conflict/reload/merge-cancel flow на 409.
   - **Вход:** T1.2.3, T8.1.4, `app_workspace.md §5–7`.
   - **Выход:** cache/invalidation/conflict components/tests.
   - **📎 Ссылка:** ADR-010, ADR-011.

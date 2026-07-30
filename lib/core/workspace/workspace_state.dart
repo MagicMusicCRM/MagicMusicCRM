@@ -2,23 +2,37 @@ import 'dart:collection';
 
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 
+class WorkspaceFormConflict {
+  const WorkspaceFormConflict({
+    required this.serverVersion,
+    required this.source,
+  });
+
+  final int serverVersion;
+  final String source;
+}
+
 class WorkspaceFormState {
   WorkspaceFormState({
     required this.formKey,
     this.dirty = false,
     this.expectedVersion,
+    this.conflict,
     Map<String, Object?> draft = const {},
   }) : draft = UnmodifiableMapView(Map<String, Object?>.from(draft));
 
   final String formKey;
   final bool dirty;
   final int? expectedVersion;
+  final WorkspaceFormConflict? conflict;
   final Map<String, Object?> draft;
 
   WorkspaceFormState copyWith({
     bool? dirty,
     int? expectedVersion,
     bool clearExpectedVersion = false,
+    WorkspaceFormConflict? conflict,
+    bool clearConflict = false,
     Map<String, Object?>? draft,
   }) {
     return WorkspaceFormState(
@@ -27,6 +41,7 @@ class WorkspaceFormState {
       expectedVersion: clearExpectedVersion
           ? null
           : expectedVersion ?? this.expectedVersion,
+      conflict: clearConflict ? null : conflict ?? this.conflict,
       draft: draft ?? this.draft,
     );
   }
