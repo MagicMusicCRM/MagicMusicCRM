@@ -35,4 +35,17 @@ describe('NotificationTokenCrypto', () => {
 
     expect(crypto.decrypt(`${encrypted}tampered`)).toBeNull();
   });
+
+  it('rejects a shortened GCM authentication tag', () => {
+    const crypto = createCrypto('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+    const encrypted = crypto.encrypt('push-token-1234567890');
+    const parts = encrypted.split(':');
+    const shortenedTag = Buffer.from(parts[2], 'base64url').subarray(0, 12);
+
+    expect(
+      crypto.decrypt(
+        [parts[0], parts[1], shortenedTag.toString('base64url'), parts[3]].join(':')
+      )
+    ).toBeNull();
+  });
 });

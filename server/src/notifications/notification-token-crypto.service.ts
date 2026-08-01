@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 
+const GCM_IV_LENGTH = 12;
+const GCM_TAG_LENGTH = 16;
+
 @Injectable()
 export class NotificationTokenCrypto {
   constructor(private readonly config: ConfigService) {}
@@ -14,8 +17,10 @@ export class NotificationTokenCrypto {
     const key = this.key();
     if (!key) return `sha256:${this.hash(token)}`;
 
-    const iv = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const iv = randomBytes(GCM_IV_LENGTH);
+    const cipher = createCipheriv('aes-256-gcm', key, iv, {
+      authTagLength: GCM_TAG_LENGTH
+    });
     const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
     const tag = cipher.getAuthTag();
     return [
@@ -37,7 +42,10 @@ export class NotificationTokenCrypto {
       const iv = Buffer.from(parts[1], 'base64url');
       const tag = Buffer.from(parts[2], 'base64url');
       const encrypted = Buffer.from(parts[3], 'base64url');
-      const decipher = createDecipheriv('aes-256-gcm', key, iv);
+      if (iv.length !== GCM_IV_LENGTH || tag.length !== GCM_TAG_LENGTH) return null;
+      const decipher = createDecipheriv('aes-256-gcm', key, iv, {
+        authTagLength: GCM_TAG_LENGTH
+      });
       decipher.setAuthTag(tag);
       return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
     } catch {
