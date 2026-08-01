@@ -1,7 +1,9 @@
 # MagicMusicCRM v4 — Release Readiness
 
-**Task:** T8.4.1  
-**Revision:** `750933ebe7d25b097337e96528ba9d9ec3bfd2bd`  
+**Task:** T8.4.1
+
+**Revision:** `750933ebe7d25b097337e96528ba9d9ec3bfd2bd`
+
 **Decision:** TECHNICAL GATES PASS WITH OWNER EXCEPTION; PRODUCTION NOT APPROVED.
 
 ## Acceptance

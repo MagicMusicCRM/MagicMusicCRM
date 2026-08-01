@@ -543,8 +543,10 @@ lock-file update was made in this ANWS package. Critical/High remains zero.
     $report = @"
 # MagicMusicCRM v4 — Release Readiness
 
-**Task:** T8.4.1  
-**Revision:** ``$resolvedRevision``  
+**Task:** T8.4.1
+
+**Revision:** ``$resolvedRevision``
+
 **Decision:** $decision
 
 ## Acceptance
