@@ -216,6 +216,7 @@ flowchart TD
 
 - [ ] **T8.4.1** [REQ-RBAC-002, REQ-PRIV-001, REQ-NAV-002]: Выполнить полные technical/UAT gates
   - **Описание:** прогнать static, unit, integration, actor, concurrency, performance, security и device acceptance.
+  - **Owner exception (2026-08-01):** по прямому решению владельца history/security gate разрешено пропустить только для продолжения technical/device/data/operations и staging rehearsal. Evidence обязан иметь `pass_with_owner_exception`, security=`owner_deferred`, `productionApproved=false` и ссылки на backlog #16/#17; это не удовлетворяет ADR-006 и не разрешает production rollout/INT-S6.
   - **Подпункты:**
     - [ ] Запустить полный Flutter/backend/security/reconciliation suite.
     - [ ] Выполнить 6-role сценарии на Windows и Android.
@@ -223,9 +224,9 @@ flowchart TD
   - **Вход:** T8.3.3, INT-S1…S5.
   - **Выход:** `.anws/v4/08_RELEASE_READINESS_REPORT.md`.
   - **📎 Ссылка:** ADR-006, ADR-012, `07_CHALLENGE_REPORT.md §6`.
-  - **Критерии:** Given release candidate; When gates выполнены; Then Critical/High=0, 29/29 REQ accepted, drift=0, обе платформы подтверждены.
+  - **Критерии:** Given release candidate; When gates выполнены; Then 29/29 REQ accepted, drift=0 и обе платформы подтверждены; production-ready требует Critical/High=0, а owner exception допускает только техническое завершение со статусом `pass_with_owner_exception` и явным запретом production.
   - **Тип верификации:** E2E + регрессионный тест.
-  - **Инструкция:** `pwsh -File scripts/v4_release_gate.ps1 -Windows -Android -RequireZeroDrift`
+  - **Инструкция:** production: `pwsh -File scripts/v4_release_gate.ps1 -Windows -Android -RequireZeroDrift`; owner-deferred security: добавить `-SkipSecurityGate -OwnerRiskAcceptance`.
   - **Оценка:** 8 ч. · **Зависимости:** T8.3.3, INT-S5 · **Приоритет:** P0 · **Sprint:** S6
 
 - [ ] **T8.4.2** [REQ-AUDIT-001]: Подготовить staged rollout, rollback и runbooks

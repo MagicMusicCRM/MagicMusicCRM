@@ -35,3 +35,9 @@
 - [FIX] Владелец подтвердил доступные администратору способы оплаты преподавателя: фиксированная сумма за занятие (`fixed`), почасовая ставка (`hourly`) или без начисления (`none`).
 - [CHANGE] `T5.1.1` и модель `TeacherCompensationFact` синхронизированы с `LessonSnapshot`; процентная оплата преподавателю исключена из текущего scope.
 - [KEEP] Скидки абонементов остаются отдельным механизмом `percent/fixed`: процент рассчитывается от указанной базовой суммы.
+
+## 2026-08-01 — Owner exception для security gate
+
+- [CHANGE] Владелец разрешил пропустить history/security gate T8.4.1, чтобы продолжить technical/device/data/operations gates и staging rollout/rollback rehearsal.
+- [KEEP] Исключение не считается прохождением security acceptance ADR-006: evidence маркируется `pass_with_owner_exception`, security=`owner_deferred`, `productionApproved=false`.
+- [KEEP] Ротация ключей и получение GitHub admin-доступа остаются в backlog #16/#17; production rollout и INT-S6 до их устранения не разрешены.
