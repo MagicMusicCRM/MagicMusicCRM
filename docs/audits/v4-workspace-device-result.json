@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "task": "T1.4.1",
+  "revision": "18e455ac499e7fcf27adb152e56631f6d8fd0540",
+  "status": "pass",
+  "generatedAt": "2026-08-01T10:43:16.0089172Z",
+  "windows": true,
+  "android": true,
+  "maxTabs": 10,
+  "contextLoss": 0,
+  "silentOverwrite": 0,
+  "crossAccountLeak": 0,
+  "logoutLatencyMaxSeconds": 2,
+  "gates": [
+    {
+      "name": "Workspace widget and navigation regression",
+      "status": "pass",
+      "durationSeconds": 18.988
+    },
+    {
+      "name": "Windows workspace device E2E",
+      "status": "pass",
+      "durationSeconds": 83.091
+    },
+    {
+      "name": "Android context-stack device E2E",
+      "status": "pass",
+      "durationSeconds": 81.637
+    }
+  ],
+  "durationSeconds": 186.009
+}

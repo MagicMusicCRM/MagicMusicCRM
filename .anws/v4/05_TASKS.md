@@ -1076,12 +1076,12 @@ flowchart TD
 
 ## Phase 4 — Verification (S5)
 
-- [ ] **T1.4.1** [REQ-NAV-001, REQ-NAV-002, REQ-NAV-003]: Закрыть workspace/navigation device suite
+- [x] **T1.4.1** [REQ-NAV-001, REQ-NAV-002, REQ-NAV-003]: Закрыть workspace/navigation device suite
   - **Описание:** проверить 10 tabs, two-tab conflict, restart/account/logout и 4-level mobile chain на Windows/Android.
   - **Подпункты:**
-    - [ ] Прогнать widget/golden regression desktop/mobile.
-    - [ ] Прогнать Windows workspace E2E с двумя tabs/windows.
-    - [ ] Прогнать Android deep-link/back restoration E2E.
+    - [x] Прогнать widget/golden regression desktop/mobile.
+    - [x] Прогнать Windows workspace E2E с двумя tabs/windows.
+    - [x] Прогнать Android deep-link/back restoration E2E.
   - **Вход:** T1.3.1.
   - **Выход:** device evidence + navigation coverage report.
   - **📎 Ссылка:** ADR-010, ADR-012.

@@ -75,7 +75,7 @@ try {
     }
     Invoke-WorkspaceStep "Windows workspace device E2E" {
       & $flutter test integration_test/v4_workspace_device_test.dart `
-        -d $windowsDevice.id --device-timeout 120
+        -d $windowsDevice.id
     }
   }
 
@@ -94,7 +94,7 @@ try {
     }
     Invoke-WorkspaceStep "Android context-stack device E2E" {
       & $flutter test integration_test/v4_workspace_device_test.dart `
-        -d $androidDevice.id --device-timeout 180
+        -d $androidDevice.id
     }
   }
 } finally {
