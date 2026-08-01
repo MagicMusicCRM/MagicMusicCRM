@@ -71,6 +71,7 @@ bool crmHasTeacherRatesAccess(String role) => crmHasManagerAccess(role);
 
 /// Canonical CRM tab indices visible to [role], in display order.
 List<int> crmVisibleTabs(String role, {required bool isDesktop}) {
+  if (role == 'client') return const [];
   if (role == 'teacher') return const [0, 1, 2];
   // Правки №2 #17: у Администратора «Обзор» (1) заменён «Задачами» (6) — в его
   // слоте сразу после Чата, и на телефоне тоже. Только role == 'admin':

@@ -10,6 +10,7 @@ import 'package:magic_music_crm/core/navigation/mobile_context_stack.dart';
 import 'package:magic_music_crm/core/workspace/shared_entity_cache.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
+import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -129,6 +130,44 @@ void main() {
       );
     },
   );
+
+  testWidgets('device validates the six-role release navigation boundary', (
+    tester,
+  ) async {
+    const roles = [
+      'client',
+      'teacher',
+      'admin',
+      'manager',
+      'director',
+      'system_admin',
+    ];
+    final desktopTabs = <String, List<int>>{
+      for (final role in roles) role: crmVisibleTabs(role, isDesktop: true),
+    };
+    final mobileTabs = <String, List<int>>{
+      for (final role in roles) role: crmVisibleTabs(role, isDesktop: false),
+    };
+
+    expect(desktopTabs['client'], isEmpty);
+    expect(desktopTabs['teacher'], [0, 1, 2]);
+    expect(desktopTabs['admin'], [0, 6, 2, 3]);
+    expect(desktopTabs['manager'], isNot(contains(5)));
+    expect(desktopTabs['director'], contains(5));
+    expect(desktopTabs['system_admin'], desktopTabs['director']);
+    expect(mobileTabs['manager'], contains(6));
+    expect(mobileTabs['manager'], isNot(contains(5)));
+    expect(crmHasSchoolFinanceAccess('director'), isTrue);
+    expect(crmHasSchoolFinanceAccess('system_admin'), isTrue);
+    for (final role in const ['client', 'teacher', 'admin', 'manager']) {
+      expect(crmHasSchoolFinanceAccess(role), isFalse, reason: role);
+    }
+
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('six-role-device-pass'))),
+    );
+    expect(find.text('six-role-device-pass'), findsOneWidget);
+  });
 
   testWidgets(
     'device mobile stack restores a four-level chain and authenticated link',

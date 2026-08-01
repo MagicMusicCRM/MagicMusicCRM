@@ -82,6 +82,11 @@ void main() {
   });
 
   group('crmVisibleTabs — per-role destination matrix', () {
+    test('client has no CRM shell destinations', () {
+      expect(crmVisibleTabs('client', isDesktop: true), isEmpty);
+      expect(crmVisibleTabs('client', isDesktop: false), isEmpty);
+    });
+
     test('Администратор (#17): «Задачи» (6) вместо «Обзора» (1) сразу после '
         'Чата, без лишних разделов', () {
       expect(crmVisibleTabs('admin', isDesktop: true), [0, 6, 2, 3]);
