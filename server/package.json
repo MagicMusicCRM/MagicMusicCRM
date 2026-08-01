@@ -14,6 +14,7 @@
     "hollihop:link-leads": "ts-node src/migration/link-students-to-leads.ts",
     "db:rollback:prod": "node dist/db/migrate.js down",
     "security:gate": "ts-node src/security/security-gate.ts",
+    "v4:backfill": "ts-node src/platform/v4-backfill.ts",
     "v4:preflight": "ts-node src/platform/v4-preflight.ts",
     "v4:reconcile": "ts-node src/platform/v4-reconcile.ts",
     "v4:access-coverage": "ts-node src/access-control/v4-access-coverage.ts",

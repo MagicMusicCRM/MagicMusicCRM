@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "task": "T8.3.1",
+  "mode": "dry-run",
+  "generatedAt": "2026-08-01T11:29:46.251Z",
+  "summary": {
+    "candidates": 1,
+    "applied": 0,
+    "reviewQueue": 0
+  },
+  "candidates": [
+    {
+      "kind": "access-link",
+      "entityId": "98ea9996-3edb-4089-ba3a-ce1161730145",
+      "relatedId": "edb32122-c09c-4448-bf43-0df33f98b1eb"
+    }
+  ],
+  "reviewQueue": [],
+  "proof": {
+    "transaction": "repeatable-read",
+    "deterministicOnly": true,
+    "reportDigestSha256": "0060e780112d2a8ad4f44a1f0f37130002919a33d4f4dfe2e00e17ed4c59a9b6"
+  }
+}

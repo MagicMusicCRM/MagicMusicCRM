@@ -762,16 +762,8 @@ async function snapshotChecks(
 ): Promise<PreflightCheck[]> {
   const checks: PreflightCheck[] = [];
 
-  const lessonSnapshotColumns = [
-    "financial_snapshot",
-    "completion_snapshot",
-    "commercial_snapshot",
-  ];
-  const lessonColumns = schema.get("lessons") ?? new Set<string>();
-  const lessonSnapshot = lessonSnapshotColumns.find((column) =>
-    lessonColumns.has(column),
-  );
-  const lessonDefinition: CheckDefinition = lessonSnapshot
+  const lessonSnapshotTable = schema.get("lesson_snapshots");
+  const lessonDefinition: CheckDefinition = lessonSnapshotTable
     ? {
         id: "schedule.future-snapshot-incomplete",
         owner: "SYS-SCHEDULE",
@@ -784,19 +776,28 @@ async function snapshotChecks(
             "scheduled_at",
             "status",
             "deleted_at",
-            lessonSnapshot,
           ],
+          lesson_snapshots: ["lesson_id", "validation_state"],
         },
         params: [asOf],
         sql: `
-          select id::text as entity_id, null::text as related_id,
-                 'lesson_snapshot_null'::text as detail
-            from app.lessons
-           where deleted_at is null
-             and status = 'scheduled'
-             and scheduled_at >= $1::timestamptz
-             and ${lessonSnapshot} is null
-           order by id`,
+          select lesson.id::text as entity_id,
+                 snapshot.lesson_id::text as related_id,
+                 case
+                   when snapshot.lesson_id is null then 'lesson_snapshot_missing'
+                   else 'lesson_snapshot_not_valid'
+                 end::text as detail
+            from app.lessons lesson
+            left join app.lesson_snapshots snapshot
+              on snapshot.lesson_id = lesson.id
+           where lesson.deleted_at is null
+             and lesson.status = 'scheduled'
+             and lesson.scheduled_at >= $1::timestamptz
+             and (
+               snapshot.lesson_id is null
+               or snapshot.validation_state <> 'valid'
+             )
+           order by lesson.id`,
       }
     : {
         id: "schedule.future-snapshot-incomplete",
@@ -1069,7 +1070,8 @@ function safeErrorMessage(error: unknown): string {
 }
 
 async function main(): Promise<void> {
-  if (!process.argv.includes("--check-read-only")) {
+  const requireZeroBlockers = process.argv.includes("--require-zero-blockers");
+  if (!process.argv.includes("--check-read-only") && !requireZeroBlockers) {
     throw new Error(
       "T8.1.3 preflight requires --check-read-only; mutable mode does not exist.",
     );
@@ -1096,6 +1098,9 @@ async function main(): Promise<void> {
         ],
       })}\n`,
     );
+    if (requireZeroBlockers && report.summary.blockerFindings > 0) {
+      process.exitCode = 2;
+    }
   } finally {
     await pool.end();
   }

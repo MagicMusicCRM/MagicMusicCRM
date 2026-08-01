@@ -170,12 +170,12 @@ flowchart TD
 
 ## Phase 3 — Migration (S6)
 
-- [ ] **T8.3.1** [REQ-SCHED-002, REQ-RBAC-001]: Выполнить production preflight и управляемый backfill
+- [x] **T8.3.1** [REQ-SCHED-002, REQ-RBAC-001]: Выполнить production preflight и управляемый backfill
   - **Описание:** на backup/staging-копии устранить missing teacher branches, lesson resources/snapshots и mapping gaps без догадок.
   - **Подпункты:**
-    - [ ] Зафиксировать backup и preflight report.
-    - [ ] Выполнить restartable backfill только однозначных rows.
-    - [ ] Вывести неоднозначные rows в review queue и закрыть каждую решением.
+    - [x] Зафиксировать backup и preflight report.
+    - [x] Выполнить restartable backfill только однозначных rows.
+    - [x] Вывести неоднозначные rows в review queue и закрыть каждую решением.
   - **Вход:** T8.1.3, закрытые INT-S1…S5.
   - **Выход:** backfill evidence, zero unresolved blocker report.
   - **📎 Ссылка:** `schedule_lifecycle.md §12`, `access_control.md §12`.
