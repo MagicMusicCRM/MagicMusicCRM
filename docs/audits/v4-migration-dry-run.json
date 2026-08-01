@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "task": "T8.3.2",
   "mode": "repeatable-read/read-only",
-  "generatedAt": "2026-08-01T11:34:05.247Z",
+  "generatedAt": "2026-08-01T12:48:24.692Z",
   "requiredMigrations": [
     "0076_capability_registry",
     "0083_lesson_lifecycle_schema",

@@ -13,6 +13,7 @@ interface CheckResult {
 const serverRoot = resolve(__dirname, "..", "..");
 const repoRoot = resolve(serverRoot, "..");
 const strict = process.env.SECURITY_GATE_STRICT === "1";
+const auditLevel = process.env.SECURITY_GATE_AUDIT_LEVEL?.trim() || "moderate";
 const results: CheckResult[] = [];
 
 function main() {
@@ -173,15 +174,15 @@ function checkNpmAudit() {
     process.platform === "win32"
       ? run(
           process.env.ComSpec ?? "cmd.exe",
-          ["/d", "/s", "/c", "npm", "audit", "--audit-level=moderate"],
+          ["/d", "/s", "/c", "npm", "audit", `--audit-level=${auditLevel}`],
           serverRoot,
         )
-      : run("npm", ["audit", "--audit-level=moderate"], serverRoot);
+      : run("npm", ["audit", `--audit-level=${auditLevel}`], serverRoot);
   const output = `${result.stdout}${result.stderr}`.trim();
   add(
     "npm-audit",
     result.status === 0 ? "pass" : "fail",
-    output || "npm audit completed.",
+    output || `npm audit completed at ${auditLevel} threshold.`,
   );
 }
 

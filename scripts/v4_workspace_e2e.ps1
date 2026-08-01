@@ -2,6 +2,7 @@
 param(
   [switch]$Windows,
   [switch]$Android,
+  [switch]$SkipHostRegression,
   [string]$EvidencePath
 )
 
@@ -55,14 +56,16 @@ function Invoke-WorkspaceStep {
 
 Push-Location $repoRoot
 try {
-  Invoke-WorkspaceStep "Workspace widget and navigation regression" {
-    & $flutter test `
-      test/features/v4/desktop_workspace_controller_test.dart `
-      test/features/v4/desktop_tab_controls_test.dart `
-      test/features/v4/workspace_persistence_logout_test.dart `
-      test/features/v4/cross_tab_conflict_test.dart `
-      test/features/v4/mobile_context_navigation_test.dart `
-      test/features/v4/context_transition_matrix_test.dart
+  if (-not $SkipHostRegression) {
+    Invoke-WorkspaceStep "Workspace widget and navigation regression" {
+      & $flutter test `
+        test/features/v4/desktop_workspace_controller_test.dart `
+        test/features/v4/desktop_tab_controls_test.dart `
+        test/features/v4/workspace_persistence_logout_test.dart `
+        test/features/v4/cross_tab_conflict_test.dart `
+        test/features/v4/mobile_context_navigation_test.dart `
+        test/features/v4/context_transition_matrix_test.dart
+    }
   }
 
   $devices = & $flutter devices --machine | ConvertFrom-Json
@@ -110,6 +113,7 @@ $result = [ordered]@{
   generatedAt = (Get-Date).ToUniversalTime().ToString("o")
   windows = [bool]$Windows
   android = [bool]$Android
+  hostRegressionSkipped = [bool]$SkipHostRegression
   maxTabs = 10
   contextLoss = 0
   silentOverwrite = 0

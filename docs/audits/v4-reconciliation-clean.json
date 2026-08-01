@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "task": "T8.1.5",
-  "generatedAt": "2026-07-25T16:19:45.700Z",
+  "generatedAt": "2026-08-01T12:48:33.443Z",
   "mode": "fixture",
   "source": "clean:source",
   "target": "clean:target",
@@ -11,9 +11,9 @@
     "unexplainedFacts": 0
   },
   "summary": {
-    "invariants": 8,
-    "sourceFacts": 8,
-    "targetFacts": 8,
+    "invariants": 14,
+    "sourceFacts": 14,
+    "targetFacts": 14,
     "invariantsWithDrift": 0,
     "unexplainedDiff": 0
   },
@@ -67,6 +67,78 @@
       "unexplainedDiff": []
     },
     {
+      "id": "commerce.installment-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Issued installment schedule and lifecycle remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "02870e2f8fcc3c337b6a0da718561abfaaf0de5eeaf65c8c23429698de7b7395",
+      "targetDigestSha256": "02870e2f8fcc3c337b6a0da718561abfaaf0de5eeaf65c8c23429698de7b7395",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.obligation-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Append-only subscription obligations remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "b5d255b884d225b65870fb9d7ea2effca9b8b90332c0279db3e1f050369c76f7",
+      "targetDigestSha256": "b5d255b884d225b65870fb9d7ea2effca9b8b90332c0279db3e1f050369c76f7",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.lifecycle-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Subscription issue/replace/cancel history remains identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "f9e49ffea089ca1cb7d964b5c04daddb04fe0f90906add0141fce67f59c4f2a3",
+      "targetDigestSha256": "f9e49ffea089ca1cb7d964b5c04daddb04fe0f90906add0141fce67f59c4f2a3",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.lesson-charge-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Immutable Lesson client charge facts remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "1f5ae1b6f6adf6b28d59acc64360973c5e858414768b3dfb116c607ba503a4f6",
+      "targetDigestSha256": "1f5ae1b6f6adf6b28d59acc64360973c5e858414768b3dfb116c607ba503a4f6",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.teacher-compensation-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Immutable Lesson teacher compensation facts remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "7c1245bcdc6c2cb8245ac6403a3c1c3e3439e8320fc2d7e8dead304756802bbd",
+      "targetDigestSha256": "7c1245bcdc6c2cb8245ac6403a3c1c3e3439e8320fc2d7e8dead304756802bbd",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.reservation-facts",
+      "owner": "SYS-COMMERCE",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Lesson coverage allocation and terminal state remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "e193431a27da4ee1a728fb708a886c821d895fa691522b3efdd1ebe86e4877bc",
+      "targetDigestSha256": "e193431a27da4ee1a728fb708a886c821d895fa691522b3efdd1ebe86e4877bc",
+      "unexplainedDiff": []
+    },
+    {
       "id": "schedule.lesson-facts",
       "owner": "SYS-SCHEDULE",
       "economic": false,
@@ -117,9 +189,9 @@
   ],
   "signature": {
     "algorithm": "Ed25519",
-    "contentSha256": "45679bfda3672f56419602ee7c53b8fea3d786246e4e8fa6de29eeac078a8ba3",
-    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA7ni/sLAIVpa4KYDNPKR6fUJ1UCA1I3bM4oDq+mEHdts=\n-----END PUBLIC KEY-----\n",
-    "valueBase64": "hNb8/Qc0v8rOKM8k92WQHQyHnZBO/wZj7q3p/6lHxGW8w7qUwgEHHEKc5s2C+yjAeG95AKXItgkdO9OSiw4MAQ==",
+    "contentSha256": "74ea5aff74c990f56962289566ddc8eced4d08ee3e75fe99f14b8f87f418e339",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAx4kBaM+ENpZ5Tmc1bBb5gXYSIF2D0RsSojjwIgbqmbk=\n-----END PUBLIC KEY-----\n",
+    "valueBase64": "hA2LNaZc80oHVxVtFr42DYhYjy0FwwRVXSku8Jm+AzLVksaWmv3d2RXN2QkCtTgaVJF8I8we48L2f+KTyNKhCg==",
     "verified": true
   }
 }

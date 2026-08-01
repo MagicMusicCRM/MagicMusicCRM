@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "task": "T1.4.1",
+  "revision": "750933ebe7d25b097337e96528ba9d9ec3bfd2bd",
+  "status": "pass",
+  "generatedAt": "2026-08-01T12:53:43.8692211Z",
+  "windows": false,
+  "android": true,
+  "hostRegressionSkipped": true,
+  "maxTabs": 10,
+  "contextLoss": 0,
+  "silentOverwrite": 0,
+  "crossAccountLeak": 0,
+  "logoutLatencyMaxSeconds": 2,
+  "gates": [
+    {
+      "name": "Android context-stack device E2E",
+      "status": "pass",
+      "durationSeconds": 78.759
+    }
+  ],
+  "durationSeconds": 80.748
+}

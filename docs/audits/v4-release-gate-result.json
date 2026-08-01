@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "task": "T8.4.1",
+  "revision": "750933ebe7d25b097337e96528ba9d9ec3bfd2bd",
+  "status": "pass_with_owner_exception",
+  "productionApproved": false,
+  "securityAccepted": false,
+  "generatedAt": "2026-08-01T12:58:02.0066168Z",
+  "requirements": {
+    "accepted": 29,
+    "total": 29,
+    "ids": [
+      "REQ-AUDIT-001",
+      "REQ-CFG-001",
+      "REQ-CLIENT-001",
+      "REQ-CLIENT-002",
+      "REQ-CLIENT-003",
+      "REQ-LEAD-001",
+      "REQ-LEAD-002",
+      "REQ-LESSON-001",
+      "REQ-LESSON-002",
+      "REQ-LESSON-003",
+      "REQ-NAV-001",
+      "REQ-NAV-002",
+      "REQ-NAV-003",
+      "REQ-PRIV-001",
+      "REQ-RBAC-001",
+      "REQ-RBAC-002",
+      "REQ-REPORT-001",
+      "REQ-REPORT-002",
+      "REQ-SCHED-001",
+      "REQ-SCHED-002",
+      "REQ-SCHED-003",
+      "REQ-SUB-001",
+      "REQ-SUB-002",
+      "REQ-SUB-003",
+      "REQ-SUB-004",
+      "REQ-SUB-005",
+      "REQ-TASK-001",
+      "REQ-TASK-002",
+      "REQ-TEACHER-001"
+    ]
+  },
+  "security": {
+    "status": "owner_deferred",
+    "critical": null,
+    "high": 1,
+    "moderate": null,
+    "ownerRiskAcceptance": true,
+    "backlogIssues": [
+      "https://github.com/MagicMusicCRM/MagicMusicCRM/issues/16",
+      "https://github.com/MagicMusicCRM/MagicMusicCRM/issues/17"
+    ],
+    "note": "History/security gate skipped by owner; known High finding remains unresolved."
+  },
+  "reconciliation": {
+    "unexplainedDiff": 0,
+    "signatureVerified": true
+  },
+  "devices": {
+    "windows": true,
+    "android": true,
+    "roles": 6
+  },
+  "operations": {
+    "backupSha256": "fe7938ac9de33e5c743c1c8444f8db7d856ee5fba80b57c4403ad09475c28363",
+    "restoredDatabase": "magiccrm_v4_s6_staging",
+    "latestMigration": "0093_report_export_jobs",
+    "pendingOutbox": 0,
+    "deadLetterOutbox": 0,
+    "poisonWorker": 0,
+    "dueWorker": 0,
+    "alertDrill": "pass"
+  },
+  "androidEvidence": {
+    "screenshotSha256": "881ea08e6f5c2193af879a38ec7bcb28561b63a96aedb6fd229ce2cb689d460b",
+    "uiTree": "captured",
+    "logcat": "captured"
+  },
+  "gates": [
+    {
+      "name": "Release task inventory and 29/29 requirement coverage",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "PostgreSQL backup",
+      "status": "pass",
+      "durationSeconds": 0.584
+    },
+    {
+      "name": "Backend typecheck (checkpoint)",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Backend production build (checkpoint)",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Backend full regression 148/148, 1148/1148 (checkpoint)",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Flutter analyze and 482/482 regression (checkpoint)",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Migration, preflight, reconciliation and shadow parity (checkpoint)",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Windows device 3/3 and Android retry 3/3 (checkpoint)",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Security gate",
+      "status": "owner_deferred",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Android UI tree, screenshot and logcat evidence",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Staging restore rehearsal",
+      "status": "pass",
+      "durationSeconds": 2.692
+    },
+    {
+      "name": "Worker/outbox metrics are observable and non-poisoned",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Forced readiness alert drill",
+      "status": "pass",
+      "durationSeconds": 11.637
+    },
+    {
+      "name": "Dependency lock integrity",
+      "status": "pass",
+      "durationSeconds": 0
+    }
+  ],
+  "durationSeconds": 29.102
+}

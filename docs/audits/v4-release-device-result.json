@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "task": "T1.4.1",
+  "revision": "750933ebe7d25b097337e96528ba9d9ec3bfd2bd",
+  "status": "pass",
+  "generatedAt": "2026-08-01T12:57:33.7036156Z",
+  "windows": true,
+  "android": true,
+  "hostRegressionSkipped": true,
+  "retryReason": "Android debug WebSocket closed before test start; isolated retry passed.",
+  "windowsTests": 3,
+  "androidTests": 3,
+  "androidRetryEvidence": "docs/audits/v4-release-device-android-retry.json"
+}
