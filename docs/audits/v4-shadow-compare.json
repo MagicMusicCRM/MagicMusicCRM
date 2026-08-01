@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "task": "T8.3.3",
+  "generatedAt": "2026-08-01T11:36:16.658Z",
+  "summary": {
+    "accessDecisions": 1650,
+    "scheduleDecisions": 2000,
+    "differences": 1,
+    "explainedDifferences": 1,
+    "unexplainedDifferences": 0
+  },
+  "safeDiffs": [
+    {
+      "domain": "access",
+      "corpusId": "GET /crm/schedule-reference:client",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    }
+  ],
+  "featureFlags": [
+    {
+      "domain": "access",
+      "configuredMode": "shadow",
+      "effectivePath": "legacy",
+      "shadowCompare": true,
+      "killSwitch": false,
+      "enableAllowed": true,
+      "reason": "shadow_compare"
+    },
+    {
+      "domain": "schedule",
+      "configuredMode": "shadow",
+      "effectivePath": "legacy",
+      "shadowCompare": true,
+      "killSwitch": false,
+      "enableAllowed": true,
+      "reason": "shadow_compare"
+    }
+  ],
+  "proof": {
+    "requestCorpusDigestSha256": "a08a3bef3c88d6f105ae58d178967613aa8f09536fc37fb80bd3b6ee5c88141d",
+    "safePayload": true
+  }
+}

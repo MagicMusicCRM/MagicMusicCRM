@@ -198,12 +198,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server run v4:migrate:dry-run && npm --prefix server run v4:reconcile -- --require-zero`
   - **Оценка:** 8 ч. · **Зависимости:** T8.3.1, T8.1.5 · **Приоритет:** P0 · **Sprint:** S6
 
-- [ ] **T8.3.3** [REQ-RBAC-001, REQ-SCHED-001]: Включить compatibility/shadow parity gates
+- [x] **T8.3.3** [REQ-RBAC-001, REQ-SCHED-001]: Включить compatibility/shadow parity gates
   - **Описание:** сравнить legacy façade и v4 services до переключения write/read paths.
   - **Подпункты:**
-    - [ ] Логировать safe diff старой/новой access и constraint decisions.
-    - [ ] Добавить feature flags по доменам и documented kill switches.
-    - [ ] Запретить enable при unexplained parity diff.
+    - [x] Логировать safe diff старой/новой access и constraint decisions.
+    - [x] Добавить feature flags по доменам и documented kill switches.
+    - [x] Запретить enable при unexplained parity diff.
   - **Вход:** T8.3.2, domain contract tests.
   - **Выход:** shadow dashboard/report и domain feature flags.
   - **📎 Ссылка:** `access_control.md §12`, `schedule_lifecycle.md §12`, ADR-012.

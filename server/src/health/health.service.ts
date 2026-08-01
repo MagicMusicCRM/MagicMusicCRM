@@ -4,6 +4,10 @@ import {
 } from '../crm/schedule/completion-worker.types';
 import { LessonCompletionWorker } from '../crm/schedule/lesson-completion.worker';
 import { DatabaseService } from '../db/database.service';
+import {
+  V4DomainFlagsService,
+  V4DomainRollout
+} from '../platform/v4-domain-flags';
 
 export interface HealthResponse {
   status: 'ok';
@@ -16,16 +20,19 @@ export interface ReadinessResponse extends HealthResponse {
     database: 'ok' | 'error';
     migrations: 'ok' | 'error';
     lessonCompletionWorker: 'ok' | 'degraded';
+    v4Rollout: 'ok' | 'blocked';
   };
   latestMigrationId: string | null;
   lessonCompletionWorker: LessonCompletionWorkerMetrics;
+  v4Rollout: V4DomainRollout[];
 }
 
 @Injectable()
 export class HealthService {
   constructor(
     private readonly database: DatabaseService,
-    private readonly lessonCompletionWorker: LessonCompletionWorker
+    private readonly lessonCompletionWorker: LessonCompletionWorker,
+    private readonly v4DomainFlags: V4DomainFlagsService
   ) {}
 
   check(): HealthResponse {
@@ -53,16 +60,22 @@ export class HealthService {
       this.lessonCompletionWorker.health()
     ]);
     const latestMigrationId = result.rows[0]?.id ?? null;
+    const v4Rollout = this.v4DomainFlags.snapshot();
+    const v4Blocked = v4Rollout.some(
+      domain => domain.configuredMode === 'v4' && !domain.enableAllowed
+    );
 
     return {
       ...this.check(),
       checks: {
         database: 'ok',
         migrations: latestMigrationId === null ? 'error' : 'ok',
-        lessonCompletionWorker: workerHealth.status
+        lessonCompletionWorker: workerHealth.status,
+        v4Rollout: v4Blocked ? 'blocked' : 'ok'
       },
       latestMigrationId,
-      lessonCompletionWorker: workerHealth.metrics
+      lessonCompletionWorker: workerHealth.metrics,
+      v4Rollout
     };
   }
 }

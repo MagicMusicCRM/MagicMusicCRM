@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "T8.1.2",
-  "source_digest_sha256": "015b8373690cdd8671bd91eb847097e0b71bd4485176933d51e6fd76e34ce9f3",
-  "source_file_count": 701,
+  "source_digest_sha256": "e8a7c05b9c9033a285e7517c0b86233343eec4fd8705341964710caaa9a87517",
+  "source_file_count": 705,
   "systems": [
     "SYS-APP",
     "SYS-ACCESS",
