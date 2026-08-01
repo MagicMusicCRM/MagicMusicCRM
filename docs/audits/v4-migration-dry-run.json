@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "task": "T8.3.2",
+  "mode": "repeatable-read/read-only",
+  "generatedAt": "2026-08-01T11:34:05.247Z",
+  "requiredMigrations": [
+    "0076_capability_registry",
+    "0083_lesson_lifecycle_schema",
+    "0087_lesson_settlement_facts",
+    "0089_commerce_catalog_snapshot_ledger",
+    "0090_commerce_package_aggregate_versions",
+    "0091_commerce_issued_subscription_aggregate_versions",
+    "0092_shared_tasks_audience_schema"
+  ],
+  "missingMigrations": [],
+  "invariants": [
+    {
+      "id": "platform.foreign-key-restore-readiness",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "violations": 0
+    },
+    {
+      "id": "access.capability-registry-packages",
+      "sourceCount": 20,
+      "targetCount": 20,
+      "violations": 0
+    },
+    {
+      "id": "access.role-compatible-links",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "violations": 0
+    },
+    {
+      "id": "schedule.lesson-lifecycle-snapshots",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "violations": 0
+    },
+    {
+      "id": "commerce.subscription-commercial-snapshots",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "violations": 0
+    },
+    {
+      "id": "commerce.lesson-settlement-facts",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "violations": 0
+    },
+    {
+      "id": "workflow.legacy-to-shared-task-links",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "violations": 0
+    },
+    {
+      "id": "workflow.assigned-task-audiences",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "violations": 0
+    }
+  ],
+  "summary": {
+    "invariants": 8,
+    "sourceRows": 21,
+    "targetRows": 21,
+    "violations": 0,
+    "pendingBatches": 0
+  },
+  "proof": {
+    "transactionReadOnly": true,
+    "digestSha256": "401db33ec964478be387f60873ca270ea11b97720a84ef34b6fc29fa854427cf"
+  }
+}

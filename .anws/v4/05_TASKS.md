@@ -184,12 +184,12 @@ flowchart TD
   - **Инструкция:** `npm --prefix server run v4:backfill -- --dry-run && npm --prefix server run v4:backfill -- --apply && npm --prefix server run v4:preflight -- --require-zero-blockers`
   - **Оценка:** 8 ч. · **Зависимости:** INT-S5 · **Приоритет:** P0 · **Sprint:** S6
 
-- [ ] **T8.3.2** [REQ-SUB-004, REQ-LESSON-002, REQ-TASK-001]: Выполнить v4 data migration dry-run
+- [x] **T8.3.2** [REQ-SUB-004, REQ-LESSON-002, REQ-TASK-001]: Выполнить v4 data migration dry-run
   - **Описание:** мигрировать capability packages, lesson lifecycle/snapshots, subscription facts и shared tasks на staging-копии.
   - **Подпункты:**
-    - [ ] Выполнить additive schema и restartable data batches.
-    - [ ] Сравнить source/target counts и named invariants.
-    - [ ] Проверить rollback/forward compensation на копии.
+    - [x] Выполнить additive schema и restartable data batches.
+    - [x] Сравнить source/target counts и named invariants.
+    - [x] Проверить rollback/forward compensation на копии.
   - **Вход:** T8.3.1, T8.1.5 и миграции domain systems.
   - **Выход:** migration run report, reconciliation drift=0, recovery evidence.
   - **📎 Ссылка:** `platform_integrity.md §9`.

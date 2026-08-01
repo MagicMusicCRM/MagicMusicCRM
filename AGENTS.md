@@ -220,6 +220,8 @@ _Актуализация 2026-08-01: `T1.3.1` закрыта: PRD §8 свед�
 
 _Актуализация 2026-08-01: `T8.3.1` закрыта на PostgreSQL 17 production-schema staging copy: backup SHA-256 зафиксирован, dry-run нашёл 1 однозначную access-link строку, первый apply изменил 1 строку, второй — 0; review queue=0, read-only preflight 16/16 и blockers=0. Exact PostgreSQL integration 1/1, typecheck clean (`docs/audits/v4-production-backfill.md`). Следующий шаг `/forge`: `T8.3.2` v4 data migration dry-run._
 
+_Актуализация 2026-08-01: `T8.3.2` закрыта на отдельной backup-restored PostgreSQL staging copy: 7/7 обязательных migrations, 8/8 named invariants, source/target 21/21, violations/pending batches=0 и повторный read-only digest стабилен. Rollback `0093→0092` + forward `0092→0093` сохранил counts; reconciliation 14 invariants, facts 1/1, drift=0, signature verified; exact PostgreSQL 1/1 (`docs/audits/v4-migration-dry-run.md`). Следующий шаг `/forge`: `T8.3.3` compatibility/shadow parity gates._
+
 _Актуализация 2026-07-30: `T3.3.2` закрыта: production launcher маршрутизирует Teacher в отдельную actor-scoped read-only карточку с горизонтальными tabs Lesson/Homework/shared Comments; запрещённые contacts/finance/tasks не строятся даже из лишнего payload. Staff-карточка получила Director/system_admin-only archive preview с impact/links/versioned confirm и tombstone contract. Comment share использует независимый `sharedWithTeacher` + expectedVersion, не меняя kind. Exact role UX 4/4, затронутые legacy card/finance 18/18, Flutter analyze clean (`docs/audits/v4-client-card-ux.md`). Следующий шаг `/forge`: `INT-S4` CRM & Shared Work._
 
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog
