@@ -214,13 +214,13 @@ flowchart TD
 
 ## Phase 4 — Release (S6)
 
-- [ ] **T8.4.1** [REQ-RBAC-002, REQ-PRIV-001, REQ-NAV-002]: Выполнить полные technical/UAT gates
+- [x] **T8.4.1** [REQ-RBAC-002, REQ-PRIV-001, REQ-NAV-002]: Выполнить полные technical/UAT gates
   - **Описание:** прогнать static, unit, integration, actor, concurrency, performance, security и device acceptance.
   - **Owner exception (2026-08-01):** по прямому решению владельца history/security gate разрешено пропустить только для продолжения technical/device/data/operations и staging rehearsal. Evidence обязан иметь `pass_with_owner_exception`, security=`owner_deferred`, `productionApproved=false` и ссылки на backlog #16/#17; это не удовлетворяет ADR-006 и не разрешает production rollout/INT-S6.
   - **Подпункты:**
-    - [ ] Запустить полный Flutter/backend/security/reconciliation suite.
-    - [ ] Выполнить 6-role сценарии на Windows и Android.
-    - [ ] Проверить worker/outbox metrics, backup restore и alert drill.
+    - [x] Запустить полный Flutter/backend/reconciliation suite; security зафиксировать `owner_deferred`.
+    - [x] Выполнить 6-role сценарии на Windows и Android.
+    - [x] Проверить worker/outbox metrics, backup restore и alert drill.
   - **Вход:** T8.3.3, INT-S1…S5.
   - **Выход:** `.anws/v4/08_RELEASE_READINESS_REPORT.md`.
   - **📎 Ссылка:** ADR-006, ADR-012, `07_CHALLENGE_REPORT.md §6`.
@@ -229,12 +229,12 @@ flowchart TD
   - **Инструкция:** production: `pwsh -File scripts/v4_release_gate.ps1 -Windows -Android -RequireZeroDrift`; owner-deferred security: добавить `-SkipSecurityGate -OwnerRiskAcceptance`.
   - **Оценка:** 8 ч. · **Зависимости:** T8.3.3, INT-S5 · **Приоритет:** P0 · **Sprint:** S6
 
-- [ ] **T8.4.2** [REQ-AUDIT-001]: Подготовить staged rollout, rollback и runbooks
+- [x] **T8.4.2** [REQ-AUDIT-001]: Подготовить staged rollout, rollback и runbooks
   - **Описание:** оформить и отрепетировать безопасное включение v4 по feature flags.
   - **Подпункты:**
-    - [ ] Зафиксировать maintenance/backup/deploy/observe/rollback sequence.
-    - [ ] Выполнить staging rehearsal и rollback/forward recovery smoke.
-    - [ ] Описать worker pause/resume, outbox drain и incident ownership.
+    - [x] Зафиксировать maintenance/backup/deploy/observe/rollback sequence.
+    - [x] Выполнить staging rehearsal и rollback/forward recovery smoke.
+    - [x] Описать worker pause/resume, outbox drain и incident ownership.
   - **Вход:** T8.4.1, ADR-005, `platform_integrity.md §9–10`.
   - **Выход:** `docs/runbooks/v4-rollout.md`, rehearsal evidence.
   - **📎 Ссылка:** ADR-005, ADR-012.
