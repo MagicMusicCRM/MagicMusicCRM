@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "task": "T8.4.2",
+  "target": "staging",
+  "revision": "750933ebe7d25b097337e96528ba9d9ec3bfd2bd",
+  "status": "pass",
+  "productionApproved": false,
+  "releaseGateStatus": "pass_with_owner_exception",
+  "generatedAt": "2026-08-01T12:58:49.0323666Z",
+  "maintenance": "documented",
+  "backupRestoreEvidence": "docs/audits/v4-release-gate-result.json",
+  "rollout": {
+    "shadow": {
+      "domain": "access",
+      "configuredMode": "shadow",
+      "effectivePath": "legacy",
+      "shadowCompare": true,
+      "killSwitch": false,
+      "enableAllowed": true,
+      "reason": "shadow_compare"
+    },
+    "enabled": {
+      "domain": "access",
+      "configuredMode": "v4",
+      "effectivePath": "v4",
+      "shadowCompare": false,
+      "killSwitch": false,
+      "enableAllowed": true,
+      "reason": "v4"
+    },
+    "unexplainedDiffBlocked": {
+      "domain": "access",
+      "configuredMode": "v4",
+      "effectivePath": "legacy",
+      "shadowCompare": true,
+      "killSwitch": false,
+      "enableAllowed": false,
+      "reason": "unexplained_parity_diff"
+    },
+    "rollback": {
+      "domain": "access",
+      "configuredMode": "v4",
+      "effectivePath": "legacy",
+      "shadowCompare": false,
+      "killSwitch": true,
+      "enableAllowed": false,
+      "reason": "kill_switch"
+    },
+    "forwardRecovery": {
+      "domain": "access",
+      "configuredMode": "v4",
+      "effectivePath": "v4",
+      "shadowCompare": false,
+      "killSwitch": false,
+      "enableAllowed": true,
+      "reason": "v4"
+    }
+  },
+  "operations": {
+    "workerPauseResume": "documented-and-safe",
+    "pendingOutbox": 0,
+    "deadLetterOutbox": 0,
+    "poisonWorker": 0,
+    "immutableFactsPreserved": true,
+    "health": "pass",
+    "auth": "pass",
+    "realtime": "pass"
+  },
+  "gates": [
+    {
+      "name": "Staging zero-blocker preflight",
+      "status": "pass",
+      "durationSeconds": 4.867
+    },
+    {
+      "name": "Health, auth, realtime and outbox smoke",
+      "status": "pass",
+      "durationSeconds": 18.05
+    }
+  ],
+  "durationSeconds": 26.928
+}
