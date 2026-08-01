@@ -1159,12 +1159,12 @@ flowchart TD
   - **Инструкция:** `pwsh -File scripts/v4_sprint_gate.ps1 -Sprint S4`
   - **Оценка:** 4 ч. · **Зависимости:** INT-S3, T3.3.2, T6.4.1 · **Приоритет:** P0
 
-- [ ] **INT-S5** [MILESTONE]: Connected Workspace
+- [x] **INT-S5** [MILESTONE]: Connected Workspace
   - **Описание:** проверить reports/OOXML и всю navigation matrix на Windows desktop workspace и Android stack.
   - **Подпункты:**
-    - [ ] T7.1.1–T7.2.2 и T1.2.1–T1.4.1 отмечены `[x]`.
-    - [ ] 10 tabs/D&D/ellipsis/restore/account/logout/conflict проходят latency/privacy gates.
-    - [ ] 100% source→target links и Excel fixtures приняты.
+    - [x] T7.1.1–T7.2.2 и T1.2.1–T1.4.1 отмечены `[x]`.
+    - [x] 10 tabs/D&D/ellipsis/restore/account/logout/conflict проходят latency/privacy gates.
+    - [x] 100% source→target links и Excel fixtures приняты.
   - **Вход:** все задачи S5.
   - **Выход:** `docs/audits/v4-s5-connected-workspace.md`.
   - **Критерии:** Given 6 roles, Windows и Android; When transition/workspace/report scenarios выполнены; Then context loss/format warning/silent overwrite/access leak=0.

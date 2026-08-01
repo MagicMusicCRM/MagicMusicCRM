@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "sprint": "S5",
+  "revision": "4e9c9b6310d796fb4e98ba4b029c09151558e64b",
+  "status": "pass",
+  "generatedAt": "2026-08-01T10:55:37.2775109Z",
+  "windows": true,
+  "android": true,
+  "excel": true,
+  "transitionCoveragePercent": 100,
+  "contextLoss": 0,
+  "formatWarnings": 0,
+  "silentOverwrite": 0,
+  "accessLeaks": 0,
+  "gates": [
+    {
+      "name": "S5 task/evidence inventory",
+      "status": "pass",
+      "durationSeconds": 0
+    },
+    {
+      "name": "Backend reporting and OOXML integration",
+      "status": "pass",
+      "durationSeconds": 8.413
+    },
+    {
+      "name": "Reporting six-role privacy boundary",
+      "status": "pass",
+      "durationSeconds": 6.909
+    },
+    {
+      "name": "Flutter reporting and transition regression",
+      "status": "pass",
+      "durationSeconds": 10.801
+    },
+    {
+      "name": "Windows and Android workspace device gate",
+      "status": "pass",
+      "durationSeconds": 90.515
+    },
+    {
+      "name": "Excel OOXML fixture validation",
+      "status": "pass",
+      "durationSeconds": 8.485
+    }
+  ],
+  "durationSeconds": 125.862
+}

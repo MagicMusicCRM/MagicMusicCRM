@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "task": "T1.4.1",
-  "revision": "18e455ac499e7fcf27adb152e56631f6d8fd0540",
+  "revision": "4e9c9b6310d796fb4e98ba4b029c09151558e64b",
   "status": "pass",
-  "generatedAt": "2026-08-01T10:43:16.0089172Z",
+  "generatedAt": "2026-08-01T10:55:28.6409501Z",
   "windows": true,
   "android": true,
   "maxTabs": 10,
@@ -15,18 +15,18 @@
     {
       "name": "Workspace widget and navigation regression",
       "status": "pass",
-      "durationSeconds": 18.988
+      "durationSeconds": 10.445
     },
     {
       "name": "Windows workspace device E2E",
       "status": "pass",
-      "durationSeconds": 83.091
+      "durationSeconds": 39.183
     },
     {
       "name": "Android context-stack device E2E",
       "status": "pass",
-      "durationSeconds": 81.637
+      "durationSeconds": 39.17
     }
   ],
-  "durationSeconds": 186.009
+  "durationSeconds": 90.016
 }
