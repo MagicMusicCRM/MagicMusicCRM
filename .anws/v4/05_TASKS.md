@@ -1275,6 +1275,54 @@ PRD не присваивает историям отдельные `US-*` ID, �
 - **Автономная демонстрация:** Manager status count→same filtered list без school finance; Director finance row→record; `.xlsx` открывается Excel без предупреждения.
 - **Статус покрытия:** Полное.
 
+## 14.1. Owner hotfix wave — повторная приёмка UI
+
+```mermaid
+graph LR
+  T1.5.1 --> INT-HF1
+  T4.3.4 --> INT-HF1
+  T7.2.3 --> INT-HF1
+```
+
+- [x] **T1.5.1** [REQ-NAV-003]: Устранить полноэкранную перезагрузку серверного поиска
+  - **Описание:** серверные поисковые поля сохраняют введённый текст и текущий список во время debounce/request; устаревший ответ не заменяет новый.
+  - **Входные данные:** `app_workspace.md §6`, существующий stable-search pattern `LeadsWidget`.
+  - **Выходные данные:** исправленные search surfaces и widget regression.
+  - **📎 Ссылка:** ADR-010.
+  - **Критерии приемки:** Given загруженный список; When пользователь вводит несколько символов; Then поле не теряет focus/text, экран не заменяется skeleton/spinner, выполняется только debounced latest-wins запрос и результат обновляется на месте.
+  - **Тип верификации:** Widget-тест.
+  - **Инструкция по верификации:** `flutter test test/features/v4/stable_server_search_test.dart`
+  - **Оценка:** 4 ч. · **Зависимости:** T1.2.2 · **Приоритет:** P0
+
+- [x] **T4.3.4** [REQ-SCHED-003, REQ-NAV-001]: Исправить рабочие режимы расписания и переход из карточки клиента
+  - **Описание:** удалить годовой режим, добавить рабочую недельную сетку и открывать из карточки клиента месячный календарь, отфильтрованный по этому клиенту.
+  - **Входные данные:** `schedule_lifecycle.md §7/§10`, `app_workspace.md §11`, существующие month/day views и `scheduleNavigationProvider`.
+  - **Выходные данные:** режимы `Месяц / Неделя / День`, client-scoped focus state и widget tests.
+  - **📎 Ссылка:** ADR-008, ADR-010.
+  - **Критерии приемки:** Given карточка Lead/Student; When «Открыть в расписании» нажата; Then открывается месяц выбранной даты и видны только занятия этого клиента; переключатели содержат ровно Месяц/Неделя/День, неделя начинается с понедельника, режим Год отсутствует.
+  - **Тип верификации:** Widget-тест.
+  - **Инструкция по верификации:** `flutter test test/features/v4/client_schedule_navigation_test.dart test/features/admin/schedule_redesign_test.dart`
+  - **Оценка:** 8 ч. · **Зависимости:** T4.3.1, T1.3.1 · **Приоритет:** P0
+
+- [x] **T7.2.3** [REQ-REPORT-002, REQ-NAV-001]: Исправить drilldown статусов отчёта
+  - **Описание:** Flutter вызывает существующий endpoint списка `/analytics/v4/client-status/clients`, не меняя backend contract.
+  - **Входные данные:** `reporting.md §5/§10`, T7.1.1, T7.2.2.
+  - **Выходные данные:** корректный service route и regression test.
+  - **📎 Ссылка:** ADR-007, ADR-010.
+  - **Критерии приемки:** Given карточка статуса клиента; When пользователь открывает её; Then запрос идёт на `/clients`, filtered list загружается без `Cannot GET`, count/list predicates совпадают.
+  - **Тип верификации:** Unit/widget-тест.
+  - **Инструкция по верификации:** `flutter test test/features/v4/reporting_drilldown_test.dart`
+  - **Оценка:** 1 ч. · **Зависимости:** T7.2.2 · **Приоритет:** P0
+
+- [x] **INT-HF1** [MILESTONE]: Интеграционная проверка owner hotfix wave
+  - **Описание:** совместно проверить три исправленных пользовательских сценария без побочных изменений API/зависимостей.
+  - **Входные данные:** T1.5.1, T4.3.4, T7.2.3.
+  - **Выходные данные:** Flutter analyze/full test и runtime smoke evidence.
+  - **Критерии приемки:** Given Windows CRM; When выполнены поиск, client→schedule и report drilldown; Then focus/context сохраняются, режимы/фильтры корректны, HTTP 404 и full-screen search reload отсутствуют.
+  - **Тип верификации:** Регрессионный тест + Smoke-тест.
+  - **Инструкция по верификации:** `flutter analyze && flutter test`
+  - **Оценка:** 2 ч. · **Зависимости:** T1.5.1, T4.3.4, T7.2.3 · **Приоритет:** P0
+
 ## 15. Глобальный Definition of Done v4
 
 - [ ] Все L3-задачи и INT-S0…INT-S6 отмечены `[x]`; evidence доступен по указанным путям.
