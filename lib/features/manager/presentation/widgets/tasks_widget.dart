@@ -35,6 +35,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   final Set<String> _pendingTaskIds = {};
   Timer? _searchDebounce;
   Timer? _realtimeDebounce;
+  int _taskLoadSequence = 0;
   bool _loading = true;
   bool _filtersLoading = true;
   bool _creatingTask = false;
@@ -124,11 +125,12 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   void _onSearchChanged() {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (mounted) _loadTasks();
+      if (mounted) _loadTasks(showLoading: false);
     });
   }
 
   Future<void> _loadTasks({bool showLoading = true}) async {
+    final sequence = ++_taskLoadSequence;
     if (showLoading) {
       setState(() {
         _loading = true;
@@ -150,17 +152,22 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
             to: dueBounds?.$2,
             limit: 100,
           );
-      if (!mounted) return;
+      if (!mounted || sequence != _taskLoadSequence) return;
       setState(() {
         _tasks = data;
         _loading = false;
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && sequence == _taskLoadSequence) {
         setState(() {
-          _loadError = e;
+          if (showLoading || _tasks.isEmpty) _loadError = e;
           _loading = false;
         });
+        if (!showLoading && _tasks.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Не удалось обновить поиск: $e')),
+          );
+        }
       }
     }
   }

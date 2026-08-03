@@ -30,6 +30,8 @@ class UserRolesWidget extends ConsumerStatefulWidget {
 class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
   List<Map<String, dynamic>> _profiles = [];
   bool _isLoading = false;
+  bool _isRefreshing = false;
+  int _profileLoadSequence = 0;
   String _searchQuery = '';
   String _selectedRole = 'all';
   String? _linkingProfileId;
@@ -134,7 +136,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                           _searchDebounce?.cancel();
                           _searchDebounce = Timer(
                             const Duration(milliseconds: 350),
-                            _loadProfiles,
+                            () => _loadProfiles(preserveContent: true),
                           );
                         },
                         style: TextStyle(
@@ -220,7 +222,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                       ),
                       onSelected: (_) {
                         _emitState(() => _selectedRole = role);
-                        _loadProfiles();
+                        _loadProfiles(preserveContent: true);
                       },
                     );
                   },
@@ -255,6 +257,12 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                     ],
                   ),
                 ),
+              SizedBox(
+                height: 2,
+                child: _isRefreshing
+                    ? const LinearProgressIndicator(minHeight: 2)
+                    : null,
+              ),
               Expanded(
                 child: _isLoading
                     ? const Padding(
@@ -432,7 +440,8 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                                     actorRole: widget.currentRole,
                                     userId: accessUserId,
                                     userLabel: _fullName(p),
-                                    onChanged: _loadProfiles,
+                                    onChanged: () =>
+                                        _loadProfiles(preserveContent: true),
                                   ),
                                   icon: const Icon(Icons.admin_panel_settings),
                                   color: AppColor.gold,

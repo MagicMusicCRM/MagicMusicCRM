@@ -8,8 +8,15 @@ extension _UserRolesActions on _UserRolesWidgetState {
     _searchController.text = query;
   }
 
-  Future<void> _loadProfiles() async {
-    _emitState(() => _isLoading = true);
+  Future<void> _loadProfiles({bool preserveContent = false}) async {
+    final sequence = ++_profileLoadSequence;
+    _emitState(() {
+      if (preserveContent && _profiles.isNotEmpty) {
+        _isRefreshing = true;
+      } else {
+        _isLoading = true;
+      }
+    });
     try {
       final data = await ref
           .read(magicProfileAdminServiceProvider)
@@ -20,13 +27,13 @@ extension _UserRolesActions on _UserRolesWidgetState {
             // just the first 100 loaded rows.
             q: _searchQuery.trim().isEmpty ? null : _searchQuery.trim(),
           );
-      if (mounted) {
+      if (mounted && sequence == _profileLoadSequence) {
         _emitState(() {
           _profiles = data;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && sequence == _profileLoadSequence) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка загрузки: $e'),
@@ -35,7 +42,12 @@ extension _UserRolesActions on _UserRolesWidgetState {
         );
       }
     } finally {
-      if (mounted) _emitState(() => _isLoading = false);
+      if (mounted && sequence == _profileLoadSequence) {
+        _emitState(() {
+          _isLoading = false;
+          _isRefreshing = false;
+        });
+      }
     }
   }
 

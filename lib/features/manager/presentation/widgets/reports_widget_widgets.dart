@@ -371,6 +371,8 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
   final _searchCtrl = TextEditingController();
   Timer? _searchDebounce;
   bool _loading = true;
+  bool _refreshing = false;
+  int _loadSequence = 0;
   Object? _loadError;
   String _period = 'week';
   String _entityType = 'all';
@@ -394,13 +396,18 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
   void _onSearchChanged() {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (mounted) _loadActivity();
+      if (mounted) _loadActivity(preserveContent: true);
     });
   }
 
-  Future<void> _loadActivity() async {
+  Future<void> _loadActivity({bool preserveContent = false}) async {
+    final sequence = ++_loadSequence;
     setState(() {
-      _loading = true;
+      if (preserveContent && _items.isNotEmpty) {
+        _refreshing = true;
+      } else {
+        _loading = true;
+      }
       _loadError = null;
     });
     try {
@@ -414,16 +421,18 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
             to: bounds.$2,
             limit: 100,
           );
-      if (!mounted) return;
+      if (!mounted || sequence != _loadSequence) return;
       setState(() {
         _items = items;
         _loading = false;
+        _refreshing = false;
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && sequence == _loadSequence) {
         setState(() {
-          _loadError = e;
+          if (!preserveContent || _items.isEmpty) _loadError = e;
           _loading = false;
+          _refreshing = false;
         });
       }
     }
@@ -431,7 +440,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
 
   void _setFilter(void Function() update) {
     setState(update);
-    _loadActivity();
+    _loadActivity(preserveContent: true);
   }
 
   /// «Активность» used to be a dead-end list. Every row carries the entity it
@@ -537,7 +546,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
                       _searchDebounce?.cancel();
                       _entityType = 'all';
                     });
-                    _loadActivity();
+                    _loadActivity(preserveContent: true);
                   },
                   icon: const Icon(Icons.close_rounded, size: 18),
                   label: const Text('Сбросить'),
@@ -545,13 +554,19 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
             ],
           ),
         ),
+        SizedBox(
+          height: 2,
+          child: _refreshing
+              ? const LinearProgressIndicator(minHeight: 2)
+              : null,
+        ),
         Expanded(
           child: _loading
               ? const Center(
                   child: CircularProgressIndicator(color: AppColor.gold),
                 )
               : _loadError != null
-              ? _ReportsError(error: _loadError, onRetry: _loadActivity)
+              ? _ReportsError(error: _loadError, onRetry: () => _loadActivity())
               : _items.isEmpty
               ? Center(
                   child: Text(
@@ -563,7 +578,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
                 )
               : RefreshIndicator(
                   color: AppColor.gold,
-                  onRefresh: _loadActivity,
+                  onRefresh: () => _loadActivity(preserveContent: true),
                   child: ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     itemCount: _items.length,
