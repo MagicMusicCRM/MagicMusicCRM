@@ -146,8 +146,7 @@ async function findTeacherBranchCandidates(
 ): Promise<BackfillCandidate[]> {
   const result = await client.query<BackfillCandidate>(`
     with future_evidence as (
-      select teacher.id as teacher_id,
-             (array_agg(distinct lesson.branch_id))[1] as branch_id
+      select distinct teacher.id as teacher_id, lesson.branch_id
         from app.teachers teacher
         join app.lessons lesson
           on lesson.teacher_id = teacher.id
@@ -160,12 +159,11 @@ async function findTeacherBranchCandidates(
          and not exists (
            select 1 from app.teacher_branches assignment
             where assignment.teacher_id = teacher.id
+              and assignment.branch_id = lesson.branch_id
               and assignment.active_from <= current_date
               and (assignment.active_until is null
                    or assignment.active_until >= current_date)
          )
-       group by teacher.id
-      having count(distinct lesson.branch_id) = 1
     )
     select 'teacher-branch'::text as kind,
            teacher_id::text as entity_id,
