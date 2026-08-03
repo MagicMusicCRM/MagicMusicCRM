@@ -756,7 +756,7 @@ extension MagicCrmFinance on MagicCrmService {
     int offset = 0,
   }) {
     return _api.get<Map<String, dynamic>>(
-      '/analytics/v4/client-status',
+      '/analytics/v4/client-status/clients',
       queryParameters: {
         ..._v4ReportQuery(
           clientType: filter['clientType']?.toString(),

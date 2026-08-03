@@ -198,7 +198,7 @@ class _ReportingApi extends MagicApiClient {
           }
           as T;
     }
-    if (path == '/analytics/v4/client-status') {
+    if (path == '/analytics/v4/client-status/clients') {
       lastListFilter = Map<String, dynamic>.from(queryParameters ?? const {});
       return <String, dynamic>{
             'total': 1,
