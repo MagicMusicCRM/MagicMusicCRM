@@ -243,6 +243,7 @@ function scheduleChecks(asOf: string): CheckDefinition[] {
            where deleted_at is null
              and status = 'scheduled'
              and scheduled_at >= $1::timestamptz
+             and (group_id is not null or scheduled_at < $1::timestamptz + interval '60 days')
         ),
         pairs as (
           select a.id as entity_id, b.id as related_id, 'teacher' as detail
@@ -306,6 +307,7 @@ function scheduleChecks(asOf: string): CheckDefinition[] {
          where deleted_at is null
            and status = 'scheduled'
            and scheduled_at >= $1::timestamptz
+           and (group_id is not null or scheduled_at < $1::timestamptz + interval '60 days')
            and (
              teacher_id is null or branch_id is null or room_id is null
              or (student_id is null and group_id is null and lead_id is null)
@@ -322,6 +324,7 @@ function scheduleChecks(asOf: string): CheckDefinition[] {
       requires: {
         lessons: [
           "id",
+          "group_id",
           "teacher_id",
           "branch_id",
           "scheduled_at",
@@ -345,6 +348,7 @@ function scheduleChecks(asOf: string): CheckDefinition[] {
          where l.deleted_at is null
            and l.status = 'scheduled'
            and l.scheduled_at >= $1::timestamptz
+           and (l.group_id is not null or l.scheduled_at < $1::timestamptz + interval '60 days')
            and l.teacher_id is not null
            and l.branch_id is not null
            and not exists (
@@ -774,6 +778,7 @@ async function snapshotChecks(
         requires: {
           lessons: [
             "id",
+            "group_id",
             "scheduled_at",
             "status",
             "deleted_at",
@@ -795,6 +800,10 @@ async function snapshotChecks(
              and lesson.status = 'scheduled'
              and lesson.scheduled_at >= $1::timestamptz
              and (
+               lesson.group_id is not null
+               or lesson.scheduled_at < $1::timestamptz + interval '60 days'
+             )
+             and (
                snapshot.lesson_id is null
                or snapshot.validation_state <> 'valid'
              )
@@ -807,7 +816,7 @@ async function snapshotChecks(
         description:
           "Future scheduled lesson lacks an immutable completion/financial snapshot.",
         requires: {
-          lessons: ["id", "scheduled_at", "status", "deleted_at"],
+          lessons: ["id", "group_id", "scheduled_at", "status", "deleted_at"],
         },
         params: [asOf],
         sql: `
@@ -817,6 +826,7 @@ async function snapshotChecks(
            where deleted_at is null
              and status = 'scheduled'
              and scheduled_at >= $1::timestamptz
+             and (group_id is not null or scheduled_at < $1::timestamptz + interval '60 days')
            order by id`,
       };
   checks.push(await executeCheck(client, schema, lessonDefinition));

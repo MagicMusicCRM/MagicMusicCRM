@@ -15,7 +15,9 @@ describe("T8.3.1 production backfill", () => {
   const branchIds = [randomUUID(), randomUUID()];
   const roomIds = [randomUUID(), randomUUID()];
   const leadId = randomUUID();
-  const lessonIds = [randomUUID(), randomUUID()];
+  const groupId = randomUUID();
+  const studentIds = [randomUUID(), randomUUID()];
+  const lessonIds = [randomUUID(), randomUUID(), randomUUID()];
 
   beforeAll(async () => {
     await pool.query(
@@ -62,14 +64,59 @@ describe("T8.3.1 production backfill", () => {
        ) values
          ($1, $3, $4, $5, $7, now() + interval '30 days', true),
          ($2, $3, $4, $6, $8, now() + interval '31 days', true)`,
-      [...lessonIds, leadId, teacherId, ...branchIds, ...roomIds],
+      [lessonIds[0], lessonIds[1], leadId, teacherId, ...branchIds, ...roomIds],
+    );
+    await pool.query(
+      `insert into app.students (id, custom_data) values
+         ($1, '{"individualPrice":800}'::jsonb),
+         ($2, '{"individualPrice":800}'::jsonb)`,
+      studentIds,
+    );
+    await pool.query(
+      `insert into app.groups (id, teacher_id, branch_id, room_id, name, price_per_lesson)
+       values ($1, $2, $3, $4, 'Backfill group', 800)`,
+      [groupId, teacherId, branchIds[0], roomIds[0]],
+    );
+    await pool.query(
+      `insert into app.group_students (group_id, student_id, joined_at)
+       values ($1, $2, now() - interval '1 day'),
+              ($1, $3, now() - interval '1 day')`,
+      [groupId, ...studentIds],
+    );
+    await pool.query(
+      `insert into app.teacher_rates (teacher_id, rate, effective_from)
+       values ($1, 600, current_date - 1)`,
+      [teacherId],
+    );
+    await pool.query(
+      `insert into app.lessons (
+         id, group_id, teacher_id, branch_id, room_id, scheduled_at
+       ) values ($1, $2, $3, $4, $5, now() + interval '32 days')`,
+      [lessonIds[2], groupId, teacherId, branchIds[0], roomIds[0]],
     );
   });
 
   afterAll(async () => {
     await pool.query("delete from app.user_crm_links where user_id = $1", [userId]);
     await pool.query("delete from app.teacher_branches where teacher_id = $1", [teacherId]);
-    await pool.query("delete from app.lessons where id = any($1::uuid[])", [lessonIds]);
+    const cleanup = await pool.connect();
+    try {
+      await cleanup.query("begin");
+      await cleanup.query("set local session_replication_role = replica");
+      await cleanup.query("delete from app.lesson_snapshot_participants where lesson_id = any($1::uuid[])", [lessonIds]);
+      await cleanup.query("delete from app.lesson_snapshots where lesson_id = any($1::uuid[])", [lessonIds]);
+      await cleanup.query("delete from app.lessons where id = any($1::uuid[])", [lessonIds]);
+      await cleanup.query("commit");
+    } catch (error) {
+      await cleanup.query("rollback");
+      throw error;
+    } finally {
+      cleanup.release();
+    }
+    await pool.query("delete from app.teacher_rates where teacher_id = $1", [teacherId]);
+    await pool.query("delete from app.group_students where group_id = $1", [groupId]);
+    await pool.query("delete from app.groups where id = $1", [groupId]);
+    await pool.query("delete from app.students where id = any($1::uuid[])", [studentIds]);
     await pool.query("delete from app.leads where id = $1", [leadId]);
     await pool.query("delete from app.rooms where id = any($1::uuid[])", [roomIds]);
     await pool.query("delete from app.branches where id = any($1::uuid[])", [branchIds]);
@@ -100,7 +147,19 @@ describe("T8.3.1 production backfill", () => {
         relatedId: branchId,
       })),
     ));
-    expect(dryRun.summary.reviewQueue).toBe(2);
+    expect(dryRun.candidates).toEqual(expect.arrayContaining(
+      lessonIds.slice(0, 2).map((lessonId) => ({
+        kind: "lesson-snapshot",
+        entityId: lessonId,
+        relatedId: leadId,
+      })),
+    ));
+    expect(dryRun.candidates).toContainEqual({
+      kind: "lesson-snapshot",
+      entityId: lessonIds[2],
+      relatedId: groupId,
+    });
+    expect(dryRun.summary.reviewQueue).toBe(0);
 
     const before = await pool.query<{ count: string }>(
       "select count(*)::text as count from app.user_crm_links where user_id = $1",
@@ -109,14 +168,26 @@ describe("T8.3.1 production backfill", () => {
     expect(before.rows[0]?.count).toBe("0");
 
     const first = await runBackfill(pool, "apply");
-    expect(first.summary.applied).toBe(3);
-    expect(first.summary.reviewQueue).toBe(2);
+    expect(first.summary.applied).toBe(6);
+    expect(first.summary.reviewQueue).toBe(0);
 
     const second = await runBackfill(pool, "apply");
     expect(second.summary).toMatchObject({
       candidates: 0,
       applied: 0,
-      reviewQueue: 2,
+      reviewQueue: 0,
     });
+    const snapshots = await pool.query<{ count: string }>(
+      `select count(*)::text as count from app.lesson_snapshots
+       where lesson_id = any($1::uuid[]) and validation_state = 'valid'`,
+      [lessonIds],
+    );
+    expect(snapshots.rows[0]?.count).toBe("3");
+    const participants = await pool.query<{ count: string }>(
+      `select count(*)::text as count from app.lesson_snapshot_participants
+       where lesson_id = $1`,
+      [lessonIds[2]],
+    );
+    expect(participants.rows[0]?.count).toBe("2");
   });
 });

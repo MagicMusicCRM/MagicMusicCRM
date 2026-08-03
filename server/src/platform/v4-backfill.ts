@@ -4,7 +4,7 @@ import { resolve } from "path";
 import { Pool, PoolClient, QueryResultRow } from "pg";
 
 type BackfillMode = "dry-run" | "apply";
-type BackfillKind = "access-link" | "teacher-branch";
+type BackfillKind = "access-link" | "teacher-branch" | "lesson-snapshot";
 
 interface BackfillCandidate extends QueryResultRow {
   kind: BackfillKind;
@@ -19,8 +19,48 @@ interface ReviewRow extends QueryResultRow {
   reason: string;
 }
 
+interface LessonSubjectRow extends QueryResultRow {
+  lesson_id: string;
+  group_id: string | null;
+  client_type: "lead" | "student";
+  client_id: string;
+  student_id: string | null;
+  scheduled_at: Date | string;
+  duration_minutes: number | string;
+  is_trial: boolean;
+  personal_price: string | null;
+  teacher_rate: string;
+}
+
+interface SubscriptionCapacityRow extends QueryResultRow {
+  id: string;
+  student_id: string;
+  starts_at: Date | string | null;
+  expires_at: Date | string | null;
+  snapshot_ready: boolean;
+  remaining_units: string;
+  created_at: Date | string;
+}
+
+interface SnapshotParticipantPlan {
+  clientType: "lead" | "student";
+  clientId: string;
+  chargeType: "subscription" | "personal_account" | "none";
+  chargeValue: number;
+  subscriptionId: string | null;
+}
+
+interface LessonSnapshotPlan {
+  lessonId: string;
+  groupId: string | null;
+  teacherCompensationType: "hourly" | "none";
+  teacherCompensationValue: number;
+  trial: boolean;
+  participants: SnapshotParticipantPlan[];
+}
+
 interface BackfillReport {
-  schemaVersion: 1;
+  schemaVersion: 2;
   task: "T8.3.1";
   mode: BackfillMode;
   generatedAt: string;
@@ -40,6 +80,7 @@ interface BackfillReport {
     relatedId: string | null;
     reason: string;
   }>;
+  manualMappingTable: BackfillReport["reviewQueue"];
   proof: {
     transaction: "repeatable-read";
     deterministicOnly: true;
@@ -173,6 +214,225 @@ async function findTeacherBranchCandidates(
   return result.rows;
 }
 
+async function planLessonSnapshots(client: PoolClient): Promise<{
+  plans: LessonSnapshotPlan[];
+  review: ReviewRow[];
+}> {
+  const subjects = await client.query<LessonSubjectRow>(`
+    with target_lessons as (
+      select lesson.id as lesson_id, lesson.group_id,
+             case when lesson.lead_id is not null then 'lead' else 'student' end
+               as direct_client_type,
+             coalesce(lesson.lead_id, lesson.student_id) as direct_client_id,
+             lesson.student_id as direct_student_id,
+             lesson.scheduled_at, lesson.duration_minutes, lesson.is_trial,
+             group_row.price_per_lesson as group_price,
+             coalesce(
+               lesson.teacher_rate,
+               group_row.teacher_rate,
+               (
+                 select rate.rate
+                 from app.teacher_rates rate
+                 where rate.teacher_id = lesson.teacher_id
+                   and rate.effective_from <= lesson.scheduled_at::date
+                 order by rate.effective_from desc, rate.created_at desc
+                 limit 1
+               ),
+               0
+             )::text as teacher_rate
+        from app.lessons lesson
+        left join app.groups group_row
+          on group_row.id = lesson.group_id and group_row.deleted_at is null
+        left join app.lesson_snapshots snapshot on snapshot.lesson_id = lesson.id
+       where lesson.deleted_at is null
+         and lesson.status = 'scheduled'
+         and lesson.scheduled_at >= now()
+         and (
+           lesson.group_id is not null
+           or lesson.scheduled_at < now() + interval '60 days'
+         )
+         and (snapshot.lesson_id is null or snapshot.validation_state <> 'valid')
+    )
+    select target.lesson_id, target.group_id,
+           target.direct_client_type::text as client_type,
+           target.direct_client_id::text as client_id,
+           target.direct_student_id::text as student_id,
+           target.scheduled_at, target.duration_minutes, target.is_trial,
+           case
+             when student.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
+               then student.custom_data->>'individualPrice'
+             when student.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
+               then student.custom_data->>'individual_price'
+             else null
+           end as personal_price,
+           target.teacher_rate
+      from target_lessons target
+      left join app.students student
+        on student.id = target.direct_student_id and student.deleted_at is null
+     where target.group_id is null and target.direct_client_id is not null
+    union all
+    select target.lesson_id, target.group_id, 'student', member.student_id::text,
+           member.student_id::text, target.scheduled_at, target.duration_minutes,
+           target.is_trial, target.group_price::text, target.teacher_rate
+      from target_lessons target
+      join app.group_students member on member.group_id = target.group_id
+       and member.joined_at <= target.scheduled_at
+       and (member.left_at is null or member.left_at > target.scheduled_at)
+      join app.students student
+        on student.id = member.student_id and student.deleted_at is null
+     where target.group_id is not null
+     order by scheduled_at, lesson_id, client_id
+  `);
+  const studentIds = Array.from(new Set(subjects.rows
+    .map((row) => row.student_id)
+    .filter((value): value is string => Boolean(value))));
+  const subscriptions = studentIds.length === 0
+    ? { rows: [] as SubscriptionCapacityRow[] }
+    : await client.query<SubscriptionCapacityRow>(`
+        select subscription.id, subscription.student_id,
+               subscription.starts_at, subscription.expires_at,
+               (subscription.commercial_snapshot is not null) as snapshot_ready,
+               greatest(0,
+                 subscription.lessons_total - subscription.lessons_used
+                 - coalesce((
+                   select sum(reservation.units)
+                   from app.lesson_reservations reservation
+                   where reservation.subscription_id = subscription.id
+                     and reservation.state = 'reserved'
+                 ), 0)
+                 - coalesce((
+                   select sum(fact.units)
+                   from app.lesson_client_charge_facts fact
+                   where fact.subscription_id = subscription.id
+                     and fact.charge_type = 'subscription'
+                 ), 0)
+               )::text as remaining_units,
+               subscription.created_at
+          from app.subscriptions subscription
+         where subscription.student_id = any($1::uuid[])
+           and subscription.status = 'active'
+         order by subscription.student_id,
+                  subscription.expires_at nulls last,
+                  subscription.created_at,
+                  subscription.id
+      `, [studentIds]);
+  const byStudent = new Map<string, Array<SubscriptionCapacityRow & { remaining: number }>>();
+  for (const subscription of subscriptions.rows) {
+    const list = byStudent.get(subscription.student_id) ?? [];
+    list.push({ ...subscription, remaining: Number(subscription.remaining_units) });
+    byStudent.set(subscription.student_id, list);
+  }
+  const plans = new Map<string, LessonSnapshotPlan>();
+  const review = new Map<string, ReviewRow>();
+  const discardPlan = (lessonId: string) => {
+    for (const participant of plans.get(lessonId)?.participants ?? []) {
+      if (!participant.subscriptionId) continue;
+      const subscription = Array.from(byStudent.values())
+        .flat()
+        .find((candidate) => candidate.id === participant.subscriptionId);
+      if (subscription) subscription.remaining += participant.chargeValue;
+    }
+    plans.delete(lessonId);
+  };
+  const lessonIds = new Set(subjects.rows.map((row) => row.lesson_id));
+  const participantCounts = new Map<string, number>();
+  for (const subject of subjects.rows) {
+    participantCounts.set(
+      subject.lesson_id,
+      (participantCounts.get(subject.lesson_id) ?? 0) + 1,
+    );
+    if (review.has(subject.lesson_id)) continue;
+    const scheduledAt = new Date(subject.scheduled_at);
+    const units = Number(subject.duration_minutes) / 60;
+    const active = subject.student_id
+      ? (byStudent.get(subject.student_id) ?? []).filter((subscription) => {
+          const starts = subscription.starts_at
+            ? new Date(`${String(subscription.starts_at).slice(0, 10)}T00:00:00Z`)
+            : null;
+          const expires = subscription.expires_at
+            ? new Date(`${String(subscription.expires_at).slice(0, 10)}T23:59:59.999Z`)
+            : null;
+          return (!starts || starts <= scheduledAt) && (!expires || expires >= scheduledAt)
+            && subscription.remaining + Number.EPSILON >= units;
+        })
+      : [];
+    const unprovable = active.find((subscription) => !subscription.snapshot_ready);
+    if (unprovable) {
+      review.set(subject.lesson_id, {
+        check_id: "schedule.future-snapshot-incomplete",
+        entity_id: subject.lesson_id,
+        related_id: unprovable.id,
+        reason: "active_subscription_snapshot_unprovable",
+      });
+      discardPlan(subject.lesson_id);
+      continue;
+    }
+    const subscription = active.find((candidate) => candidate.snapshot_ready);
+    let participant: SnapshotParticipantPlan;
+    if (subscription) {
+      subscription.remaining -= units;
+      participant = {
+        clientType: subject.client_type,
+        clientId: subject.client_id,
+        chargeType: "subscription",
+        chargeValue: units,
+        subscriptionId: subscription.id,
+      };
+    } else if (subject.is_trial && subject.personal_price === null) {
+      participant = {
+        clientType: subject.client_type,
+        clientId: subject.client_id,
+        chargeType: "none",
+        chargeValue: 0,
+        subscriptionId: null,
+      };
+    } else if (subject.personal_price !== null) {
+      participant = {
+        clientType: subject.client_type,
+        clientId: subject.client_id,
+        chargeType: "personal_account",
+        chargeValue: Number(subject.personal_price),
+        subscriptionId: null,
+      };
+    } else {
+      review.set(subject.lesson_id, {
+        check_id: "schedule.future-snapshot-incomplete",
+        entity_id: subject.lesson_id,
+        related_id: subject.client_id,
+        reason: "personal_account_price_missing",
+      });
+      discardPlan(subject.lesson_id);
+      continue;
+    }
+    const rate = Number(subject.teacher_rate);
+    const plan = plans.get(subject.lesson_id) ?? {
+      lessonId: subject.lesson_id,
+      groupId: subject.group_id,
+      teacherCompensationType: rate > 0 ? "hourly" : "none",
+      teacherCompensationValue: rate > 0 ? rate : 0,
+      trial: subject.is_trial,
+      participants: [],
+    };
+    plan.participants.push(participant);
+    plans.set(subject.lesson_id, plan);
+  }
+  for (const lessonId of lessonIds) {
+    if ((participantCounts.get(lessonId) ?? 0) === 0) {
+      review.set(lessonId, {
+        check_id: "schedule.future-snapshot-incomplete",
+        entity_id: lessonId,
+        related_id: null,
+        reason: "group_has_no_scheduled_participants",
+      });
+      discardPlan(lessonId);
+    }
+  }
+  return {
+    plans: Array.from(plans.values()).sort((a, b) => a.lessonId.localeCompare(b.lessonId)),
+    review: Array.from(review.values()).sort((a, b) => a.entity_id.localeCompare(b.entity_id)),
+  };
+}
+
 async function applyCandidates(
   client: PoolClient,
   candidates: readonly BackfillCandidate[],
@@ -219,6 +479,84 @@ async function applyCandidates(
   return applied;
 }
 
+async function applySnapshotPlans(
+  client: PoolClient,
+  plans: readonly LessonSnapshotPlan[],
+): Promise<number> {
+  let applied = 0;
+  for (const plan of plans) {
+    const first = plan.participants[0]!;
+    const snapshot = await client.query(
+      `
+        insert into app.lesson_snapshots (
+          lesson_id, client_type, client_id, group_id, completion_type,
+          client_charge_type, client_charge_value,
+          teacher_compensation_type, teacher_compensation_value,
+          subscription_id, trial, validation_state, origin, duration_minutes
+        ) values (
+          $1, $2, $3, $4, 'standard.success', $5, $6, $7, $8, $9,
+          $10, 'valid', 'legacy_backfill',
+          (select duration_minutes from app.lessons where id = $1)
+        )
+        on conflict (lesson_id) do update set
+          client_charge_type = excluded.client_charge_type,
+          client_charge_value = excluded.client_charge_value,
+          teacher_compensation_type = excluded.teacher_compensation_type,
+          teacher_compensation_value = excluded.teacher_compensation_value,
+          subscription_id = excluded.subscription_id,
+          validation_state = 'valid'
+        where app.lesson_snapshots.validation_state = 'legacy_incomplete'
+        returning lesson_id
+      `,
+      [
+        plan.lessonId,
+        plan.groupId ? null : first.clientType,
+        plan.groupId ? null : first.clientId,
+        plan.groupId,
+        plan.groupId ? "none" : first.chargeType,
+        plan.groupId ? 0 : first.chargeValue,
+        plan.teacherCompensationType,
+        plan.teacherCompensationValue,
+        plan.groupId ? null : first.subscriptionId,
+        plan.trial,
+      ],
+    );
+    if (snapshot.rowCount !== 1) continue;
+    if (plan.groupId) {
+      for (const participant of plan.participants) {
+        await client.query(
+          `
+            insert into app.lesson_snapshot_participants (
+              lesson_id, student_id, charge_type, charge_value, subscription_id
+            ) values ($1, $2, $3, $4, $5)
+            on conflict (lesson_id, student_id) do nothing
+          `,
+          [
+            plan.lessonId,
+            participant.clientId,
+            participant.chargeType,
+            participant.chargeValue,
+            participant.subscriptionId,
+          ],
+        );
+      }
+    }
+    for (const participant of plan.participants) {
+      if (participant.chargeType !== "subscription" || !participant.subscriptionId) continue;
+      await client.query(
+        `
+          insert into app.lesson_reservations (lesson_id, subscription_id, units)
+          values ($1, $2, $3)
+          on conflict (lesson_id, subscription_id) do nothing
+        `,
+        [plan.lessonId, participant.subscriptionId, participant.chargeValue],
+      );
+    }
+    applied += 1;
+  }
+  return applied;
+}
+
 async function findReviewQueue(
   client: PoolClient,
   candidates: readonly BackfillCandidate[],
@@ -228,6 +566,9 @@ async function findReviewQueue(
     .map((candidate) => candidate.entity_id);
   const teacherIds = candidates
     .filter((candidate) => candidate.kind === "teacher-branch")
+    .map((candidate) => candidate.entity_id);
+  const lessonIds = candidates
+    .filter((candidate) => candidate.kind === "lesson-snapshot")
     .map((candidate) => candidate.entity_id);
   const result = await client.query<ReviewRow>(`
     with expected_links as (
@@ -272,6 +613,16 @@ async function findReviewQueue(
        )
        and not (teacher.id = any($2::uuid[]))
     union all
+    select 'commerce.subscription-snapshot-unprovable',
+           subscription.id::text,
+           subscription.package_id::text,
+           concat_ws(',',
+             'commercial_snapshot_null',
+             'payment=' || coalesce(subscription.payment_id::text, 'null')
+           )
+      from app.subscriptions subscription
+     where subscription.commercial_snapshot is null
+    union all
     select 'schedule.future-missing-resources', lesson.id::text, null,
            concat_ws(',',
              case when lesson.teacher_id is null then 'teacher' end,
@@ -284,6 +635,10 @@ async function findReviewQueue(
      where lesson.deleted_at is null
        and lesson.status = 'scheduled'
        and lesson.scheduled_at >= now()
+       and (
+         lesson.group_id is not null
+         or lesson.scheduled_at < now() + interval '60 days'
+       )
        and (lesson.teacher_id is null or lesson.branch_id is null
          or lesson.room_id is null
          or coalesce(lesson.student_id, lesson.lead_id, lesson.group_id) is null
@@ -298,8 +653,13 @@ async function findReviewQueue(
      where lesson.deleted_at is null
        and lesson.status = 'scheduled'
        and lesson.scheduled_at >= now()
+       and (
+         lesson.group_id is not null
+         or lesson.scheduled_at < now() + interval '60 days'
+       )
        and (snapshot.lesson_id is null or snapshot.validation_state <> 'valid')
-    order by 1, 2`, [accessIds, teacherIds]);
+       and not (lesson.id = any($3::uuid[]))
+    order by 1, 2`, [accessIds, teacherIds, lessonIds]);
   return result.rows;
 }
 
@@ -320,16 +680,33 @@ async function runBackfill(
   try {
     await client.query("begin transaction isolation level repeatable read");
     await client.query("select pg_advisory_xact_lock(hashtext('v4-production-backfill'))");
-    const candidates = [
+    const deterministicCandidates = [
       ...(await findAccessCandidates(client)),
       ...(await findTeacherBranchCandidates(client)),
     ];
+    const snapshotPlanning = await planLessonSnapshots(client);
+    const snapshotCandidates: BackfillCandidate[] = snapshotPlanning.plans.map(
+      (plan) => ({
+        kind: "lesson-snapshot",
+        entity_id: plan.lessonId,
+        related_id: plan.groupId ?? plan.participants[0]!.clientId,
+      }),
+    );
+    const candidates = [...deterministicCandidates, ...snapshotCandidates];
     const applied = mode === "apply"
-      ? await applyCandidates(client, candidates)
+      ? (await applyCandidates(client, deterministicCandidates))
+        + (await applySnapshotPlans(client, snapshotPlanning.plans))
       : 0;
-    const review = await findReviewQueue(
+    const discoveredReview = await findReviewQueue(
       client,
       mode === "apply" ? [] : candidates,
+    );
+    const reviewByKey = new Map<string, ReviewRow>();
+    for (const row of [...snapshotPlanning.review, ...discoveredReview]) {
+      reviewByKey.set(`${row.check_id}:${row.entity_id}`, row);
+    }
+    const review = Array.from(reviewByKey.values()).sort((a, b) =>
+      `${a.check_id}:${a.entity_id}`.localeCompare(`${b.check_id}:${b.entity_id}`),
     );
     const normalizedCandidates = canonicalCandidates(candidates);
     const normalizedReview = canonicalReview(review);
@@ -337,7 +714,7 @@ async function runBackfill(
       .update(JSON.stringify({ normalizedCandidates, normalizedReview }))
       .digest("hex");
     const report: BackfillReport = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       task: "T8.3.1",
       mode,
       generatedAt: new Date().toISOString(),
@@ -348,6 +725,7 @@ async function runBackfill(
       },
       candidates: normalizedCandidates,
       reviewQueue: normalizedReview,
+      manualMappingTable: normalizedReview,
       proof: {
         transaction: "repeatable-read",
         deterministicOnly: true,
