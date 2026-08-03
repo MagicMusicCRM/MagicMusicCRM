@@ -120,10 +120,13 @@
 
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
-- **Последняя версия архитектуры**: `.anws/v4` (Operational Integrity & Connected Workspace)
-- **Активный список задач**: `.anws/v4/05_TASKS.md`
-- **Количество задач к выполнению**: 55 (49 L3 + 6 INT)
-- **Последнее обновление**: `2026-07-26`
+- **Последняя версия архитектуры**: `.anws/v6` (Configurable CRM & Product UX Completion)
+- **Активный blueprint**: `.anws/v6/05_TASKS.md` — ожидает owner design checkpoint; `/forge` не начинать до подтверждения
+- **Количество задач v6**: 49 (41 implementation + 8 INT)
+- **Последнее обновление**: `2026-08-04`
+
+### 🌊 Wave v6 — UX/UI Blueprint (ожидает owner checkpoint)
+_PRD подтверждён и расширен до 22 requirements. Созданы architecture overview, ADR-001..006, adaptive App Experience Design (desktop workspace/tabs/breadcrumbs, mobile full-width expandable sheets и predictive Back, role/scope IA), challenge report и 8-sprint blueprint на 41 задачу + 8 INT gates. Реализация v4 остаётся фактическим baseline; до явного подтверждения owner дизайн v6 не исполнять._
 
 ### 🌊 Wave v4/S0 — Baseline & Evidence
 _`INT-S0` закрыт 2026-07-25: detached clean revision прошёл current-state inventory, lock install, backend typecheck/build, explicit platform PostgreSQL 5/5, full backend 103/103 suites и 929/929 tests, два стабильных read-only preflight-run, signed clean/drift reconciliation, Flutter analyze и 400/400 tests; skipped integration suites=0, lock/tracked diff=0._
