@@ -96,6 +96,44 @@ void main() {
     expect(find.text('home'), findsOneWidget);
   });
 
+  testWidgets('desktop direct link reconstructs its canonical context path', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 800);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ProductionWorkspaceHost(
+              snapshot: snapshot,
+              initialLink: EntityLink.typed(
+                entityType: EntityLinkType.client,
+                entityId: 'student-direct',
+                variant: 'student',
+              ),
+              tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Клиенты'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('context-current'))).data,
+      'Ученик · student-direct',
+    );
+  });
+
   testWidgets('restart restores permitted tabs and logout clears cache', (
     tester,
   ) async {

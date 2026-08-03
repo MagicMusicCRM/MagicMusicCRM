@@ -58,6 +58,25 @@ void main() {
     expect(restored.activeTab.forms, isEmpty);
   });
 
+  test('persists and restores per-tab Back and Forward history', () async {
+    final backend = InMemoryWorkspaceKeyValueStore();
+    final store = AccountWorkspaceStore(backend);
+    final workspace = controller('account-1');
+    workspace.push('tab-1', link('client-1'));
+    workspace.push('tab-1', link('client-2'));
+    workspace.back('tab-1');
+    await store.save(workspace.state);
+
+    final restored = await store.restore(
+      accountId: 'account-1',
+      fallback: controller('account-1').state,
+      routeAllowed: (_) => true,
+    );
+
+    expect(restored.activeTab.currentRoute.link.entityId, 'client-1');
+    expect(restored.activeTab.forwardStack.single.link.entityId, 'client-2');
+  });
+
   test('account namespace prevents cross-account restore', () async {
     final backend = InMemoryWorkspaceKeyValueStore();
     final store = AccountWorkspaceStore(backend);

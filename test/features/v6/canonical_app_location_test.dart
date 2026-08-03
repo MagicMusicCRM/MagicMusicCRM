@@ -80,6 +80,28 @@ void main() {
     expect(resolution.canonicalLocation, isNull);
   });
 
+  test('schedule path metadata keeps schedule capability semantics', () {
+    final resolution = EntityRouteRegistry().resolve(
+      EntityLink.typed(
+        entityType: EntityLinkType.report,
+        entityId: '__section__',
+        variant: 'lesson_list',
+        optionalFocus: EntityLinkFocus(focus: 'schedule'),
+      ),
+      snapshot,
+    );
+
+    expect(resolution.canonicalLocation?.title, 'Расписание');
+    expect(
+      resolution.canonicalLocation?.requiredCapabilities,
+      contains('schedule.lesson.read.assigned'),
+    );
+    expect(
+      resolution.canonicalLocation?.requiredCapabilities,
+      isNot(contains('report.status.read')),
+    );
+  });
+
   test('view state has a fail-closed schema version', () {
     final encoded = ContextViewState(
       filters: const {'branch': 'branch-1'},

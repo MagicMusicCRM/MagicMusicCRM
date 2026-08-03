@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
+import 'package:magic_music_crm/core/workspace/magic_context_bar.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 
@@ -135,7 +136,22 @@ class _ProductionWorkspaceHostState
         }
         return DesktopWorkspaceShell(
           controller: _controller,
-          tabBuilder: widget.tabBuilder,
+          tabBuilder: (context, tab) {
+            final location = EntityRouteRegistry()
+                .resolve(tab.currentRoute.link, widget.snapshot)
+                .canonicalLocation;
+            if (location == null) return widget.tabBuilder(context, tab);
+            return Column(
+              children: [
+                MagicContextBar(
+                  controller: _controller,
+                  tab: tab,
+                  location: location,
+                ),
+                Expanded(child: widget.tabBuilder(context, tab)),
+              ],
+            );
+          },
           onLimitReached: () {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(

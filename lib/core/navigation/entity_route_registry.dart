@@ -15,16 +15,19 @@ class AppBreadcrumbNode {
     required this.routeName,
     required this.title,
     required this.location,
+    required this.link,
   });
 
   final String routeName;
   final String title;
   final String location;
+  final EntityLink link;
 
   Map<String, Object?> toJson() => {
     'routeName': routeName,
     'title': title,
     'location': location,
+    'link': link.toJson(),
   };
 }
 
@@ -222,26 +225,88 @@ class EntityRouteRegistry {
       path: home,
       queryParameters: {'section': section},
     ).toString();
+    final isSectionRoot = link.entityId == '__section__';
     return CanonicalAppLocation(
       link: link,
       routeName: 'entity:${link.rawEntityType}',
       location: location,
-      title: '${_titleFor(link)} · ${link.entityId}',
+      title: isSectionRoot
+          ? _sectionTitle(section)
+          : '${_titleFor(link)} · ${link.entityId}',
       requiredCapabilities: _requiredCapabilitiesFor(link),
       surfaceKind: link.entityType == EntityLinkType.report
           ? AppSurfaceKind.comparison
           : AppSurfaceKind.primary,
-      ancestors: [
-        AppBreadcrumbNode(
-          routeName: 'section:$section',
-          title: _sectionTitle(section),
-          location: rootLocation,
-        ),
-      ],
+      ancestors: isSectionRoot
+          ? const []
+          : [
+              AppBreadcrumbNode(
+                routeName: 'section:$section',
+                title: _sectionTitle(section),
+                location: rootLocation,
+                link: _sectionRootLink(section),
+              ),
+            ],
     );
   }
 
+  static EntityLink _sectionRootLink(String section) {
+    final focus = EntityLinkFocus(focus: 'section');
+    return switch (section) {
+      'clients' => EntityLink.typed(
+        entityType: EntityLinkType.clientStatus,
+        entityId: '__section__',
+        optionalFocus: focus,
+      ),
+      'schedule' => EntityLink.typed(
+        entityType: EntityLinkType.report,
+        entityId: '__section__',
+        optionalFocus: EntityLinkFocus(focus: 'schedule'),
+        variant: 'lesson_list',
+      ),
+      'tasks' => EntityLink.typed(
+        entityType: EntityLinkType.task,
+        entityId: '__section__',
+        optionalFocus: focus,
+      ),
+      'finance' => EntityLink.typed(
+        entityType: EntityLinkType.payment,
+        entityId: '__section__',
+        optionalFocus: focus,
+      ),
+      'users' => EntityLink.typed(
+        entityType: EntityLinkType.user,
+        entityId: '__section__',
+        optionalFocus: focus,
+      ),
+      'homework' => EntityLink.typed(
+        entityType: EntityLinkType.homework,
+        entityId: '__section__',
+        optionalFocus: focus,
+      ),
+      'reports' => EntityLink.typed(
+        entityType: EntityLinkType.report,
+        entityId: '__section__',
+        optionalFocus: focus,
+      ),
+      _ => EntityLink.typed(
+        entityType: EntityLinkType.chat,
+        entityId: 'home',
+        optionalFocus: focus,
+      ),
+    };
+  }
+
   static String _sectionFor(EntityLink link) => switch (link.entityType) {
+    EntityLinkType.report
+        when link.rawEntityType == 'lesson_list' &&
+            const {
+              'date',
+              'lesson',
+              'schedule',
+              'conflictList',
+            }.contains(link.optionalFocus?.focus) =>
+      'schedule',
     EntityLinkType.client ||
     EntityLinkType.subscription ||
     EntityLinkType.comment ||
@@ -297,30 +362,41 @@ class EntityRouteRegistry {
     EntityLinkType.unknown => 'Запись',
   };
 
-  static Set<String> _requiredCapabilitiesFor(EntityLink link) =>
-      switch (link.entityType) {
-        EntityLinkType.client ||
-        EntityLinkType.homework ||
-        EntityLinkType.comment ||
-        EntityLinkType.clientStatus => const {'crm.client.read.basic'},
-        EntityLinkType.lesson ||
-        EntityLinkType.teacher ||
-        EntityLinkType.group ||
-        EntityLinkType.room ||
-        EntityLinkType.branch ||
-        EntityLinkType.scheduleSeries => const {
-          'schedule.lesson.read.assigned',
-          'schedule.lesson.write',
-        },
-        EntityLinkType.task => const {'workflow.task.read'},
-        EntityLinkType.subscription ||
-        EntityLinkType.payment => const {'commerce.client_finance.read'},
-        EntityLinkType.user => const {'system.settings.manage'},
-        EntityLinkType.report => const {'report.status.read'},
-        EntityLinkType.clientSource => const {'crm.client.write'},
-        EntityLinkType.subscriptionPackage => const {'commerce.package.read'},
-        EntityLinkType.chat || EntityLinkType.unknown => const {},
-      };
+  static Set<String> _requiredCapabilitiesFor(EntityLink link) {
+    if (link.entityType == EntityLinkType.report &&
+        link.rawEntityType == 'lesson_list' &&
+        const {
+          'date',
+          'lesson',
+          'schedule',
+          'conflictList',
+        }.contains(link.optionalFocus?.focus)) {
+      return const {'schedule.lesson.read.assigned', 'schedule.lesson.write'};
+    }
+    return switch (link.entityType) {
+      EntityLinkType.client ||
+      EntityLinkType.homework ||
+      EntityLinkType.comment ||
+      EntityLinkType.clientStatus => const {'crm.client.read.basic'},
+      EntityLinkType.lesson ||
+      EntityLinkType.teacher ||
+      EntityLinkType.group ||
+      EntityLinkType.room ||
+      EntityLinkType.branch ||
+      EntityLinkType.scheduleSeries => const {
+        'schedule.lesson.read.assigned',
+        'schedule.lesson.write',
+      },
+      EntityLinkType.task => const {'workflow.task.read'},
+      EntityLinkType.subscription ||
+      EntityLinkType.payment => const {'commerce.client_finance.read'},
+      EntityLinkType.user => const {'system.settings.manage'},
+      EntityLinkType.report => const {'report.status.read'},
+      EntityLinkType.clientSource => const {'crm.client.write'},
+      EntityLinkType.subscriptionPackage => const {'commerce.package.read'},
+      EntityLinkType.chat || EntityLinkType.unknown => const {},
+    };
+  }
 
   static bool _hasAny(
     CapabilitySnapshot snapshot,

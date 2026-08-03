@@ -94,17 +94,15 @@ class AccountWorkspaceStore {
         final tab = rawTab.map((key, value) => MapEntry(key.toString(), value));
         final rawRoutes = tab['routeStack'];
         if (rawRoutes is! List || rawRoutes.isEmpty) return fallback;
-        final routes = <ContextRouteState>[];
-        for (final rawRoute in rawRoutes) {
-          if (rawRoute is! Map) return fallback;
-          final route = ContextRouteState.fromJson(
-            rawRoute.map((key, value) => MapEntry(key.toString(), value)),
-          );
-          if (!route.link.isSupported || !routeAllowed(route.link)) {
-            return fallback;
-          }
-          routes.add(route);
-        }
+        final routes = _restoreRoutes(rawRoutes, routeAllowed);
+        if (routes == null || routes.isEmpty) return fallback;
+        final rawForward = tab['forwardStack'];
+        final forward = rawForward == null
+            ? const <ContextRouteState>[]
+            : rawForward is List
+            ? _restoreRoutes(rawForward, routeAllowed)
+            : null;
+        if (forward == null) return fallback;
         final tabId = tab['tabId']?.toString() ?? '';
         if (tabId.isEmpty || !tabIds.add(tabId)) return fallback;
         tabs.add(
@@ -112,6 +110,7 @@ class AccountWorkspaceStore {
             tabId: tabId,
             titleHint: tab['titleHint']?.toString() ?? '',
             routeStack: routes,
+            forwardStack: forward,
           ),
         );
       }
@@ -150,9 +149,28 @@ class AccountWorkspaceStore {
             'tabId': tab.tabId,
             'titleHint': tab.titleHint,
             'routeStack': [for (final route in tab.routeStack) route.toJson()],
+            'forwardStack': [
+              for (final route in tab.forwardStack) route.toJson(),
+            ],
           },
       ],
     };
+  }
+
+  static List<ContextRouteState>? _restoreRoutes(
+    List<Object?> rawRoutes,
+    WorkspaceRouteValidator routeAllowed,
+  ) {
+    final routes = <ContextRouteState>[];
+    for (final rawRoute in rawRoutes) {
+      if (rawRoute is! Map) return null;
+      final route = ContextRouteState.fromJson(
+        rawRoute.map((key, value) => MapEntry(key.toString(), value)),
+      );
+      if (!route.link.isSupported || !routeAllowed(route.link)) return null;
+      routes.add(route);
+    }
+    return routes;
   }
 }
 

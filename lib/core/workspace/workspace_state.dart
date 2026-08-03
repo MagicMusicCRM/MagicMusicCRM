@@ -52,13 +52,16 @@ class WorkspaceTabState {
     required this.tabId,
     required this.titleHint,
     required List<ContextRouteState> routeStack,
+    List<ContextRouteState> forwardStack = const [],
     Map<String, WorkspaceFormState> forms = const {},
   }) : routeStack = List.unmodifiable(routeStack),
+       forwardStack = List.unmodifiable(forwardStack),
        forms = UnmodifiableMapView(Map<String, WorkspaceFormState>.from(forms));
 
   final String tabId;
   final String titleHint;
   final List<ContextRouteState> routeStack;
+  final List<ContextRouteState> forwardStack;
   final Map<String, WorkspaceFormState> forms;
 
   ContextRouteState get currentRoute => routeStack.last;
@@ -67,12 +70,14 @@ class WorkspaceTabState {
   WorkspaceTabState copyWith({
     String? titleHint,
     List<ContextRouteState>? routeStack,
+    List<ContextRouteState>? forwardStack,
     Map<String, WorkspaceFormState>? forms,
   }) {
     return WorkspaceTabState(
       tabId: tabId,
       titleHint: titleHint ?? this.titleHint,
       routeStack: routeStack ?? this.routeStack,
+      forwardStack: forwardStack ?? this.forwardStack,
       forms: forms ?? this.forms,
     );
   }

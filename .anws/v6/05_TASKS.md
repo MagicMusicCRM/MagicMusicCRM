@@ -117,7 +117,7 @@ flowchart TD
   - **Проверка:** restart, logout/login, user switch, role downgrade, route schema bump tests.
   - **Оценка:** 7 ч · **Зависимости:** V6-102 · **Приоритет:** P0.
 
-- [ ] **V6-104** `[REQ-NAV-003]` — Реализовать desktop context bar и breadcrumbs.
+- [x] **V6-104** `[REQ-NAV-003]` — Реализовать desktop context bar и breadcrumbs.
   - **Работа:** Back/Forward states, typed ancestor trail, current node, ellipsis/path menu, page actions overflow, focus/tooltips.
   - **Критерий:** 1–8 nodes and long Russian titles fit at 840/1000/1200 widths; ancestors jump without accidental new tab; current is not clickable.
   - **Проверка:** widget/golden layouts + keyboard flow + direct-link reconstruction.

@@ -126,21 +126,37 @@ class WorkspaceController extends ChangeNotifier {
         );
       }
       routes.add(ContextRouteState(link: link, viewState: ContextViewState()));
-      return tab.copyWith(routeStack: routes);
+      return tab.copyWith(routeStack: routes, forwardStack: const []);
     });
   }
 
-  ContextRouteState? pop(String tabId) {
+  ContextRouteState? back(String tabId) {
     ContextRouteState? removed;
     _updateTab(tabId, (tab) {
       if (tab.routeStack.length == 1) return tab;
       removed = tab.routeStack.last;
       return tab.copyWith(
         routeStack: tab.routeStack.sublist(0, tab.routeStack.length - 1),
+        forwardStack: [...tab.forwardStack, removed!],
       );
     });
     return removed;
   }
+
+  ContextRouteState? forward(String tabId) {
+    ContextRouteState? restored;
+    _updateTab(tabId, (tab) {
+      if (tab.forwardStack.isEmpty) return tab;
+      restored = tab.forwardStack.last;
+      return tab.copyWith(
+        routeStack: [...tab.routeStack, restored!],
+        forwardStack: tab.forwardStack.sublist(0, tab.forwardStack.length - 1),
+      );
+    });
+    return restored;
+  }
+
+  ContextRouteState? pop(String tabId) => back(tabId);
 
   void reorderTab(int oldIndex, int newIndex) {
     if (oldIndex < 0 || oldIndex >= _state.tabs.length) {
