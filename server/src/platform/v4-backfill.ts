@@ -702,7 +702,7 @@ async function runBackfill(
       mode === "apply" ? [] : candidates,
     );
     const reviewByKey = new Map<string, ReviewRow>();
-    for (const row of [...snapshotPlanning.review, ...discoveredReview]) {
+    for (const row of [...discoveredReview, ...snapshotPlanning.review]) {
       reviewByKey.set(`${row.check_id}:${row.entity_id}`, row);
     }
     const review = Array.from(reviewByKey.values()).sort((a, b) =>

@@ -17,7 +17,7 @@ describe("T8.3.1 production backfill", () => {
   const leadId = randomUUID();
   const groupId = randomUUID();
   const studentIds = [randomUUID(), randomUUID()];
-  const lessonIds = [randomUUID(), randomUUID(), randomUUID()];
+  const lessonIds = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
 
   beforeAll(async () => {
     await pool.query(
@@ -94,6 +94,12 @@ describe("T8.3.1 production backfill", () => {
        ) values ($1, $2, $3, $4, $5, now() + interval '32 days')`,
       [lessonIds[2], groupId, teacherId, branchIds[0], roomIds[0]],
     );
+    await pool.query(
+      `insert into app.lessons (
+         id, lead_id, teacher_id, branch_id, room_id, scheduled_at, is_trial
+       ) values ($1, $2, $3, $4, $5, now() + interval '33 days', false)`,
+      [lessonIds[3], leadId, teacherId, branchIds[0], roomIds[0]],
+    );
   });
 
   afterAll(async () => {
@@ -159,7 +165,13 @@ describe("T8.3.1 production backfill", () => {
       entityId: lessonIds[2],
       relatedId: groupId,
     });
-    expect(dryRun.summary.reviewQueue).toBe(0);
+    expect(dryRun.manualMappingTable).toContainEqual({
+      checkId: "schedule.future-snapshot-incomplete",
+      entityId: lessonIds[3],
+      relatedId: leadId,
+      reason: "personal_account_price_missing",
+    });
+    expect(dryRun.summary.reviewQueue).toBe(1);
 
     const before = await pool.query<{ count: string }>(
       "select count(*)::text as count from app.user_crm_links where user_id = $1",
@@ -169,13 +181,13 @@ describe("T8.3.1 production backfill", () => {
 
     const first = await runBackfill(pool, "apply");
     expect(first.summary.applied).toBe(6);
-    expect(first.summary.reviewQueue).toBe(0);
+    expect(first.summary.reviewQueue).toBe(1);
 
     const second = await runBackfill(pool, "apply");
     expect(second.summary).toMatchObject({
       candidates: 0,
       applied: 0,
-      reviewQueue: 0,
+      reviewQueue: 1,
     });
     const snapshots = await pool.query<{ count: string }>(
       `select count(*)::text as count from app.lesson_snapshots
