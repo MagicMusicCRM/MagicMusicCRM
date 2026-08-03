@@ -1,0 +1,131 @@
+{
+  "version": "v5",
+  "title": "Configurable CRM",
+  "status": "clarification_pending",
+  "glossary": {
+    "Configuration area": "Логическая область CRM, например карточка клиента, расписание, задачи, абонементы или коммуникации, внутри которой сгруппированы настройки.",
+    "Field category": "Создаваемая владельцем секция формы или карточки с названием, порядком и правилами видимости.",
+    "Field definition": "Версионируемое описание typed-поля: стабильный ключ, подпись, тип, обязательность, подсказка, validation и категория.",
+    "Option set": "Переиспользуемый версионируемый справочник вариантов для select, multi-select, radio, checkbox-group или toggle.",
+    "Business default": "Настраиваемое число, длительность, лимит или значение по умолчанию, семантика которого заранее определена кодом.",
+    "Subscription package": "Версионируемая коммерческая карточка абонемента; использованные версии сохраняются в issued snapshot.",
+    "Config capability": "Отдельное разрешение читать или изменять конкретную область конфигурации, выдаваемое через существующий capability override.",
+    "Protected invariant": "Системный ключ, состояние или правило безопасности/финансовой целостности, семантика которого не редактируется через CRM.",
+    "Archive": "Обратимое исключение определения из новых операций без удаления исторических значений и snapshots."
+  },
+  "entities": [
+    {
+      "name": "ConfigurationArea",
+      "responsibility": "Группирует настройки по экрану и бизнес-домену.",
+      "key_properties": ["stableKey", "title", "scope", "sortOrder", "active"]
+    },
+    {
+      "name": "FieldCategory",
+      "responsibility": "Определяет пользовательскую секцию карточки или формы.",
+      "key_properties": ["areaId", "stableKey", "title", "sortOrder", "visibilityRule", "version", "archivedAt"]
+    },
+    {
+      "name": "FieldDefinition",
+      "responsibility": "Описывает typed-поле и его validation/rendering contract.",
+      "key_properties": ["categoryId", "entityType", "stableKey", "label", "valueType", "required", "defaultValue", "validation", "optionSetId", "isSystem", "version", "archivedAt"]
+    },
+    {
+      "name": "OptionSet",
+      "responsibility": "Хранит переиспользуемый упорядоченный справочник выбора.",
+      "key_properties": ["stableKey", "title", "selectionMode", "version", "archivedAt"]
+    },
+    {
+      "name": "OptionItem",
+      "responsibility": "Стабильный вариант справочника с отдельно изменяемой подписью.",
+      "key_properties": ["optionSetId", "stableKey", "label", "sortOrder", "colorToken", "archivedAt"]
+    },
+    {
+      "name": "BusinessSettingDefinition",
+      "responsibility": "Allowlist управляемых чисел, длительностей, лимитов и defaults с типом и безопасным диапазоном.",
+      "key_properties": ["areaId", "stableKey", "valueType", "unit", "min", "max", "defaultValue", "scopePolicy", "version"]
+    },
+    {
+      "name": "BusinessSettingValue",
+      "responsibility": "Опубликованное значение настройки в разрешённом global или branch scope.",
+      "key_properties": ["definitionId", "scopeType", "scopeId", "value", "version", "effectiveFrom"]
+    },
+    {
+      "name": "SubscriptionPackage",
+      "responsibility": "Существующий каталог абонементов с create/update/archive/restore и immutable issued snapshots.",
+      "key_properties": ["name", "unitCount", "basePriceMinor", "currency", "validityDays", "installmentPolicy", "sortOrder", "version", "archivedAt"]
+    },
+    {
+      "name": "ConfigCapability",
+      "responsibility": "Гранулярно делегирует управление областью через существующую access matrix.",
+      "key_properties": ["capabilityKey", "areaKey", "riskLevel", "overrideMode"]
+    },
+    {
+      "name": "ConfigurationRevision",
+      "responsibility": "Фиксирует before/after, автора, причину, expectedVersion и публикацию изменений.",
+      "key_properties": ["aggregateType", "aggregateId", "version", "actorUserId", "reason", "createdAt"]
+    },
+    {
+      "name": "ProtectedInvariant",
+      "responsibility": "Объясняет, какая часть системного определения доступна только для label/order/visibility, а какая полностью locked.",
+      "key_properties": ["stableKey", "semanticLock", "editablePresentation", "reason"]
+    }
+  ],
+  "relationships": [
+    "ConfigurationArea contains FieldCategory and BusinessSettingDefinition",
+    "FieldCategory orders FieldDefinition",
+    "FieldDefinition optionally references one OptionSet",
+    "OptionSet contains stable OptionItem rows",
+    "BusinessSettingDefinition owns scoped BusinessSettingValue revisions",
+    "ConfigCapability protects one or more ConfigurationArea mutations",
+    "SubscriptionPackage keeps immutable commercial snapshots after issue",
+    "ConfigurationRevision audits every published mutation",
+    "ProtectedInvariant constrains editable parts of system definitions"
+  ],
+  "flows": [
+    {
+      "name": "Configure fields and categories",
+      "steps": ["select area", "create/reorder category", "create typed field", "configure validation/options", "preview", "publish version", "invalidate clients"]
+    },
+    {
+      "name": "Manage option sets",
+      "steps": ["create or reuse dictionary", "add/reorder/archive stable options", "validate references", "publish", "preserve old stored keys"]
+    },
+    {
+      "name": "Manage business defaults",
+      "steps": ["select allowlisted setting", "choose permitted scope", "validate range", "preview impact", "publish effective value", "audit"]
+    },
+    {
+      "name": "Delegate configuration access",
+      "steps": ["Director opens existing access matrix", "selects granular config capability", "confirms reason", "writes personal override", "access invalidation reaches all sessions"]
+    },
+    {
+      "name": "Manage subscription packages",
+      "steps": ["create or clone package", "edit commercial terms", "archive/restore", "prevent destructive removal when referenced", "keep issued snapshots unchanged"]
+    },
+    {
+      "name": "Render configured UI",
+      "steps": ["load actor-safe published schema", "render supported native control", "validate client and server", "persist typed value", "show archived historical value read-only"]
+    }
+  ],
+  "missing_components": [
+    "Единый источник истины вместо legacy system_settings.crm_custom_fields и normalized client field definitions.",
+    "Категории/секции и порядок полей по типам окон.",
+    "Multi-select, checkbox-group, radio, toggle, textarea, money и duration types поверх существующих базовых типов.",
+    "Переиспользуемые option sets со стабильными ключами вариантов.",
+    "Allowlist безопасных business defaults и диапазонов вместо произвольных key/value настроек.",
+    "Гранулярные делегируемые config-capabilities вместо одного locked system.settings.manage.",
+    "Preview impact, optimistic concurrency, audit, realtime invalidation и rollback published revision.",
+    "Usage counters и archive-only поведение для используемых полей, опций и абонементов.",
+    "Migration legacy hardcoded lists and custom_data without value loss.",
+    "Global-versus-branch scope policy for numeric defaults.",
+    "Accessible responsive Flutter schema renderer and configuration workspace."
+  ],
+  "clarifications": [
+    {
+      "id": "C1",
+      "question": "Можно ли менять смысл системных ролей, lifecycle/finance statuses и security keys, или только их подписи/порядок/видимость?",
+      "recommended": "Смысл и stable keys защищены; Директор меняет presentation и создаёт бизнес-поля/варианты вокруг них.",
+      "answer": null
+    }
+  ]
+}
