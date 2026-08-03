@@ -121,12 +121,12 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v6` (Configurable CRM & Product UX Completion)
-- **Активный blueprint**: `.anws/v6/05_TASKS.md` — ожидает owner design checkpoint; `/forge` не начинать до подтверждения
-- **Количество задач v6**: 49 (41 implementation + 8 INT)
+- **Активный список задач**: `.anws/v6/05_TASKS.md` — S0 закрыт, следующая волна S1 Navigation Kernel
+- **Количество задач v6 к выполнению**: 43 (36 implementation + 7 INT)
 - **Последнее обновление**: `2026-08-04`
 
-### 🌊 Wave v6 — UX/UI Blueprint (ожидает owner checkpoint)
-_PRD подтверждён и расширен до 22 requirements. Созданы architecture overview, ADR-001..006, adaptive App Experience Design (desktop workspace/tabs/breadcrumbs, mobile full-width expandable sheets и predictive Back, role/scope IA), challenge report и 8-sprint blueprint на 41 задачу + 8 INT gates. Реализация v4 остаётся фактическим baseline; до явного подтверждения owner дизайн v6 не исполнять._
+### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
+_Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._
 
 ### 🌊 Wave v4/S0 — Baseline & Evidence
 _`INT-S0` закрыт 2026-07-25: detached clean revision прошёл current-state inventory, lock install, backend typecheck/build, explicit platform PostgreSQL 5/5, full backend 103/103 suites и 929/929 tests, два стабильных read-only preflight-run, signed clean/drift reconciliation, Flutter analyze и 400/400 tests; skipped integration suites=0, lock/tracked diff=0._

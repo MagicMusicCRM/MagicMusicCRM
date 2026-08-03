@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "T8.1.2",
-  "source_digest_sha256": "e8a7c05b9c9033a285e7517c0b86233343eec4fd8705341964710caaa9a87517",
-  "source_file_count": 705,
+  "source_digest_sha256": "2dc0bb08b4ca3a145b5dac0e8cdc869b16150d049d8245676b4aa975c56d2c37",
+  "source_file_count": 707,
   "systems": [
     "SYS-APP",
     "SYS-ACCESS",
@@ -17,9 +17,9 @@
     "backend_routes": 287,
     "role_guards": 22,
     "policy_calls": 226,
-    "dto_fields": 658,
-    "flutter_role_checks": 134,
-    "flutter_navigation_sources": 327,
+    "dto_fields": 660,
+    "flutter_role_checks": 135,
+    "flutter_navigation_sources": 335,
     "schedule_entry_points": 37,
     "attendance_mutations": 0,
     "finance_writes": 43,
@@ -37,7 +37,7 @@
       "owner": "SYS-PLATFORM",
       "status": "compatibility-facade",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 50
+      "line": 54
     },
     {
       "id": "PATCH /crm/students/:id/adjustments/:adjustmentId",
@@ -158,7 +158,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 212
+      "line": 227
     },
     {
       "id": "POST /crm/lessons/:id/cancel",
@@ -169,7 +169,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 198
+      "line": 212
     },
     {
       "id": "POST /crm/lessons/:id/cancel/preview",
@@ -180,7 +180,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 189
+      "line": 202
     },
     {
       "id": "POST /crm/lessons/:id/reschedule",
@@ -191,7 +191,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 175
+      "line": 187
     },
     {
       "id": "GET /crm/students/search",
@@ -213,7 +213,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 166
+      "line": 177
     },
     {
       "id": "POST /crm/students/:id/transfer",
@@ -422,7 +422,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 152
+      "line": 160
     },
     {
       "id": "POST /crm/lessons",
@@ -433,7 +433,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 129
+      "line": 134
     },
     {
       "id": "POST /crm/disciplines",
@@ -609,7 +609,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 144
+      "line": 152
     },
     {
       "id": "POST /crm/branches/:branchId/disciplines",
@@ -642,7 +642,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 121
+      "line": 126
     },
     {
       "id": "GET /crm/schedule/month-summary",
@@ -653,7 +653,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 112
+      "line": 117
     },
     {
       "id": "GET /crm/schedule/matrix",
@@ -664,7 +664,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 104
+      "line": 109
     },
     {
       "id": "GET /crm/lessons",
@@ -675,7 +675,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 96
+      "line": 101
     },
     {
       "id": "DELETE /crm/schedule-series/:id",
@@ -686,7 +686,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 87
+      "line": 92
     },
     {
       "id": "PATCH /crm/schedule-series/:id",
@@ -697,7 +697,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 78
+      "line": 83
     },
     {
       "id": "PATCH /crm/branches/:branchId/disciplines/order",
@@ -719,7 +719,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 65
+      "line": 67
     },
     {
       "id": "DELETE /crm/lead-statuses/:id",
@@ -796,7 +796,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 51
+      "line": 53
     },
     {
       "id": "PATCH /crm/teachers/:id",
@@ -829,7 +829,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 27
+      "line": 31
     },
     {
       "id": "POST /notifications/:id/read",
@@ -1416,7 +1416,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 53
+      "line": 59
     },
     {
       "id": "PUT /crm/schedule-reference/teachers/:teacherId/branches",
@@ -1427,7 +1427,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 44
+      "line": 49
     },
     {
       "id": "PUT /crm/schedule-reference/branches/:branchId/hours",
@@ -1438,7 +1438,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 35
+      "line": 39
     },
     {
       "id": "POST /files/:id/download-token",
@@ -2187,7 +2187,7 @@
       "owner": "SYS-PLATFORM",
       "status": "compatibility-facade",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 111
+      "line": 117
     },
     {
       "id": "PUT /access/users/:userId/role",
@@ -2201,7 +2201,7 @@
       "owner": "SYS-ACCESS",
       "status": "compatibility-facade",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 95
+      "line": 100
     },
     {
       "id": "GET /access/users/:userId",
@@ -2215,7 +2215,7 @@
       "owner": "SYS-PLATFORM",
       "status": "compatibility-facade",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 86
+      "line": 91
     },
     {
       "id": "PUT /access/role-packages/:role",
@@ -2229,7 +2229,7 @@
       "owner": "SYS-ACCESS",
       "status": "compatibility-facade",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 70
+      "line": 74
     },
     {
       "id": "GET /access/role-packages/:role",
@@ -2243,7 +2243,7 @@
       "owner": "SYS-ACCESS",
       "status": "compatibility-facade",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 61
+      "line": 65
     },
     {
       "id": "GET /access/role-packages",
@@ -2257,7 +2257,7 @@
       "owner": "SYS-ACCESS",
       "status": "compatibility-facade",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 55
+      "line": 59
     },
     {
       "id": "GET /analytics/v4/client-status/summary",
@@ -3285,7 +3285,7 @@
       "owner": "SYS-ACCESS",
       "status": "legacy-review-required",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 56
+      "line": 60
     },
     {
       "kind": "@Roles",
@@ -3489,7 +3489,7 @@
       "owner": "SYS-ACCESS",
       "status": "legacy-review-required",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 112
+      "line": 118
     },
     {
       "kind": "@Roles",
@@ -3501,7 +3501,7 @@
       "owner": "SYS-ACCESS",
       "status": "legacy-review-required",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 96
+      "line": 101
     },
     {
       "kind": "@Roles",
@@ -3513,7 +3513,7 @@
       "owner": "SYS-ACCESS",
       "status": "legacy-review-required",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 87
+      "line": 92
     },
     {
       "kind": "@Roles",
@@ -3525,7 +3525,7 @@
       "owner": "SYS-ACCESS",
       "status": "legacy-review-required",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 71
+      "line": 75
     },
     {
       "kind": "@Roles",
@@ -3537,7 +3537,7 @@
       "owner": "SYS-ACCESS",
       "status": "legacy-review-required",
       "file": "server/src/access-control/access-mutations.controller.ts",
-      "line": 62
+      "line": 66
     },
     {
       "kind": "@Roles",
@@ -3831,7 +3831,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 416
+      "line": 420
     },
     {
       "kind": "policy-call",
@@ -3840,7 +3840,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 529
+      "line": 533
     },
     {
       "kind": "policy-call",
@@ -3849,7 +3849,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 903
+      "line": 907
     },
     {
       "kind": "policy-call",
@@ -3858,7 +3858,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 1201
+      "line": 1325
     },
     {
       "kind": "policy-call",
@@ -3867,7 +3867,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 1251
+      "line": 1375
     },
     {
       "kind": "policy-call",
@@ -3876,7 +3876,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 1324
+      "line": 1448
     },
     {
       "kind": "policy-call",
@@ -3885,7 +3885,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 1483
+      "line": 1607
     },
     {
       "kind": "policy-call",
@@ -3894,7 +3894,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 1931
+      "line": 2055
     },
     {
       "kind": "policy-call",
@@ -3903,7 +3903,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 1984
+      "line": 2108
     },
     {
       "kind": "policy-call",
@@ -3912,7 +3912,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 2021
+      "line": 2145
     },
     {
       "kind": "policy-call",
@@ -3921,7 +3921,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 2041
+      "line": 2165
     },
     {
       "kind": "policy-call",
@@ -4335,7 +4335,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule/lesson-series-command.service.ts",
-      "line": 57
+      "line": 58
     },
     {
       "kind": "policy-call",
@@ -4560,7 +4560,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 389
+      "line": 393
     },
     {
       "kind": "policy-call",
@@ -4569,7 +4569,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 338
+      "line": 342
     },
     {
       "kind": "policy-call",
@@ -6711,20 +6711,6 @@
       "line": 16
     },
     {
-      "dto": "UpdateSubscriptionPackageDto",
-      "field": "sortOrder",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Type"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-subscription-package.dto.ts",
-      "line": 71
-    },
-    {
       "dto": "TaskBoardQuery",
       "field": "status",
       "type": "string",
@@ -6739,6 +6725,19 @@
     },
     {
       "dto": "TaskBoardQuery",
+      "field": "branchId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/task-board.query.ts",
+      "line": 42
+    },
+    {
+      "dto": "TaskBoardQuery",
       "field": "createdBy",
       "type": "string",
       "decorators": [
@@ -6749,6 +6748,18 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/task-board.query.ts",
       "line": 38
+    },
+    {
+      "dto": "SharedTaskReminderDto",
+      "field": "channel",
+      "type": "\"in_app\" | \"push\" | \"email\"",
+      "decorators": [
+        "IsIn"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/shared-task.dto.ts",
+      "line": 42
     },
     {
       "dto": "CreateSharedTaskDto",
@@ -6830,6 +6841,18 @@
       "line": 69
     },
     {
+      "dto": "SharedTaskReminderDto",
+      "field": "dueAt",
+      "type": "string",
+      "decorators": [
+        "IsDateString"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/shared-task.dto.ts",
+      "line": 39
+    },
+    {
       "dto": "CreateSharedTaskDto",
       "field": "linkedEntity",
       "type": "SharedTaskEntityLinkDto",
@@ -6844,31 +6867,18 @@
       "line": 74
     },
     {
-      "dto": "SharedTaskReminderDto",
-      "field": "channel",
-      "type": "\"in_app\" | \"push\" | \"email\"",
+      "dto": "UpdateSharedTaskDto",
+      "field": "expectedVersion",
+      "type": "number",
       "decorators": [
-        "IsIn"
+        "IsInt",
+        "Min",
+        "Type"
       ],
       "owner": "SYS-WORKFLOW",
       "status": "current-contract",
       "file": "server/src/crm/dto/shared-task.dto.ts",
-      "line": 42
-    },
-    {
-      "dto": "CreateSharedTaskDto",
-      "field": "reminders",
-      "type": "SharedTaskReminderDto[]",
-      "decorators": [
-        "IsArray",
-        "IsOptional",
-        "Type",
-        "ValidateNested"
-      ],
-      "owner": "SYS-WORKFLOW",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/shared-task.dto.ts",
-      "line": 80
+      "line": 87
     },
     {
       "dto": "CloseSharedTaskDto",
@@ -6955,44 +6965,19 @@
       "line": 26
     },
     {
-      "dto": "StaffListQuery",
-      "field": "status",
-      "type": "string",
+      "dto": "CreateSharedTaskDto",
+      "field": "reminders",
+      "type": "SharedTaskReminderDto[]",
       "decorators": [
+        "IsArray",
         "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/staff-list.query.ts",
-      "line": 31
-    },
-    {
-      "dto": "UpdateSharedTaskDto",
-      "field": "expectedVersion",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "Min",
-        "Type"
+        "Type",
+        "ValidateNested"
       ],
       "owner": "SYS-WORKFLOW",
       "status": "current-contract",
       "file": "server/src/crm/dto/shared-task.dto.ts",
-      "line": 87
-    },
-    {
-      "dto": "SharedTaskReminderDto",
-      "field": "dueAt",
-      "type": "string",
-      "decorators": [
-        "IsDateString"
-      ],
-      "owner": "SYS-WORKFLOW",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/shared-task.dto.ts",
-      "line": 39
+      "line": 80
     },
     {
       "dto": "SharedTaskEntityLinkDto",
@@ -7018,6 +7003,32 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/shared-task.dto.ts",
       "line": 31
+    },
+    {
+      "dto": "SharedTaskAudienceDto",
+      "field": "targetId",
+      "type": "string",
+      "decorators": [
+        "IsUUID",
+        "ValidateIf"
+      ],
+      "owner": "SYS-WORKFLOW",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/shared-task.dto.ts",
+      "line": 25
+    },
+    {
+      "dto": "UpdateScheduleSeriesDto",
+      "field": "effectiveFrom",
+      "type": "string",
+      "decorators": [
+        "IsDateString",
+        "IsOptional"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 149
     },
     {
       "dto": "UpdateScheduleSeriesDto",
@@ -7233,17 +7244,18 @@
       "line": 21
     },
     {
-      "dto": "SharedTaskAudienceDto",
-      "field": "targetId",
+      "dto": "StaffListQuery",
+      "field": "status",
       "type": "string",
       "decorators": [
-        "IsUUID",
-        "ValidateIf"
+        "IsOptional",
+        "IsString",
+        "MaxLength"
       ],
-      "owner": "SYS-WORKFLOW",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/shared-task.dto.ts",
-      "line": 25
+      "file": "server/src/crm/dto/staff-list.query.ts",
+      "line": 31
     },
     {
       "dto": "StaffListQuery",
@@ -7260,19 +7272,6 @@
       "line": 36
     },
     {
-      "dto": "TaskBoardQuery",
-      "field": "branchId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-WORKFLOW",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/task-board.query.ts",
-      "line": 42
-    },
-    {
       "dto": "StaffListQuery",
       "field": "authorization",
       "type": "\"app\" | \"technical\" | \"linked\" | \"unlinked\"",
@@ -7287,7 +7286,7 @@
     },
     {
       "dto": "StaffListQuery",
-      "field": "limit",
+      "field": "birthdayMonth",
       "type": "number",
       "decorators": [
         "IsInt",
@@ -7299,7 +7298,20 @@
       "owner": "SYS-CRM",
       "status": "current-contract",
       "file": "server/src/crm/dto/staff-list.query.ts",
-      "line": 54
+      "line": 47
+    },
+    {
+      "dto": "SubscriptionCancelCommandDto",
+      "field": "previewToken",
+      "type": "string",
+      "decorators": [
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/subscription-cancel.dto.ts",
+      "line": 22
     },
     {
       "dto": "SubscriptionCancelCommandDto",
@@ -7399,19 +7411,6 @@
       "line": 15
     },
     {
-      "dto": "SubscriptionCancelCommandDto",
-      "field": "previewToken",
-      "type": "string",
-      "decorators": [
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/subscription-cancel.dto.ts",
-      "line": 22
-    },
-    {
       "dto": "SubscriptionReplaceCommandDto",
       "field": "expectedVersion",
       "type": "number",
@@ -7424,6 +7423,19 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/subscription-replace.dto.ts",
       "line": 22
+    },
+    {
+      "dto": "SubscriptionReplaceCommandDto",
+      "field": "previewToken",
+      "type": "string",
+      "decorators": [
+        "IsString",
+        "MaxLength"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/subscription-replace.dto.ts",
+      "line": 26
     },
     {
       "dto": "SubscriptionReplaceCommandDto",
@@ -7518,19 +7530,6 @@
       "line": 34
     },
     {
-      "dto": "SubscriptionReplaceCommandDto",
-      "field": "previewToken",
-      "type": "string",
-      "decorators": [
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-COMMERCE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/subscription-replace.dto.ts",
-      "line": 26
-    },
-    {
       "dto": "SubscriptionCancelCommandDto",
       "field": "expectedVersion",
       "type": "number",
@@ -7543,6 +7542,20 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/subscription-cancel.dto.ts",
       "line": 18
+    },
+    {
+      "dto": "UpdateSubscriptionPackageDto",
+      "field": "sortOrder",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Type"
+      ],
+      "owner": "SYS-COMMERCE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/update-subscription-package.dto.ts",
+      "line": 71
     },
     {
       "dto": "StudentSearchQuery",
@@ -7562,17 +7575,33 @@
     },
     {
       "dto": "StudentSearchQuery",
-      "field": "noBranch",
+      "field": "noOpenTasks",
       "type": "boolean",
       "decorators": [
         "IsBoolean",
         "IsOptional",
         "Transform"
       ],
-      "owner": "SYS-CRM",
+      "owner": "SYS-WORKFLOW",
       "status": "current-contract",
       "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 76
+      "line": 69
+    },
+    {
+      "dto": "StaffListQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-CRM",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/staff-list.query.ts",
+      "line": 54
     },
     {
       "dto": "StudentBalanceQuery",
@@ -7798,33 +7827,30 @@
     },
     {
       "dto": "StudentSearchQuery",
-      "field": "noOpenTasks",
+      "field": "noBranch",
       "type": "boolean",
       "decorators": [
         "IsBoolean",
         "IsOptional",
         "Transform"
       ],
-      "owner": "SYS-WORKFLOW",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/student-search.query.ts",
-      "line": 69
-    },
-    {
-      "dto": "StaffListQuery",
-      "field": "birthdayMonth",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
       "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/staff-list.query.ts",
-      "line": 47
+      "file": "server/src/crm/dto/student-search.query.ts",
+      "line": 76
+    },
+    {
+      "dto": "UpdateScheduleSeriesDto",
+      "field": "validUntil",
+      "type": "string | null",
+      "decorators": [
+        "IsDateString",
+        "IsOptional"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 144
     },
     {
       "dto": "UpdateTeacherDto",
@@ -7839,20 +7865,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/update-teacher.dto.ts",
       "line": 18
-    },
-    {
-      "dto": "UpdateTeacherDto",
-      "field": "lastName",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/update-teacher.dto.ts",
-      "line": 23
     },
     {
       "dto": "UpdateTeacherDto",
@@ -9768,17 +9780,18 @@
       "line": 22
     },
     {
-      "dto": "UpdateScheduleSeriesDto",
-      "field": "effectiveFrom",
+      "dto": "UpdateTeacherDto",
+      "field": "lastName",
       "type": "string",
       "decorators": [
-        "IsDateString",
-        "IsOptional"
+        "IsOptional",
+        "IsString",
+        "MaxLength"
       ],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 149
+      "file": "server/src/crm/dto/update-teacher.dto.ts",
+      "line": 23
     },
     {
       "dto": "UpsertSubscriptionPackageDto",
@@ -10055,19 +10068,6 @@
     },
     {
       "dto": "UpdateScheduleSeriesDto",
-      "field": "validUntil",
-      "type": "string | null",
-      "decorators": [
-        "IsDateString",
-        "IsOptional"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 144
-    },
-    {
-      "dto": "UpdateScheduleSeriesDto",
       "field": "durationMinutes",
       "type": "number",
       "decorators": [
@@ -10094,6 +10094,22 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/schedule-series.dto.ts",
       "line": 133
+    },
+    {
+      "dto": "UpdateScheduleSeriesDto",
+      "field": "weekday",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 129
     },
     {
       "dto": "StrictCreateStudentDto",
@@ -12260,22 +12276,6 @@
       "line": 60
     },
     {
-      "dto": "CrmCustomFieldDefinitionDto",
-      "field": "options",
-      "type": "string[]",
-      "decorators": [
-        "ArrayMaxSize",
-        "IsArray",
-        "IsOptional",
-        "IsString",
-        "MaxLength"
-      ],
-      "owner": "SYS-CRM",
-      "status": "current-contract",
-      "file": "server/src/settings/dto/update-crm-custom-fields.dto.ts",
-      "line": 61
-    },
-    {
       "dto": "CreatePaymentDto",
       "field": "notes",
       "type": "string",
@@ -12288,6 +12288,19 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/create-payment.dto.ts",
       "line": 33
+    },
+    {
+      "dto": "CreatePaymentDto",
+      "field": "lessonId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/create-payment.dto.ts",
+      "line": 42
     },
     {
       "dto": "CreateStaffDto",
@@ -12805,20 +12818,6 @@
       "line": 34
     },
     {
-      "dto": "LessonCancelPreviewDto",
-      "field": "expectedVersion",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lesson-transition.dto.ts",
-      "line": 27
-    },
-    {
       "dto": "RoomAvailabilityQuery",
       "field": "durationMinutes",
       "type": "number",
@@ -12835,6 +12834,22 @@
       "line": 41
     },
     {
+      "dto": "RoomAvailabilityQuery",
+      "field": "limit",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "IsOptional",
+        "Max",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/room-availability.query.ts",
+      "line": 48
+    },
+    {
       "dto": "SaveContactFromChatDto",
       "field": "userId",
       "type": "string",
@@ -12845,6 +12860,32 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/save-contact-from-chat.dto.ts",
       "line": 5
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "roomId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 45
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "branchId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 49
     },
     {
       "dto": "CreateScheduleSeriesDto",
@@ -12943,19 +12984,6 @@
     },
     {
       "dto": "CreateScheduleSeriesDto",
-      "field": "branchId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 49
-    },
-    {
-      "dto": "CreateScheduleSeriesDto",
       "field": "clientChargeType",
       "type": "\"subscription\" | \"personal_account\" | \"none\"",
       "decorators": [
@@ -12966,6 +12994,20 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/schedule-series.dto.ts",
       "line": 87
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "clientChargeValue",
+      "type": "number",
+      "decorators": [
+        "IsNumber",
+        "IsOptional",
+        "Min"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 92
     },
     {
       "dto": "CreateScheduleSeriesDto",
@@ -13048,49 +13090,6 @@
       "line": 122
     },
     {
-      "dto": "UpdateScheduleSeriesDto",
-      "field": "weekday",
-      "type": "number",
-      "decorators": [
-        "IsInt",
-        "IsOptional",
-        "Max",
-        "Min",
-        "Type"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 129
-    },
-    {
-      "dto": "CreateScheduleSeriesDto",
-      "field": "clientChargeValue",
-      "type": "number",
-      "decorators": [
-        "IsNumber",
-        "IsOptional",
-        "Min"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 92
-    },
-    {
-      "dto": "CreateScheduleSeriesDto",
-      "field": "roomId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 45
-    },
-    {
       "dto": "CreateScheduleSeriesDto",
       "field": "teacherId",
       "type": "string",
@@ -13104,6 +13103,20 @@
       "line": 41
     },
     {
+      "dto": "LessonCancelPreviewDto",
+      "field": "expectedVersion",
+      "type": "number",
+      "decorators": [
+        "IsInt",
+        "Min",
+        "Type"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/lesson-transition.dto.ts",
+      "line": 27
+    },
+    {
       "dto": "CreateScheduleSeriesDto",
       "field": "groupId",
       "type": "string",
@@ -13115,6 +13128,19 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/schedule-series.dto.ts",
       "line": 37
+    },
+    {
+      "dto": "CreateScheduleSeriesDto",
+      "field": "studentId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-series.dto.ts",
+      "line": 29
     },
     {
       "dto": "SaveContactFromChatDto",
@@ -13258,6 +13284,32 @@
     },
     {
       "dto": "ScheduleMatrixQuery",
+      "field": "studentId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-matrix.query.ts",
+      "line": 36
+    },
+    {
+      "dto": "ScheduleMatrixQuery",
+      "field": "leadId",
+      "type": "string",
+      "decorators": [
+        "IsOptional",
+        "IsUUID"
+      ],
+      "owner": "SYS-SCHEDULE",
+      "status": "current-contract",
+      "file": "server/src/crm/dto/schedule-matrix.query.ts",
+      "line": 40
+    },
+    {
+      "dto": "ScheduleMatrixQuery",
       "field": "isTrial",
       "type": "boolean",
       "decorators": [
@@ -13268,7 +13320,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
       "file": "server/src/crm/dto/schedule-matrix.query.ts",
-      "line": 37
+      "line": 45
     },
     {
       "dto": "ScheduleMatrixQuery",
@@ -13281,7 +13333,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
       "file": "server/src/crm/dto/schedule-matrix.query.ts",
-      "line": 41
+      "line": 49
     },
     {
       "dto": "ScheduleMatrixQuery",
@@ -13297,7 +13349,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
       "file": "server/src/crm/dto/schedule-matrix.query.ts",
-      "line": 48
+      "line": 56
     },
     {
       "dto": "CreateScheduleSeriesDto",
@@ -13315,19 +13367,6 @@
     },
     {
       "dto": "CreateScheduleSeriesDto",
-      "field": "studentId",
-      "type": "string",
-      "decorators": [
-        "IsOptional",
-        "IsUUID"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/schedule-series.dto.ts",
-      "line": 29
-    },
-    {
-      "dto": "CreateScheduleSeriesDto",
       "field": "leadId",
       "type": "string",
       "decorators": [
@@ -13340,20 +13379,20 @@
       "line": 33
     },
     {
-      "dto": "RoomAvailabilityQuery",
-      "field": "limit",
-      "type": "number",
+      "dto": "CrmCustomFieldDefinitionDto",
+      "field": "options",
+      "type": "string[]",
       "decorators": [
-        "IsInt",
+        "ArrayMaxSize",
+        "IsArray",
         "IsOptional",
-        "Max",
-        "Min",
-        "Type"
+        "IsString",
+        "MaxLength"
       ],
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM",
       "status": "current-contract",
-      "file": "server/src/crm/dto/room-availability.query.ts",
-      "line": 48
+      "file": "server/src/settings/dto/update-crm-custom-fields.dto.ts",
+      "line": 61
     },
     {
       "dto": "LessonFinancialDecisionDto",
@@ -13366,18 +13405,6 @@
       "status": "current-contract",
       "file": "server/src/crm/dto/lesson-transition.dto.ts",
       "line": 20
-    },
-    {
-      "dto": "LessonFinancialDecisionDto",
-      "field": "chargeClient",
-      "type": "boolean",
-      "decorators": [
-        "IsBoolean"
-      ],
-      "owner": "SYS-SCHEDULE",
-      "status": "current-contract",
-      "file": "server/src/crm/dto/lesson-transition.dto.ts",
-      "line": 17
     },
     {
       "dto": "LeadWebhookDto",
@@ -14199,17 +14226,16 @@
       "line": 62
     },
     {
-      "dto": "CreatePaymentDto",
-      "field": "lessonId",
-      "type": "string",
+      "dto": "LessonFinancialDecisionDto",
+      "field": "chargeClient",
+      "type": "boolean",
       "decorators": [
-        "IsOptional",
-        "IsUUID"
+        "IsBoolean"
       ],
       "owner": "SYS-SCHEDULE",
       "status": "current-contract",
-      "file": "server/src/crm/dto/create-payment.dto.ts",
-      "line": 42
+      "file": "server/src/crm/dto/lesson-transition.dto.ts",
+      "line": 17
     },
     {
       "dto": "LeadBoardQuery",
@@ -14544,7 +14570,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 141
+      "line": 142
     },
     {
       "kind": "role-check",
@@ -14552,7 +14578,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 140
+      "line": 141
     },
     {
       "kind": "role-check",
@@ -14560,7 +14586,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 139
+      "line": 140
     },
     {
       "kind": "role-check",
@@ -14568,7 +14594,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 137
+      "line": 138
     },
     {
       "kind": "role-check",
@@ -14576,7 +14602,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 136
+      "line": 137
     },
     {
       "kind": "role-check",
@@ -14584,7 +14610,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 132
+      "line": 133
     },
     {
       "kind": "role-check",
@@ -14592,7 +14618,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 95
+      "line": 96
     },
     {
       "kind": "role-check",
@@ -14600,7 +14626,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 88
+      "line": 89
     },
     {
       "kind": "role-check",
@@ -14608,7 +14634,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 79
+      "line": 80
     },
     {
       "kind": "role-check",
@@ -14616,15 +14642,23 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 74
+      "line": 75
     },
     {
       "kind": "role-check",
-      "expression": "List<int> crmVisibleTabs(String role, {required bool isDesktop}) {",
+      "expression": "return crmVisibleTabsForCapabilities(snapshot, isDesktop: isDesktop);",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "line": 194
+    },
+    {
+      "kind": "role-check",
+      "expression": "if (role == 'client') return const [];",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 73
+      "line": 74
     },
     {
       "kind": "role-check",
@@ -14740,11 +14774,19 @@
     },
     {
       "kind": "role-check",
-      "expression": "return crmVisibleTabsForCapabilities(snapshot, isDesktop: isDesktop);",
+      "expression": "List<int> crmVisibleTabs(String role, {required bool isDesktop}) {",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 194
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 73
+    },
+    {
+      "kind": "role-check",
+      "expression": "role == 'director' ||",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 31
     },
     {
       "kind": "role-check",
@@ -14753,14 +14795,6 @@
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
       "line": 203
-    },
-    {
-      "kind": "role-check",
-      "expression": "visibleTabs: visibleTabs,",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 209
     },
     {
       "kind": "role-check",
@@ -14884,11 +14918,11 @@
     },
     {
       "kind": "role-check",
-      "expression": "role == 'director' ||",
+      "expression": "visibleTabs: visibleTabs,",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 31
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "line": 209
     },
     {
       "kind": "role-check",
@@ -15020,19 +15054,19 @@
     },
     {
       "kind": "role-check",
+      "expression": "bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';",
+      "owner": "SYS-APP",
+      "status": "legacy-review-required",
+      "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
+      "line": 214
+    },
+    {
+      "kind": "role-check",
       "expression": "role == 'manager' ||",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
       "line": 30
-    },
-    {
-      "kind": "role-check",
-      "expression": "role == 'admin' ||",
-      "owner": "SYS-APP",
-      "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
-      "line": 29
     },
     {
       "kind": "role-check",
@@ -15264,7 +15298,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 82
+      "line": 87
     },
     {
       "kind": "role-check",
@@ -15272,7 +15306,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 80
+      "line": 85
     },
     {
       "kind": "role-check",
@@ -15292,11 +15326,11 @@
     },
     {
       "kind": "role-check",
-      "expression": "bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';",
+      "expression": "role == 'admin' ||",
       "owner": "SYS-APP",
       "status": "legacy-review-required",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 214
+      "file": "lib/features/messenger/presentation/screens/crm_nav_rbac.dart",
+      "line": 29
     },
     {
       "kind": "role-check",
@@ -15360,7 +15394,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/manager/presentation/widgets/user_roles_widget.dart",
-      "line": 117
+      "line": 119
     },
     {
       "kind": "role-check",
@@ -15368,7 +15402,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/manager/presentation/widgets/user_roles_actions.dart",
-      "line": 18
+      "line": 25
     },
     {
       "kind": "role-check",
@@ -15376,7 +15410,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/manager/presentation/widgets/tasks_widget.dart",
-      "line": 718
+      "line": 725
     },
     {
       "kind": "role-check",
@@ -15560,7 +15594,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/manager/presentation/widgets/reports_widget_widgets.dart",
-      "line": 676
+      "line": 691
     },
     {
       "kind": "role-check",
@@ -15579,22 +15613,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/main.dart",
       "line": 154
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: _busy ? null : () => Navigator.of(context).pop(),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
-      "line": 306
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(context).pop(),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/teacher_client_card.dart",
-      "line": 116
     },
     {
       "kind": "navigation-source",
@@ -15638,19 +15656,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.of(context).pop(_SourceDraft(canonical, display));",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
-      "line": 442
-    },
-    {
-      "kind": "navigation-source",
       "expression": "if (mounted) Navigator.pop(context, true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/subscription_cancel_sheet.dart",
       "line": 112
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
+      "line": 698
     },
     {
       "kind": "navigation-source",
@@ -15710,11 +15728,51 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 629
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 624
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 698
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 550
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(context).pop(),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/teacher_client_card.dart",
+      "line": 116
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 545
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: _busy ? null : () => Navigator.of(context).pop(),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 306
     },
     {
       "kind": "navigation-source",
@@ -15723,38 +15781,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
       "line": 470
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.of(context).pop(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
-      "line": 546
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(context).pop(),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
-      "line": 637
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 545
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, controller.text),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 499
     },
     {
       "kind": "navigation-source",
@@ -15878,11 +15904,27 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, true),",
+      "expression": "onPressed: () => Navigator.of(context).pop(),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 629
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 637
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.of(context).pop(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 546
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.of(context).pop(_SourceDraft(canonical, display));",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 442
     },
     {
       "kind": "navigation-source",
@@ -15890,23 +15932,55 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 549
+      "line": 499
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 624
+      "line": 494
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "context.go('/admin');",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+      "line": 902
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
+      "line": 1020
     },
     {
       "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 545
+      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
+      "line": 1015
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(ctx).pop(true),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
+      "line": 342
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(ctx).pop(false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
+      "line": 337
     },
     {
       "kind": "navigation-source",
@@ -15966,19 +16040,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(ctx).pop(false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
-      "line": 337
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_data.dart",
       "line": 617
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context, true);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_data.dart",
+      "line": 496
     },
     {
       "kind": "navigation-source",
@@ -16014,67 +16088,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "context.go('/');",
+      "expression": "onTap: () => Navigator.pop(sheetContext, pkg),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/registration_screen.dart",
-      "line": 66
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: _isLoading ? null : () => context.go('/login'),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/password_reset_screen.dart",
-      "line": 214
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "context.go('/login');",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/password_reset_screen.dart",
-      "line": 104
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(context, true);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_data.dart",
-      "line": 496
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(ctx).pop(true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
-      "line": 342
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
-      "line": 1015
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_editors.dart",
-      "line": 1020
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 494
+      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
+      "line": 36
     },
     {
       "kind": "navigation-source",
@@ -16083,6 +16101,70 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
       "line": 490
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
+      "line": 294
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "clientCardGhostButton('Отмена', () => Navigator.pop(context, false)),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
+      "line": 452
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.of(context).pop(_dirty ? true : null);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+      "line": 900
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "if (Navigator.of(context).canPop()) {",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+      "line": 899
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "CrmNavigationRequest.schedule(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+      "line": 893
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ".navigateTo(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+      "line": 892
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ".read(crmNavigationRequestProvider.notifier)",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+      "line": 891
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ".read(scheduleNavigationProvider.notifier)",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+      "line": 883
     },
     {
       "kind": "navigation-source",
@@ -16174,14 +16256,6 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "clientCardGhostButton('Отмена', () => Navigator.pop(context, false)),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 452
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(context, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -16190,35 +16264,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "expression": "context.go('/');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 294
+      "file": "lib/features/auth/presentation/screens/registration_screen.dart",
+      "line": 66
     },
     {
       "kind": "navigation-source",
-      "expression": "onTap: () => Navigator.pop(sheetContext, pkg),",
+      "expression": "onPressed: () => Navigator.pop(ctx),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_sheets.dart",
-      "line": 36
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 550
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "if (mounted) context.go('/legal-consent');",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
-      "line": 96
+      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
+      "line": 545
     },
     {
       "kind": "navigation-source",
@@ -16227,14 +16285,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/lead_card.dart",
       "line": 602
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ".read(scheduleNavigationProvider.notifier)",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 616
     },
     {
       "kind": "navigation-source",
@@ -16294,11 +16344,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "if (context.mounted) context.go('/login');",
+      "expression": "ref.read(messengerNavigationProvider.notifier).clear();",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 462
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
+      "line": 106
     },
     {
       "kind": "navigation-source",
@@ -16306,7 +16356,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
-      "line": 106
+      "line": 68
     },
     {
       "kind": "navigation-source",
@@ -16330,7 +16380,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/user_roles_widget.dart",
-      "line": 465
+      "line": 474
     },
     {
       "kind": "navigation-source",
@@ -16338,7 +16388,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/user_roles_actions.dart",
-      "line": 260
+      "line": 272
     },
     {
       "kind": "navigation-source",
@@ -16346,7 +16396,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/user_roles_actions.dart",
-      "line": 251
+      "line": 263
     },
     {
       "kind": "navigation-source",
@@ -16354,7 +16404,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/user_roles_actions.dart",
-      "line": 90
+      "line": 102
     },
     {
       "kind": "navigation-source",
@@ -16366,11 +16416,27 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "ref.read(messengerNavigationProvider.notifier).clear();",
+      "expression": "if (mounted) Navigator.pop(context, true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
-      "line": 68
+      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
+      "line": 891
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "if (context.mounted) context.go('/login');",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "line": 462
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: touched ? () => Navigator.pop(ctx, true) : null,",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
+      "line": 248
     },
     {
       "kind": "navigation-source",
@@ -16379,14 +16445,6 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
       "line": 478
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.of(context).push(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_b.dart",
-      "line": 233
     },
     {
       "kind": "navigation-source",
@@ -16534,43 +16592,35 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "if (mounted) Navigator.pop(context, true);",
+      "expression": "Navigator.of(context).push(",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 891
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_b.dart",
+      "line": 233
     },
     {
       "kind": "navigation-source",
-      "expression": ".navigateTo(MessengerNavigationState(partnerId: userId));",
+      "expression": "onPressed: () => Navigator.pop(ctx, controller.text),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 603
+      "line": 549
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: touched ? () => Navigator.pop(ctx, true) : null,",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 248
+      "line": 244
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: touched ? () => Navigator.pop(ctx, true) : null,",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 179
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 847
+      "line": 175
     },
     {
       "kind": "navigation-source",
@@ -16622,19 +16672,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context, {",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 886
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(context, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/manage_statuses_dialog.dart",
       "line": 251
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/manage_statuses_dialog.dart",
+      "line": 247
     },
     {
       "kind": "navigation-source",
@@ -16694,19 +16744,43 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "expression": ".read(scheduleNavigationProvider.notifier)",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/manage_statuses_dialog.dart",
-      "line": 247
+      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
+      "line": 616
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "expression": ".navigateTo(MessengerNavigationState(partnerId: userId));",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/subscription_catalog_widget.dart",
-      "line": 167
+      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
+      "line": 603
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
+      "line": 847
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: touched ? () => Navigator.pop(ctx, true) : null,",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
+      "line": 179
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context, {",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
+      "line": 886
     },
     {
       "kind": "navigation-source",
@@ -16718,27 +16792,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "class _DayNavigator extends StatelessWidget {",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
-      "line": 4
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 175
-    },
-    {
-      "kind": "navigation-source",
       "expression": "return Navigator.of(context).push<void>(",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/tasks_widget.dart",
-      "line": 911
+      "line": 918
     },
     {
       "kind": "navigation-source",
@@ -16746,7 +16804,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/manager/presentation/widgets/tasks_widget.dart",
-      "line": 799
+      "line": 806
     },
     {
       "kind": "navigation-source",
@@ -16862,11 +16920,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "expression": "class _DayNavigator extends StatelessWidget {",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 244
+      "file": "lib/features/manager/presentation/widgets/tasks_widget_cards.dart",
+      "line": 4
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/manager/presentation/widgets/subscription_catalog_widget.dart",
+      "line": 167
     },
     {
       "kind": "navigation-source",
@@ -16878,19 +16944,35 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => context.push('/register'),",
+      "expression": "onPressed: _isLoading ? null : () => context.go('/login'),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/login_screen.dart",
-      "line": 262
+      "file": "lib/features/auth/presentation/screens/password_reset_screen.dart",
+      "line": 214
     },
     {
       "kind": "navigation-source",
-      "expression": "context.go(",
+      "expression": "if (mounted) context.go('/legal-consent');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/login_screen.dart",
-      "line": 70
+      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
+      "line": 96
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(context).pop(),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/file_attachment_widget.dart",
+      "line": 433
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.of(context).push(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/file_attachment_widget.dart",
+      "line": 193
     },
     {
       "kind": "navigation-source",
@@ -16950,19 +17032,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.of(context).push(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/file_attachment_widget.dart",
-      "line": 193
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.of(dialogCtx).pop(true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/update/update_prompt.dart",
       "line": 110
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(dialogCtx).pop(false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/update/update_prompt.dart",
+      "line": 89
     },
     {
       "kind": "navigation-source",
@@ -17014,30 +17096,6 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "context.go(_deepLinkHomeRoute(ref));",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/router/app_router.dart",
-      "line": 557
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(dialogCtx).pop(false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/update/update_prompt.dart",
-      "line": 89
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(context).pop(),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/file_attachment_widget.dart",
-      "line": 433
-    },
-    {
-      "kind": "navigation-source",
       "expression": "Navigator.pop(context);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -17046,11 +17104,43 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "context.go(_deepLinkHomeRoute(ref));",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/router/app_router.dart",
+      "line": 557
+    },
+    {
+      "kind": "navigation-source",
       "expression": "Navigator.pop(context);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/widgets/searchable_select.dart",
       "line": 294
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/telegram/chat_info_dialog_dialogs.dart",
+      "line": 247
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 554
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 536
     },
     {
       "kind": "navigation-source",
@@ -17174,19 +17264,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/chat_info_dialog_dialogs.dart",
-      "line": 247
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: onBack ?? () => Navigator.of(context).maybePop(),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/widgets/telegram/chat_header.dart",
       "line": 77
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 563
     },
     {
       "kind": "navigation-source",
@@ -17198,83 +17288,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 536
-    },
-    {
-      "kind": "navigation-source",
       "expression": "GoRoute(",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/router/app_router.dart",
-      "line": 319
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "GoRoute(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/router/app_router.dart",
-      "line": 310
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "NotifierProvider<CrmNavigationRequestNotifier, CrmNavigationRequest?>(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 64
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "final crmNavigationRequestProvider =",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 63
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "void navigateTo(CrmNavigationRequest? request) => state = request;",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 58
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "CrmNavigationRequest? build() => null;",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 56
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "class CrmNavigationRequestNotifier extends Notifier<CrmNavigationRequest?> {",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 54
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "return CrmNavigationRequest(",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 36
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "factory CrmNavigationRequest.userRolesSearch(String query) {",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 35
+      "line": 315
     },
     {
       "kind": "navigation-source",
@@ -17282,7 +17300,47 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 65
+      "line": 70
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "NotifierProvider<CrmNavigationRequestNotifier, CrmNavigationRequest?>(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/providers/crm_navigation_provider.dart",
+      "line": 69
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "final crmNavigationRequestProvider =",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/providers/crm_navigation_provider.dart",
+      "line": 68
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "void navigateTo(CrmNavigationRequest? request) => state = request;",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/providers/crm_navigation_provider.dart",
+      "line": 63
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "CrmNavigationRequest? build() => null;",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/providers/crm_navigation_provider.dart",
+      "line": 61
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "class CrmNavigationRequestNotifier extends Notifier<CrmNavigationRequest?> {",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/providers/crm_navigation_provider.dart",
+      "line": 59
     },
     {
       "kind": "navigation-source",
@@ -17290,7 +17348,31 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 17
+      "line": 41
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "factory CrmNavigationRequest.userRolesSearch(String query) {",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/providers/crm_navigation_provider.dart",
+      "line": 40
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "return CrmNavigationRequest(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/providers/crm_navigation_provider.dart",
+      "line": 19
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "factory CrmNavigationRequest.schedule({",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/providers/crm_navigation_provider.dart",
+      "line": 12
     },
     {
       "kind": "navigation-source",
@@ -17350,19 +17432,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "factory CrmNavigationRequest.schedule({",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/providers/crm_navigation_provider.dart",
-      "line": 12
-    },
-    {
-      "kind": "navigation-source",
       "expression": "final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/router/app_router.dart",
       "line": 106
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "GoRoute(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/router/app_router.dart",
+      "line": 319
     },
     {
       "kind": "navigation-source",
@@ -17374,11 +17456,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "navigatorKey: rootNavigatorKey,",
+      "expression": "GoRoute(",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/router/app_router.dart",
-      "line": 142
+      "line": 222
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "GoRoute(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/router/app_router.dart",
+      "line": 310
     },
     {
       "kind": "navigation-source",
@@ -17510,35 +17600,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "GoRoute(",
+      "expression": "navigatorKey: rootNavigatorKey,",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/core/router/app_router.dart",
-      "line": 222
+      "line": 142
     },
     {
       "kind": "navigation-source",
-      "expression": "GoRoute(",
+      "expression": "context.go('/login');",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/core/router/app_router.dart",
-      "line": 315
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ": () => context.push('/password-reset'),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/auth/presentation/screens/login_screen.dart",
-      "line": 214
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(context);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 554
+      "file": "lib/features/auth/presentation/screens/password_reset_screen.dart",
+      "line": 104
     },
     {
       "kind": "navigation-source",
@@ -17550,11 +17624,43 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "Navigator.pop(context);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 602
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ".navigateTo(CrmNavigationRequest.userRolesSearch(value));",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
+      "line": 113
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ".read(crmNavigationRequestProvider.notifier)",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
+      "line": 112
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "ref.listen(scheduleNavigationProvider, (prev, next) {",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
+      "line": 198
+    },
+    {
+      "kind": "navigation-source",
       "expression": "final focus = ref.read(scheduleNavigationProvider);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
-      "line": 162
+      "line": 155
     },
     {
       "kind": "navigation-source",
@@ -17562,7 +17668,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 285
+      "line": 324
     },
     {
       "kind": "navigation-source",
@@ -17570,7 +17676,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 252
+      "line": 291
     },
     {
       "kind": "navigation-source",
@@ -17578,7 +17684,15 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 20
+      "line": 37
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "ref.read(scheduleNavigationProvider.notifier).clear();",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
+      "line": 21
     },
     {
       "kind": "navigation-source",
@@ -17606,19 +17720,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "ref.listen(scheduleNavigationProvider, (prev, next) {",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
-      "line": 205
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.of(ctx).pop(),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
       "line": 22
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onSubmitted: (value) => Navigator.of(ctx).pop(value),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
+      "line": 18
     },
     {
       "kind": "navigation-source",
@@ -17654,6 +17768,14 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "Navigator.of(context, rootNavigator: true).pop(false);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
+      "line": 114
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -17662,51 +17784,43 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 308
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "if (ctx.mounted) Navigator.pop(ctx);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 274
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onSubmitted: (value) => Navigator.of(ctx).pop(value),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
-      "line": 18
-    },
-    {
-      "kind": "navigation-source",
-      "expression": ".read(crmNavigationRequestProvider.notifier)",
+      "expression": "Navigator.of(context).pop(true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 112
+      "line": 147
     },
     {
       "kind": "navigation-source",
-      "expression": ".navigateTo(CrmNavigationRequest.userRolesSearch(value));",
+      "expression": "Navigator.pop(context, true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 113
+      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
+      "line": 268
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.of(context, rootNavigator: true).pop(false);",
+      "expression": "onPressed: () => context.push('/register'),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 114
+      "file": "lib/features/auth/presentation/screens/login_screen.dart",
+      "line": 262
+    },
+    {
+      "kind": "navigation-source",
+      "expression": ": () => context.push('/password-reset'),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/auth/presentation/screens/login_screen.dart",
+      "line": 214
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "context.go(",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/auth/presentation/screens/login_screen.dart",
+      "line": 70
     },
     {
       "kind": "navigation-source",
@@ -17822,14 +17936,6 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context, true);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 268
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: _saving ? null : () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -17838,11 +17944,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.of(context).pop(true);",
+      "expression": "Navigator.pop(context);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 147
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 587
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 308
     },
     {
       "kind": "navigation-source",
@@ -17854,27 +17968,27 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context);",
+      "expression": "onPressed: () => Navigator.pop(ctx),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 563
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(c, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 260
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 515
     },
     {
       "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 165
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 465
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context, true);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 354
     },
     {
       "kind": "navigation-source",
@@ -17934,19 +18048,19 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context, true);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 354
-    },
-    {
-      "kind": "navigation-source",
       "expression": "final scheduleNavigationProvider =",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/providers/schedule_navigation_provider.dart",
-      "line": 60
+      "line": 83
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onTap: () => Navigator.of(context).pop<T>(item.value),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/core/widgets/v7/magic_menu.dart",
+      "line": 92
     },
     {
       "kind": "navigation-source",
@@ -17990,51 +18104,59 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 602
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(context);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 587
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onTap: () => Navigator.of(context).pop<T>(item.value),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/core/widgets/v7/magic_menu.dart",
-      "line": 92
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 465
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 515
-    },
-    {
-      "kind": "navigation-source",
       "expression": ".read(scheduleNavigationProvider.notifier)",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
       "line": 553
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "if (ctx.mounted) Navigator.pop(ctx);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 274
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(dialogContext);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 555
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(context),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 839
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(c, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 260
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(ctx);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 235
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 165
     },
     {
       "kind": "navigation-source",
@@ -18150,35 +18272,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 839
-    },
-    {
-      "kind": "navigation-source",
       "expression": "Navigator.pop(context);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
       "line": 556
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(dialogContext);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 555
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "Navigator.pop(ctx);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 235
     },
     {
       "kind": "navigation-source",
@@ -18204,7 +18302,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 53
+      "line": 59
     },
     {
       "kind": "flutter-call",
@@ -18212,7 +18310,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 188
+      "line": 192
     },
     {
       "kind": "flutter-call",
@@ -18220,7 +18318,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 244
+      "line": 248
     },
     {
       "kind": "flutter-call",
@@ -18228,7 +18326,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 277
+      "line": 281
     },
     {
       "kind": "flutter-call",
@@ -18236,7 +18334,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 671
+      "line": 675
     },
     {
       "kind": "flutter-call",
@@ -18244,7 +18342,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 700
+      "line": 704
     },
     {
       "kind": "flutter-call",
@@ -18276,7 +18374,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 147
+      "line": 186
     },
     {
       "kind": "flutter-call",
@@ -18284,7 +18382,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 324
+      "line": 363
     },
     {
       "kind": "flutter-call",
@@ -18292,7 +18390,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 384
+      "line": 423
     },
     {
       "kind": "flutter-call",
@@ -18300,7 +18398,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 673
+      "line": 712
     },
     {
       "kind": "flutter-call",
@@ -18308,7 +18406,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 682
+      "line": 721
     },
     {
       "kind": "flutter-call",
@@ -18316,7 +18414,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 685
+      "line": 724
     },
     {
       "kind": "backend-route",
@@ -18324,7 +18422,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 44
+      "line": 49
     },
     {
       "kind": "flutter-call",
@@ -18340,7 +18438,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 35
+      "line": 39
     },
     {
       "kind": "backend-route",
@@ -18348,7 +18446,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 212
+      "line": 227
     },
     {
       "kind": "backend-route",
@@ -18356,7 +18454,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 51
+      "line": 53
     },
     {
       "kind": "backend-route",
@@ -18364,7 +18462,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 65
+      "line": 67
     },
     {
       "kind": "backend-route",
@@ -18372,7 +18470,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 78
+      "line": 83
     },
     {
       "kind": "backend-route",
@@ -18380,7 +18478,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 87
+      "line": 92
     },
     {
       "kind": "backend-route",
@@ -18388,7 +18486,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 96
+      "line": 101
     },
     {
       "kind": "backend-route",
@@ -18396,7 +18494,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 104
+      "line": 109
     },
     {
       "kind": "backend-route",
@@ -18404,7 +18502,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 112
+      "line": 117
     },
     {
       "kind": "backend-route",
@@ -18412,7 +18510,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 121
+      "line": 126
     },
     {
       "kind": "backend-route",
@@ -18420,7 +18518,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 129
+      "line": 134
     },
     {
       "kind": "backend-route",
@@ -18428,7 +18526,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 144
+      "line": 152
     },
     {
       "kind": "backend-route",
@@ -18436,7 +18534,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 152
+      "line": 160
     },
     {
       "kind": "backend-route",
@@ -18444,7 +18542,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 166
+      "line": 177
     },
     {
       "kind": "backend-route",
@@ -18452,7 +18550,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 175
+      "line": 187
     },
     {
       "kind": "backend-route",
@@ -18460,7 +18558,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 189
+      "line": 202
     },
     {
       "kind": "backend-route",
@@ -18468,7 +18566,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 198
+      "line": 212
     },
     {
       "kind": "backend-route",
@@ -18476,7 +18574,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 27
+      "line": 31
     },
     {
       "kind": "flutter-call",
@@ -18759,7 +18857,7 @@
       "owner": "SYS-COMMERCE",
       "status": "commerce-migration-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 144
+      "line": 152
     },
     {
       "kind": "backend-route",

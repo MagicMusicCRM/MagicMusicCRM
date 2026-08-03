@@ -60,37 +60,37 @@ flowchart TD
 
 ## 4. Sprint S0 — Evidence & UX foundation
 
-- [ ] **V6-001** `[REQ-UX-001, REQ-UX-002]` — Зафиксировать production route/surface inventory.
+- [x] **V6-001** `[REQ-UX-001, REQ-UX-002]` — Зафиксировать production route/surface inventory.
   - **Работа:** выгрузить routed screens, modal/sheet/dialog entry points, owner role/scope, primary action и loading/empty/error/forbidden/retry states; отдельно отметить production mount vs isolated code.
   - **Критерий:** 100% production routes и всех упомянутых в ТЗ surfaces имеют owner/status; unowned=0.
   - **Проверка/evidence:** machine-checkable JSON + `docs/audits/v6-route-surface-inventory.md`; command returns non-zero on unowned route.
   - **Оценка:** 6 ч · **Зависимости:** нет · **Приоритет:** P0.
 
-- [ ] **V6-002** `[REQ-NAV-001..003, REQ-WORKSPACE-001]` — Инвентаризировать router/workspace/entity-link seams.
+- [x] **V6-002** `[REQ-NAV-001..003, REQ-WORKSPACE-001]` — Инвентаризировать router/workspace/entity-link seams.
   - **Работа:** сопоставить GoRouter routes, workspace stack/store, `EntityRouteRegistry`, 327 pending navigation items, typed refs, display-name fallbacks и restorable view state.
   - **Критерий:** каждый deep-linkable entity и pending call site имеет canonical target/owner/migration status; локальные display-name lookups перечислены.
   - **Проверка/evidence:** `docs/audits/v6-navigation-inventory.md` + check script; ручная выборка 20 refs совпадает с кодом.
   - **Оценка:** 6 ч · **Зависимости:** V6-001 · **Приоритет:** P0.
 
-- [ ] **V6-003** `[REQ-DESKTOP-001, REQ-SURFACE-001]` — Инвентаризировать scroll/input и Android Back.
+- [x] **V6-003** `[REQ-DESKTOP-001, REQ-SURFACE-001]` — Инвентаризировать scroll/input и Android Back.
   - **Работа:** найти vertical/horizontal/nested scroll owners/controllers, mouse drag/wheel behavior, `PopScope`/Navigator paths, dirty forms, keyboard insets и safe-area violations.
   - **Критерий:** каждый overflow и каждый exit path привязан к явному controller/pop owner; multi-attach/unsafe-pop candidates перечислены.
   - **Проверка/evidence:** `docs/audits/v6-input-back-inventory.md`, Windows mouse-only smoke и Android Back smoke на baseline.
   - **Оценка:** 6 ч · **Зависимости:** V6-001 · **Приоритет:** P0.
 
-- [ ] **V6-004** `[REQ-UX-001, REQ-SURFACE-001]` — Заморозить v7 tokens/component/state delta.
+- [x] **V6-004** `[REQ-UX-001, REQ-SURFACE-001]` — Заморозить v7 tokens/component/state delta.
   - **Работа:** подтвердить current tokens/Inter/assets, специфицировать только недостающие repeated behaviors (`ContextBar`, adaptive surface, draggable sheet, entity link, page state, scope selector, explicit scrollbar).
   - **Критерий:** ни один новый цвет/font/radius/package не добавлен без owner-approved reason; каждая новая primitive имеет ≥2 consumers или заменяет incomplete shared widget.
   - **Проверка/evidence:** component contract checklist + owner visual checkpoint at representative desktop/mobile states.
   - **Оценка:** 5 ч · **Зависимости:** V6-001, V6-003 · **Приоритет:** P0.
 
-- [ ] **V6-005** `[ALL V6 REQ]` — Снять wire-to-service и role/scope baseline.
+- [x] **V6-005** `[ALL V6 REQ]` — Снять wire-to-service и role/scope baseline.
   - **Работа:** для Schedule, Client, Payment, Tasks, Dashboard, Config записать method/path/body/result count per principal; зафиксировать Admin/Manager/Teacher negative requests.
   - **Критерий:** baseline воспроизводим на seeded backend; секреты/PII редактированы; missing workflow явно `blocked`.
   - **Проверка/evidence:** versioned redacted traces + automated comparison harness.
   - **Оценка:** 5 ч · **Зависимости:** V6-001 · **Приоритет:** P0.
 
-- [ ] **INT-S0** — Принять foundation.
+- [x] **INT-S0** — Принять foundation.
   - **Критерий:** inventories complete, PRD↔design traceability=100%, visual direction owner-confirmed, baseline gates зелёные, Critical challenge findings=0.
   - **Проверка:** `flutter analyze`, full Flutter tests, relevant server baseline, inventory checks, `git diff server/` empty for design/front changes.
   - **Оценка:** 4 ч · **Зависимости:** V6-001..005 · **Приоритет:** P0.
