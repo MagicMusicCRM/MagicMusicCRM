@@ -129,7 +129,7 @@ flowchart TD
   - **Проверка:** entity-link matrix on Windows/Android; forbidden refs cause no existence leak or forbidden prefetch.
   - **Оценка:** 6 ч · **Зависимости:** V6-101, V6-104 · **Приоритет:** P0.
 
-- [ ] **INT-S1** — Принять navigation/workspace kernel.
+- [x] **INT-S1** — Принять navigation/workspace kernel.
   - **Критерий:** CH-01/08 closed; production workspace mounted; per-tab history, breadcrumbs, restart/logout and deep links pass; second registry=0.
   - **Проверка:** targeted + full Flutter tests, Windows flow, negative network assertions, `git diff server/` empty.
   - **Оценка:** 4 ч · **Зависимости:** V6-101..105 · **Приоритет:** P0.

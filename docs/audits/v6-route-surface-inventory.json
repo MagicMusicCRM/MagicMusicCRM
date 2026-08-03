@@ -3,8 +3,8 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 260,
-    "production_reachable_files": 253,
+    "dart_files": 262,
+    "production_reachable_files": 255,
     "go_routes": 21,
     "screens": 21,
     "production_screens": 21,
@@ -242,7 +242,7 @@
         "retry": true
       },
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 73
+      "line": 74
     },
     {
       "name": "ManagerDashboardScreen",
