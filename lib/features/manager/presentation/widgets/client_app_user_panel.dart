@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
@@ -109,8 +110,9 @@ class _ClientAppUserPanelState extends ConsumerState<ClientAppUserPanel> {
       return;
     }
 
-    final selected = await showMagicSheet<Map<String, dynamic>>(
+    final selected = await showMagicAdaptiveSurface<Map<String, dynamic>>(
       context,
+      kind: AppSurfaceKind.selection,
       title: 'Привязать пользователя',
       subtitle: 'Выберите аккаунт приложения по номеру телефона',
       icon: Icons.link_rounded,

@@ -114,7 +114,7 @@ foreach ($match in [regex]::Matches($routerText, "(?s)GoRoute\s*\(\s*path:\s*'(?
 
 $screens = [Collections.Generic.List[object]]::new()
 $surfaces = [Collections.Generic.List[object]]::new()
-$surfacePattern = '(?<call>showDialog|showGeneralDialog|showModalBottomSheet|showMagicSheet|showMagicDrawer|DraggableScrollableSheet)\s*(?:<[^>]+>)?\s*\('
+$surfacePattern = '(?<call>showDialog|showGeneralDialog|showModalBottomSheet|showMagicSheet|showMagicDrawer|showMagicAdaptiveSurface|DraggableScrollableSheet)\s*(?:<[^>]+>)?\s*\('
 
 foreach ($file in $allDartFiles) {
   $relative = Get-RelativePath $file.FullName
@@ -143,6 +143,7 @@ foreach ($file in $allDartFiles) {
       'showModalBottomSheet' { 'bottom-sheet' }
       'showMagicSheet' { 'magic-sheet' }
       'showMagicDrawer' { 'drawer' }
+      'showMagicAdaptiveSurface' { 'adaptive-surface' }
       default { 'draggable-sheet' }
     }
     $surfaces.Add([ordered]@{
@@ -213,13 +214,13 @@ $routeMd = @"
 
 $navigationSites = [Collections.Generic.List[object]]::new()
 $displayNameRouteCandidates = [Collections.Generic.List[object]]::new()
-$navigationPattern = '(?<kind>openEntityLink|EntityRouteRegistry\s*\(|DesktopWorkspaceShell\s*\(|WorkspaceController\s*\(|context\.(?:go|push|replace|goNamed|pushNamed)\s*\(|Navigator(?:\.of)?\s*\(|Navigator\.(?:push|pop|maybePop|canPop)\s*\()'
+$navigationPattern = '(?<kind>openEntityLink|navigateEntityLink|EntityRouteRegistry\s*\(|DesktopWorkspaceShell\s*\(|WorkspaceController\s*\(|context\.(?:go|push|replace|goNamed|pushNamed)\s*\(|Navigator(?:\.of)?\s*\(|Navigator\.(?:push|pop|maybePop|canPop)\s*\()'
 foreach ($file in $allDartFiles) {
   $relative = Get-RelativePath $file.FullName
   $text = [IO.File]::ReadAllText($file.FullName)
   foreach ($match in [regex]::Matches($text, $navigationPattern)) {
     $raw = $match.Groups['kind'].Value
-    $kind = if ($raw -match 'EntityRouteRegistry|openEntityLink') { 'typed-entity' }
+    $kind = if ($raw -match 'EntityRouteRegistry|openEntityLink|navigateEntityLink') { 'typed-entity' }
       elseif ($raw -match 'DesktopWorkspaceShell|WorkspaceController') { 'workspace' }
       elseif ($raw -match '^context\.') { 'go-router' }
       else { 'navigator' }

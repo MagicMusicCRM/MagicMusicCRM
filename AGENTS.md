@@ -131,6 +131,9 @@ _Owner подтвердил полное выполнение v6. `V6-001..005` 
 ### 🌊 Wave v6/S1 — Navigation Kernel ✅
 _`V6-101..105` и `INT-S1` закрыты 2026-08-04: один `EntityRouteRegistry` обслуживает canonical metadata/direct links/breadcrumbs, production workspace смонтирован для staff roles, account-scoped tabs и per-tab Back/Forward переживают restart и безопасно очищаются при logout/role change. Один typed navigation path управляет desktop current/new-tab и compact GoRouter stack, сохраняет source state и не prefetch-ит forbidden entity. Gate: Flutter analyze clean, 503/503 tests, Windows debug build PASS, inventory stale-check routes=21/reachable=255/workspaceProduction=2/unowned=0, registry definitions=1, direct entity route bypass=0, server diff empty (`docs/audits/v6-int-s1-navigation-workspace.md`). Следующий шаг `/forge`: `V6-201` adaptive surface policy._
 
+### 🌊 Wave v6/S2 — Adaptive Surfaces & Mobile Back (in progress)
+_`V6-201` закрыта 2026-08-04: shared `AdaptiveSurfacePolicy` декларативно выбирает existing route / MagicSheet / MagicDrawer / dialog по job kind и breakpoint 840 без второго stack или duplicate content. Production Client selector и Finance expense form подключены; wire/service baseline exact unchanged. Flutter analyze clean, targeted 12/12, inventory routes=21/reachable=256/unowned=0, server diff empty (`docs/audits/v6-adaptive-surface-policy.md`). Следующий шаг `/forge`: `V6-202` full-width expandable mobile sheet._
+
 ### 🌊 Wave v4/S0 — Baseline & Evidence
 _`INT-S0` закрыт 2026-07-25: detached clean revision прошёл current-state inventory, lock install, backend typecheck/build, explicit platform PostgreSQL 5/5, full backend 103/103 suites и 929/929 tests, два стабильных read-only preflight-run, signed clean/drift reconciliation, Flutter analyze и 400/400 tests; skipped integration suites=0, lock/tracked diff=0._
 

@@ -6,6 +6,7 @@
 /// chrome scattered across `lib/features/*`.
 library;
 
+export 'adaptive_surface.dart';
 export 'magic_drawer.dart';
 export 'magic_menu.dart';
 export 'magic_sheet.dart';

@@ -138,7 +138,7 @@ flowchart TD
 
 ## 6. Sprint S2 — Adaptive surfaces & mobile Back
 
-- [ ] **V6-201** `[REQ-SURFACE-001]` — Поставить adaptive surface policy в shared presentation layer.
+- [x] **V6-201** `[REQ-SURFACE-001]` — Поставить adaptive surface policy в shared presentation layer.
   - **Работа:** route/page for primary jobs, existing magic sheet/drawer for contextual jobs, dialog only for short decisions; no new navigation stack.
   - **Критерий:** declarative surface kind selects correct container at 360/600/840 without duplicating content/service calls.
   - **Проверка:** representative Client/Lesson/Payment surface widget tests + wire-to-service diff.

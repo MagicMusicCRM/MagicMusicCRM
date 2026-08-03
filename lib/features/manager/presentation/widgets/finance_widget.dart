@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
@@ -224,8 +225,9 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
 
   Future<void> _addExpense() async {
     if (_savingExpense) return;
-    final result = await showMagicSheet<Map<String, dynamic>>(
+    final result = await showMagicAdaptiveSurface<Map<String, dynamic>>(
       context,
+      kind: AppSurfaceKind.quickView,
       title: 'Добавить расход',
       subtitle: 'Сумма, категория и комментарий',
       icon: Icons.receipt_long_rounded,

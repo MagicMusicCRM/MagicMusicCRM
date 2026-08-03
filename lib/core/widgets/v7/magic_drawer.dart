@@ -13,6 +13,8 @@ Future<T?> showMagicDrawer<T>(
   BuildContext context, {
   required String title,
   required WidgetBuilder builder,
+  String? subtitle,
+  IconData? icon,
   List<Widget>? actions,
 }) {
   return showGeneralDialog<T>(
@@ -26,6 +28,8 @@ Future<T?> showMagicDrawer<T>(
         alignment: Alignment.centerRight,
         child: _MagicDrawer(
           title: title,
+          subtitle: subtitle,
+          icon: icon,
           actions: actions,
           body: builder(context),
         ),
@@ -46,11 +50,15 @@ Future<T?> showMagicDrawer<T>(
 class _MagicDrawer extends StatelessWidget {
   const _MagicDrawer({
     required this.title,
+    required this.subtitle,
+    required this.icon,
     required this.actions,
     required this.body,
   });
 
   final String title;
+  final String? subtitle;
+  final IconData? icon;
   final List<Widget>? actions;
   final Widget body;
 
@@ -77,21 +85,54 @@ class _MagicDrawer extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 16, 8, 16),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColor.text,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.16,
+                    if (icon != null) ...[
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColor.goldSoft,
+                          borderRadius: BorderRadius.circular(AppRadius.icon),
+                          border: Border.all(color: AppColor.goldLine),
                         ),
+                        child: Icon(icon, size: 20, color: AppColor.gold),
+                      ),
+                      const SizedBox(width: AppSpace.md),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColor.text,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.16,
+                            ),
+                          ),
+                          if (subtitle != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                subtitle!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColor.text2,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     IconButton(
+                      tooltip: 'Закрыть',
                       icon: const Icon(Icons.close_rounded),
                       color: AppColor.text2,
                       iconSize: 20,
