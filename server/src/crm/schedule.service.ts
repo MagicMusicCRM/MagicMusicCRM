@@ -156,9 +156,11 @@ export class ScheduleService {
             and ($3::uuid is null or l.branch_id = $3 or g.branch_id = $3 or r.branch_id = $3)
             and ($4::uuid is null or l.room_id = $4)
             and ($5::uuid is null or l.teacher_id = $5)
-            and ($6::boolean is null or l.is_trial = $6)
+            and ($6::uuid is null or l.student_id = $6)
+            and ($7::uuid is null or l.lead_id = $7)
+            and ($8::boolean is null or l.is_trial = $8)
           order by l.scheduled_at asc, l.id asc
-          limit $7
+          limit $9
         )
         select scoped.id, scoped.student_id, scoped.group_id, scoped.lead_id,
           scoped.teacher_id, scoped.branch_id, scoped.room_id,
@@ -248,6 +250,8 @@ export class ScheduleService {
         query.branchId ?? null,
         query.roomId ?? null,
         query.teacherId ?? null,
+        query.studentId ?? null,
+        query.leadId ?? null,
         query.isTrial ?? null,
         limit,
       ],

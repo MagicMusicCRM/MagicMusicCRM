@@ -13,6 +13,8 @@ class CrmNavigationRequest {
     required DateTime date,
     String? lessonId,
     String? leadId,
+    String? clientType,
+    String? clientId,
   }) {
     return CrmNavigationRequest(
       link: EntityLink.typed(
@@ -25,6 +27,9 @@ class CrmNavigationRequest {
             'date': date.toUtc().toIso8601String(),
             if (lessonId != null && lessonId.isNotEmpty) 'lessonId': lessonId,
             if (leadId != null && leadId.isNotEmpty) 'leadId': leadId,
+            if (clientType != null && clientType.isNotEmpty)
+              'clientType': clientType,
+            if (clientId != null && clientId.isNotEmpty) 'clientId': clientId,
           },
         ),
       ),

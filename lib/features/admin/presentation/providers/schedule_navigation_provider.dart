@@ -22,12 +22,20 @@ class ScheduleFocusState {
   /// screen/day and only then opens its canonical create-lesson dialog.
   final String? leadId;
   final String? leadName;
+  final bool openMonth;
+  final String? clientType;
+  final String? clientId;
+  final String? clientName;
 
   const ScheduleFocusState({
     required this.focusDate,
     this.highlightLessonId,
     this.leadId,
     this.leadName,
+    this.openMonth = false,
+    this.clientType,
+    this.clientId,
+    this.clientName,
   });
 }
 
@@ -50,6 +58,21 @@ class ScheduleFocusNotifier extends Notifier<ScheduleFocusState?> {
       focusDate: date,
       leadId: leadId,
       leadName: leadName,
+    );
+  }
+
+  void focusClientMonth(
+    DateTime date, {
+    required String clientType,
+    required String clientId,
+    String? clientName,
+  }) {
+    state = ScheduleFocusState(
+      focusDate: date,
+      openMonth: true,
+      clientType: clientType,
+      clientId: clientId,
+      clientName: clientName,
     );
   }
 

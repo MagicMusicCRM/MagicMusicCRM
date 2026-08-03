@@ -858,27 +858,47 @@ extension _ClientCardTabsA on _ClientCardState {
     }
   }
 
-  /// «Открыть в расписании» (#6): фокусирует расписание дашборда на ближайшем
-  /// предстоящем занятии клиента, а если занятий нет — просто на сегодняшнем
-  /// дне, затем закрывает карточку и уводит на /admin (вкладка «Расписание»).
-  ///
-  /// Тот же механизм, что у тапа по занятию ([_openScheduleForLesson]): один
-  /// one-shot [scheduleNavigationProvider] + [crmNavigationRequestProvider].
+  /// Opens the month containing the nearest upcoming lesson and keeps the
+  /// schedule scoped to this client. With no future lesson it opens this month.
   void _openScheduleFromCard() {
     final now = DateTime.now();
     DateTime? bestDt;
-    String bestId = '';
     for (final l in _lessons) {
       final dt = DateTime.tryParse(l.scheduledAt ?? '');
       final id = l.id;
       if (dt == null || id == null || id.isEmpty || dt.isBefore(now)) continue;
       if (bestDt == null || dt.isBefore(bestDt)) {
         bestDt = dt;
-        bestId = id;
       }
     }
-    // Пустой highlight-id — валидная деградация: расписание откроет день, а
-    // подсвечивать будет нечего (id не совпадёт ни с одним занятием).
-    _openScheduleForLesson(bestDt ?? now, bestId);
+    final clientType = _isStudent && _studentId.isNotEmpty ? 'student' : 'lead';
+    final clientId = clientType == 'student' ? _studentId : _leadId;
+    if (clientId.isEmpty) return;
+    final date = bestDt ?? now;
+    final name = [
+      _leadData['first_name'],
+      _leadData['last_name'],
+    ].whereType<Object>().map((value) => value.toString()).join(' ').trim();
+    ref
+        .read(scheduleNavigationProvider.notifier)
+        .focusClientMonth(
+          date,
+          clientType: clientType,
+          clientId: clientId,
+          clientName: name.isEmpty ? null : name,
+        );
+    ref
+        .read(crmNavigationRequestProvider.notifier)
+        .navigateTo(
+          CrmNavigationRequest.schedule(
+            date: date,
+            clientType: clientType,
+            clientId: clientId,
+          ),
+        );
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop(_dirty ? true : null);
+    }
+    context.go('/admin');
   }
 }

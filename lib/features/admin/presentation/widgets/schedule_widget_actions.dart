@@ -1,7 +1,6 @@
 part of 'schedule_widget.dart';
 
 extension _ScheduleActions on _ScheduleWidgetState {
-
   // ── Data fetching ─────────────────────────────────────────────────────────
   Future<void> _fetchAll() async {
     _emitState(() {
@@ -53,8 +52,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       if (defaultBranch == null && branches.isNotEmpty) {
         final home = _homeBranchId;
         final hasHome =
-            home != null &&
-            branches.any((b) => b['id'].toString() == home);
+            home != null && branches.any((b) => b['id'].toString() == home);
         defaultBranch = hasHome ? home : branches.first['id'].toString();
       }
 
@@ -86,35 +84,46 @@ extension _ScheduleActions on _ScheduleWidgetState {
       final monthSummary = <String, Map<String, dynamic>>{};
 
       final wave2 = await Future.wait<Object?>([
-        crm.getScheduleMatrix(
-          from: fromIso,
-          to: toIso,
-          branchId: defaultBranch,
-          groupBy:
-              _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
-          limit: 300,
-        ).catchError((e) {
-          debugPrint('Error fetching schedule matrix: $e');
-          return <String, dynamic>{};
-        }),
-        crm.listRoomAvailability(
-          branchId: defaultBranch,
-          date: dateOnly(_selectedDate),
-          from: _slotIso(_selectedDate, 6),
-          to: _slotIso(_selectedDate, 23),
-          limit: 100,
-        ).catchError((e) {
-          debugPrint('Error fetching room availability: $e');
-          return <String, dynamic>{};
-        }),
-        crm.getScheduleMonthSummary(
-          from: fromIso,
-          to: toIso,
-          branchId: defaultBranch,
-        ).catchError((e) {
-          debugPrint('Error fetching month summary: $e');
-          return <Map<String, dynamic>>[];
-        }),
+        crm
+            .getScheduleMatrix(
+              from: fromIso,
+              to: toIso,
+              branchId: defaultBranch,
+              groupBy: _dayViewMode == DayViewMode.byTeacher
+                  ? 'teacher'
+                  : 'room',
+              studentId: _filterClientType == 'student'
+                  ? _filterClientId
+                  : null,
+              leadId: _filterClientType == 'lead' ? _filterClientId : null,
+              limit: _filterClientId == null ? 300 : 500,
+            )
+            .catchError((e) {
+              debugPrint('Error fetching schedule matrix: $e');
+              return <String, dynamic>{};
+            }),
+        crm
+            .listRoomAvailability(
+              branchId: defaultBranch,
+              date: dateOnly(_selectedDate),
+              from: _slotIso(_selectedDate, 6),
+              to: _slotIso(_selectedDate, 23),
+              limit: 100,
+            )
+            .catchError((e) {
+              debugPrint('Error fetching room availability: $e');
+              return <String, dynamic>{};
+            }),
+        crm
+            .getScheduleMonthSummary(
+              from: fromIso,
+              to: toIso,
+              branchId: defaultBranch,
+            )
+            .catchError((e) {
+              debugPrint('Error fetching month summary: $e');
+              return <Map<String, dynamic>>[];
+            }),
       ]);
 
       final matrixResult = wave2[0] as Map<String, dynamic>;
@@ -123,18 +132,21 @@ extension _ScheduleActions on _ScheduleWidgetState {
 
       final matrixItems = matrixResult['items'];
       if (matrixItems is List && matrixItems.isNotEmpty) {
-        enrichedLessons =
-            matrixItems.whereType<Map<String, dynamic>>().toList();
+        enrichedLessons = matrixItems
+            .whereType<Map<String, dynamic>>()
+            .toList();
       }
       final conflicts = matrixResult['conflicts'];
       if (conflicts is List) {
-        scheduleConflicts =
-            conflicts.whereType<Map<String, dynamic>>().toList();
+        scheduleConflicts = conflicts
+            .whereType<Map<String, dynamic>>()
+            .toList();
       }
       final availabilityItems = availabilityResult['items'];
       if (availabilityItems is List) {
-        roomAvailability =
-            availabilityItems.whereType<Map<String, dynamic>>().toList();
+        roomAvailability = availabilityItems
+            .whereType<Map<String, dynamic>>()
+            .toList();
       }
       for (final item in summaryResult) {
         final day = item['day']?.toString();
@@ -212,8 +224,6 @@ extension _ScheduleActions on _ScheduleWidgetState {
       // cap (e.g. today mid-month).
       if (_currentView == ScheduleView.day) {
         _fetchDayLessons(_selectedDate);
-      } else if (_currentView == ScheduleView.year) {
-        _fetchYearSummary();
       }
     } catch (e) {
       debugPrint('Error fetching schedule: $e');
@@ -262,17 +272,24 @@ extension _ScheduleActions on _ScheduleWidgetState {
     if (branchId == null || branchId.isEmpty) return;
     final offset = _branchOffsets[branchId] ?? 180;
     // Branch-local midnight expressed as the corresponding UTC instant.
-    final dayStartUtc = DateTime.utc(date.year, date.month, date.day)
-        .subtract(Duration(minutes: offset));
+    final dayStartUtc = DateTime.utc(
+      date.year,
+      date.month,
+      date.day,
+    ).subtract(Duration(minutes: offset));
     final dayEndUtc = dayStartUtc.add(const Duration(days: 1));
     try {
-      final result = await ref.read(magicCrmServiceProvider).getScheduleMatrix(
-        from: dayStartUtc.toIso8601String(),
-        to: dayEndUtc.toIso8601String(),
-        branchId: branchId,
-        groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
-        limit: 500,
-      );
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .getScheduleMatrix(
+            from: dayStartUtc.toIso8601String(),
+            to: dayEndUtc.toIso8601String(),
+            branchId: branchId,
+            groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
+            studentId: _filterClientType == 'student' ? _filterClientId : null,
+            leadId: _filterClientType == 'lead' ? _filterClientId : null,
+            limit: 500,
+          );
       final items = result['items'];
       if (items is! List || !mounted) return;
       final dayLessons = items.whereType<Map<String, dynamic>>().toList();
@@ -338,6 +355,10 @@ extension _ScheduleActions on _ScheduleWidgetState {
           l['teacher_id']?.toString() != _filterTeacherId) {
         return false;
       }
+      if (_filterClientId != null) {
+        final key = _filterClientType == 'lead' ? 'lead_id' : 'student_id';
+        if (l[key]?.toString() != _filterClientId) return false;
+      }
       return true;
     }).toList();
   }
@@ -356,7 +377,10 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   bool get _hasExtraFilters =>
-      _onlyTrial || _onlyConflicts || _filterTeacherId != null;
+      _onlyTrial ||
+      _onlyConflicts ||
+      _filterTeacherId != null ||
+      _filterClientId != null;
 
   List<Map<String, dynamic>> _lessonsForDate(DateTime date) {
     return _filteredLessons.where((l) {
@@ -369,8 +393,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   // UTC offset (minutes) for the selected branch, falling back to Moscow.
-  int get _selectedBranchOffset =>
-      _branchOffsets[_selectedBranchId] ?? 180;
+  int get _selectedBranchOffset => _branchOffsets[_selectedBranchId] ?? 180;
 
   // Offset for a specific lesson based on its branch, falling back to the
   // selected branch / Moscow.
@@ -392,7 +415,6 @@ extension _ScheduleActions on _ScheduleWidgetState {
     if (parsed == null) return null;
     return parsed.toUtc().add(Duration(minutes: _selectedBranchOffset));
   }
-
 
   String _slotIso(DateTime date, int hour) {
     return DateTime(
@@ -435,68 +457,22 @@ extension _ScheduleActions on _ScheduleWidgetState {
     _fetchAll();
   }
 
-  void _prevYear() {
-    _emitState(() => _displayedYear -= 1);
-    _fetchYearSummary();
-  }
-
-  void _nextYear() {
-    _emitState(() => _displayedYear += 1);
-    _fetchYearSummary();
-  }
-
-  // Opening a month from the year overview drops the user into that month.
-  void _onYearMonthTap(int month) {
+  void _prevWeek() {
     _emitState(() {
       _clearHighlight();
-      _displayedMonth = DateTime(_displayedYear, month);
-      _selectedDate = DateTime(_displayedYear, month, 1);
-      _currentView = ScheduleView.month;
+      _selectedDate = _selectedDate.subtract(const Duration(days: 7));
+      _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
     });
     _fetchAll();
   }
 
-  // Whole-year per-month aggregate from the lightweight day-level month-summary
-  // (one HTTP call, ≈365 small rows). Counts/active-days are SERVER-derived; we
-  // never invent conflict numbers the summary endpoint doesn't return.
-  Future<void> _fetchYearSummary() async {
-    final branchId = _selectedBranchId;
-    final guard = _displayedYear * 31 + (branchId?.hashCode ?? 0) % 31;
-    if (_yearLoadedFor == guard && _yearMonths.isNotEmpty) return;
-    _emitState(() => _yearLoading = true);
-    try {
-      final from = DateTime.utc(_displayedYear, 1, 1).toIso8601String();
-      final to = DateTime.utc(_displayedYear + 1, 1, 1).toIso8601String();
-      final summary = await ref
-          .read(magicCrmServiceProvider)
-          .getScheduleMonthSummary(from: from, to: to, branchId: branchId);
-      final months = <int, ({int count, int activeDays})>{};
-      for (final item in summary) {
-        final day = item['day']?.toString();
-        if (day == null) continue;
-        final parts = day.split('-');
-        if (parts.length < 2) continue;
-        final m = int.tryParse(parts[1]);
-        if (m == null) continue;
-        final c = item['count'] is int
-            ? item['count'] as int
-            : int.tryParse('${item['count']}') ?? 0;
-        final cur = months[m] ?? (count: 0, activeDays: 0);
-        months[m] = (
-          count: cur.count + c,
-          activeDays: cur.activeDays + (c > 0 ? 1 : 0),
-        );
-      }
-      if (!mounted) return;
-      _emitState(() {
-        _yearMonths = months;
-        _yearLoading = false;
-        _yearLoadedFor = guard;
-      });
-    } catch (e) {
-      debugPrint('Error fetching year summary: $e');
-      if (mounted) _emitState(() => _yearLoading = false);
-    }
+  void _nextWeek() {
+    _emitState(() {
+      _clearHighlight();
+      _selectedDate = _selectedDate.add(const Duration(days: 7));
+      _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
+    });
+    _fetchAll();
   }
 
   void _prevDay() {

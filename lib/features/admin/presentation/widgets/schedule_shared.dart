@@ -59,7 +59,7 @@ List<String> conflictTypes(dynamic value) {
 }
 
 /// Top-level schedule view mode.
-enum ScheduleView { year, month, day }
+enum ScheduleView { month, week, day }
 
 /// Day-view grouping mode.
 enum DayViewMode { byRoom, byTeacher }

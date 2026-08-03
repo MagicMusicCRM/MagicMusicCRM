@@ -32,6 +32,14 @@ export class ScheduleMatrixQuery {
   teacherId?: string;
 
   @IsOptional()
+  @IsUUID()
+  studentId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  leadId?: string;
+
+  @IsOptional()
   @Transform(({ value }) => value === true || value === "true")
   @IsBoolean()
   isTrial?: boolean;

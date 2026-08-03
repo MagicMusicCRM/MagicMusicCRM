@@ -8,11 +8,28 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     final date = focus.focusDate;
     final day = DateTime(date.year, date.month, date.day);
     _highlightClearTimer?.cancel();
+    if (focus.openMonth && focus.clientId?.isNotEmpty == true) {
+      _emitState(() {
+        _selectedDate = day;
+        _displayedMonth = DateTime(day.year, day.month);
+        _currentView = ScheduleView.month;
+        _highlightLessonId = null;
+        _filterClientType = focus.clientType;
+        _filterClientId = focus.clientId;
+        _filterClientName = focus.clientName;
+      });
+      ref.read(scheduleNavigationProvider.notifier).clear();
+      unawaited(_fetchAll());
+      return;
+    }
     _emitState(() {
       _selectedDate = day;
       _displayedMonth = DateTime(day.year, day.month);
       _currentView = ScheduleView.day;
       _highlightLessonId = focus.highlightLessonId;
+      _filterClientType = null;
+      _filterClientId = null;
+      _filterClientName = null;
     });
     _fetchAvailabilityForSelectedDay();
     _fetchDayLessons(day);

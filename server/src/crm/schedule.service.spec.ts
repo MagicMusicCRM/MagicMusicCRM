@@ -345,6 +345,8 @@ describe("ScheduleService", () => {
       branchId: "branch-a",
       roomId: "room-a",
       teacherId: "teacher-a",
+      studentId: "student-a",
+      leadId: "lead-a",
       isTrial: true,
       groupBy: "room",
       limit: 30,
@@ -383,6 +385,8 @@ describe("ScheduleService", () => {
       "branch-a",
       "room-a",
       "teacher-a",
+      "student-a",
+      "lead-a",
       true,
       30,
     ]);

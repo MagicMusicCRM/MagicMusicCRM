@@ -8,7 +8,7 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
-/// KVA-195 redesign coverage: Год/Месяц/День navigation, the day-grid canvas,
+/// KVA-195 redesign coverage: Месяц/Неделя/День navigation, the day-grid canvas,
 /// the interaction legend (no per-cell instructions), and the quick-create
 /// popover wired to the existing `POST /crm/lessons` contract.
 
@@ -33,38 +33,41 @@ class _FakeClient extends MagicApiClient {
     final iso = _today().toIso8601String();
     if (path == '/crm/branches') {
       return <String, dynamic>{
-        'items': [
-          {'id': _branchId, 'name': 'Сокол', 'utcOffsetMinutes': 0},
-        ],
-      } as T;
+            'items': [
+              {'id': _branchId, 'name': 'Сокол', 'utcOffsetMinutes': 0},
+            ],
+          }
+          as T;
     }
     if (path == '/crm/rooms') {
       return <String, dynamic>{
-        'items': [
-          {'id': _roomId, 'branchId': _branchId, 'name': 'Аудитория 1'},
-        ],
-      } as T;
+            'items': [
+              {'id': _roomId, 'branchId': _branchId, 'name': 'Аудитория 1'},
+            ],
+          }
+          as T;
     }
     if (path == '/crm/schedule/matrix') {
       return <String, dynamic>{
-        'items': [
-          {
-            'id': 'lesson-1',
-            'studentId': 'student-a',
-            'studentName': 'Ольга Ученик',
-            'teacherId': 'teacher-a',
-            'teacherName': 'Анна Сусарина',
-            'branchId': _branchId,
-            'roomId': _roomId,
-            'roomName': 'Аудитория 1',
-            'scheduledAt': iso,
-            'durationMinutes': 120,
-            'status': 'scheduled',
-          },
-        ],
-        'groups': const [],
-        'conflicts': const [],
-      } as T;
+            'items': [
+              {
+                'id': 'lesson-1',
+                'studentId': 'student-a',
+                'studentName': 'Ольга Ученик',
+                'teacherId': 'teacher-a',
+                'teacherName': 'Анна Сусарина',
+                'branchId': _branchId,
+                'roomId': _roomId,
+                'roomName': 'Аудитория 1',
+                'scheduledAt': iso,
+                'durationMinutes': 120,
+                'status': 'scheduled',
+              },
+            ],
+            'groups': const [],
+            'conflicts': const [],
+          }
+          as T;
     }
     return <String, dynamic>{'items': const []} as T;
   }
@@ -81,24 +84,19 @@ void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
 
   group('KVA-195 schedule redesign', () {
-    testWidgets('Год / Месяц / День switcher changes the view', (tester) async {
+    testWidgets('Месяц / Неделя / День switcher changes the view', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const ScheduleWidget()));
       await tester.pumpAndSettle();
 
       // Default = month: weekday headers visible.
       expect(find.text('Пн'), findsOneWidget);
+      expect(find.text('Год'), findsNothing);
 
-      // Switch to Год → month overview cards (top rows are on-screen; the grid
-      // is lazy, so the last months are below the fold).
-      await tester.tap(find.text('Год'));
+      await tester.tap(find.text('Неделя'));
       await tester.pumpAndSettle();
-      expect(find.text('Январь'), findsOneWidget);
-      expect(find.text('Февраль'), findsOneWidget);
-
-      // Click a month card → back into Месяц.
-      await tester.tap(find.text('Январь'));
-      await tester.pumpAndSettle();
-      expect(find.text('Пн'), findsOneWidget);
+      expect(find.byKey(const ValueKey('schedule-week-view')), findsOneWidget);
 
       // Switch to День → the time grid (wide «Время» gutter header) is shown.
       await tester.tap(find.text('День'));

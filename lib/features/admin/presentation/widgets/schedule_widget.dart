@@ -14,13 +14,13 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:syncfusion_flutter_calendar/calendar.dart';
 
 import 'create_lesson_dialog.dart';
 import 'schedule_day_canvas.dart';
 import 'lesson_details_sheet.dart';
 import 'schedule_legends.dart';
 import 'schedule_shared.dart';
-import 'schedule_year_view.dart';
 import 'schedule_month_view.dart';
 import 'schedule_day_mode_toggle.dart';
 import 'schedule_timezone_dialog.dart';
@@ -46,6 +46,12 @@ const List<Color> _roomColors = [
   Color(0xFFC58A5B), // приглушённый терракотовый
   AppColor.danger, // красный (статус)
 ];
+
+class _ScheduleWeekDataSource extends CalendarDataSource {
+  _ScheduleWeekDataSource(List<Appointment> source) {
+    appointments = source;
+  }
+}
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 
@@ -92,15 +98,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Map<String, Map<String, dynamic>> _monthDaySummary = {};
   bool _availabilityLoading = false;
 
-  // ── Year view (KVA-195) ─────────────────────────────────────────────────────
-  // Per-month aggregate for the selected year, derived from the lightweight
-  // whole-year `getScheduleMonthSummary` (per-day counts) so the year overview
-  // shows real load without fetching every lesson. Keyed by month 1..12.
-  int _displayedYear = DateTime.now().year;
-  Map<int, ({int count, int activeDays})> _yearMonths = {};
-  bool _yearLoading = false;
-  int? _yearLoadedFor; // (year ^ branch) guard so we fetch once per year/branch
-
   // UI state
   String? _selectedBranchId;
   ScheduleView _currentView = ScheduleView.month;
@@ -110,6 +107,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   bool _onlyTrial = false;
   bool _onlyConflicts = false;
   String? _filterTeacherId;
+  String? _filterClientType;
+  String? _filterClientId;
+  String? _filterClientName;
   // The user's own branch (staff assignment), resolved once, used as the
   // default instead of «the first branch in the system».
   String? _homeBranchId;
@@ -242,6 +242,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               ),
           ],
           _buildDateNavigation(),
+          if (!firstLoad && _filterClientId != null) _buildClientFilterBanner(),
           if (!firstLoad && _currentView == ScheduleView.day) ...[
             const ScheduleDayLegend(),
             _buildAvailabilitySummary(),

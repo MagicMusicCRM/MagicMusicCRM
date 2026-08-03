@@ -67,6 +67,8 @@ extension MagicCrmSchedule on MagicCrmService {
     String? branchId,
     String? roomId,
     String? teacherId,
+    String? studentId,
+    String? leadId,
     bool? isTrial,
     String? groupBy,
     int limit = 300,
@@ -84,6 +86,8 @@ extension MagicCrmSchedule on MagicCrmService {
     addString('branchId', branchId);
     addString('roomId', roomId);
     addString('teacherId', teacherId);
+    addString('studentId', studentId);
+    addString('leadId', leadId);
     addString('groupBy', groupBy);
     if (isTrial != null) queryParameters['isTrial'] = isTrial;
 

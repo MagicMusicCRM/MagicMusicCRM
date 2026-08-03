@@ -15,22 +15,16 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       return _ScheduleError(error: _loadError, onRetry: _fetchAll);
     }
     return switch (_currentView) {
-      ScheduleView.year => ScheduleYearView(
-        yearMonths: _yearMonths,
-        displayedYear: _displayedYear,
-        displayedMonth: _displayedMonth,
-        yearLoading: _yearLoading,
-        onMonthTap: _onYearMonthTap,
-      ),
       ScheduleView.month => ScheduleMonthView(
         selectedDate: _selectedDate,
         displayedMonth: _displayedMonth,
         studentNames: _studentNames,
-        monthDaySummary: _monthDaySummary,
+        monthDaySummary: _filterClientId == null ? _monthDaySummary : const {},
         lessonsForDate: _lessonsForDate,
         parseLessonTime: _parseLessonTime,
         onDayTap: _onMonthDayTap,
       ),
+      ScheduleView.week => _buildWeekView(),
       ScheduleView.day => _buildDayView(),
     };
   }
@@ -38,9 +32,9 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
   // ── Header ────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     final title = switch (_currentView) {
-      ScheduleView.year => 'Расписание / $_displayedYear',
       ScheduleView.month =>
         '${monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}',
+      ScheduleView.week => 'Расписание / Неделя',
       ScheduleView.day => 'Расписание / День',
     };
 
@@ -73,9 +67,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
             icon: Icon(
               // A dot on the funnel signals filters are active — otherwise a
               // half-empty grid reads as «нет занятий», not «отфильтровано».
-              _hasExtraFilters
-                  ? Icons.filter_alt_rounded
-                  : Icons.tune_rounded,
+              _hasExtraFilters ? Icons.filter_alt_rounded : Icons.tune_rounded,
               color: _hasExtraFilters
                   ? AppColor.gold
                   : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -97,7 +89,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
     );
   }
 
-  // ── Год / Месяц / День segmented control (primary navigation) ──────────────
+  // ── Месяц / Неделя / День segmented control (primary navigation) ──────────
   Widget _buildViewSwitcher() {
     Widget seg(String label, ScheduleView view) {
       final active = _currentView == view;
@@ -141,9 +133,9 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
         ),
         child: Row(
           children: [
-            seg('Год', ScheduleView.year),
-            const SizedBox(width: 4),
             seg('Месяц', ScheduleView.month),
+            const SizedBox(width: 4),
+            seg('Неделя', ScheduleView.week),
             const SizedBox(width: 4),
             seg('День', ScheduleView.day),
           ],
@@ -158,11 +150,12 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       _clearHighlight();
       _currentView = view;
     });
-    if (view == ScheduleView.year) {
-      _fetchYearSummary();
-    } else if (view == ScheduleView.day) {
+    if (view == ScheduleView.day) {
       _fetchAvailabilityForSelectedDay();
       _fetchDayLessons(_selectedDate);
+    } else if (view == ScheduleView.week) {
+      _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
+      _fetchAll();
     }
   }
 
@@ -234,7 +227,6 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
     );
   }
 
-
   Future<void> _editBranchTimezone() async {
     final branchId = _selectedBranchId;
     if (branchId == null) return;
@@ -281,15 +273,21 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
     String dateLabel;
     VoidCallback onPrev, onNext;
 
-    if (_currentView == ScheduleView.year) {
-      dateLabel = '$_displayedYear';
-      onPrev = _prevYear;
-      onNext = _nextYear;
-    } else if (_currentView == ScheduleView.month) {
+    if (_currentView == ScheduleView.month) {
       dateLabel =
           '${monthNamesGenitive[_displayedMonth.month].toLowerCase()} ${_displayedMonth.year}';
       onPrev = _prevMonth;
       onNext = _nextMonth;
+    } else if (_currentView == ScheduleView.week) {
+      final monday = _selectedDate.subtract(
+        Duration(days: _selectedDate.weekday - 1),
+      );
+      final sunday = monday.add(const Duration(days: 6));
+      dateLabel =
+          '${monday.day} ${monthNamesGenitive[monday.month]} — '
+          '${sunday.day} ${monthNamesGenitive[sunday.month]} ${sunday.year}';
+      onPrev = _prevWeek;
+      onNext = _nextWeek;
     } else {
       final weekDayNames = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
       final wd = weekDayNames[_selectedDate.weekday - 1];
@@ -361,6 +359,76 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWeekView() {
+    final appointments = <Appointment>[];
+    for (final lesson in _filteredLessons) {
+      final start = _parseLessonTime(lesson);
+      if (start == null) continue;
+      final leadName = lesson['lead_name']?.toString().trim() ?? '';
+      final subject =
+          _studentNames[lesson['student_id']?.toString()] ??
+          lesson['group_name']?.toString() ??
+          (leadName.isEmpty ? 'Занятие' : leadName);
+      appointments.add(
+        Appointment(
+          id: lesson['id']?.toString(),
+          startTime: start,
+          endTime: start.add(Duration(minutes: _durationMinutes(lesson))),
+          subject: subject,
+          location: _roomNames[lesson['room_id']?.toString()] ?? '',
+          color: LessonStateProjection.fromMap(lesson).token.accent,
+        ),
+      );
+    }
+    return SfCalendar(
+      key: const ValueKey('schedule-week-view'),
+      view: CalendarView.week,
+      initialDisplayDate: _selectedDate,
+      firstDayOfWeek: 1,
+      todayHighlightColor: AppColor.gold,
+      cellBorderColor: AppColor.divider,
+      backgroundColor: Colors.transparent,
+      dataSource: _ScheduleWeekDataSource(appointments),
+      timeSlotViewSettings: const TimeSlotViewSettings(
+        startHour: 6,
+        endHour: 23,
+        timeFormat: 'HH:mm',
+        timeIntervalHeight: 54,
+      ),
+      onTap: (details) {
+        final selected = details.appointments;
+        if (selected == null || selected.isEmpty) return;
+        final id = (selected.first as Appointment).id?.toString();
+        if (id == null) return;
+        final lesson = _lessons
+            .where((item) => item['id']?.toString() == id)
+            .firstOrNull;
+        if (lesson != null) _showLessonDetails(lesson);
+      },
+    );
+  }
+
+  Widget _buildClientFilterBanner() {
+    final fallback = _filterClientType == 'lead' ? 'Лид' : 'Ученик';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: InputChip(
+          avatar: const Icon(Icons.person_search_rounded, size: 18),
+          label: Text(
+            'Клиент: ${_filterClientName?.trim().isNotEmpty == true ? _filterClientName : fallback}',
+          ),
+          onDeleted: () => _emitState(() {
+            _filterClientType = null;
+            _filterClientId = null;
+            _filterClientName = null;
+          }),
+        ),
       ),
     );
   }
@@ -448,7 +516,6 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
     }
     return null;
   }
-
 
   // Defensive: the backend may send duration as int, double, or string. A bare
   // `as int?` cast throws on a double and blanks the whole card (the lesson then
@@ -564,7 +631,8 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           // past», not «audited»; it must not be a write lock. Fixing a
           // mistyped past lesson is ordinary admin work.
           movable: l['id'] != null && status != 'cancelled',
-          highlighted: _highlightLessonId != null &&
+          highlighted:
+              _highlightLessonId != null &&
               l['id']?.toString() == _highlightLessonId,
         ),
       );
