@@ -123,7 +123,7 @@ flowchart TD
   - **Проверка:** widget/golden layouts + keyboard flow + direct-link reconstruction.
   - **Оценка:** 7 ч · **Зависимости:** V6-101, V6-102 · **Приоритет:** P0.
 
-- [ ] **V6-105** `[REQ-NAV-001, REQ-NAV-002]` — Унифицировать typed entity navigation policy.
+- [x] **V6-105** `[REQ-NAV-001, REQ-NAV-002]` — Унифицировать typed entity navigation policy.
   - **Работа:** current-tab/open-new-tab/mobile-stack behaviors and actor-safe missing/forbidden/tombstone state through existing `EntityRouteRegistry`.
   - **Критерий:** Client/Lead/Student/Teacher/Room/Lesson/Task/Payment/Subscription/Branch/User/Report refs follow one policy and restore source filters/date/position.
   - **Проверка:** entity-link matrix on Windows/Android; forbidden refs cause no existence leak or forbidden prefetch.

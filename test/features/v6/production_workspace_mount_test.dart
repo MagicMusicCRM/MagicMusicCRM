@@ -134,6 +134,49 @@ void main() {
     );
   });
 
+  testWidgets('a new direct link updates the current workspace history', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 800);
+    addTearDown(tester.view.reset);
+    final store = AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore());
+    const hostKey = ValueKey('stable-workspace');
+
+    Widget app(String id) => ProviderScope(
+      overrides: [accountWorkspaceStoreProvider.overrideWithValue(store)],
+      child: MaterialApp(
+        home: Scaffold(
+          body: ProductionWorkspaceHost(
+            key: hostKey,
+            snapshot: snapshot,
+            initialLink: EntityLink.typed(
+              entityType: EntityLinkType.client,
+              entityId: id,
+              variant: 'student',
+            ),
+            tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(app('student-first'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(app('student-second'));
+    await tester.pumpAndSettle();
+
+    final shell = tester.widget<DesktopWorkspaceShell>(
+      find.byType(DesktopWorkspaceShell),
+    );
+    expect(shell.controller.state.tabs, hasLength(1));
+    expect(shell.controller.state.activeTab.routeStack, hasLength(2));
+    expect(
+      shell.controller.state.activeTab.currentRoute.link.entityId,
+      'student-second',
+    );
+  });
+
   testWidgets('restart restores permitted tabs and logout clears cache', (
     tester,
   ) async {

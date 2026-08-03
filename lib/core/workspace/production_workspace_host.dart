@@ -10,6 +10,7 @@ import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/magic_context_bar.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
+import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 
 class ProductionWorkspaceHost extends ConsumerStatefulWidget {
   const ProductionWorkspaceHost({
@@ -52,6 +53,19 @@ class _ProductionWorkspaceHostState
           : Future<void>.value();
       _disposeController();
       _initialize(beforeRestore: reset);
+    } else if (!_sameLink(oldWidget.initialLink, widget.initialLink) &&
+        widget.initialLink != null) {
+      final resolution = EntityRouteRegistry().resolve(
+        widget.initialLink!,
+        widget.snapshot,
+      );
+      if (resolution.canOpen &&
+          !_sameLink(
+            _controller.state.activeTab.currentRoute.link,
+            widget.initialLink,
+          )) {
+        _controller.push(_controller.state.activeTabId, widget.initialLink!);
+      }
     }
   }
 
@@ -124,43 +138,57 @@ class _ProductionWorkspaceHostState
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 840) {
-          return ListenableBuilder(
-            listenable: _controller,
-            builder: (context, _) {
-              if (_controller.state.loggedOut) {
-                return const SizedBox.shrink();
-              }
-              return widget.tabBuilder(context, _controller.state.activeTab);
-            },
+          return WorkspaceNavigationScope(
+            controller: _controller,
+            isDesktop: false,
+            child: ListenableBuilder(
+              listenable: _controller,
+              builder: (context, _) {
+                if (_controller.state.loggedOut) {
+                  return const SizedBox.shrink();
+                }
+                return widget.tabBuilder(context, _controller.state.activeTab);
+              },
+            ),
           );
         }
-        return DesktopWorkspaceShell(
+        return WorkspaceNavigationScope(
           controller: _controller,
-          tabBuilder: (context, tab) {
-            final location = EntityRouteRegistry()
-                .resolve(tab.currentRoute.link, widget.snapshot)
-                .canonicalLocation;
-            if (location == null) return widget.tabBuilder(context, tab);
-            return Column(
-              children: [
-                MagicContextBar(
-                  controller: _controller,
-                  tab: tab,
-                  location: location,
+          isDesktop: true,
+          child: DesktopWorkspaceShell(
+            controller: _controller,
+            tabBuilder: (context, tab) {
+              final location = EntityRouteRegistry()
+                  .resolve(tab.currentRoute.link, widget.snapshot)
+                  .canonicalLocation;
+              if (location == null) return widget.tabBuilder(context, tab);
+              return Column(
+                children: [
+                  MagicContextBar(
+                    controller: _controller,
+                    tab: tab,
+                    location: location,
+                  ),
+                  Expanded(child: widget.tabBuilder(context, tab)),
+                ],
+              );
+            },
+            onLimitReached: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Можно открыть не больше 10 вкладок.'),
                 ),
-                Expanded(child: widget.tabBuilder(context, tab)),
-              ],
-            );
-          },
-          onLimitReached: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Можно открыть не больше 10 вкладок.'),
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
+  }
+
+  static bool _sameLink(EntityLink? left, EntityLink? right) {
+    return left?.rawEntityType == right?.rawEntityType &&
+        left?.entityId == right?.entityId &&
+        left?.optionalFocus?.focus == right?.optionalFocus?.focus;
   }
 }

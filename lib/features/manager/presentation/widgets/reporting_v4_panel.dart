@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_state_view.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
@@ -528,8 +528,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       widget.onOpenEntity!(link);
       return;
     }
-    final route = EntityRouteRegistry().resolve(link, _snapshot);
-    if (route.canOpen) context.push(route.location!);
+    unawaited(navigateEntityLink(context, _snapshot, link));
   }
 }
 
