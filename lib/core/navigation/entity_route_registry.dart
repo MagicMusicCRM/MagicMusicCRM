@@ -1,4 +1,5 @@
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 
 enum EntityLifecycleState { active, archived, deleted }
@@ -7,18 +8,74 @@ enum EntityRouteState { resolved, forbidden, archived, deleted, unknown }
 
 enum EntityProjection { full, limited }
 
+enum AppSurfaceKind { primary, quickView, selection, confirmation, comparison }
+
+class AppBreadcrumbNode {
+  const AppBreadcrumbNode({
+    required this.routeName,
+    required this.title,
+    required this.location,
+  });
+
+  final String routeName;
+  final String title;
+  final String location;
+
+  Map<String, Object?> toJson() => {
+    'routeName': routeName,
+    'title': title,
+    'location': location,
+  };
+}
+
+class CanonicalAppLocation {
+  CanonicalAppLocation({
+    required this.link,
+    required this.routeName,
+    required this.location,
+    required this.title,
+    required Set<String> requiredCapabilities,
+    required this.surfaceKind,
+    required List<AppBreadcrumbNode> ancestors,
+    this.viewStateVersion = ContextViewState.schemaVersion,
+  }) : ancestors = List.unmodifiable(ancestors),
+       requiredCapabilities = Set.unmodifiable(requiredCapabilities);
+
+  final EntityLink link;
+  final String routeName;
+  final String location;
+  final String title;
+  final Set<String> requiredCapabilities;
+  final AppSurfaceKind surfaceKind;
+  final List<AppBreadcrumbNode> ancestors;
+  final int viewStateVersion;
+
+  Map<String, Object?> toJson() => {
+    'routeName': routeName,
+    'location': location,
+    'link': link.toJson(),
+    'title': title,
+    'requiredCapabilities': requiredCapabilities.toList()..sort(),
+    'surfaceKind': surfaceKind.name,
+    'ancestors': [for (final ancestor in ancestors) ancestor.toJson()],
+    'viewStateVersion': viewStateVersion,
+  };
+}
+
 class EntityRouteResolution {
   const EntityRouteResolution({
     required this.link,
     required this.state,
     this.location,
     this.projection,
+    this.canonicalLocation,
   });
 
   final EntityLink link;
   final EntityRouteState state;
   final String? location;
   final EntityProjection? projection;
+  final CanonicalAppLocation? canonicalLocation;
 
   bool get canOpen => state == EntityRouteState.resolved;
 }
@@ -69,12 +126,78 @@ class EntityRouteRegistry {
         state: EntityRouteState.archived,
       );
     }
+    final location = registration.buildLocation(link, snapshot);
     return EntityRouteResolution(
       link: link,
       state: EntityRouteState.resolved,
-      location: registration.buildLocation(link, snapshot),
+      location: location,
       projection: _projectionFor(link, snapshot),
+      canonicalLocation: _canonicalize(link, snapshot, location),
     );
+  }
+
+  EntityRouteResolution resolveLocation(
+    String location,
+    CapabilitySnapshot snapshot,
+  ) {
+    final uri = Uri.tryParse(location);
+    if (uri == null) {
+      return EntityRouteResolution(
+        link: EntityLink.fromJson(const {}),
+        state: EntityRouteState.unknown,
+      );
+    }
+    final segments = uri.pathSegments;
+    EntityLink? link;
+    if (segments.length == 2) {
+      final id = Uri.decodeComponent(segments[1]);
+      link = switch (segments.first) {
+        'student' || 'students' => EntityLink.typed(
+          entityType: EntityLinkType.client,
+          entityId: id,
+          variant: 'student',
+        ),
+        'leads' => EntityLink.typed(
+          entityType: EntityLinkType.client,
+          entityId: id,
+          variant: 'lead',
+        ),
+        'lessons' => EntityLink.typed(
+          entityType: EntityLinkType.lesson,
+          entityId: id,
+        ),
+        _ => null,
+      };
+    } else if (segments.length == 3 &&
+        segments[0] == 'admin' &&
+        segments[1] == 'profiles') {
+      link = EntityLink.typed(
+        entityType: EntityLinkType.user,
+        entityId: Uri.decodeComponent(segments[2]),
+      );
+    }
+
+    final entityId = uri.queryParameters['entityId'];
+    if (link == null && entityId != null && entityId.trim().isNotEmpty) {
+      final rawType =
+          uri.queryParameters['entityType'] ??
+          switch (uri.queryParameters['section']) {
+            'chat' => 'chat',
+            'homework' => 'homework',
+            'tasks' => 'task',
+            'schedule' => 'lesson_list',
+            'reports' => 'report',
+            _ => '',
+          };
+      link = EntityLink.fromJson({'entityType': rawType, 'entityId': entityId});
+    }
+    if (link == null || !link.isSupported) {
+      return EntityRouteResolution(
+        link: link ?? EntityLink.fromJson(const {}),
+        state: EntityRouteState.unknown,
+      );
+    }
+    return resolve(link, snapshot);
   }
 
   static EntityProjection _projectionFor(
@@ -87,6 +210,117 @@ class EntityRouteRegistry {
     }
     return EntityProjection.full;
   }
+
+  static CanonicalAppLocation _canonicalize(
+    EntityLink link,
+    CapabilitySnapshot snapshot,
+    String location,
+  ) {
+    final section = _sectionFor(link);
+    final home = _staffHome(snapshot);
+    final rootLocation = Uri(
+      path: home,
+      queryParameters: {'section': section},
+    ).toString();
+    return CanonicalAppLocation(
+      link: link,
+      routeName: 'entity:${link.rawEntityType}',
+      location: location,
+      title: '${_titleFor(link)} · ${link.entityId}',
+      requiredCapabilities: _requiredCapabilitiesFor(link),
+      surfaceKind: link.entityType == EntityLinkType.report
+          ? AppSurfaceKind.comparison
+          : AppSurfaceKind.primary,
+      ancestors: [
+        AppBreadcrumbNode(
+          routeName: 'section:$section',
+          title: _sectionTitle(section),
+          location: rootLocation,
+        ),
+      ],
+    );
+  }
+
+  static String _sectionFor(EntityLink link) => switch (link.entityType) {
+    EntityLinkType.client ||
+    EntityLinkType.subscription ||
+    EntityLinkType.comment ||
+    EntityLinkType.clientSource ||
+    EntityLinkType.clientStatus ||
+    EntityLinkType.subscriptionPackage => 'clients',
+    EntityLinkType.lesson ||
+    EntityLinkType.teacher ||
+    EntityLinkType.group ||
+    EntityLinkType.room ||
+    EntityLinkType.branch ||
+    EntityLinkType.scheduleSeries => 'schedule',
+    EntityLinkType.task => 'tasks',
+    EntityLinkType.payment => 'finance',
+    EntityLinkType.user => 'users',
+    EntityLinkType.homework => 'homework',
+    EntityLinkType.chat => 'chat',
+    EntityLinkType.report => 'reports',
+    EntityLinkType.unknown => 'home',
+  };
+
+  static String _sectionTitle(String section) => switch (section) {
+    'clients' => 'Клиенты',
+    'schedule' => 'Расписание',
+    'tasks' => 'Задачи',
+    'finance' => 'Финансы',
+    'users' => 'Пользователи',
+    'homework' => 'Домашние задания',
+    'chat' => 'Чат',
+    'reports' => 'Аналитика',
+    _ => 'Главная',
+  };
+
+  static String _titleFor(EntityLink link) => switch (link.entityType) {
+    EntityLinkType.client => link.rawEntityType == 'lead' ? 'Лид' : 'Ученик',
+    EntityLinkType.lesson => 'Занятие',
+    EntityLinkType.task => 'Задача',
+    EntityLinkType.subscription => 'Абонемент',
+    EntityLinkType.payment => 'Оплата',
+    EntityLinkType.user => 'Пользователь',
+    EntityLinkType.homework => 'Домашнее задание',
+    EntityLinkType.chat => 'Чат',
+    EntityLinkType.report => 'Отчёт',
+    EntityLinkType.teacher => 'Преподаватель',
+    EntityLinkType.group => 'Группа',
+    EntityLinkType.room => 'Аудитория',
+    EntityLinkType.branch => 'Филиал',
+    EntityLinkType.scheduleSeries => 'Серия занятий',
+    EntityLinkType.comment => 'Комментарий',
+    EntityLinkType.clientSource => 'Источник',
+    EntityLinkType.clientStatus => 'Статус клиента',
+    EntityLinkType.subscriptionPackage => 'Тип абонемента',
+    EntityLinkType.unknown => 'Запись',
+  };
+
+  static Set<String> _requiredCapabilitiesFor(EntityLink link) =>
+      switch (link.entityType) {
+        EntityLinkType.client ||
+        EntityLinkType.homework ||
+        EntityLinkType.comment ||
+        EntityLinkType.clientStatus => const {'crm.client.read.basic'},
+        EntityLinkType.lesson ||
+        EntityLinkType.teacher ||
+        EntityLinkType.group ||
+        EntityLinkType.room ||
+        EntityLinkType.branch ||
+        EntityLinkType.scheduleSeries => const {
+          'schedule.lesson.read.assigned',
+          'schedule.lesson.write',
+        },
+        EntityLinkType.task => const {'workflow.task.read'},
+        EntityLinkType.subscription ||
+        EntityLinkType.payment => const {'commerce.client_finance.read'},
+        EntityLinkType.user => const {'system.settings.manage'},
+        EntityLinkType.report => const {'report.status.read'},
+        EntityLinkType.clientSource => const {'crm.client.write'},
+        EntityLinkType.subscriptionPackage => const {'commerce.package.read'},
+        EntityLinkType.chat || EntityLinkType.unknown => const {},
+      };
 
   static bool _hasAny(
     CapabilitySnapshot snapshot,

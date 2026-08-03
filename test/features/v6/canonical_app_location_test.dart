@@ -1,0 +1,96 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+
+void main() {
+  const capabilities = <String>{
+    'crm.client.read.basic',
+    'crm.client.write',
+    'schedule.lesson.read.assigned',
+    'schedule.lesson.write',
+    'workflow.task.read',
+    'commerce.client_finance.read',
+    'commerce.package.read',
+    'system.settings.manage',
+    'report.status.read',
+  };
+  const snapshot = CapabilitySnapshot(
+    accountId: 'account-1',
+    role: 'director',
+    accessVersion: 1,
+    capabilities: capabilities,
+    scopes: {},
+  );
+
+  test('typed link and direct URL resolve to one canonical location', () {
+    final registry = EntityRouteRegistry();
+    final link = EntityLink.typed(
+      entityType: EntityLinkType.client,
+      entityId: 'student-1',
+      variant: 'student',
+    );
+
+    final fromLink = registry.resolve(link, snapshot);
+    final fromUrl = registry.resolveLocation('/students/student-1', snapshot);
+
+    expect(fromLink.state, EntityRouteState.resolved);
+    expect(fromUrl.state, EntityRouteState.resolved);
+    expect(fromUrl.canonicalLocation?.routeName, 'entity:student');
+    expect(
+      fromUrl.canonicalLocation?.toJson(),
+      fromLink.canonicalLocation?.toJson(),
+    );
+    expect(fromUrl.canonicalLocation?.ancestors.single.title, 'Клиенты');
+    expect(
+      fromUrl.canonicalLocation?.requiredCapabilities,
+      contains('crm.client.read.basic'),
+    );
+  });
+
+  test('query deep link uses the same entity registry policy', () {
+    final registry = EntityRouteRegistry();
+    final resolution = registry.resolveLocation(
+      '/manager?section=tasks&entityId=task-1&entityType=task',
+      snapshot,
+    );
+
+    expect(resolution.state, EntityRouteState.resolved);
+    expect(resolution.link.entityType, EntityLinkType.task);
+    expect(resolution.canonicalLocation?.routeName, 'entity:task');
+    expect(resolution.canonicalLocation?.ancestors.single.title, 'Задачи');
+  });
+
+  test('forbidden direct URL fails closed before canonical metadata', () {
+    const teacher = CapabilitySnapshot(
+      accountId: 'teacher-1',
+      role: 'teacher',
+      accessVersion: 1,
+      capabilities: {'crm.client.read.basic'},
+      scopes: {},
+    );
+
+    final resolution = EntityRouteRegistry().resolveLocation(
+      '/manager?section=finance&entityId=payment-1&entityType=payment',
+      teacher,
+    );
+
+    expect(resolution.state, EntityRouteState.forbidden);
+    expect(resolution.canonicalLocation, isNull);
+  });
+
+  test('view state has a fail-closed schema version', () {
+    final encoded = ContextViewState(
+      filters: const {'branch': 'branch-1'},
+      scrollOffset: 42,
+    ).toJson();
+
+    expect(encoded['version'], ContextViewState.schemaVersion);
+    expect(ContextViewState.fromJson(encoded).scrollOffset, 42);
+    expect(
+      () => ContextViewState.fromJson({...encoded, 'version': 99}),
+      throwsFormatException,
+    );
+  });
+}

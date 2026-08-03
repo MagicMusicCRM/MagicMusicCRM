@@ -99,7 +99,7 @@ flowchart TD
 
 ## 5. Sprint S1 — Navigation kernel & desktop workspace
 
-- [ ] **V6-101** `[REQ-NAV-002, REQ-NAV-003]` — Ввести canonical location adapter поверх существующей навигации.
+- [x] **V6-101** `[REQ-NAV-002, REQ-NAV-003]` — Ввести canonical location adapter поверх существующей навигации.
   - **Работа:** связать stable route identity, typed params, parent metadata, access declaration и versioned safe view state с GoRouter/workspace/entity registry без второго registry.
   - **Критерий:** direct URL и in-app navigation дают одинаковую current location/breadcrumb; display name не используется как ID.
   - **Проверка:** unit/property checks для encode/decode/parent + widget direct-link tests.
