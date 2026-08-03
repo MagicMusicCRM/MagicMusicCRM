@@ -9,16 +9,30 @@ extension _ScheduleActions on _ScheduleWidgetState {
     });
     try {
       final crm = ref.read(magicCrmServiceProvider);
-      final from = DateTime(
-        _displayedMonth.year,
-        _displayedMonth.month,
-        1,
-      ).subtract(const Duration(days: 7));
-      final to = DateTime(
-        _displayedMonth.year,
-        _displayedMonth.month + 1,
-        1,
-      ).add(const Duration(days: 7));
+      final DateTime from;
+      final DateTime to;
+      if (_currentView == ScheduleView.week) {
+        final monday = DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+        ).subtract(Duration(days: _selectedDate.weekday - 1));
+        // One-day guards keep the whole branch-local week inside the UTC query
+        // for every supported branch offset; rendering still clips to Mon–Sun.
+        from = monday.subtract(const Duration(days: 1));
+        to = monday.add(const Duration(days: 8));
+      } else {
+        from = DateTime(
+          _displayedMonth.year,
+          _displayedMonth.month,
+          1,
+        ).subtract(const Duration(days: 7));
+        to = DateTime(
+          _displayedMonth.year,
+          _displayedMonth.month + 1,
+          1,
+        ).add(const Duration(days: 7));
+      }
       final fromIso = from.toUtc().toIso8601String();
       final toIso = to.toUtc().toIso8601String();
 
@@ -96,7 +110,10 @@ extension _ScheduleActions on _ScheduleWidgetState {
                   ? _filterClientId
                   : null,
               leadId: _filterClientType == 'lead' ? _filterClientId : null,
-              limit: _filterClientId == null ? 300 : 500,
+              limit:
+                  _currentView == ScheduleView.week || _filterClientId != null
+                  ? 500
+                  : 300,
             )
             .catchError((e) {
               debugPrint('Error fetching schedule matrix: $e');

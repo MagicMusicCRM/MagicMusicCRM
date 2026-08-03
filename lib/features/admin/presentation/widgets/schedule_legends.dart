@@ -61,7 +61,9 @@ class ScheduleMonthLegend extends StatelessWidget {
 /// Colour/gesture legend for the day view. Extracted from _ScheduleWidgetState
 /// — pure display.
 class ScheduleDayLegend extends StatelessWidget {
-  const ScheduleDayLegend({super.key});
+  final bool week;
+
+  const ScheduleDayLegend({super.key, this.week = false});
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +105,12 @@ class ScheduleDayLegend extends StatelessWidget {
         child: Row(
           children: [
             chip(AppColor.transferCyan, 'Зажать и тянуть вниз — выбрать часы'),
-            chip(AppColor.actionBlue, 'Перетащить — время / комната'),
+            chip(
+              AppColor.actionBlue,
+              week
+                  ? 'Перетащить — время / день'
+                  : 'Перетащить — время / комната',
+            ),
             chip(AppColor.gold, 'Край — растянуть'),
             chip(AppColor.danger, 'Конфликт'),
           ],

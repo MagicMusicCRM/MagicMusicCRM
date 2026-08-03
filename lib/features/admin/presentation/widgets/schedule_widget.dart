@@ -14,7 +14,6 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
-import 'package:syncfusion_flutter_calendar/calendar.dart';
 
 import 'create_lesson_dialog.dart';
 import 'schedule_day_canvas.dart';
@@ -46,12 +45,6 @@ const List<Color> _roomColors = [
   Color(0xFFC58A5B), // приглушённый терракотовый
   AppColor.danger, // красный (статус)
 ];
-
-class _ScheduleWeekDataSource extends CalendarDataSource {
-  _ScheduleWeekDataSource(List<Appointment> source) {
-    appointments = source;
-  }
-}
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 
@@ -243,8 +236,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           ],
           _buildDateNavigation(),
           if (!firstLoad && _filterClientId != null) _buildClientFilterBanner(),
+          if (!firstLoad && _currentView != ScheduleView.month) ...[
+            ScheduleDayLegend(week: _currentView == ScheduleView.week),
+          ],
           if (!firstLoad && _currentView == ScheduleView.day) ...[
-            const ScheduleDayLegend(),
             _buildAvailabilitySummary(),
           ],
           Expanded(child: _buildScheduleContent()),
@@ -255,9 +250,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           : FloatingActionButton(
               tooltip: 'Новое занятие',
               onPressed: () => _showAddLessonDialog(
-                _currentView == ScheduleView.day
-                    ? _selectedDate
-                    : DateTime.now(),
+                _currentView == ScheduleView.month
+                    ? DateTime.now()
+                    : _selectedDate,
                 null,
               ),
               backgroundColor: AppColor.gold,

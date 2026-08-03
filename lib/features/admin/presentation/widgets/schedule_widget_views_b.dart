@@ -101,6 +101,22 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     }
   }
 
+  Future<void> _openWeekCreate(DateTime startLocal, int durationMinutes) async {
+    final created = await CreateLessonDialog.show(
+      context,
+      initialDate: startLocal,
+      initialBranchId: _selectedBranchId,
+      initialDurationMinutes: durationMinutes,
+    );
+    if (created == true && mounted) await _fetchAll();
+  }
+
+  Future<void> _refreshEditedSchedule() {
+    return _currentView == ScheduleView.week
+        ? _fetchAll()
+        : _fetchDayLessons(_selectedDate);
+  }
+
   // ── Optimistic move + rollback + undo (KVA-195) ────────────────────────────
   // Vertical drop → new time; horizontal drop → new room. The block jumps to the
   // new slot immediately (the rest of the grid stays put), then the move commits
@@ -109,20 +125,25 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
   Future<void> _moveLessonOptimistic(
     Map<String, dynamic> lesson,
     DateTime newStartLocal,
-    String newColumnId,
-  ) async {
+    String? newColumnId, {
+    bool preserveRoom = false,
+  }) async {
     final lessonId = lesson['id']?.toString();
     if (lessonId == null || _movingLesson) return;
 
-    final targetRoomId =
-        (newColumnId == kUnassignedColumnId || newColumnId.isEmpty)
+    final currentRoomId = lesson['room_id']?.toString();
+    final targetRoomId = preserveRoom
+        ? currentRoomId
+        : (newColumnId == null ||
+              newColumnId == kUnassignedColumnId ||
+              newColumnId.isEmpty)
         ? null
         : newColumnId;
-    final currentRoomId = lesson['room_id']?.toString();
     final currentStart = _parseLessonTime(lesson);
 
     // No-op drop (same room + same minute) → skip the round-trip.
     if (currentStart != null &&
+        DateUtils.isSameDay(currentStart, newStartLocal) &&
         currentStart.hour == newStartLocal.hour &&
         currentStart.minute == newStartLocal.minute &&
         (targetRoomId ?? '') == (currentRoomId ?? '')) {
@@ -143,7 +164,8 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     final prevScheduledAt = lesson['scheduled_at'];
     final prevRoomId = lesson['room_id'];
     final prevConflicts = lesson['conflict_types'];
-    final roomChanged = targetRoomId != null && targetRoomId != currentRoomId;
+    final roomChanged =
+        !preserveRoom && targetRoomId != null && targetRoomId != currentRoomId;
 
     _emitState(() {
       _movingLesson = true;
@@ -168,7 +190,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
             roomId: roomChanged ? targetRoomId : null,
           );
       if (!mounted) return;
-      await _fetchDayLessons(_selectedDate); // server re-derives conflicts
+      await _refreshEditedSchedule(); // server re-derives conflicts
       if (!mounted) return;
       final moved = _lessons.firstWhere(
         (l) => l['id']?.toString() == lessonId,
@@ -351,7 +373,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
             scheduledAt: prevScheduledAt.toString(),
             roomId: prevRoomId?.toString(),
           );
-      if (mounted) await _fetchDayLessons(_selectedDate);
+      if (mounted) await _refreshEditedSchedule();
     } catch (e) {
       if (!mounted) return;
       MagicToast.show(
@@ -405,7 +427,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
             durationMinutes: newDurationMinutes,
           );
       if (!mounted) return;
-      await _fetchDayLessons(_selectedDate);
+      await _refreshEditedSchedule();
       if (!mounted) return;
       MagicToast.show(
         context,

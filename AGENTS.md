@@ -230,6 +230,8 @@ _Актуализация 2026-08-03: owner-refinement для `T4.2.3`/`T5.1.1`/
 
 _Актуализация 2026-08-03: owner hotfix wave `T1.5.1`/`T4.3.4`/`T7.2.3`/`INT-HF1` закрыта: серверный поиск сохраняет текущий экран и применяет debounce/latest-wins; расписание имеет только `Месяц / Неделя / День`, а переход из карточки открывает месяц с серверным Lead/Student-фильтром; report drilldown использует существующий `/analytics/v4/client-status/clients`. Targeted Flutter 10/10 и ScheduleService 53/53; полный regression backend 150/150 suites и 1160/1160 tests, Flutter 485/485, analyze/typecheck/build clean; Windows release build запущен и отвечает._
 
+_Актуализация 2026-08-03: regression-fix `T4.3.4`: отдельный display-only Week calendar удалён; режим `Неделя` переиспользует рабочий `ScheduleDayCanvas` и те же create/details/move/resize server paths, поддерживает перенос между днями с сохранением комнаты и exact Mon–Sun query. Targeted schedule/client-navigation 12/12, Flutter analyze clean и полный Flutter regression 486/486._
+
 _Актуализация 2026-07-30: `T3.3.2` закрыта: production launcher маршрутизирует Teacher в отдельную actor-scoped read-only карточку с горизонтальными tabs Lesson/Homework/shared Comments; запрещённые contacts/finance/tasks не строятся даже из лишнего payload. Staff-карточка получила Director/system_admin-only archive preview с impact/links/versioned confirm и tombstone contract. Comment share использует независимый `sharedWithTeacher` + expectedVersion, не меняя kind. Exact role UX 4/4, затронутые legacy card/finance 18/18, Flutter analyze clean (`docs/audits/v4-client-card-ux.md`). Следующий шаг `/forge`: `INT-S4` CRM & Shared Work._
 
 ### 🌊 Wave v3/S0 — Architecture and Linear Backlog

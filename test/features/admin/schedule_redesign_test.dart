@@ -97,6 +97,9 @@ void main() {
       await tester.tap(find.text('Неделя'));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('schedule-week-view')), findsOneWidget);
+      expect(find.byType(ScheduleDayCanvas), findsOneWidget);
+      expect(find.text('Ольга Ученик'), findsOneWidget);
+      expect(find.text('Перетащить — время / день'), findsOneWidget);
 
       // Switch to День → the time grid (wide «Время» gutter header) is shown.
       await tester.tap(find.text('День'));
@@ -140,6 +143,50 @@ void main() {
 
       // Consolidated to the single full create window (no separate compact sheet).
       expect(find.text('Новое занятие'), findsOneWidget);
+    });
+
+    testWidgets('week canvas maps each column to its own calendar date', (
+      tester,
+    ) async {
+      final monday = DateTime(2026, 8, 3);
+      final tuesday = monday.add(const Duration(days: 1));
+      DateTime? createdAt;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ScheduleDayCanvas(
+              date: monday,
+              columns: [
+                ScheduleColumn(
+                  id: 'tuesday',
+                  name: 'Вт',
+                  color: Colors.blue,
+                  date: tuesday,
+                ),
+              ],
+              entries: const [],
+              onCreateSlot: (_, start, _) => createdAt = start,
+              onMove: (_, _, _) {},
+              onResize: (_, _, _) {},
+              onOpenLesson: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final canvas = tester.getRect(find.byType(ScheduleDayCanvas));
+      await tester.tapAt(
+        Offset(
+          canvas.left + kTimeColWidth + 40,
+          canvas.top + kHeaderHeight + 14,
+        ),
+      );
+      await tester.pump();
+
+      expect(createdAt, isNotNull);
+      expect(DateUtils.isSameDay(createdAt, tuesday), isTrue);
     });
   });
 }

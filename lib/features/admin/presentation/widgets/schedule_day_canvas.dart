@@ -32,6 +32,7 @@ class ScheduleColumn {
   final String id;
   final String name;
   final Color color;
+  final DateTime? date;
   final bool isUnassigned;
   final bool hasConflict;
 
@@ -39,6 +40,7 @@ class ScheduleColumn {
     required this.id,
     required this.name,
     required this.color,
+    this.date,
     this.isUnassigned = false,
     this.hasConflict = false,
   });
@@ -133,6 +135,7 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
 
   // Vertical drag-select (new booking) — vertical only, single column.
   String? _selColumnId;
+  DateTime? _selColumnDate;
   int? _selStartColIndex;
   double? _selStartY;
   double? _selEndY;

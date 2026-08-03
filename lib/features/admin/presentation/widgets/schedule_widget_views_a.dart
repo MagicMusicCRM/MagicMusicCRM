@@ -153,7 +153,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
     if (view == ScheduleView.day) {
       _fetchAvailabilityForSelectedDay();
       _fetchDayLessons(_selectedDate);
-    } else if (view == ScheduleView.week) {
+    } else {
       _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
       _fetchAll();
     }
@@ -364,51 +364,74 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
   }
 
   Widget _buildWeekView() {
-    final appointments = <Appointment>[];
-    for (final lesson in _filteredLessons) {
-      final start = _parseLessonTime(lesson);
-      if (start == null) continue;
-      final leadName = lesson['lead_name']?.toString().trim() ?? '';
-      final subject =
-          _studentNames[lesson['student_id']?.toString()] ??
-          lesson['group_name']?.toString() ??
-          (leadName.isEmpty ? 'Занятие' : leadName);
-      appointments.add(
-        Appointment(
-          id: lesson['id']?.toString(),
-          startTime: start,
-          endTime: start.add(Duration(minutes: _durationMinutes(lesson))),
-          subject: subject,
-          location: _roomNames[lesson['room_id']?.toString()] ?? '',
-          color: LessonStateProjection.fromMap(lesson).token.accent,
+    final monday = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    ).subtract(Duration(days: _selectedDate.weekday - 1));
+    final weekEnd = monday.add(const Duration(days: 7));
+    final cs = Theme.of(context).colorScheme;
+    final columns = <ScheduleColumn>[];
+    for (var i = 0; i < 7; i++) {
+      final date = monday.add(Duration(days: i));
+      final isToday = DateUtils.isSameDay(date, DateTime.now());
+      columns.add(
+        ScheduleColumn(
+          id: dateOnly(date),
+          name: '${weekDays[i]}\n${date.day} ${monthNamesGenitive[date.month]}',
+          color: isToday ? AppColor.gold : cs.onSurfaceVariant,
+          date: date,
+          hasConflict: _scheduleConflicts.any((conflict) {
+            final at = _parseServerTime(conflict['scheduled_at']);
+            return at != null && DateUtils.isSameDay(at, date);
+          }),
         ),
       );
     }
-    return SfCalendar(
+
+    final entries = <ScheduleEntry>[];
+    for (final lesson in _filteredLessons) {
+      final start = _parseLessonTime(lesson);
+      if (start == null || start.isBefore(monday) || !start.isBefore(weekEnd)) {
+        continue;
+      }
+      final leadName = lesson['lead_name']?.toString().trim() ?? '';
+      final title =
+          _studentNames[lesson['student_id']?.toString()] ??
+          lesson['group_name']?.toString() ??
+          (leadName.isEmpty ? 'Занятие' : leadName);
+      final teacher = _teacherNames[lesson['teacher_id']?.toString()] ?? '';
+      final room = _roomNames[lesson['room_id']?.toString()] ?? '';
+      entries.add(
+        ScheduleEntry(
+          lesson: lesson,
+          id: lesson['id']?.toString() ?? '',
+          columnId: dateOnly(start),
+          startLocal: start,
+          durationMinutes: _durationMinutes(lesson),
+          title: title,
+          subtitle: [
+            room,
+            teacher,
+          ].where((value) => value.isNotEmpty).join(' · '),
+          isTrial: lesson['is_trial'] == true,
+          conflicts: conflictTypes(lesson['conflict_types']),
+          movable: lesson['id'] != null && lesson['status'] != 'cancelled',
+          highlighted: false,
+        ),
+      );
+    }
+
+    return ScheduleDayCanvas(
       key: const ValueKey('schedule-week-view'),
-      view: CalendarView.week,
-      initialDisplayDate: _selectedDate,
-      firstDayOfWeek: 1,
-      todayHighlightColor: AppColor.gold,
-      cellBorderColor: AppColor.divider,
-      backgroundColor: Colors.transparent,
-      dataSource: _ScheduleWeekDataSource(appointments),
-      timeSlotViewSettings: const TimeSlotViewSettings(
-        startHour: 6,
-        endHour: 23,
-        timeFormat: 'HH:mm',
-        timeIntervalHeight: 54,
-      ),
-      onTap: (details) {
-        final selected = details.appointments;
-        if (selected == null || selected.isEmpty) return;
-        final id = (selected.first as Appointment).id?.toString();
-        if (id == null) return;
-        final lesson = _lessons
-            .where((item) => item['id']?.toString() == id)
-            .firstOrNull;
-        if (lesson != null) _showLessonDetails(lesson);
-      },
+      date: monday,
+      columns: columns,
+      entries: entries,
+      onCreateSlot: (_, start, duration) => _openWeekCreate(start, duration),
+      onMove: (lesson, start, _) =>
+          _moveLessonOptimistic(lesson, start, null, preserveRoom: true),
+      onResize: _resizeLesson,
+      onOpenLesson: _showLessonDetails,
     );
   }
 

@@ -21,14 +21,15 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
   double _yForTime(DateTime t) =>
       ((t.hour - kDayStartHour) + t.minute / 60.0) * kHourHeight;
 
-  DateTime _timeForY(double y, {int snap = 15}) {
+  DateTime _timeForY(double y, {int snap = 15, DateTime? date}) {
     final rawMin = kDayStartHour * 60 + (y / kHourHeight) * 60.0;
     var minutes = (rawMin / snap).round() * snap;
     minutes = minutes.clamp(kDayStartHour * 60, kDayEndHour * 60 - snap);
+    final targetDate = date ?? widget.date;
     return DateTime(
-      widget.date.year,
-      widget.date.month,
-      widget.date.day,
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
       minutes ~/ 60,
       minutes % 60,
     );
@@ -92,7 +93,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
       _emitState(() => _selectedId = null);
       return;
     }
-    final start = _timeForY(localY, snap: 60);
+    final start = _timeForY(localY, snap: 60, date: col.date);
     widget.onCreateSlot(col.id, start, 60);
   }
 
@@ -100,6 +101,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     // Anchor only. Nothing is shown and _dragging stays false until the pointer
     // actually travels [kSelectSlop] — see _onSelectUpdate.
     _selColumnId = col.id;
+    _selColumnDate = col.date;
     _selStartColIndex = colIndex;
     _selStartY = localY;
     _selEndY = localY;
@@ -136,6 +138,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     if (_selColumnId == null) return;
     _emitState(() {
       _selColumnId = null;
+      _selColumnDate = null;
       _selStartColIndex = null;
       _selStartY = null;
       _selEndY = null;
@@ -147,11 +150,13 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
 
   void _onSelectEnd() {
     final colId = _selColumnId;
+    final columnDate = _selColumnDate;
     final armed = _selArmed;
     final a = _selStartY;
     final b = _selEndY;
     _emitState(() {
       _selColumnId = null;
+      _selColumnDate = null;
       _selStartColIndex = null;
       _selStartY = null;
       _selEndY = null;
@@ -162,8 +167,8 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     // Never armed → this was a click that wobbled, not a booking. The tap
     // handler owns that case; creating here too would double-fire.
     if (!armed || colId == null || a == null || b == null) return;
-    final start = _timeForY(a < b ? a : b, snap: 15);
-    final end = _timeForY(a < b ? b : a, snap: 15);
+    final start = _timeForY(a < b ? a : b, snap: 15, date: columnDate);
+    final end = _timeForY(a < b ? b : a, snap: 15, date: columnDate);
     var duration = end.difference(start).inMinutes;
     if (duration < 30) duration = 60; // a near-tap behaves like one slot
     widget.onCreateSlot(colId, start, duration);
@@ -178,7 +183,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     final box = _bodyKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return;
     final localY = box.globalToLocal(globalOffset).dy;
-    final start = _timeForY(localY, snap: 5);
+    final start = _timeForY(localY, snap: 5, date: col.date);
     widget.onMove(lesson, start, col.id);
   }
 
@@ -200,9 +205,9 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
         Duration(minutes: e.durationMinutes),
       );
       final dayStart = DateTime(
-        widget.date.year,
-        widget.date.month,
-        widget.date.day,
+        e.startLocal.year,
+        e.startLocal.month,
+        e.startLocal.day,
         kDayStartHour,
       );
       var newStart = e.startLocal.add(Duration(minutes: deltaMin));
@@ -456,9 +461,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
           )
         : GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _emitState(
-              () => _selectedId = selected ? null : e.id,
-            ),
+            onTap: () => _emitState(() => _selectedId = selected ? null : e.id),
             onDoubleTap: () => widget.onOpenLesson(e.lesson),
             child: _LessonCard(entry: e, selected: selected),
           );
