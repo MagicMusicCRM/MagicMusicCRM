@@ -1013,7 +1013,8 @@ export class ScheduleService {
 
   /** Горизонт материализации занятий серии, дней вперёд. */
   private static readonly MAX_BOOKING_AHEAD_DAYS = 365;
-  private static readonly SERIES_HORIZON_DAYS = 400;
+  private static readonly INDIVIDUAL_SERIES_HORIZON_DAYS = 60;
+  private static readonly GROUP_SERIES_HORIZON_DAYS = 400;
 
   /**
    * Догенерировать занятия серии до горизонта. Идемпотентно: дата серии,
@@ -1053,8 +1054,10 @@ export class ScheduleService {
           cross join lateral generate_series(
             greatest(s.valid_from, (now() at time zone 'Europe/Moscow')::date)::timestamp,
             least(
-              coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date + $2::int),
-              (now() at time zone 'Europe/Moscow')::date + $2::int
+              coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date
+                + case when s.group_id is null then $2::int else $3::int end),
+              (now() at time zone 'Europe/Moscow')::date
+                + case when s.group_id is null then $2::int else $3::int end
             )::timestamp,
             interval '1 day'
           ) as d
@@ -1098,7 +1101,11 @@ export class ScheduleService {
         order by l.scheduled_at asc, l.id asc
         limit 20
       `,
-      [seriesId, ScheduleService.SERIES_HORIZON_DAYS],
+      [
+        seriesId,
+        ScheduleService.INDIVIDUAL_SERIES_HORIZON_DAYS,
+        ScheduleService.GROUP_SERIES_HORIZON_DAYS,
+      ],
     );
     if (!result.rows.length) return;
     throw new ConflictException({
@@ -1116,7 +1123,7 @@ export class ScheduleService {
     // them, or two edits can create competing continuations.
     await this.acquireScheduleSeriesLock(executor, seriesId);
     await this.assertNoScheduleSeriesConflicts(seriesId, executor);
-    const result = await executor.query(
+    const result = await executor.query<{ id: string }>(
       `
         insert into app.lessons (
           student_id, group_id, teacher_id, branch_id, room_id,
@@ -1131,8 +1138,10 @@ export class ScheduleService {
         cross join lateral generate_series(
           greatest(s.valid_from, (now() at time zone 'Europe/Moscow')::date)::timestamp,
           least(
-            coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date + $2::int),
-            (now() at time zone 'Europe/Moscow')::date + $2::int
+              coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date
+                + case when s.group_id is null then $2::int else $3::int end),
+              (now() at time zone 'Europe/Moscow')::date
+                + case when s.group_id is null then $2::int else $3::int end
           )::timestamp,
           interval '1 day'
         ) as d
@@ -1144,10 +1153,121 @@ export class ScheduleService {
           )
         on conflict (series_id, series_date) where deleted_at is null
         do nothing
+        returning id
       `,
-      [seriesId, ScheduleService.SERIES_HORIZON_DAYS],
+      [
+        seriesId,
+        ScheduleService.INDIVIDUAL_SERIES_HORIZON_DAYS,
+        ScheduleService.GROUP_SERIES_HORIZON_DAYS,
+      ],
     );
-    return result.rowCount ?? 0;
+    const lessonIds = result.rows.map((row) => row.id);
+    if (lessonIds.length === 0) return 0;
+    await executor.query(
+      `
+        with candidate as (
+          select lesson.id, lesson.scheduled_at, lesson.duration_minutes,
+                 series.client_type, series.client_id, series.completion_type,
+                 series.client_charge_type, series.client_charge_value,
+                 series.teacher_compensation_type,
+                 series.teacher_compensation_value, series.subscription_id,
+                 series.trial,
+                 case
+                   when student.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
+                     then (student.custom_data->>'individualPrice')::numeric
+                   when student.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
+                     then (student.custom_data->>'individual_price')::numeric
+                   else null
+                 end as personal_price,
+                 row_number() over (order by lesson.scheduled_at, lesson.id) as position
+            from app.lessons lesson
+            join app.schedule_series series on series.id = lesson.series_id
+            left join app.students student
+              on series.client_type = 'student' and student.id = series.client_id
+           where lesson.id = any($1::uuid[]) and series.client_type is not null
+        ), capacity as (
+          select subscription.id,
+                 greatest(0,
+                   subscription.lessons_total - subscription.lessons_used
+                   - coalesce((select sum(reservation.units)
+                       from app.lesson_reservations reservation
+                       where reservation.subscription_id = subscription.id
+                         and reservation.state = 'reserved'), 0)
+                   - coalesce((select sum(fact.units)
+                       from app.lesson_client_charge_facts fact
+                       where fact.subscription_id = subscription.id
+                         and fact.charge_type = 'subscription'), 0)
+                 ) as available
+            from app.subscriptions subscription
+           where subscription.id = (
+             select subscription_id from candidate limit 1
+           )
+             and subscription.status = 'active'
+             and subscription.commercial_snapshot is not null
+        ), resolved as (
+          select candidate.*,
+                 case
+                   when candidate.client_charge_type = 'subscription'
+                     and exists (
+                       select 1 from capacity
+                       where capacity.available >= candidate.position
+                         * candidate.client_charge_value
+                     )
+                     and exists (
+                       select 1 from app.subscriptions subscription
+                       where subscription.id = candidate.subscription_id
+                         and (subscription.starts_at is null
+                           or subscription.starts_at <= candidate.scheduled_at::date)
+                         and (subscription.expires_at is null
+                           or subscription.expires_at >= candidate.scheduled_at::date)
+                     ) then 'subscription'
+                   when candidate.client_charge_type = 'subscription'
+                     then 'personal_account'
+                   else candidate.client_charge_type
+                 end as resolved_charge_type
+            from candidate
+        )
+        insert into app.lesson_snapshots (
+          lesson_id, client_type, client_id, completion_type,
+          client_charge_type, client_charge_value,
+          teacher_compensation_type, teacher_compensation_value,
+          subscription_id, trial, duration_minutes
+        )
+        select id, client_type, client_id, completion_type,
+               resolved_charge_type,
+               case when resolved_charge_type = 'personal_account'
+                      and client_charge_type = 'subscription'
+                    then personal_price
+                    else client_charge_value end,
+               teacher_compensation_type, teacher_compensation_value,
+               case when resolved_charge_type = 'subscription'
+                    then subscription_id else null end,
+               trial, duration_minutes
+          from resolved
+        on conflict (lesson_id) do nothing
+      `,
+      [lessonIds],
+    );
+    await executor.query(
+      `
+        insert into app.lesson_reservations (lesson_id, subscription_id, units)
+        select snapshot.lesson_id, snapshot.subscription_id,
+               snapshot.client_charge_value
+          from app.lesson_snapshots snapshot
+         where snapshot.lesson_id = any($1::uuid[])
+           and snapshot.client_charge_type = 'subscription'
+        on conflict (lesson_id, subscription_id) do nothing
+      `,
+      [lessonIds],
+    );
+    await executor.query(
+      `update app.schedule_series
+       set occurrence_count = coalesce(occurrence_count, 0) + $2,
+           updated_at = now()
+       where id = $1 and client_type is not null`,
+      [seriesId, lessonIds.length],
+    );
+    return lessonIds.length;
   }
 
   /** Продлить все живые серии (вкл. «до бесконечности») — вызывается воркером. */

@@ -38,6 +38,7 @@ interface SeriesOccurrence {
 @Injectable()
 export class LessonSeriesCommandService {
   private static readonly MAX_RANGE_DAYS = 365;
+  private static readonly MATERIALIZATION_HORIZON_DAYS = 60;
 
   constructor(
     private readonly platform: PlatformIntegrityService,
@@ -91,13 +92,17 @@ export class LessonSeriesCommandService {
         payload: { entityId: seriesId, state: "created" },
       },
       mutate: async (client, nextVersion) => {
+        const templateOccurrence = await this.templateOccurrence(client, dto);
+        const templateDraft = this.validator.create(
+          this.lessonDraft(dto, clientRef, templateOccurrence.startAt),
+        );
         const occurrences = await this.expand(client, dto);
         const drafts = occurrences.map((occurrence) =>
           this.validator.create(
             this.lessonDraft(dto, clientRef, occurrence.startAt),
           ),
         );
-        await this.acquireLocks(client, seriesId, drafts[0]!);
+        await this.acquireLocks(client, seriesId, templateDraft);
         await this.assertLeadNotConverted(client, clientRef);
         await this.validateEveryOccurrence(client, drafts, occurrences);
 
@@ -106,8 +111,9 @@ export class LessonSeriesCommandService {
           seriesId,
           actor.userId,
           dto,
-          drafts[0]!,
+          templateDraft,
           occurrences,
+          templateOccurrence.timezone,
           nextVersion,
         );
         const lessonIds: string[] = [];
@@ -187,8 +193,14 @@ export class LessonSeriesCommandService {
           branch.timezone_name
         from app.branches branch
         cross join lateral generate_series(
-          $2::date,
-          $3::date,
+          greatest(
+            $2::date,
+            timezone(branch.timezone_name, now())::date
+          ),
+          least(
+            $3::date,
+            timezone(branch.timezone_name, now())::date + $8::int
+          ),
           interval '1 day'
         ) day
         where branch.id = $1
@@ -205,16 +217,9 @@ export class LessonSeriesCommandService {
         dto.beginTime,
         dto.durationMinutes ?? 60,
         LessonSeriesCommandService.MAX_RANGE_DAYS,
+        LessonSeriesCommandService.MATERIALIZATION_HORIZON_DAYS,
       ],
     );
-    if (result.rows.length === 0) {
-      throw new UnprocessableEntityException({
-        code: "LESSON_SERIES_NO_OCCURRENCES",
-        message:
-          "Recurrence has no occurrences or exceeds the one-year booking range.",
-        fields: ["branchId", "weekday", "validFrom", "validUntil"],
-      });
-    }
     return result.rows.map((row, index) => ({
       index,
       localDate: row.local_date,
@@ -222,6 +227,45 @@ export class LessonSeriesCommandService {
       endAt: new Date(row.ends_at).toISOString(),
       timezone: row.timezone_name,
     }));
+  }
+
+  private async templateOccurrence(
+    client: PoolClient,
+    dto: CreateScheduleSeriesDto,
+  ): Promise<SeriesOccurrence> {
+    const result = await client.query<SeriesOccurrenceRow>(
+      `
+        select
+          $2::date::text as local_date,
+          ($2::date + $3::time) at time zone branch.timezone_name as starts_at,
+          (($2::date + $3::time) at time zone branch.timezone_name
+            + $4::int * interval '1 minute') as ends_at,
+          branch.timezone_name
+        from app.branches branch
+        where branch.id = $1 and branch.deleted_at is null
+      `,
+      [
+        dto.branchId ?? null,
+        dto.validFrom.slice(0, 10),
+        dto.beginTime,
+        dto.durationMinutes ?? 60,
+      ],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new UnprocessableEntityException({
+        code: "LESSON_SERIES_BRANCH_MISSING",
+        message: "Lesson series branch is missing or archived.",
+        fields: ["branchId"],
+      });
+    }
+    return {
+      index: 0,
+      localDate: row.local_date,
+      startAt: new Date(row.starts_at).toISOString(),
+      endAt: new Date(row.ends_at).toISOString(),
+      timezone: row.timezone_name,
+    };
   }
 
   private lessonDraft(
@@ -328,6 +372,7 @@ export class LessonSeriesCommandService {
     dto: CreateScheduleSeriesDto,
     draft: CompleteLessonDraft,
     occurrences: SeriesOccurrence[],
+    timezone: string,
     version: number,
   ) {
     return client.query(
@@ -363,7 +408,7 @@ export class LessonSeriesCommandService {
         dto.validUntil!.slice(0, 10),
         draft.notes,
         actorUserId,
-        occurrences[0]!.timezone,
+        timezone,
         draft.completionType,
         draft.clientChargeType,
         draft.clientChargeValue,

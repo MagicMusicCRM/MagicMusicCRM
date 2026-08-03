@@ -86,8 +86,8 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
       roomId: fixture.roomId,
       weekday: 1,
       durationMinutes: 60,
-      validFrom: "2026-10-26",
-      validUntil: "2026-11-09",
+      validFrom: "2026-08-03",
+      validUntil: "2026-08-17",
       isTrial: false,
       completionType: "standard.success",
       clientChargeType: "none" as const,
@@ -112,9 +112,9 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
         failedIndex: 1,
         occurrence: {
           index: 1,
-          localDate: "2026-11-02",
-          startAt: "2026-11-02T14:00:00.000Z",
-          endAt: "2026-11-02T15:00:00.000Z",
+          localDate: "2026-08-10",
+          startAt: "2026-08-10T13:00:00.000Z",
+          endAt: "2026-08-10T14:00:00.000Z",
           timezone: "America/New_York",
         },
       });
@@ -202,9 +202,9 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
           new Date(value).toISOString(),
         ),
       ).toEqual([
-        "2026-10-26T15:00:00.000Z",
-        "2026-11-02T16:00:00.000Z",
-        "2026-11-09T16:00:00.000Z",
+        "2026-08-03T15:00:00.000Z",
+        "2026-08-10T15:00:00.000Z",
+        "2026-08-17T15:00:00.000Z",
       ]);
 
       const replay = await commands.create(
@@ -287,6 +287,47 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
         const elapsedHours = (current - previous) / 3_600_000;
         expect([167, 168, 169]).toContain(elapsedHours);
       }
+    }
+  });
+
+  it("stores a future individual series without materializing beyond 60 days", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    let seriesId: string | undefined;
+    try {
+      const created = await commands.create(actor, {
+        clientRef: { type: "student", id: fixture.studentId },
+        teacherId: fixture.teacherId,
+        branchId: fixture.branchId,
+        roomId: fixture.roomId,
+        weekday: 1,
+        beginTime: "11:00",
+        durationMinutes: 60,
+        validFrom: "2026-10-26",
+        validUntil: "2026-11-09",
+        isTrial: false,
+        completionType: "standard.success",
+        clientChargeType: "none",
+        clientChargeValue: 0,
+        teacherCompensationType: "none",
+        teacherCompensationValue: 0,
+      }, {
+        idempotencyKey: `series-horizon-${randomUUID()}`,
+        requestId: `request-horizon-${randomUUID()}`,
+      });
+      seriesId = created.id;
+      expect(created).toMatchObject({ lessonsCreated: 0, lessonIds: [] });
+      const persisted = await pool.query<{ occurrence_count: string; lessons: string }>(`
+        select series.occurrence_count::text,
+          count(lesson.id)::text as lessons
+        from app.schedule_series series
+        left join app.lessons lesson on lesson.series_id = series.id
+        where series.id = $1
+        group by series.id
+      `, [seriesId]);
+      expect(persisted.rows[0]).toEqual({ occurrence_count: "0", lessons: "0" });
+    } finally {
+      await cleanupFixture(pool, fixture, seriesId);
     }
   });
 });
@@ -414,7 +455,7 @@ async function createFixture(pool: Pool) {
         student_id, teacher_id, branch_id, room_id,
         scheduled_at, duration_minutes, created_by
       )
-      values ($1, $2, $3, $4, '2026-11-02T14:00:00.000Z', 60, $5)
+      values ($1, $2, $3, $4, '2026-08-10T13:00:00.000Z', 60, $5)
       returning id
     `,
     [

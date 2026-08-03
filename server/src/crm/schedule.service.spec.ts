@@ -481,7 +481,7 @@ describe("ScheduleService", () => {
     expect(materializeSql).toContain(
       "on conflict (series_id, series_date) where deleted_at is null",
     );
-    expect(materializeCall?.[1]).toEqual(["series-a", 400]);
+    expect(materializeCall?.[1]).toEqual(["series-a", 60, 400]);
     expect(
       query.mock.calls.some(
         (call) =>
