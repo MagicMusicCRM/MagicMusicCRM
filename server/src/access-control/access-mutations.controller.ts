@@ -21,6 +21,7 @@ import {
 } from "./dto/access-mutation.dto";
 import { AccessMutationsService } from "./access-mutations.service";
 import { AccessRole, USER_ROLES } from "./capability-registry";
+import { V4DomainFlagsService } from "../platform/v4-domain-flags";
 
 function parseRole(value: string): AccessRole {
   if (!(USER_ROLES as readonly string[]).includes(value)) {
@@ -45,7 +46,10 @@ function commandHeaders(
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("access")
 export class AccessMutationsController {
-  constructor(private readonly access: AccessMutationsService) {}
+  constructor(
+    private readonly access: AccessMutationsService,
+    private readonly v4DomainFlags: V4DomainFlagsService,
+  ) {}
 
   @Get("me")
   getMyAccess(@CurrentActor() actor: ActorContext) {
@@ -76,6 +80,7 @@ export class AccessMutationsController {
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: ReplaceRolePackageDto,
   ) {
+    this.v4DomainFlags.assertEnabled("access");
     return this.access.replaceRolePackage(actor, {
       role: parseRole(role),
       ...dto,
@@ -101,6 +106,7 @@ export class AccessMutationsController {
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: AssignAccessRoleDto,
   ) {
+    this.v4DomainFlags.assertEnabled("access");
     return this.access.assignRole(actor, {
       userId,
       ...dto,
@@ -118,6 +124,7 @@ export class AccessMutationsController {
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: SetUserOverrideDto,
   ) {
+    this.v4DomainFlags.assertEnabled("access");
     return this.access.setUserOverride(actor, {
       userId,
       capabilityKey,

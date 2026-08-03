@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 export const V4_DOMAINS = ["access", "schedule"] as const;
 
@@ -72,7 +72,7 @@ export function resolveV4DomainRollout(
 
 @Injectable()
 export class V4DomainFlagsService {
-  snapshot(): V4DomainRollout[] {
+  get(domain: V4Domain): V4DomainRollout {
     const rawDiffs = process.env.V4_PARITY_UNEXPLAINED_DIFFS ?? "1";
     const unexplainedDiffs = Number(rawDiffs);
     if (!Number.isInteger(unexplainedDiffs) || unexplainedDiffs < 0) {
@@ -80,8 +80,22 @@ export class V4DomainFlagsService {
         "V4_PARITY_UNEXPLAINED_DIFFS must be a non-negative integer.",
       );
     }
-    return V4_DOMAINS.map((domain) =>
-      resolveV4DomainRollout(domain, process.env, unexplainedDiffs),
-    );
+    return resolveV4DomainRollout(domain, process.env, unexplainedDiffs);
+  }
+
+  assertEnabled(domain: V4Domain): V4DomainRollout {
+    const rollout = this.get(domain);
+    if (rollout.effectivePath !== "v4") {
+      throw new ServiceUnavailableException({
+        code: "V4_DOMAIN_DISABLED",
+        domain,
+        reason: rollout.reason,
+      });
+    }
+    return rollout;
+  }
+
+  snapshot(): V4DomainRollout[] {
+    return V4_DOMAINS.map((domain) => this.get(domain));
   }
 }

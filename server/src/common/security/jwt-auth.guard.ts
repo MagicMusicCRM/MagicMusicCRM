@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   Optional,
   UnauthorizedException
@@ -16,6 +17,8 @@ import {
 } from './actor-context';
 import { DatabaseService } from '../../db/database.service';
 import { CapabilityRequestAuthorizer } from '../../access-control/capability-request-authorizer';
+import { resolveCapabilityRoutePolicy } from '../../access-control/capability-route-policy';
+import { V4DomainFlagsService } from '../../platform/v4-domain-flags';
 
 interface AccessTokenPayload {
   sub?: string;
@@ -37,6 +40,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     @Optional() private readonly database?: DatabaseService,
+    @Optional() private readonly v4DomainFlags?: V4DomainFlagsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -66,13 +70,53 @@ export class JwtAuthGuard implements CanActivate {
     request.user = { userId: payload.sub, role: payload.role };
     if (this.database) {
       const route = request.route as { path?: string } | undefined;
-      const authorization =
-        await new CapabilityRequestAuthorizer(this.database).authorize(
-          request.user,
-          request.method,
-          request.originalUrl ||
-            `${request.baseUrl ?? ''}${route?.path ?? request.path}`,
-        );
+      const path = request.originalUrl ||
+        `${request.baseUrl ?? ''}${route?.path ?? request.path}`;
+      const policy = resolveCapabilityRoutePolicy(request.method, path);
+      const rollout = (this.v4DomainFlags ?? new V4DomainFlagsService())
+        .get('access');
+      const authorizer = new CapabilityRequestAuthorizer(this.database);
+
+      if (rollout.effectivePath === 'legacy') {
+        if (
+          !policy.authenticatedOnly &&
+          !policy.legacyAllowedRoles.includes(request.user.role)
+        ) {
+          throw new ForbiddenException({
+            code: 'LEGACY_ROLE_DENIED',
+            capabilityKey: policy.capabilityKey,
+          });
+        }
+
+        let decisionSource = 'legacy';
+        if (rollout.shadowCompare) {
+          try {
+            const shadow = await authorizer.authorize(
+              request.user,
+              request.method,
+              path,
+            );
+            decisionSource = `legacy;shadow:${shadow.source}:allow`;
+          } catch (error) {
+            decisionSource = error instanceof ForbiddenException
+              ? 'legacy;shadow:deny'
+              : 'legacy;shadow:error';
+          }
+        }
+        request.capabilityAccess = {
+          capabilityKey: policy.capabilityKey,
+          scope: policy.scope,
+          decisionSource,
+          legacyPolicy: policy.legacyPolicy,
+        };
+        return true;
+      }
+
+      const authorization = await authorizer.authorize(
+        request.user,
+        request.method,
+        path,
+      );
       request.capabilityAccess = {
         capabilityKey: authorization.policy.capabilityKey,
         scope: authorization.policy.scope,

@@ -1,4 +1,8 @@
-import { resolveV4DomainRollout } from "./v4-domain-flags";
+import { ServiceUnavailableException } from "@nestjs/common";
+import {
+  resolveV4DomainRollout,
+  V4DomainFlagsService,
+} from "./v4-domain-flags";
 
 describe("T8.3.3 domain compatibility flags", () => {
   it("defaults to legacy execution with shadow comparison", () => {
@@ -34,5 +38,29 @@ describe("T8.3.3 domain compatibility flags", () => {
       killSwitch: true,
       enableAllowed: false,
     });
+  });
+});
+
+describe("V4DomainFlagsService runtime boundary", () => {
+  const original = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...original };
+  });
+
+  it("rejects v4-only execution while shadow keeps the legacy path", () => {
+    process.env.V4_ACCESS_MODE = "shadow";
+    process.env.V4_PARITY_UNEXPLAINED_DIFFS = "0";
+
+    expect(() => new V4DomainFlagsService().assertEnabled("access"))
+      .toThrow(ServiceUnavailableException);
+  });
+
+  it("allows v4-only execution only after the domain is enabled", () => {
+    process.env.V4_SCHEDULE_MODE = "v4";
+    process.env.V4_PARITY_UNEXPLAINED_DIFFS = "0";
+
+    expect(new V4DomainFlagsService().assertEnabled("schedule"))
+      .toMatchObject({ effectivePath: "v4", enableAllowed: true });
   });
 });

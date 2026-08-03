@@ -37,6 +37,7 @@ import {
 import { LessonCommandService } from "./schedule/lesson-command.service";
 import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
 import { LessonTransitionService } from "./schedule/lesson-transition.service";
+import { V4DomainFlagsService } from "../platform/v4-domain-flags";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -46,6 +47,7 @@ export class CrmScheduleController {
     private readonly lessonCommands: LessonCommandService,
     private readonly lessonSeriesCommands: LessonSeriesCommandService,
     private readonly lessonTransitions: LessonTransitionService,
+    private readonly v4DomainFlags: V4DomainFlagsService,
   ) {}
 
   @Get("schedule-series")
@@ -69,10 +71,13 @@ export class CrmScheduleController {
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: CreateScheduleSeriesDto,
   ) {
-    return this.lessonSeriesCommands.create(actor, dto, {
+    const metadata = {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
-    });
+    };
+    return this.v4DomainFlags.get("schedule").effectivePath === "v4"
+      ? this.lessonSeriesCommands.create(actor, dto, metadata)
+      : this.schedule.createScheduleSeries(actor, dto);
   }
 
   @Patch("schedule-series/:id")
@@ -133,10 +138,13 @@ export class CrmScheduleController {
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: UpsertLessonDto,
   ) {
-    return this.lessonCommands.create(actor, dto, {
+    const metadata = {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
-    });
+    };
+    return this.v4DomainFlags.get("schedule").effectivePath === "v4"
+      ? this.lessonCommands.create(actor, dto, metadata)
+      : this.schedule.createLesson(actor, dto);
   }
 
   // Registered before "lessons/:id" so the literal segment wins the match and
@@ -157,10 +165,13 @@ export class CrmScheduleController {
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: UpsertLessonDto,
   ) {
-    return this.lessonCommands.update(actor, id, dto, {
+    const metadata = {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
-    });
+    };
+    return this.v4DomainFlags.get("schedule").effectivePath === "v4"
+      ? this.lessonCommands.update(actor, id, dto, metadata)
+      : this.schedule.updateLesson(actor, id, dto);
   }
 
   @Post("lessons/:id/reschedule/preview")
@@ -169,6 +180,7 @@ export class CrmScheduleController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: LessonReschedulePreviewDto,
   ) {
+    this.v4DomainFlags.assertEnabled("schedule");
     return this.lessonTransitions.previewReschedule(actor, id, dto);
   }
 
@@ -180,6 +192,7 @@ export class CrmScheduleController {
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: LessonRescheduleCommandDto,
   ) {
+    this.v4DomainFlags.assertEnabled("schedule");
     return this.lessonTransitions.reschedule(actor, id, dto, {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
@@ -192,6 +205,7 @@ export class CrmScheduleController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: LessonCancelPreviewDto,
   ) {
+    this.v4DomainFlags.assertEnabled("schedule");
     return this.lessonTransitions.previewCancel(actor, id, dto);
   }
 
@@ -203,6 +217,7 @@ export class CrmScheduleController {
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: LessonCancelCommandDto,
   ) {
+    this.v4DomainFlags.assertEnabled("schedule");
     return this.lessonTransitions.cancel(actor, id, dto, {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
