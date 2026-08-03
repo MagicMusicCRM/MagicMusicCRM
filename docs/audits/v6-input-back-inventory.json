@@ -2,11 +2,11 @@
   "schema_version": 1,
   "task": "V6-003",
   "summary": {
-    "scroll_sites": 143,
-    "production_scroll_sites": 142,
+    "scroll_sites": 144,
+    "production_scroll_sites": 143,
     "explicit_scrollbars": 3,
     "visible_thumb_sites": 5,
-    "scroll_sites_without_file_controller_evidence": 132,
+    "scroll_sites_without_file_controller_evidence": 133,
     "back_exit_sites": 208,
     "production_back_exit_sites": 207,
     "predictive_back_sites": 35,
@@ -785,17 +785,6 @@
       "line": 630
     },
     {
-      "kind": "ListView.separated",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "controller_evidence": false,
-      "scrollbar_evidence": false,
-      "visible_thumb_evidence": false,
-      "status": "scroll-owner-review",
-      "file": "lib/features/teacher/presentation/widgets/teacher_schedule_widget.dart",
-      "line": 748
-    },
-    {
       "kind": "ListView.builder",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
@@ -815,7 +804,29 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/client/presentation/widgets/homework_widget.dart",
+      "line": 376
+    },
+    {
+      "kind": "ListView.builder",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "controller_evidence": false,
+      "scrollbar_evidence": false,
+      "visible_thumb_evidence": false,
+      "status": "scroll-owner-review",
+      "file": "lib/features/client/presentation/widgets/homework_widget.dart",
       "line": 66
+    },
+    {
+      "kind": "DraggableScrollableSheet",
+      "owner": "SYS-UI-FOUNDATION",
+      "production_reachable": true,
+      "controller_evidence": false,
+      "scrollbar_evidence": false,
+      "visible_thumb_evidence": false,
+      "status": "scroll-owner-review",
+      "file": "lib/core/widgets/v7/magic_sheet.dart",
+      "line": 195
     },
     {
       "kind": "SingleChildScrollView",
@@ -826,7 +837,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/core/widgets/v7/magic_sheet.dart",
-      "line": 145
+      "line": 261
     },
     {
       "kind": "SingleChildScrollView",
@@ -874,17 +885,6 @@
     },
     {
       "kind": "SingleChildScrollView",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "controller_evidence": false,
-      "scrollbar_evidence": false,
-      "visible_thumb_evidence": false,
-      "status": "scroll-owner-review",
-      "file": "lib/features/admin/presentation/widgets/create_group_dialog.dart",
-      "line": 130
-    },
-    {
-      "kind": "SingleChildScrollView",
       "owner": "SYS-UI-FOUNDATION",
       "production_reachable": true,
       "controller_evidence": false,
@@ -896,6 +896,17 @@
     },
     {
       "kind": "SingleChildScrollView",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "controller_evidence": false,
+      "scrollbar_evidence": false,
+      "visible_thumb_evidence": false,
+      "status": "scroll-owner-review",
+      "file": "lib/features/admin/presentation/widgets/create_group_dialog.dart",
+      "line": 130
+    },
+    {
+      "kind": "SingleChildScrollView",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "controller_evidence": false,
@@ -903,7 +914,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 443
+      "line": 493
     },
     {
       "kind": "SingleChildScrollView",
@@ -961,6 +972,17 @@
       "line": 159
     },
     {
+      "kind": "SingleChildScrollView",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "controller_evidence": false,
+      "scrollbar_evidence": false,
+      "visible_thumb_evidence": false,
+      "status": "scroll-owner-review",
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 443
+    },
+    {
       "kind": "ListView",
       "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
@@ -970,28 +992,6 @@
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/deletion_requests_widget.dart",
       "line": 165
-    },
-    {
-      "kind": "SingleChildScrollView",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "controller_evidence": false,
-      "scrollbar_evidence": false,
-      "visible_thumb_evidence": false,
-      "status": "scroll-owner-review",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 493
-    },
-    {
-      "kind": "ListView",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "controller_evidence": false,
-      "scrollbar_evidence": false,
-      "visible_thumb_evidence": false,
-      "status": "scroll-owner-review",
-      "file": "lib/features/admin/presentation/widgets/deletion_requests_widget.dart",
-      "line": 171
     },
     {
       "kind": "SingleChildScrollView",
@@ -1181,15 +1181,15 @@
       "line": 188
     },
     {
-      "kind": "ListView.builder",
-      "owner": "SYS-CRM-WORKSPACE",
+      "kind": "ListView",
+      "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "controller_evidence": false,
       "scrollbar_evidence": false,
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
-      "file": "lib/features/client/presentation/widgets/homework_widget.dart",
-      "line": 376
+      "file": "lib/features/admin/presentation/widgets/deletion_requests_widget.dart",
+      "line": 171
     },
     {
       "kind": "ListView.builder",
@@ -1203,15 +1203,15 @@
       "line": 181
     },
     {
-      "kind": "SingleChildScrollView",
+      "kind": "Scrollbar",
       "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "controller_evidence": false,
       "scrollbar_evidence": true,
       "visible_thumb_evidence": false,
-      "status": "scroll-owner-review",
+      "status": "explicit-scrollbar",
       "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 194
+      "line": 193
     },
     {
       "kind": "ListView.builder",
@@ -1379,17 +1379,6 @@
       "line": 136
     },
     {
-      "kind": "Scrollbar",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "controller_evidence": false,
-      "scrollbar_evidence": true,
-      "visible_thumb_evidence": false,
-      "status": "explicit-scrollbar",
-      "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 193
-    },
-    {
       "kind": "SingleChildScrollView",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
@@ -1409,7 +1398,29 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/schedule_legends.dart",
+      "line": 103
+    },
+    {
+      "kind": "SingleChildScrollView",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "controller_evidence": false,
+      "scrollbar_evidence": false,
+      "visible_thumb_evidence": false,
+      "status": "scroll-owner-review",
+      "file": "lib/features/admin/presentation/widgets/schedule_legends.dart",
       "line": 46
+    },
+    {
+      "kind": "SingleChildScrollView",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "controller_evidence": false,
+      "scrollbar_evidence": true,
+      "visible_thumb_evidence": false,
+      "status": "scroll-owner-review",
+      "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
+      "line": 194
     },
     {
       "kind": "SingleChildScrollView",
@@ -1478,15 +1489,15 @@
       "line": 29
     },
     {
-      "kind": "SingleChildScrollView",
-      "owner": "SYS-SCHEDULE",
+      "kind": "ListView.builder",
+      "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "controller_evidence": false,
       "scrollbar_evidence": false,
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
-      "file": "lib/features/admin/presentation/widgets/schedule_legends.dart",
-      "line": 103
+      "file": "lib/features/admin/presentation/widgets/manage_entities_scheduling.dart",
+      "line": 263
     },
     {
       "kind": "ListView.builder",
@@ -1497,7 +1508,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/manage_entities_scheduling.dart",
-      "line": 263
+      "line": 360
     },
     {
       "kind": "ListView.builder",
@@ -1566,15 +1577,15 @@
       "line": 41
     },
     {
-      "kind": "ListView.builder",
-      "owner": "SYS-PLATFORM-QUALITY",
+      "kind": "ListView.separated",
+      "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "controller_evidence": false,
       "scrollbar_evidence": false,
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_scheduling.dart",
-      "line": 360
+      "file": "lib/features/teacher/presentation/widgets/teacher_schedule_widget.dart",
+      "line": 748
     },
     {
       "kind": "ListView.builder",

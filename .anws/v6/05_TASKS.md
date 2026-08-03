@@ -144,7 +144,7 @@ flowchart TD
   - **Проверка:** representative Client/Lesson/Payment surface widget tests + wire-to-service diff.
   - **Оценка:** 7 ч · **Зависимости:** INT-S1 · **Приоритет:** P0.
 
-- [ ] **V6-202** `[REQ-SURFACE-001]` — Реализовать full-width expandable mobile sheet.
+- [x] **V6-202** `[REQ-SURFACE-001]` — Реализовать full-width expandable mobile sheet.
   - **Работа:** visible handle, 0.58/0.90/1.0 snaps, labelled expand/collapse, supplied scroll controller, safe area and keyboard inset.
   - **Критерий:** drag and button reach fullscreen; last field/action stays visible; nested scroll remains stable; screen reader announces state.
   - **Проверка:** Android widget/device tests portrait/landscape, keyboard open, long/short content.
