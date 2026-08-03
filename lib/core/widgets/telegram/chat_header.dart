@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'avatar_widget.dart';
 
@@ -71,12 +72,7 @@ class ChatHeader extends StatelessWidget {
     return Row(
       children: [
         if (showBackButton)
-          IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
-            tooltip: 'Назад',
-            onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-            splashRadius: 20,
-          ),
+          AppBackButton(onPressed: onBack),
         if (!showBackButton) const SizedBox(width: 8),
         // Avatar
         GestureDetector(

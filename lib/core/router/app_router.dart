@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/services/access_invalidation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_shell.dart';
@@ -554,7 +555,7 @@ class _LeadDeepLinkScreenState extends ConsumerState<_LeadDeepLinkScreen> {
     await showClientCard(context, entityType: 'lead', entityId: widget.leadId);
 
     if (!mounted) return;
-    context.go(_deepLinkHomeRoute(ref));
+    returnFromDeepLink(context, fallbackLocation: _deepLinkHomeRoute(ref));
   }
 
   @override
@@ -597,7 +598,7 @@ class _StudentDeepLinkScreenState
     );
 
     if (!mounted) return;
-    context.go(_deepLinkHomeRoute(ref));
+    returnFromDeepLink(context, fallbackLocation: _deepLinkHomeRoute(ref));
   }
 
   @override
@@ -629,7 +630,7 @@ class _LessonDeepLinkScreenState extends ConsumerState<_LessonDeepLinkScreen> {
     if (_opened || !mounted) return;
     _opened = true;
     if (widget.lessonId.isEmpty) return;
-    context.go(_deepLinkHomeRoute(ref));
+    returnFromDeepLink(context, fallbackLocation: _deepLinkHomeRoute(ref));
   }
 
   @override

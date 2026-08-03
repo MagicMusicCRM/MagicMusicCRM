@@ -3,8 +3,8 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 263,
-    "production_reachable_files": 256,
+    "dart_files": 264,
+    "production_reachable_files": 257,
     "go_routes": 21,
     "screens": 21,
     "production_screens": 21,
@@ -20,147 +20,147 @@
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 222
+      "line": 223
     },
     {
       "path": "/login",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 226
+      "line": 227
     },
     {
       "path": "/register",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 227
+      "line": 228
     },
     {
       "path": "/email-otp",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 231
+      "line": 232
     },
     {
       "path": "/password-reset",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 244
+      "line": 245
     },
     {
       "path": "/onboarding",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 248
+      "line": 249
     },
     {
       "path": "/legal-consent",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 252
+      "line": 253
     },
     {
       "path": "/legal-documents",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 256
+      "line": 257
     },
     {
       "path": "/account-deletion-status",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 261
+      "line": 262
     },
     {
       "path": "/client",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 265
+      "line": 266
     },
     {
       "path": "/admin",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 271
+      "line": 272
     },
     {
       "path": "/teacher",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 276
+      "line": 277
     },
     {
       "path": "/manager",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 280
+      "line": 281
     },
     {
       "path": "/student/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 285
+      "line": 286
     },
     {
       "path": "/admin/profiles/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 290
+      "line": 291
     },
     {
       "path": "/students/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 300
+      "line": 301
     },
     {
       "path": "/leads/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 305
+      "line": 306
     },
     {
       "path": "/lessons/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 310
+      "line": 311
     },
     {
       "path": "/profile",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 315
+      "line": 316
     },
     {
       "path": "/auth-methods",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 319
+      "line": 320
     },
     {
       "path": "/delete-account",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 323
+      "line": 324
     }
   ],
   "screens": [
@@ -178,7 +178,7 @@
         "retry": true
       },
       "file": "lib/core/router/app_router.dart",
-      "line": 343
+      "line": 344
     },
     {
       "name": "AuthMethodsScreen",
@@ -242,7 +242,7 @@
         "retry": true
       },
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 74
+      "line": 75
     },
     {
       "name": "ManagerDashboardScreen",
@@ -434,7 +434,7 @@
         "retry": true
       },
       "file": "lib/core/router/app_router.dart",
-      "line": 609
+      "line": 610
     },
     {
       "name": "_StudentDeepLinkScreen",
@@ -450,7 +450,7 @@
         "retry": true
       },
       "file": "lib/core/router/app_router.dart",
-      "line": 569
+      "line": 570
     },
     {
       "name": "_LeadDeepLinkScreen",
@@ -466,7 +466,7 @@
         "retry": true
       },
       "file": "lib/core/router/app_router.dart",
-      "line": 531
+      "line": 532
     },
     {
       "name": "OnboardingScreen",

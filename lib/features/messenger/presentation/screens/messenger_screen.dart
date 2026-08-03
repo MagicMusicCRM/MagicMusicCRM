@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
@@ -267,11 +268,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
     if (widget.role == 'client') {
       // Clients only see the chat shell directly, no CRM navigation
-      return PopScope(
-        canPop: !_hasInternalBackState(includeCrmTabs: false),
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) _consumeBackNavigation(includeCrmTabs: false);
-        },
+      return AppBackScope(
+        hasLocalHistory: _hasInternalBackState(includeCrmTabs: false),
+        onBack: () => _consumeBackNavigation(includeCrmTabs: false),
         child: Scaffold(body: SafeArea(child: _buildMessengerShell(context))),
       );
     }
@@ -385,12 +384,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         ),
       );
     } else {
-      return PopScope(
-        canPop: !_hasInternalBackState(includeCrmTabs: true),
-        onPopInvokedWithResult: (didPop, result) {
-          if (didPop) return;
-          _consumeBackNavigation(includeCrmTabs: true);
-        },
+      return AppBackScope(
+        hasLocalHistory: _hasInternalBackState(includeCrmTabs: true),
+        onBack: () => _consumeBackNavigation(includeCrmTabs: true),
         child: Scaffold(
           body: SafeArea(child: bodyContent),
           bottomNavigationBar: selectedCrmTab == 0 && _selectedChatId != null

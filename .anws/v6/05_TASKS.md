@@ -150,7 +150,7 @@ flowchart TD
   - **Проверка:** Android widget/device tests portrait/landscape, keyboard open, long/short content.
   - **Оценка:** 7 ч · **Зависимости:** V6-201 · **Приоритет:** P0.
 
-- [ ] **V6-203** `[REQ-SURFACE-001, REQ-NAV-002]` — Унифицировать UI/system/predictive Back.
+- [x] **V6-203** `[REQ-SURFACE-001, REQ-NAV-002]` — Унифицировать UI/system/predictive Back.
   - **Работа:** ahead-of-time `PopScope`/navigator pop policy; overlay → route → tab-root/exit order; consistent app-bar Back.
   - **Критерий:** system gesture never silently routes home or discards input; top overlay dismisses first.
   - **Проверка:** Android predictive Back matrix for top/nested routes, partial/full sheet, nested dialog.

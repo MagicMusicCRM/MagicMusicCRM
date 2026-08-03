@@ -315,7 +315,7 @@ The key production gap is explicit: workspace foundations do not count as mounte
 $scrollSites = [Collections.Generic.List[object]]::new()
 $backSites = [Collections.Generic.List[object]]::new()
 $scrollPattern = '(?<kind>RawScrollbar|Scrollbar|SingleChildScrollView|ListView(?:\.[A-Za-z]+)?|GridView(?:\.[A-Za-z]+)?|CustomScrollView|DraggableScrollableSheet)\s*\('
-$backPattern = '(?<kind>PopScope|WillPopScope|NavigatorPopHandler|Form)\s*(?:<[^>]+>)?\s*\(|(?<exit>Navigator\.(?:pop|maybePop)|context\.pop)\s*\('
+$backPattern = '(?<kind>AppBackScope|PopScope|WillPopScope|NavigatorPopHandler|Form)\s*(?:<[^>]+>)?\s*\(|(?<exit>Navigator\.(?:pop|maybePop)|context\.pop)\s*\('
 foreach ($file in $allDartFiles) {
   $relative = Get-RelativePath $file.FullName
   $text = [IO.File]::ReadAllText($file.FullName)
@@ -342,8 +342,8 @@ foreach ($file in $allDartFiles) {
       kind = $kind
       owner = Get-Owner $relative
       production_reachable = $reachableSet.Contains($file.FullName)
-      ahead_of_time = $kind -in @('PopScope', 'NavigatorPopHandler', 'Form')
-      status = if ($kind -in @('PopScope', 'NavigatorPopHandler', 'Form')) { 'predictive-back-capable' }
+      ahead_of_time = $kind -in @('AppBackScope', 'PopScope', 'NavigatorPopHandler', 'Form')
+      status = if ($kind -in @('AppBackScope', 'PopScope', 'NavigatorPopHandler', 'Form')) { 'predictive-back-capable' }
         elseif ($kind -eq 'WillPopScope') { 'legacy-back' }
         else { 'exit-review' }
       file = $relative
