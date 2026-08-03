@@ -44,12 +44,17 @@ class _ProductionWorkspaceHostState
   void didUpdateWidget(covariant ProductionWorkspaceHost oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.snapshot.cacheKey != widget.snapshot.cacheKey) {
+      final reset =
+          oldWidget.snapshot.accountId != widget.snapshot.accountId ||
+              oldWidget.snapshot.role != widget.snapshot.role
+          ? _logoutCoordinator.logout(oldWidget.snapshot.accountId)
+          : Future<void>.value();
       _disposeController();
-      _initialize();
+      _initialize(beforeRestore: reset);
     }
   }
 
-  void _initialize() {
+  void _initialize({Future<void>? beforeRestore}) {
     final generation = ++_generation;
     final store = ref.read(accountWorkspaceStoreProvider);
     _logoutCoordinator = ref.read(workspaceLogoutCoordinatorProvider);
@@ -82,12 +87,16 @@ class _ProductionWorkspaceHostState
       store: store,
     );
     unawaited(
-      store
-          .restore(
-            accountId: widget.snapshot.accountId,
-            fallback: _controller.state,
-            routeAllowed: (link) =>
-                registry.resolve(link, widget.snapshot).canOpen,
+      Future<void>.sync(() async {
+            await beforeRestore;
+          })
+          .then(
+            (_) => store.restore(
+              accountId: widget.snapshot.accountId,
+              fallback: _controller.state,
+              routeAllowed: (link) =>
+                  registry.resolve(link, widget.snapshot).canOpen,
+            ),
           )
           .then((restored) {
             if (!mounted || generation != _generation) return;

@@ -111,7 +111,7 @@ flowchart TD
   - **Проверка:** Windows widget/device flow login → 10 tabs → reorder/duplicate/close.
   - **Оценка:** 8 ч · **Зависимости:** V6-101 · **Приоритет:** P0.
 
-- [ ] **V6-103** `[REQ-WORKSPACE-001, REQ-SEC-001]` — Безопасное restore и logout reset.
+- [x] **V6-103** `[REQ-WORKSPACE-001, REQ-SEC-001]` — Безопасное restore и logout reset.
   - **Работа:** account/schema-version key, safe-state serialization, access/resource revalidation, dirty decision, clear current-account cache on logout/role change.
   - **Критерий:** restart restores only permitted routes; stale/deleted/forbidden routes safely fall back; user B never sees user A tabs.
   - **Проверка:** restart, logout/login, user switch, role downgrade, route schema bump tests.

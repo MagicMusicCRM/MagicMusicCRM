@@ -95,4 +95,130 @@ void main() {
     expect(find.byType(DesktopWorkspaceShell), findsNothing);
     expect(find.text('home'), findsOneWidget);
   });
+
+  testWidgets('restart restores permitted tabs and logout clears cache', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 800);
+    addTearDown(tester.view.reset);
+    final backend = InMemoryWorkspaceKeyValueStore();
+    final store = AccountWorkspaceStore(backend);
+
+    Widget app(Key key) => ProviderScope(
+      overrides: [accountWorkspaceStoreProvider.overrideWithValue(store)],
+      child: MaterialApp(
+        home: Scaffold(
+          body: ProductionWorkspaceHost(
+            key: key,
+            snapshot: snapshot,
+            tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(app(const ValueKey('first-run')));
+    await tester.pumpAndSettle();
+    var shell = tester.widget<DesktopWorkspaceShell>(
+      find.byType(DesktopWorkspaceShell),
+    );
+    shell.controller.open(
+      EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: 'restored-client',
+        variant: 'student',
+      ),
+      explicitNew: true,
+    );
+    await tester.pumpAndSettle();
+    expect(backend.values, isNotEmpty);
+
+    await tester.pumpWidget(app(const ValueKey('second-run')));
+    await tester.pumpAndSettle();
+    shell = tester.widget<DesktopWorkspaceShell>(
+      find.byType(DesktopWorkspaceShell),
+    );
+    expect(shell.controller.state.tabs, hasLength(2));
+    expect(
+      shell.controller.state.activeTab.currentRoute.link.entityId,
+      'restored-client',
+    );
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ProductionWorkspaceHost)),
+    );
+    await container
+        .read(workspaceLogoutCoordinatorProvider)
+        .logout(snapshot.accountId);
+    await tester.pump();
+    expect(backend.values, isEmpty);
+    expect(
+      tester
+          .widget<DesktopWorkspaceShell>(find.byType(DesktopWorkspaceShell))
+          .controller
+          .state
+          .loggedOut,
+      isTrue,
+    );
+    expect(find.text('restored-client'), findsNothing);
+  });
+
+  testWidgets('role downgrade clears cached privileged tabs', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 800);
+    addTearDown(tester.view.reset);
+    final backend = InMemoryWorkspaceKeyValueStore();
+    final store = AccountWorkspaceStore(backend);
+    const director = CapabilitySnapshot(
+      accountId: 'account-1',
+      role: 'director',
+      accessVersion: 1,
+      capabilities: {'crm.client.read.basic', 'commerce.client_finance.read'},
+      scopes: {},
+    );
+    const teacher = CapabilitySnapshot(
+      accountId: 'account-1',
+      role: 'teacher',
+      accessVersion: 2,
+      capabilities: {'crm.client.read.basic'},
+      scopes: {},
+    );
+
+    Widget app(CapabilitySnapshot actor) => ProviderScope(
+      overrides: [accountWorkspaceStoreProvider.overrideWithValue(store)],
+      child: MaterialApp(
+        home: Scaffold(
+          body: ProductionWorkspaceHost(
+            snapshot: actor,
+            tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(app(director));
+    await tester.pumpAndSettle();
+    var shell = tester.widget<DesktopWorkspaceShell>(
+      find.byType(DesktopWorkspaceShell),
+    );
+    shell.controller.open(
+      EntityLink.typed(
+        entityType: EntityLinkType.payment,
+        entityId: 'private-payment',
+      ),
+      explicitNew: true,
+    );
+    await tester.pumpAndSettle();
+    expect(backend.values.values.single, contains('private-payment'));
+
+    await tester.pumpWidget(app(teacher));
+    await tester.pumpAndSettle();
+    shell = tester.widget<DesktopWorkspaceShell>(
+      find.byType(DesktopWorkspaceShell),
+    );
+    expect(backend.values.values.single, isNot(contains('private-payment')));
+    expect(shell.controller.state.tabs, hasLength(1));
+    expect(shell.controller.state.activeTab.currentRoute.link.entityId, 'home');
+  });
 }
