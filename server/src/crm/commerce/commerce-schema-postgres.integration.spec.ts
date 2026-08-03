@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { MigrationRunner } from "../../db/migration-runner";
 import { CommerceSchemaRepository } from "./commerce-schema.repository";
@@ -324,6 +326,102 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
           [lessonId],
         ),
       );
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
+  it("moves legacy negative payment refunds into the adjustment ledger losslessly", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const fixture = await createClientFixture(client);
+      await client.query("drop trigger if exists payments_immutable on app.payments");
+      await client.query(
+        "alter table app.payments drop constraint if exists payments_amount_minor_nonnegative",
+      );
+      const payment = await client.query<{ id: string }>(
+        `
+          insert into app.payments (
+            student_id, amount, currency, payment_date, method, external_id,
+            notes, created_by
+          )
+          values ($1, -4200, 'RUB', now(), 'cashless', $2, 'Возврат', $3)
+          returning id
+        `,
+        [fixture.studentId, `legacy-refund-${randomUUID()}`, fixture.managerId],
+      );
+      const paymentId = payment.rows[0]!.id;
+      const migration = readFileSync(
+        resolve(
+          process.cwd(),
+          "db/migrations/0088z_legacy_negative_payment_refunds.up.sql",
+        ),
+        "utf8",
+      );
+
+      await client.query(migration);
+
+      const remaining = await client.query(
+        "select id from app.payments where id = $1",
+        [paymentId],
+      );
+      const adjustment = await client.query<{
+        id: string;
+        amount: string;
+        kind: string;
+        externalId: string;
+        currency: string;
+      }>(
+        `
+          select id, amount::text, kind,
+            legacy_payment_external_id as "externalId",
+            legacy_payment_currency as currency
+          from app.account_adjustments
+          where id = $1
+        `,
+        [paymentId],
+      );
+      expect(remaining.rowCount).toBe(0);
+      expect(adjustment.rows[0]).toMatchObject({
+        id: paymentId,
+        amount: "-4200.00",
+        kind: "refund",
+        currency: "RUB",
+      });
+      expect(adjustment.rows[0]!.externalId).toContain("legacy-refund-");
+
+      const rollbackMigration = readFileSync(
+        resolve(
+          process.cwd(),
+          "db/migrations/0088z_legacy_negative_payment_refunds.down.sql",
+        ),
+        "utf8",
+      );
+      await client.query(rollbackMigration);
+      const restored = await client.query<{
+        id: string;
+        amount: string;
+        externalId: string;
+      }>(
+        `
+          select id, amount::text, external_id as "externalId"
+          from app.payments
+          where id = $1
+        `,
+        [paymentId],
+      );
+      const removedAdjustment = await client.query(
+        "select id from app.account_adjustments where id = $1",
+        [paymentId],
+      );
+      expect(restored.rows[0]).toMatchObject({
+        id: paymentId,
+        amount: "-4200.00",
+      });
+      expect(restored.rows[0]!.externalId).toContain("legacy-refund-");
+      expect(removedAdjustment.rowCount).toBe(0);
     } finally {
       await client.query("rollback");
       client.release();
