@@ -635,15 +635,16 @@ function mappingChecks(): CheckDefinition[] {
       owner: "SYS-WORKFLOW",
       severity: "blocker",
       description:
-        "Active task has neither an assignee nor a branch audience anchor.",
+        "Open task has neither an assignee nor a branch audience anchor.",
       requires: {
-        tasks: ["id", "assigned_to", "branch_id", "deleted_at"],
+        tasks: ["id", "status", "assigned_to", "branch_id", "deleted_at"],
       },
       sql: `
         select id::text as entity_id, null::text as related_id,
                'assignee_and_branch_missing'::text as detail
           from app.tasks
          where deleted_at is null
+           and status not in ('done', 'completed', 'cancelled')
            and assigned_to is null
            and branch_id is null
          order by id`,
