@@ -3,8 +3,8 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 259,
-    "production_reachable_files": 248,
+    "dart_files": 260,
+    "production_reachable_files": 253,
     "go_routes": 21,
     "screens": 21,
     "production_screens": 21,
@@ -258,7 +258,7 @@
         "retry": false
       },
       "file": "lib/features/manager/presentation/screens/manager_dashboard_screen.dart",
-      "line": 6
+      "line": 7
     },
     {
       "name": "ClientPortalScreen",
@@ -418,7 +418,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/screens/admin_dashboard_screen.dart",
-      "line": 6
+      "line": 7
     },
     {
       "name": "_LessonDeepLinkScreen",
@@ -498,7 +498,7 @@
         "retry": false
       },
       "file": "lib/features/teacher/presentation/screens/teacher_dashboard_screen.dart",
-      "line": 5
+      "line": 6
     }
   ],
   "surfaces": [

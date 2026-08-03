@@ -3,13 +3,13 @@
   "task": "V6-003",
   "summary": {
     "scroll_sites": 143,
-    "production_scroll_sites": 141,
+    "production_scroll_sites": 142,
     "explicit_scrollbars": 3,
     "visible_thumb_sites": 5,
-    "scroll_sites_without_file_controller_evidence": 131,
+    "scroll_sites_without_file_controller_evidence": 132,
     "back_exit_sites": 208,
-    "production_back_exit_sites": 202,
-    "predictive_back_sites": 30,
+    "production_back_exit_sites": 207,
+    "predictive_back_sites": 35,
     "legacy_back_sites": 0,
     "unowned": 0
   },
@@ -842,7 +842,7 @@
     {
       "kind": "ListView.builder",
       "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": false,
+      "production_reachable": true,
       "controller_evidence": false,
       "scrollbar_evidence": false,
       "visible_thumb_evidence": false,
@@ -2537,7 +2537,7 @@
     {
       "kind": "Form",
       "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": false,
+      "production_reachable": true,
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/core/workspace/workspace_controller.dart",
@@ -2546,7 +2546,7 @@
     {
       "kind": "Form",
       "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": false,
+      "production_reachable": true,
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/core/workspace/workspace_controller.dart",
@@ -2555,7 +2555,7 @@
     {
       "kind": "Form",
       "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": false,
+      "production_reachable": true,
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/core/workspace/workspace_controller.dart",
@@ -2564,7 +2564,7 @@
     {
       "kind": "Form",
       "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": false,
+      "production_reachable": true,
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/core/workspace/workspace_controller.dart",
@@ -2573,7 +2573,7 @@
     {
       "kind": "Form",
       "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": false,
+      "production_reachable": true,
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/core/workspace/workspace_controller.dart",

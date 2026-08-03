@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
@@ -209,4 +210,18 @@ class WorkspaceLogoutCoordinator {
     }
     await _store.clear(accountId);
   }
+
+  Future<void> logoutAll() async {
+    for (final accountId in _controllers.keys.toList(growable: false)) {
+      await logout(accountId);
+    }
+  }
 }
+
+final accountWorkspaceStoreProvider = Provider<AccountWorkspaceStore>((ref) {
+  return const AccountWorkspaceStore(SecureWorkspaceKeyValueStore());
+});
+
+final workspaceLogoutCoordinatorProvider = Provider<WorkspaceLogoutCoordinator>(
+  (ref) => WorkspaceLogoutCoordinator(ref.watch(accountWorkspaceStoreProvider)),
+);

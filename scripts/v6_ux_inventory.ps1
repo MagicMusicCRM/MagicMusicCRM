@@ -223,7 +223,11 @@ foreach ($file in $allDartFiles) {
       elseif ($raw -match 'DesktopWorkspaceShell|WorkspaceController') { 'workspace' }
       elseif ($raw -match '^context\.') { 'go-router' }
       else { 'navigator' }
-    $isDefinition = $relative.StartsWith('lib/core/workspace/') -or $relative -eq 'lib/core/navigation/entity_route_registry.dart'
+    $isDefinition = $relative -in @(
+      'lib/core/workspace/workspace_controller.dart',
+      'lib/core/workspace/desktop_workspace_shell.dart',
+      'lib/core/navigation/entity_route_registry.dart'
+    )
     $navigationSites.Add([ordered]@{
       kind = $kind
       expression = $match.Value.Trim()

@@ -105,7 +105,7 @@ flowchart TD
   - **Проверка:** unit/property checks для encode/decode/parent + widget direct-link tests.
   - **Оценка:** 8 ч · **Зависимости:** INT-S0 · **Приоритет:** P0.
 
-- [ ] **V6-102** `[REQ-WORKSPACE-001]` — Смонтировать существующий desktop workspace в production shell.
+- [x] **V6-102** `[REQ-WORKSPACE-001]` — Смонтировать существующий desktop workspace в production shell.
   - **Работа:** подключить `DesktopWorkspaceShell`/controller/store к реальному dashboard/router, account identity и capability refresh.
   - **Критерий:** production route поддерживает 10 tabs, active state, close/reorder/duplicate; isolated/demo engine отсутствует.
   - **Проверка:** Windows widget/device flow login → 10 tabs → reorder/duplicate/close.
