@@ -221,6 +221,16 @@ void main() {
         tester,
         find.byKey(const Key('subscription-cancel-confirmation')),
       );
+      await tester.binding.handlePopRoute();
+      await _pumpFrames(tester);
+      expect(find.text('Сохранить изменения?'), findsOneWidget);
+      await tester.tap(find.text('Остаться'));
+      await _pumpFrames(tester);
+      expect(find.text('Отменить абонемент'), findsOneWidget);
+      expect(
+        tester.widget<TextFormField>(reason).controller!.text,
+        'client.requested_cancel',
+      );
       await _tapVisible(
         tester,
         find.byKey(const Key('subscription-cancel-submit')),

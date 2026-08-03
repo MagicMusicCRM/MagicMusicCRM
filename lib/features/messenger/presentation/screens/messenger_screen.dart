@@ -16,6 +16,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_messenger_shell.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
+import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_list_tile.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_header.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_search_bar.dart';

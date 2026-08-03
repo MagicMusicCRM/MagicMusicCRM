@@ -27,6 +27,15 @@ enum DirtyCloseDecision { save, discard, cancel }
 typedef DirtyCloseResolver =
     Future<DirtyCloseDecision> Function(WorkspaceTabState tab);
 typedef DirtyTabSaver = Future<void> Function(WorkspaceTabState tab);
+typedef DirtyTabDiscarder = Future<void> Function(WorkspaceTabState tab);
+typedef WorkspaceFormSaver = Future<bool> Function();
+
+class _WorkspaceFormActions {
+  const _WorkspaceFormActions({required this.save, required this.discard});
+
+  final WorkspaceFormSaver? save;
+  final VoidCallback? discard;
+}
 
 class WorkspaceController extends ChangeNotifier {
   WorkspaceController({
@@ -54,6 +63,7 @@ class WorkspaceController extends ChangeNotifier {
   static const maxTabs = 10;
 
   final WorkspaceSharedScope sharedScope;
+  final Map<String, _WorkspaceFormActions> _formActions = {};
   WorkspaceState _state;
   var _nextTabNumber = 2;
 
@@ -63,6 +73,7 @@ class WorkspaceController extends ChangeNotifier {
     if (restored.accountId != _state.accountId) {
       throw StateError('Cannot restore another account workspace.');
     }
+    _formActions.clear();
     _state = restored;
     _nextTabNumber = _nextAvailableTabNumber(restored.tabs);
     notifyListeners();
@@ -70,6 +81,7 @@ class WorkspaceController extends ChangeNotifier {
 
   void handleGlobalLogout() {
     if (_state.loggedOut) return;
+    _formActions.clear();
     _state = WorkspaceState.loggedOut(_state.accountId);
     notifyListeners();
   }
@@ -186,21 +198,22 @@ class WorkspaceController extends ChangeNotifier {
     String tabId, {
     required DirtyCloseResolver resolveDirty,
     required DirtyTabSaver saveDirty,
+    DirtyTabDiscarder? discardDirty,
   }) async {
     if (_state.tabs.length == 1) return false;
-    final index = _tabIndex(tabId);
-    final tab = _state.tabs[index];
-    if (tab.hasDirtyForms) {
-      final decision = await resolveDirty(tab);
-      if (decision == DirtyCloseDecision.cancel) return false;
-      if (decision == DirtyCloseDecision.save) {
-        await saveDirty(tab);
-      }
-    }
+    _tabIndex(tabId);
+    final canClose = await resolveDirtyTab(
+      tabId,
+      resolveDirty: resolveDirty,
+      saveDirty: saveDirty,
+      discardDirty: discardDirty,
+    );
+    if (!canClose) return false;
 
     final currentIndex = _state.tabs.indexWhere((item) => item.tabId == tabId);
     if (currentIndex < 0) return true;
     final tabs = [..._state.tabs]..removeAt(currentIndex);
+    _formActions.removeWhere((key, _) => key.startsWith('$tabId:'));
     var activeTabId = _state.activeTabId;
     if (activeTabId == tabId) {
       activeTabId = tabs[currentIndex.clamp(0, tabs.length - 1)].tabId;
@@ -214,6 +227,7 @@ class WorkspaceController extends ChangeNotifier {
     String tabId, {
     required DirtyCloseResolver resolveDirty,
     required DirtyTabSaver saveDirty,
+    DirtyTabDiscarder? discardDirty,
   }) async {
     _tabIndex(tabId);
     final otherIds = _state.tabs
@@ -225,10 +239,35 @@ class WorkspaceController extends ChangeNotifier {
         otherId,
         resolveDirty: resolveDirty,
         saveDirty: saveDirty,
+        discardDirty: discardDirty,
       );
       if (!closed) break;
     }
     selectTab(tabId);
+  }
+
+  Future<bool> resolveDirtyTab(
+    String tabId, {
+    required DirtyCloseResolver resolveDirty,
+    required DirtyTabSaver saveDirty,
+    DirtyTabDiscarder? discardDirty,
+  }) async {
+    final tab = _state.tabs[_tabIndex(tabId)];
+    if (!tab.hasDirtyForms) return true;
+    final decision = await resolveDirty(tab);
+    if (decision == DirtyCloseDecision.cancel) return false;
+    try {
+      if (decision == DirtyCloseDecision.save) {
+        await saveDirty(tab);
+        _clearDirtyForms(tabId, discard: false);
+      } else {
+        await discardDirty?.call(tab);
+        _clearDirtyForms(tabId, discard: true);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   void updateCurrentView(String tabId, ContextViewState viewState) {
@@ -244,7 +283,13 @@ class WorkspaceController extends ChangeNotifier {
     String formKey, {
     int? expectedVersion,
     Map<String, Object?> draft = const {},
+    WorkspaceFormSaver? onSave,
+    VoidCallback? onDiscard,
   }) {
+    _formActions[_formActionKey(tabId, formKey)] = _WorkspaceFormActions(
+      save: onSave,
+      discard: onDiscard,
+    );
     _updateTab(tabId, (tab) {
       final forms = {...tab.forms};
       forms[formKey] = WorkspaceFormState(
@@ -282,9 +327,42 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   void unregisterForm(String tabId, String formKey) {
+    _formActions.remove(_formActionKey(tabId, formKey));
     _updateTab(tabId, (tab) {
       if (!tab.forms.containsKey(formKey)) return tab;
       final forms = {...tab.forms}..remove(formKey);
+      return tab.copyWith(forms: forms);
+    });
+  }
+
+  Future<void> saveDirtyForms(WorkspaceTabState tab) async {
+    for (final form in tab.forms.values.where((form) => form.dirty)) {
+      final save = _formActions[_formActionKey(tab.tabId, form.formKey)]?.save;
+      if (save == null || !await save()) {
+        throw StateError('Form "${form.formKey}" was not saved.');
+      }
+    }
+  }
+
+  Future<void> discardDirtyForms(WorkspaceTabState tab) async {
+    for (final form in tab.forms.values.where((form) => form.dirty)) {
+      _formActions[_formActionKey(tab.tabId, form.formKey)]?.discard?.call();
+    }
+  }
+
+  void _clearDirtyForms(String tabId, {required bool discard}) {
+    if (!_state.tabs.any((tab) => tab.tabId == tabId)) return;
+    _updateTab(tabId, (tab) {
+      final forms = {
+        for (final entry in tab.forms.entries)
+          entry.key: entry.value.dirty
+              ? entry.value.copyWith(
+                  dirty: false,
+                  draft: discard ? const {} : entry.value.draft,
+                  clearConflict: discard,
+                )
+              : entry.value,
+      };
       return tab.copyWith(forms: forms);
     });
   }
@@ -411,4 +489,7 @@ class WorkspaceController extends ChangeNotifier {
     }
     return maximum + 1;
   }
+
+  static String _formActionKey(String tabId, String formKey) =>
+      '$tabId:$formKey';
 }

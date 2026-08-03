@@ -12,6 +12,7 @@ class DesktopWorkspaceShell extends StatelessWidget {
     required this.tabBuilder,
     this.resolveDirty,
     this.saveDirty,
+    this.discardDirty,
     this.onLimitReached,
     super.key,
   });
@@ -20,6 +21,7 @@ class DesktopWorkspaceShell extends StatelessWidget {
   final WorkspaceTabBuilder tabBuilder;
   final DirtyCloseResolver? resolveDirty;
   final DirtyTabSaver? saveDirty;
+  final DirtyTabDiscarder? discardDirty;
   final VoidCallback? onLimitReached;
 
   @override
@@ -46,7 +48,7 @@ class DesktopWorkspaceShell extends StatelessWidget {
                       key: ValueKey('workspace-tab-${tab.tabId}'),
                       tab: tab,
                       selected: tab.tabId == state.activeTabId,
-                      onPressed: () => controller.selectTab(tab.tabId),
+                      onPressed: () => _select(tab.tabId),
                       onDuplicate: () {
                         try {
                           controller.duplicateTab(tab.tabId);
@@ -78,6 +80,7 @@ class DesktopWorkspaceShell extends StatelessWidget {
       tabId,
       resolveDirty: resolveDirty ?? _cancelDirtyClose,
       saveDirty: saveDirty ?? _noSave,
+      discardDirty: discardDirty,
     );
   }
 
@@ -86,7 +89,19 @@ class DesktopWorkspaceShell extends StatelessWidget {
       tabId,
       resolveDirty: resolveDirty ?? _cancelDirtyClose,
       saveDirty: saveDirty ?? _noSave,
+      discardDirty: discardDirty,
     );
+  }
+
+  Future<void> _select(String tabId) async {
+    if (tabId == controller.state.activeTabId) return;
+    final canLeave = await controller.resolveDirtyTab(
+      controller.state.activeTabId,
+      resolveDirty: resolveDirty ?? _cancelDirtyClose,
+      saveDirty: saveDirty ?? _noSave,
+      discardDirty: discardDirty,
+    );
+    if (canLeave) controller.selectTab(tabId);
   }
 
   static Future<DirtyCloseDecision> _cancelDirtyClose(

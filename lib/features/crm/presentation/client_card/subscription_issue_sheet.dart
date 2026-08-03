@@ -101,6 +101,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
   late final DateTime _commandTimestamp;
   late final MagicMutationIdentity _issueIdentity;
   late final MagicMutationIdentity _paymentIdentity;
+  late final DirtyFormExitController _exitController;
 
   SubscriptionIssueDiscountMode _discountMode =
       SubscriptionIssueDiscountMode.none;
@@ -124,6 +125,9 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     _commandTimestamp = (widget.commandTimestamp ?? DateTime.now()).toUtc();
     _issueIdentity = MagicMutationIdentity.create('subscription-issue');
     _paymentIdentity = MagicMutationIdentity.create('subscription-payment');
+    _exitController = DirtyFormExitController(
+      onSave: () => _submit(closeOnSuccess: false),
+    );
     _paymentAmountController.text = _minorToInput(_basePriceMinor);
   }
 
@@ -132,6 +136,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     _discountValueController.dispose();
     _discountReasonController.dispose();
     _paymentAmountController.dispose();
+    _exitController.dispose();
     super.dispose();
   }
 
@@ -174,6 +179,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
       _error = null;
       _syncUntouchedPaymentAmount();
     });
+    _exitController.markDirty();
   }
 
   void _pricingChanged() {
@@ -287,19 +293,19 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     );
   }
 
-  Future<void> _submit() async {
-    if (_busy) return;
+  Future<bool> _submit({bool closeOnSuccess = true}) async {
+    if (_busy) return false;
     FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return false;
 
     final finalPrice = _finalPriceMinor;
-    if (finalPrice == null || finalPrice < BigInt.zero) return;
+    if (finalPrice == null || finalPrice < BigInt.zero) return false;
     if (_useInstallments && finalPrice < BigInt.from(_installmentCount)) {
       setState(() {
         _error =
             'Итог должен позволять $_installmentCount положительных платежа.';
       });
-      return;
+      return false;
     }
 
     final submission = _buildSubmission(finalPrice);
@@ -308,16 +314,31 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
       _attempted = true;
       _error = null;
     });
+    _exitController.setBusy(true);
     try {
       await widget.onSubmit(submission);
-      if (mounted) Navigator.pop(context, true);
+      _exitController.setBusy(false);
+      _exitController.markClean();
+      if (closeOnSuccess && mounted) Navigator.pop(context, true);
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _busy = false;
         _error = '$error';
       });
+      _exitController.setBusy(false);
+      return false;
     }
+  }
+
+  void _requestClose() {
+    _exitController.requestExit(
+      context,
+      reason: DirtyFormExitReason.appBack,
+      savedResult: true,
+      discardedResult: false,
+    );
   }
 
   @override
@@ -328,241 +349,254 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
         ? const <SubscriptionInstallmentInput>[]
         : _installments(finalPrice);
 
-    return Form(
-      key: _formKey,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _PriceSummary(
-            packageName: widget.package['name']?.toString() ?? 'Абонемент',
-            basePriceMinor: _basePriceMinor,
-            discountMinor: discount,
-            finalPriceMinor: finalPrice,
-            currencyCode: _currencyCode,
-          ),
-          const SizedBox(height: AppSpace.lg),
-          const _SectionTitle('Скидка'),
-          const SizedBox(height: AppSpace.sm),
-          Wrap(
-            spacing: AppSpace.sm,
-            runSpacing: AppSpace.sm,
-            children: [
-              _ModeChip(
-                key: const Key('subscription-discount-none'),
-                label: 'Без скидки',
-                selected: _discountMode == SubscriptionIssueDiscountMode.none,
-                enabled: _fieldsEnabled,
-                onSelected: () =>
-                    _selectDiscountMode(SubscriptionIssueDiscountMode.none),
-              ),
-              _ModeChip(
-                key: const Key('subscription-discount-percent'),
-                label: 'Процент',
-                selected:
-                    _discountMode == SubscriptionIssueDiscountMode.percent,
-                enabled: _fieldsEnabled,
-                onSelected: () =>
-                    _selectDiscountMode(SubscriptionIssueDiscountMode.percent),
-              ),
-              _ModeChip(
-                key: const Key('subscription-discount-fixed'),
-                label: 'Сумма',
-                selected: _discountMode == SubscriptionIssueDiscountMode.fixed,
-                enabled: _fieldsEnabled,
-                onSelected: () =>
-                    _selectDiscountMode(SubscriptionIssueDiscountMode.fixed),
-              ),
-            ],
-          ),
-          if (_discountMode != SubscriptionIssueDiscountMode.none) ...[
-            const SizedBox(height: AppSpace.md),
-            _AdaptivePair(
-              first: TextFormField(
-                key: const Key('subscription-discount-value'),
-                controller: _discountValueController,
-                enabled: _fieldsEnabled,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-                ],
-                decoration: clientCardInputDecoration(
-                  Theme.of(context).colorScheme,
-                  label: _discountMode == SubscriptionIssueDiscountMode.percent
-                      ? 'Скидка, %'
-                      : 'Скидка, ₽',
-                  isDense: true,
-                ),
-                validator: _validateDiscountValue,
-                onChanged: (_) => _pricingChanged(),
-              ),
-              second: TextFormField(
-                key: const Key('subscription-discount-reason'),
-                controller: _discountReasonController,
-                enabled: _fieldsEnabled,
-                maxLength: 500,
-                decoration: clientCardInputDecoration(
-                  Theme.of(context).colorScheme,
-                  label: 'Причина',
-                  hint: 'Например: семейная скидка',
-                  isDense: true,
-                ),
-                validator: _validateReason,
-                onChanged: (_) {
-                  if (_error != null) setState(() => _error = null);
-                },
-              ),
+    return DirtyFormExitScope(
+      controller: _exitController,
+      savedResult: true,
+      discardedResult: false,
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        onChanged: _exitController.markDirty,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _PriceSummary(
+              packageName: widget.package['name']?.toString() ?? 'Абонемент',
+              basePriceMinor: _basePriceMinor,
+              discountMinor: discount,
+              finalPriceMinor: finalPrice,
+              currencyCode: _currencyCode,
             ),
-          ],
-          const SizedBox(height: AppSpace.xl),
-          _OptionCard(
-            key: const Key('subscription-installments-toggle'),
-            icon: Icons.calendar_view_month_rounded,
-            title: 'Рассрочка',
-            subtitle: 'Разделить итог на равные ежемесячные обязательства',
-            value: _useInstallments,
-            enabled:
-                _fieldsEnabled &&
-                finalPrice != null &&
-                finalPrice > BigInt.zero,
-            onChanged: (value) => setState(() {
-              _useInstallments = value;
-              _error = null;
-            }),
-          ),
-          if (_useInstallments) ...[
-            const SizedBox(height: AppSpace.md),
-            DropdownButtonFormField<int>(
-              key: const Key('subscription-installment-count'),
-              initialValue: _installmentCount,
-              decoration: clientCardInputDecoration(
-                Theme.of(context).colorScheme,
-                label: 'Количество платежей',
-                isDense: true,
-              ),
-              items: [
-                for (var count = 2; count <= 12; count++)
-                  DropdownMenuItem(value: count, child: Text('$count')),
-              ],
-              onChanged: _fieldsEnabled
-                  ? (value) => setState(() {
-                      _installmentCount = value ?? 2;
-                      _error = null;
-                    })
-                  : null,
-            ),
-            if (installmentItems.isNotEmpty) ...[
-              const SizedBox(height: AppSpace.sm),
-              _InstallmentPreview(
-                installments: installmentItems,
-                currencyCode: _currencyCode,
-              ),
-            ],
-          ],
-          const SizedBox(height: AppSpace.md),
-          _OptionCard(
-            key: const Key('subscription-payment-toggle'),
-            icon: Icons.payments_outlined,
-            title: 'Внести оплату сейчас',
-            subtitle: 'Оплата будет записана отдельным финансовым фактом',
-            value: _recordPayment,
-            enabled:
-                _fieldsEnabled &&
-                finalPrice != null &&
-                finalPrice > BigInt.zero,
-            onChanged: (value) => setState(() {
-              _recordPayment = value;
-              _error = null;
-              if (value && !_paymentAmountTouched) {
-                _syncUntouchedPaymentAmount();
-              }
-            }),
-          ),
-          if (_recordPayment) ...[
-            const SizedBox(height: AppSpace.md),
-            _AdaptivePair(
-              first: TextFormField(
-                key: const Key('subscription-payment-amount'),
-                controller: _paymentAmountController,
-                enabled: _fieldsEnabled,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
+            const SizedBox(height: AppSpace.lg),
+            const _SectionTitle('Скидка'),
+            const SizedBox(height: AppSpace.sm),
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: [
+                _ModeChip(
+                  key: const Key('subscription-discount-none'),
+                  label: 'Без скидки',
+                  selected: _discountMode == SubscriptionIssueDiscountMode.none,
+                  enabled: _fieldsEnabled,
+                  onSelected: () =>
+                      _selectDiscountMode(SubscriptionIssueDiscountMode.none),
                 ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-                ],
-                decoration: clientCardInputDecoration(
-                  Theme.of(context).colorScheme,
-                  label: 'Сумма оплаты, ₽',
-                  helperText: 'Можно внести часть итога',
-                  isDense: true,
-                ),
-                validator: _validatePaymentAmount,
-                onChanged: (_) {
-                  _paymentAmountTouched = true;
-                  if (_error != null) setState(() => _error = null);
-                },
-              ),
-              second: _PaymentMethodPicker(
-                method: _paymentMethod,
-                enabled: _fieldsEnabled,
-                onChanged: (method) => setState(() {
-                  _paymentMethod = method;
-                  _error = null;
-                }),
-              ),
-            ),
-          ],
-          if (_attempted) ...[
-            const SizedBox(height: AppSpace.md),
-            const _RetryNotice(),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: AppSpace.md),
-            _InlineError(error: _error!),
-          ],
-          const SizedBox(height: AppSpace.xl),
-          Row(
-            children: [
-              Expanded(
-                child: clientCardGhostButton(
-                  'Отмена',
-                  _busy ? null : () => Navigator.pop(context, false),
-                ),
-              ),
-              const SizedBox(width: AppSpace.sm),
-              Expanded(
-                child: FilledButton(
-                  key: const Key('subscription-issue-submit'),
-                  onPressed: _busy ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColor.gold,
-                    foregroundColor: AppColor.onGold,
-                    disabledBackgroundColor: AppColor.goldSoft,
-                    disabledForegroundColor: AppColor.text2,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                    ),
+                _ModeChip(
+                  key: const Key('subscription-discount-percent'),
+                  label: 'Процент',
+                  selected:
+                      _discountMode == SubscriptionIssueDiscountMode.percent,
+                  enabled: _fieldsEnabled,
+                  onSelected: () => _selectDiscountMode(
+                    SubscriptionIssueDiscountMode.percent,
                   ),
-                  child: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColor.onGold,
-                          ),
-                        )
-                      : Text(_attempted ? 'Повторить' : 'Выдать'),
+                ),
+                _ModeChip(
+                  key: const Key('subscription-discount-fixed'),
+                  label: 'Сумма',
+                  selected:
+                      _discountMode == SubscriptionIssueDiscountMode.fixed,
+                  enabled: _fieldsEnabled,
+                  onSelected: () =>
+                      _selectDiscountMode(SubscriptionIssueDiscountMode.fixed),
+                ),
+              ],
+            ),
+            if (_discountMode != SubscriptionIssueDiscountMode.none) ...[
+              const SizedBox(height: AppSpace.md),
+              _AdaptivePair(
+                first: TextFormField(
+                  key: const Key('subscription-discount-value'),
+                  controller: _discountValueController,
+                  enabled: _fieldsEnabled,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                  ],
+                  decoration: clientCardInputDecoration(
+                    Theme.of(context).colorScheme,
+                    label:
+                        _discountMode == SubscriptionIssueDiscountMode.percent
+                        ? 'Скидка, %'
+                        : 'Скидка, ₽',
+                    isDense: true,
+                  ),
+                  validator: _validateDiscountValue,
+                  onChanged: (_) => _pricingChanged(),
+                ),
+                second: TextFormField(
+                  key: const Key('subscription-discount-reason'),
+                  controller: _discountReasonController,
+                  enabled: _fieldsEnabled,
+                  maxLength: 500,
+                  decoration: clientCardInputDecoration(
+                    Theme.of(context).colorScheme,
+                    label: 'Причина',
+                    hint: 'Например: семейная скидка',
+                    isDense: true,
+                  ),
+                  validator: _validateReason,
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
                 ),
               ),
             ],
-          ),
-        ],
+            const SizedBox(height: AppSpace.xl),
+            _OptionCard(
+              key: const Key('subscription-installments-toggle'),
+              icon: Icons.calendar_view_month_rounded,
+              title: 'Рассрочка',
+              subtitle: 'Разделить итог на равные ежемесячные обязательства',
+              value: _useInstallments,
+              enabled:
+                  _fieldsEnabled &&
+                  finalPrice != null &&
+                  finalPrice > BigInt.zero,
+              onChanged: (value) => setState(() {
+                _useInstallments = value;
+                _error = null;
+                _exitController.markDirty();
+              }),
+            ),
+            if (_useInstallments) ...[
+              const SizedBox(height: AppSpace.md),
+              DropdownButtonFormField<int>(
+                key: const Key('subscription-installment-count'),
+                initialValue: _installmentCount,
+                decoration: clientCardInputDecoration(
+                  Theme.of(context).colorScheme,
+                  label: 'Количество платежей',
+                  isDense: true,
+                ),
+                items: [
+                  for (var count = 2; count <= 12; count++)
+                    DropdownMenuItem(value: count, child: Text('$count')),
+                ],
+                onChanged: _fieldsEnabled
+                    ? (value) => setState(() {
+                        _installmentCount = value ?? 2;
+                        _error = null;
+                        _exitController.markDirty();
+                      })
+                    : null,
+              ),
+              if (installmentItems.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.sm),
+                _InstallmentPreview(
+                  installments: installmentItems,
+                  currencyCode: _currencyCode,
+                ),
+              ],
+            ],
+            const SizedBox(height: AppSpace.md),
+            _OptionCard(
+              key: const Key('subscription-payment-toggle'),
+              icon: Icons.payments_outlined,
+              title: 'Внести оплату сейчас',
+              subtitle: 'Оплата будет записана отдельным финансовым фактом',
+              value: _recordPayment,
+              enabled:
+                  _fieldsEnabled &&
+                  finalPrice != null &&
+                  finalPrice > BigInt.zero,
+              onChanged: (value) => setState(() {
+                _recordPayment = value;
+                _error = null;
+                _exitController.markDirty();
+                if (value && !_paymentAmountTouched) {
+                  _syncUntouchedPaymentAmount();
+                }
+              }),
+            ),
+            if (_recordPayment) ...[
+              const SizedBox(height: AppSpace.md),
+              _AdaptivePair(
+                first: TextFormField(
+                  key: const Key('subscription-payment-amount'),
+                  controller: _paymentAmountController,
+                  enabled: _fieldsEnabled,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                  ],
+                  decoration: clientCardInputDecoration(
+                    Theme.of(context).colorScheme,
+                    label: 'Сумма оплаты, ₽',
+                    helperText: 'Можно внести часть итога',
+                    isDense: true,
+                  ),
+                  validator: _validatePaymentAmount,
+                  onChanged: (_) {
+                    _paymentAmountTouched = true;
+                    if (_error != null) setState(() => _error = null);
+                  },
+                ),
+                second: _PaymentMethodPicker(
+                  method: _paymentMethod,
+                  enabled: _fieldsEnabled,
+                  onChanged: (method) => setState(() {
+                    _paymentMethod = method;
+                    _error = null;
+                    _exitController.markDirty();
+                  }),
+                ),
+              ),
+            ],
+            if (_attempted) ...[
+              const SizedBox(height: AppSpace.md),
+              const _RetryNotice(),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: AppSpace.md),
+              _InlineError(error: _error!),
+            ],
+            const SizedBox(height: AppSpace.xl),
+            Row(
+              children: [
+                Expanded(
+                  child: clientCardGhostButton(
+                    'Отмена',
+                    _busy ? null : _requestClose,
+                  ),
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: FilledButton(
+                    key: const Key('subscription-issue-submit'),
+                    onPressed: _busy ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColor.gold,
+                      foregroundColor: AppColor.onGold,
+                      disabledBackgroundColor: AppColor.goldSoft,
+                      disabledForegroundColor: AppColor.text2,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.control),
+                      ),
+                    ),
+                    child: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColor.onGold,
+                            ),
+                          )
+                        : Text(_attempted ? 'Повторить' : 'Выдать'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

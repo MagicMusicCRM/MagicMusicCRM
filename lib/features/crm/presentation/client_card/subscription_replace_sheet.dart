@@ -63,6 +63,7 @@ class _SubscriptionReplacementFormState
   final _formKey = GlobalKey<FormState>();
   final _reasonController = TextEditingController();
   late final MagicMutationIdentity _identity;
+  late final DirtyFormExitController _exitController;
 
   bool _confirmed = false;
   bool _busy = false;
@@ -75,11 +76,15 @@ class _SubscriptionReplacementFormState
   void initState() {
     super.initState();
     _identity = MagicMutationIdentity.create('subscription-replace');
+    _exitController = DirtyFormExitController(
+      onSave: () => _submit(closeOnSuccess: false),
+    );
   }
 
   @override
   void dispose() {
     _reasonController.dispose();
+    _exitController.dispose();
     super.dispose();
   }
 
@@ -92,13 +97,13 @@ class _SubscriptionReplacementFormState
     return null;
   }
 
-  Future<void> _submit() async {
-    if (_busy) return;
+  Future<bool> _submit({bool closeOnSuccess = true}) async {
+    if (_busy) return false;
     FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return false;
     if (!_confirmed) {
       setState(() => _error = 'Подтвердите последствия замены.');
-      return;
+      return false;
     }
 
     final confirmation = SubscriptionReplacementConfirmation(
@@ -114,153 +119,175 @@ class _SubscriptionReplacementFormState
       _attempted = true;
       _error = null;
     });
+    _exitController.setBusy(true);
     try {
       await widget.onConfirm(confirmation);
-      if (mounted) Navigator.pop(context, true);
+      _exitController.setBusy(false);
+      _exitController.markClean();
+      if (closeOnSuccess && mounted) Navigator.pop(context, true);
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _busy = false;
         _error = '$error';
       });
+      _exitController.setBusy(false);
+      return false;
     }
+  }
+
+  void _requestClose() {
+    _exitController.requestExit(
+      context,
+      reason: DirtyFormExitReason.appBack,
+      savedResult: true,
+      discardedResult: false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final preview = widget.preview;
-    return Form(
-      key: _formKey,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _PackageComparison(
-            oldSubscription: widget.oldSubscription,
-            preview: preview,
-          ),
-          const SizedBox(height: AppSpace.md),
-          _UsageSummary(usage: preview.usage),
-          const SizedBox(height: AppSpace.md),
-          _FinancialSummary(financial: preview.financial),
-          if (preview.warnings.isNotEmpty) ...[
+    return DirtyFormExitScope(
+      controller: _exitController,
+      savedResult: true,
+      discardedResult: false,
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        onChanged: _exitController.markDirty,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _PackageComparison(
+              oldSubscription: widget.oldSubscription,
+              preview: preview,
+            ),
             const SizedBox(height: AppSpace.md),
-            _Warnings(warnings: preview.warnings),
-          ],
-          const SizedBox(height: AppSpace.md),
-          Text(
-            'Расчёт действителен до '
-            '${DateFormat('dd.MM.yyyy HH:mm').format(preview.expiresAt.toLocal())}',
-            style: const TextStyle(color: AppColor.text2, fontSize: 11.5),
-          ),
-          const SizedBox(height: AppSpace.lg),
-          TextFormField(
-            key: const Key('subscription-replace-reason'),
-            controller: _reasonController,
-            enabled: _fieldsEnabled,
-            maxLength: 120,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9._:-]')),
+            _UsageSummary(usage: preview.usage),
+            const SizedBox(height: AppSpace.md),
+            _FinancialSummary(financial: preview.financial),
+            if (preview.warnings.isNotEmpty) ...[
+              const SizedBox(height: AppSpace.md),
+              _Warnings(warnings: preview.warnings),
             ],
-            decoration: clientCardInputDecoration(
-              Theme.of(context).colorScheme,
-              label: 'Код причины',
-              hint: 'Например: client.requested_change',
-              helperText: 'Код попадёт в журнал действий',
-              isDense: true,
+            const SizedBox(height: AppSpace.md),
+            Text(
+              'Расчёт действителен до '
+              '${DateFormat('dd.MM.yyyy HH:mm').format(preview.expiresAt.toLocal())}',
+              style: const TextStyle(color: AppColor.text2, fontSize: 11.5),
             ),
-            validator: _validateReason,
-            onChanged: (_) {
-              if (_error != null) setState(() => _error = null);
-            },
-          ),
-          const SizedBox(height: AppSpace.sm),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColor.input,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              border: Border.all(
-                color: _confirmed ? AppColor.goldLine : AppColor.divider,
-              ),
-            ),
-            child: CheckboxListTile(
-              key: const Key('subscription-replace-confirmation'),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpace.md,
-              ),
-              value: _confirmed,
+            const SizedBox(height: AppSpace.lg),
+            TextFormField(
+              key: const Key('subscription-replace-reason'),
+              controller: _reasonController,
               enabled: _fieldsEnabled,
-              activeColor: AppColor.gold,
-              checkColor: AppColor.onGold,
-              title: const Text(
-                'Подтверждаю замену',
-                style: TextStyle(
-                  color: AppColor.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
+              maxLength: 120,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9._:-]')),
+              ],
+              decoration: clientCardInputDecoration(
+                Theme.of(context).colorScheme,
+                label: 'Код причины',
+                hint: 'Например: client.requested_change',
+                helperText: 'Код попадёт в журнал действий',
+                isDense: true,
               ),
-              subtitle: const Text(
-                'Старый абонемент закроется, использованные часы и резервы '
-                'перейдут в новый; фактические оплаты не изменятся.',
-                style: TextStyle(color: AppColor.text2, fontSize: 11.5),
-              ),
-              onChanged: _fieldsEnabled
-                  ? (value) => setState(() {
-                      _confirmed = value == true;
-                      _error = null;
-                    })
-                  : null,
+              validator: _validateReason,
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
             ),
-          ),
-          if (_attempted) ...[
-            const SizedBox(height: AppSpace.md),
-            const _StableRetryNotice(),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: AppSpace.md),
-            _ReplaceError(message: _error!),
-          ],
-          const SizedBox(height: AppSpace.xl),
-          Row(
-            children: [
-              Expanded(
-                child: clientCardGhostButton(
-                  'Отмена',
-                  _busy ? null : () => Navigator.pop(context, false),
+            const SizedBox(height: AppSpace.sm),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColor.input,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: Border.all(
+                  color: _confirmed ? AppColor.goldLine : AppColor.divider,
                 ),
               ),
-              const SizedBox(width: AppSpace.sm),
-              Expanded(
-                child: FilledButton(
-                  key: const Key('subscription-replace-submit'),
-                  onPressed: _busy ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColor.gold,
-                    foregroundColor: AppColor.onGold,
-                    disabledBackgroundColor: AppColor.goldSoft,
-                    disabledForegroundColor: AppColor.text2,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                    ),
+              child: CheckboxListTile(
+                key: const Key('subscription-replace-confirmation'),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.md,
+                ),
+                value: _confirmed,
+                enabled: _fieldsEnabled,
+                activeColor: AppColor.gold,
+                checkColor: AppColor.onGold,
+                title: const Text(
+                  'Подтверждаю замену',
+                  style: TextStyle(
+                    color: AppColor.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                   ),
-                  child: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColor.onGold,
-                          ),
-                        )
-                      : Text(_attempted ? 'Повторить' : 'Заменить'),
                 ),
+                subtitle: const Text(
+                  'Старый абонемент закроется, использованные часы и резервы '
+                  'перейдут в новый; фактические оплаты не изменятся.',
+                  style: TextStyle(color: AppColor.text2, fontSize: 11.5),
+                ),
+                onChanged: _fieldsEnabled
+                    ? (value) => setState(() {
+                        _confirmed = value == true;
+                        _error = null;
+                        _exitController.markDirty();
+                      })
+                    : null,
               ),
+            ),
+            if (_attempted) ...[
+              const SizedBox(height: AppSpace.md),
+              const _StableRetryNotice(),
             ],
-          ),
-        ],
+            if (_error != null) ...[
+              const SizedBox(height: AppSpace.md),
+              _ReplaceError(message: _error!),
+            ],
+            const SizedBox(height: AppSpace.xl),
+            Row(
+              children: [
+                Expanded(
+                  child: clientCardGhostButton(
+                    'Отмена',
+                    _busy ? null : _requestClose,
+                  ),
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: FilledButton(
+                    key: const Key('subscription-replace-submit'),
+                    onPressed: _busy ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColor.gold,
+                      foregroundColor: AppColor.onGold,
+                      disabledBackgroundColor: AppColor.goldSoft,
+                      disabledForegroundColor: AppColor.text2,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.control),
+                      ),
+                    ),
+                    child: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColor.onGold,
+                            ),
+                          )
+                        : Text(_attempted ? 'Повторить' : 'Заменить'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

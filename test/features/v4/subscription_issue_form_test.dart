@@ -216,10 +216,19 @@ void main() {
         tester,
         find.byKey(const Key('subscription-payment-cashless')),
       );
-      await _tapVisible(
-        tester,
-        find.byKey(const Key('subscription-issue-submit')),
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Сохранить изменения?'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.byKey(const Key('subscription-discount-value')),
+            )
+            .controller!
+            .text,
+        '20',
       );
+      await tester.tap(find.text('Сохранить'));
       await tester.pumpAndSettle();
 
       expect(submissions, hasLength(1));

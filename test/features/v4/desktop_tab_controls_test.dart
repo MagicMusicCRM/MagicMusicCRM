@@ -113,6 +113,47 @@ void main() {
     expect(workspace.state.activeTabId, clientTab);
   });
 
+  testWidgets('dirty tab switch waits for the shared exit decision', (
+    tester,
+  ) async {
+    final workspace = controller();
+    final first = workspace.state.activeTabId;
+    final second = workspace.open(link('client-2'), titleHint: 'Вторая');
+    workspace.selectTab(first);
+    workspace.registerForm(first, 'editor', draft: const {'name': 'Анна'});
+    workspace.updateForm(first, 'editor', dirty: true);
+    var decision = DirtyCloseDecision.cancel;
+    var discarded = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DesktopWorkspaceShell(
+            controller: workspace,
+            resolveDirty: (_) async => decision,
+            saveDirty: (_) async {},
+            discardDirty: (_) async => discarded++,
+            tabBuilder: (_, tab) => Text(tab.titleHint),
+          ),
+        ),
+      ),
+    );
+
+    final secondTab = find.byKey(ValueKey('workspace-tab-select-$second'));
+    await tester.tap(secondTab);
+    await tester.pumpAndSettle();
+    expect(workspace.state.activeTabId, first);
+    expect(workspace.state.tabs.first.forms['editor']!.dirty, isTrue);
+
+    decision = DirtyCloseDecision.discard;
+    await tester.tap(secondTab);
+    await tester.pumpAndSettle();
+    expect(workspace.state.activeTabId, second);
+    expect(discarded, 1);
+    final form = workspace.state.tabs.first.forms['editor']!;
+    expect(form.dirty, isFalse);
+    expect(form.draft, isEmpty);
+  });
+
   test(
     'dirty close supports Save, Discard and Cancel without silent loss',
     () async {
@@ -171,4 +212,35 @@ void main() {
       );
     },
   );
+
+  test('failed workspace Save preserves draft version and conflict', () async {
+    final workspace = controller();
+    final tabId = workspace.state.activeTabId;
+    workspace.registerForm(
+      tabId,
+      'editor',
+      expectedVersion: 7,
+      draft: const {'name': 'Анна', 'idempotencyKey': 'stable-key'},
+    );
+    workspace.updateForm(tabId, 'editor', dirty: true);
+    workspace.markFormConflict(
+      tabId,
+      'editor',
+      serverVersion: 8,
+      source: 'realtime',
+    );
+
+    final allowed = await workspace.resolveDirtyTab(
+      tabId,
+      resolveDirty: (_) async => DirtyCloseDecision.save,
+      saveDirty: (_) async => throw StateError('network failed'),
+    );
+
+    expect(allowed, isFalse);
+    final form = workspace.state.activeTab.forms['editor']!;
+    expect(form.dirty, isTrue);
+    expect(form.expectedVersion, 7);
+    expect(form.conflict!.serverVersion, 8);
+    expect(form.draft, {'name': 'Анна', 'idempotencyKey': 'stable-key'});
+  });
 }

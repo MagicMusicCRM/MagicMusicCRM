@@ -40,12 +40,39 @@ void main() {
     debugPrint('V6_BACK_ROUTE_READY');
     await _waitUntilGone(tester, find.text('Экран второго уровня'));
 
+    await tester.tap(find.text('Несохранённая форма'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Анна');
+    await tester.pump();
+    debugPrint('V6_DIRTY_FIRST_READY');
+    await _waitUntilVisible(tester, find.text('Сохранить изменения?'));
+    await tester.tap(find.text('Остаться'));
+    await tester.pumpAndSettle();
+    expect(find.text('Несохранённая форма'), findsOneWidget);
+
+    debugPrint('V6_DIRTY_SECOND_READY');
+    await _waitUntilVisible(tester, find.text('Сохранить изменения?'));
+    await tester.tap(find.text('Не сохранять'));
+    await tester.pumpAndSettle();
+    expect(find.text('Главная Back QA'), findsOneWidget);
+
     expect(find.text('Локальная история: есть'), findsOneWidget);
     debugPrint('V6_BACK_LOCAL_READY');
     await _waitUntilGone(tester, find.text('Локальная история: есть'));
     expect(find.text('Локальная история: закрыта'), findsOneWidget);
     debugPrint('V6_BACK_DEVICE_PASS');
   });
+}
+
+Future<void> _waitUntilVisible(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 300; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    if (finder.evaluate().isNotEmpty) return;
+  }
+  fail('ADB Back did not open the dirty-form decision.');
 }
 
 Future<void> _waitUntilGone(WidgetTester tester, Finder finder) async {
@@ -94,6 +121,12 @@ class _BackDeviceHomeState extends State<_BackDeviceHome> {
               ),
               child: const Text('Вложенный маршрут'),
             ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute(builder: (_) => const _DirtyFormRoute()),
+              ),
+              child: const Text('Несохранённая форма'),
+            ),
           ],
         ),
       ),
@@ -132,6 +165,51 @@ class _SecondLevel extends StatelessWidget {
       appBar: AppBar(
         leading: const AppBackButton(),
         title: const Text('Экран второго уровня'),
+      ),
+    );
+  }
+}
+
+class _DirtyFormRoute extends StatefulWidget {
+  const _DirtyFormRoute();
+
+  @override
+  State<_DirtyFormRoute> createState() => _DirtyFormRouteState();
+}
+
+class _DirtyFormRouteState extends State<_DirtyFormRoute> {
+  late final DirtyFormExitController _exitController;
+
+  @override
+  void initState() {
+    super.initState();
+    _exitController = DirtyFormExitController(onSave: () async => true);
+  }
+
+  @override
+  void dispose() {
+    _exitController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DirtyFormExitScope(
+      controller: _exitController,
+      child: Scaffold(
+        appBar: AppBar(
+          leading: AppBackButton(
+            onPressed: () => _exitController.requestExit(
+              context,
+              reason: DirtyFormExitReason.appBack,
+            ),
+          ),
+          title: const Text('Несохранённая форма'),
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(24),
+          child: TextField(onChanged: (_) => _exitController.markDirty()),
+        ),
       ),
     );
   }

@@ -156,7 +156,7 @@ flowchart TD
   - **Проверка:** Android predictive Back matrix for top/nested routes, partial/full sheet, nested dialog.
   - **Оценка:** 7 ч · **Зависимости:** V6-201, V6-202 · **Приоритет:** P0.
 
-- [ ] **V6-204** `[REQ-SURFACE-001, REQ-UX-001]` — Один dirty-form exit contract.
+- [x] **V6-204** `[REQ-SURFACE-001, REQ-UX-001]` — Один dirty-form exit contract.
   - **Работа:** Save/Discard/Cancel for app Back, system Back, breadcrumb, tab switch/close, logout; preserve server/field errors and idempotency metadata.
   - **Критерий:** every exit path produces the same decision/result; Cancel stays, Save awaits success, Discard explicitly clears.
   - **Проверка:** reusable contract tests + three real forms including network failure/conflict.

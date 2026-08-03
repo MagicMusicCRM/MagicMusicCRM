@@ -458,6 +458,11 @@ extension _MessengerBuildersA on _MessengerScreenState {
                   } else if (value == 'theme') {
                     ref.read(themeModeProvider.notifier).toggle();
                   } else if (value == 'logout') {
+                    final canLogout = await requestWorkspaceDirtyExit(
+                      context,
+                      reason: DirtyFormExitReason.logout,
+                    );
+                    if (!canLogout) return;
                     await ref.read(magicAuthServiceProvider).signOut();
                     if (context.mounted) context.go('/login');
                   }

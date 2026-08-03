@@ -272,6 +272,16 @@ void main() {
         tester,
         find.byKey(const Key('subscription-replace-confirmation')),
       );
+      await tester.binding.handlePopRoute();
+      await _pumpFrames(tester);
+      expect(find.text('Сохранить изменения?'), findsOneWidget);
+      await tester.tap(find.text('Остаться'));
+      await _pumpFrames(tester);
+      expect(find.text('Подтвердите замену'), findsOneWidget);
+      expect(
+        tester.widget<TextFormField>(reason).controller!.text,
+        'client.requested_change',
+      );
       await _tapVisible(
         tester,
         find.byKey(const Key('subscription-replace-submit')),

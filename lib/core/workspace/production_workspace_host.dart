@@ -9,8 +9,10 @@ import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/magic_context_bar.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
+import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
+import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
 
 class ProductionWorkspaceHost extends ConsumerStatefulWidget {
   const ProductionWorkspaceHost({
@@ -133,6 +135,40 @@ class _ProductionWorkspaceHostState
     _controller.dispose();
   }
 
+  Future<DirtyCloseDecision> _resolveDirty(WorkspaceTabState tab) async {
+    final decision = await showDirtyFormExitDialog(context);
+    return switch (decision) {
+      DirtyFormExitDecision.save => DirtyCloseDecision.save,
+      DirtyFormExitDecision.discard => DirtyCloseDecision.discard,
+      DirtyFormExitDecision.cancel || null => DirtyCloseDecision.cancel,
+    };
+  }
+
+  Future<void> _saveDirty(WorkspaceTabState tab) =>
+      _controller.saveDirtyForms(tab);
+
+  Future<void> _discardDirty(WorkspaceTabState tab) =>
+      _controller.discardDirtyForms(tab);
+
+  Future<bool> _canLeaveTab(String tabId) {
+    return _controller.resolveDirtyTab(
+      tabId,
+      resolveDirty: _resolveDirty,
+      saveDirty: _saveDirty,
+      discardDirty: _discardDirty,
+    );
+  }
+
+  Future<void> _back(WorkspaceTabState tab) async {
+    if (await _canLeaveTab(tab.tabId)) _controller.back(tab.tabId);
+  }
+
+  Future<void> _navigate(WorkspaceTabState tab, AppBreadcrumbNode node) async {
+    if (await _canLeaveTab(tab.tabId)) {
+      _controller.push(tab.tabId, node.link);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -168,6 +204,8 @@ class _ProductionWorkspaceHostState
                     controller: _controller,
                     tab: tab,
                     location: location,
+                    onBack: () => unawaited(_back(tab)),
+                    onNavigate: (node) => unawaited(_navigate(tab, node)),
                   ),
                   Expanded(child: widget.tabBuilder(context, tab)),
                 ],
@@ -180,6 +218,9 @@ class _ProductionWorkspaceHostState
                 ),
               );
             },
+            resolveDirty: _resolveDirty,
+            saveDirty: _saveDirty,
+            discardDirty: _discardDirty,
           ),
         );
       },

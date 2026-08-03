@@ -22,6 +22,8 @@ class MagicContextBar extends StatelessWidget {
     required this.tab,
     required this.location,
     this.actions = const [],
+    this.onBack,
+    this.onNavigate,
     super.key,
   });
 
@@ -29,6 +31,8 @@ class MagicContextBar extends StatelessWidget {
   final WorkspaceTabState tab;
   final CanonicalAppLocation location;
   final List<MagicContextAction> actions;
+  final VoidCallback? onBack;
+  final ValueChanged<AppBreadcrumbNode>? onNavigate;
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +51,7 @@ class MagicContextBar extends StatelessWidget {
               tooltip: 'Назад',
               icon: Icons.arrow_back,
               enabled: tab.routeStack.length > 1,
-              onPressed: () => controller.back(tab.tabId),
+              onPressed: onBack ?? () => controller.back(tab.tabId),
             ),
             _HistoryButton(
               key: const ValueKey('context-forward'),
@@ -64,7 +68,9 @@ class MagicContextBar extends StatelessWidget {
                 builder: (context, constraints) => _BreadcrumbTrail(
                   location: location,
                   availableWidth: constraints.maxWidth,
-                  onNavigate: (node) => controller.push(tab.tabId, node.link),
+                  onNavigate:
+                      onNavigate ??
+                      (node) => controller.push(tab.tabId, node.link),
                 ),
               ),
             ),
