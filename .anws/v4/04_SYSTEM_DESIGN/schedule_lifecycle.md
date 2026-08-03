@@ -49,10 +49,10 @@ flowchart LR
 
 | Entity | Ключевые поля |
 |---|---|
-| Lesson | id, seriesId?, clientType/id, teacherId, branchId, roomId, startAt/endAt, trial, state, version |
-| LessonSnapshot | successType, clientChargeType/value, teacherPayType/value, subscriptionId?, createdAt |
+| Lesson | id, seriesId?, clientType/id XOR groupId, teacherId, branchId, roomId, startAt/endAt, trial, state, version |
+| LessonSnapshot | participant client refs, successType, per-client charge source/value, teacherPayType/value, subscription ids?, createdAt |
 | LessonTransition | lessonId, from/to, reasonCode/text, actor/worker, predecessor/successor, financial decision |
-| LessonSeries | recurrence rule, start/end/count, template snapshot, version |
+| LessonSeries | recurrence rule, start/end/count, template snapshot, materializedThrough, version |
 | BranchHours | branchId, weekday, open/close, exception dates |
 | TeacherAvailability | teacherId, interval/rule, available boolean, optional end |
 | TeacherBranch | teacherId, branchId, active interval |
@@ -65,6 +65,8 @@ Times хранятся как UTC instant; school timezone использует�
 Обязательные поля: Client (Lead или Student), teacher, branch, room, start/end, completion type, client write-off/cost, teacher compensation type/value. `Пробный урок` — независимый boolean и marker во всех связанных projections.
 
 Форма не предлагает два взаимоисключающих поля Lead/Student. Search endpoint возвращает typed Client options.
+
+Группа остаётся отдельным взаимоисключающим режимом. Её snapshot фиксирует участников до завершения; финансовый результат создаётся отдельно для каждого участника, а начисление преподавателю — одно на групповое занятие.
 
 ## 6. Constraint engine
 
@@ -89,6 +91,7 @@ Times хранятся как UTC instant; school timezone использует�
 | Validate draft | schedule writer | complete draft + excludeId? | violations + price preview | 422 |
 | Create Lesson | Admin/Manager/Director/sysadmin | draft + idempotency key | Lesson + reservation | 409/422 |
 | Create Series | same | template + recurrence | created list/failed index, atomic | 409/422 |
+| Extend Series Horizon | internal | active individual series + now | atomic occurrences through now+60d | retryable conflict |
 | Edit/drag | writer | lesson/version + changes | new version | 409 stale/conflict |
 | Reschedule | writer | source/version, reason, financial decision, successor draft | source+successor | 409/422 |
 | Cancel | writer | version, reason, financial decision | terminal Lesson | 409/422 |
@@ -106,13 +109,15 @@ sequenceDiagram
     participant RT as Realtime
     W->>DB: claim due scheduled lesson
     DB->>C: apply snapshot in same transaction
-    C-->>DB: client fact + teacher fact
+    C-->>DB: client fact(s) + one teacher fact
     DB->>DB: terminal state + reservation + audit + outbox
     DB-->>W: commit result
     DB-->>RT: publish committed invalidation
 ```
 
 Worker clock определяется сервером. Повторный claim видит terminal state и возвращает уже созданные fact ids.
+
+Индивидуальная постоянная series материализуется только в скользящем окне ближайших 60 дней. Повторное расширение окна идемпотентно. Для участника сначала резервируется подходящий активный абонемент, а при его отсутствии snapshot фиксирует списание с личного счёта. `fixed/hourly/none` преподавателя сохраняется в snapshot занятия; процентная оплата не поддерживается.
 
 ## 9. Перенос, цвета и subscription units
 
@@ -139,7 +144,7 @@ Worker clock определяется сервером. Повторный claim
 ## 12. Миграция и rollout
 
 1. Audit future lesson overlaps, missing resources/teacher branches/snapshots.
-2. Backfill teacher branches and snapshots; unresolved rows block strict enablement.
+2. Backfill teacher branches and snapshots для индивидуальных занятий ближайших 60 дней; unresolved rows block strict enablement, а дальние individual occurrences обрабатываются при входе в rolling horizon.
 3. Introduce new state/transition/reservation alongside legacy status.
 4. Shadow-run constraints and compare current behavior.
 5. Enable writes through unified service.

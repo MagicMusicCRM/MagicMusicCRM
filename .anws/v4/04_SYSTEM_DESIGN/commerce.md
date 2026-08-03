@@ -46,7 +46,7 @@ flowchart LR
 | Installment | issuedId, dueAt, amount, status | ≥2 when plan; sum = finalPrice |
 | ActualPayment | id, clientId, issuedId?, amount, method cash/cashless, occurredAt, idempotencyRef | append-only |
 | ObligationFact | id, client/issued, type, amount, sourceRef | append-only |
-| LessonChargeFact | lessonId unique, subscription/writeoff result, amount/units | one per completion |
+| LessonChargeFact | lessonId + clientId unique, subscription/personal-account result, amount/units | one per participant per completion |
 | TeacherCompensationFact | lessonId unique, teacher, type fixed/hourly/none, rate, duration, amount | one per completion; hourly = rate × LessonSnapshot duration, none = 0 |
 | SubscriptionLifecycleEvent | issue/replace/cancel, before/after ids, actor, reason | audit link |
 
@@ -62,7 +62,7 @@ flowchart LR
 | Preview cancel | same | issued/version | payments/writeoffs/balance/future lessons | 404 |
 | Cancel | same | version + reason + confirm | cancelled lifecycle + reservation recalc | 409 |
 | Record payment | permitted staff | amount, cash/cashless, idempotency key | ActualPayment | 409 key mismatch/422 |
-| Settle completed lesson | internal Schedule port | lesson snapshot/idempotency | charge + compensation facts | stable duplicate result |
+| Settle completed lesson | internal Schedule port | immutable participant/finance snapshot + idempotency | per-client charge facts + one compensation fact | stable duplicate result |
 | Read own finance | Client self | self | own subscription/movements/balance | 403 |
 
 ## 6. Выдача и рассрочка
@@ -108,7 +108,8 @@ sequenceDiagram
 - Одновременные replace/cancel: expected version допускает только одну.
 - Completion и cancel race сериализуются блокировкой issued/reservation aggregate; сохранённый lesson snapshot гарантирует определённый outcome.
 - Metrics: ledger write failures, duplicate suppression, balance reconciliation drift, cancelled active leak, installment overdue counts.
-- Alert на любой non-zero reconciliation drift и duplicate lesson fact constraint.
+- Для каждого участника группового занятия settlement использует его snapshot: подходящий active subscription первым, иначе personal account; один и тот же client fact не дублируется.
+- Alert на любой non-zero reconciliation drift и duplicate lesson/client fact constraint.
 
 ## 11. Тестирование
 

@@ -171,15 +171,15 @@ flowchart TD
 ## Phase 3 — Migration (S6)
 
 - [x] **T8.3.1** [REQ-SCHED-002, REQ-RBAC-001]: Выполнить production preflight и управляемый backfill
-  - **Описание:** на backup/staging-копии устранить missing teacher branches, lesson resources/snapshots и mapping gaps без догадок.
+  - **Описание:** на backup/staging-копии устранить missing teacher branches, lesson resources/snapshots и mapping gaps без догадок; для индивидуальных занятий строгий future horizon равен ближайшим 60 дням.
   - **Подпункты:**
     - [x] Зафиксировать backup и preflight report.
     - [x] Выполнить restartable backfill только однозначных rows.
-    - [x] Вывести неоднозначные rows в review queue и закрыть каждую решением.
+    - [x] Вывести неоднозначные rows в review queue и закрыть каждую только подтверждённым ручным сопоставлением владельца; до подтверждения строки остаются blocker.
   - **Вход:** T8.1.3, закрытые INT-S1…S5.
   - **Выход:** backfill evidence, zero unresolved blocker report.
   - **📎 Ссылка:** `schedule_lifecycle.md §12`, `access_control.md §12`.
-  - **Критерии:** Given staging copy; When backfill повторён; Then второй запуск не меняет данные, unresolved blockers=0.
+  - **Критерии:** Given staging copy и подтверждённая mapping table для оставшихся account/teacher/subscription rows; When backfill повторён; Then второй запуск не меняет данные, индивидуальные занятия ближайших 60 дней имеют snapshot с active subscription либо personal-account fallback, существующие групповые занятия сохранены, unresolved blockers=0.
   - **Тип верификации:** Интеграционный тест.
   - **Инструкция:** `npm --prefix server run v4:backfill -- --dry-run && npm --prefix server run v4:backfill -- --apply && npm --prefix server run v4:preflight -- --require-zero-blockers`
   - **Оценка:** 8 ч. · **Зависимости:** INT-S5 · **Приоритет:** P0 · **Sprint:** S6
@@ -554,7 +554,7 @@ flowchart TD
   - **Оценка:** 8 ч. · **Зависимости:** T4.2.1, T8.1.4 · **Приоритет:** P0 · **Sprint:** S2
 
 - [x] **T4.2.3** [REQ-SCHED-003, REQ-SCHED-001]: Реализовать atomic LessonSeries
-  - **Описание:** создавать постоянное расписание из карточки/формы целиком либо не создавать ничего.
+  - **Описание:** хранить постоянное расписание как series и атомарно материализовать индивидуальные занятия в скользящем окне 60 дней.
   - **Подпункты:**
     - [x] Реализовать recurrence expansion в school timezone.
     - [x] Валидировать каждый occurrence до write.
@@ -562,7 +562,7 @@ flowchart TD
   - **Вход:** T4.2.2, `schedule_lifecycle.md §3/§7`.
   - **Выход:** series command/API/tests.
   - **📎 Ссылка:** ADR-008.
-  - **Критерии:** Given series с конфликтом в N-м occurrence; When create вызван; Then created=0 и ошибка указывает N; valid series создаётся полностью.
+  - **Критерии:** Given индивидуальная series с конфликтом в N-м occurrence внутри ближайших 60 дней; When create/materialize вызван; Then created=0 и ошибка указывает N; valid series атомарно поддерживает заполненное скользящее окно 60 дней без дублей. Уже созданные групповые занятия сохраняются и не удаляются.
   - **Тип верификации:** Интеграционный тест.
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/crm/schedule/lesson-series-postgres.integration.spec.ts`
   - **Оценка:** 8 ч. · **Зависимости:** T4.2.2 · **Приоритет:** P1 · **Sprint:** S2
@@ -662,15 +662,15 @@ flowchart TD
 ## Phase 1 — Foundation (S2/S3)
 
 - [x] **T5.1.1** [REQ-LESSON-002, REQ-SUB-004]: Реализовать idempotent Lesson settlement port
-  - **Описание:** в transaction context создать ровно одно client charge/debt и teacher compensation по LessonSnapshot.
+  - **Описание:** в transaction context создать client charge/debt по каждому участнику занятия и ровно одно teacher compensation по LessonSnapshot.
   - **Подпункты:**
-    - [x] Создать unique facts by lesson id и money rounding policy.
+    - [x] Создать unique client facts by lesson id + client id, unique teacher fact by lesson id и money rounding policy.
     - [x] Поддержать fixed/hourly/none teacher compensation: hourly рассчитывается по длительности LessonSnapshot с округлением до minor units, none создаёт нулевой факт.
     - [x] Возвращать stable result при повторном completion.
   - **Вход:** T4.1.1, T8.1.4, `commerce.md §3–4`.
   - **Выход:** settlement service/repository/tests.
   - **📎 Ссылка:** ADR-008, ADR-009, ADR-011.
-  - **Критерии:** Given два settlement вызова одного lesson; When выполняются параллельно; Then один client fact, один teacher fact, одинаковый result.
+  - **Критерии:** Given два параллельных settlement одного индивидуального или группового lesson; When операция завершается; Then для индивидуального занятия создан один client fact, для группового — по одному fact на каждого зафиксированного участника, а teacher fact всегда один; повтор возвращает тот же result. Для каждого участника активный подходящий абонемент используется первым, иначе списание идёт с личного счёта; teacher compensation берётся из сохранённого `fixed/hourly/none` snapshot.
   - **Тип верификации:** Интеграционный тест.
   - **Инструкция:** `npm --prefix server test -- --runTestsByPath src/crm/commerce/lesson-settlement-postgres.integration.spec.ts`
   - **Оценка:** 8 ч. · **Зависимости:** T4.1.1, T8.1.4 · **Приоритет:** P0 · **Sprint:** S2

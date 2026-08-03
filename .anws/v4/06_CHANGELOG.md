@@ -41,3 +41,10 @@
 - [CHANGE] Владелец разрешил пропустить history/security gate T8.4.1, чтобы продолжить technical/device/data/operations gates и staging rollout/rollback rehearsal.
 - [KEEP] Исключение не считается прохождением security acceptance ADR-006: evidence маркируется `pass_with_owner_exception`, security=`owner_deferred`, `productionApproved=false`.
 - [KEEP] Ротация ключей и получение GitHub admin-доступа остаются в backlog #16/#17; production rollout и INT-S6 до их устранения не разрешены.
+
+## 2026-08-03 — Уточнение rolling schedule и group settlement
+
+- [CHANGE] Владелец подтвердил скользящее 60-дневное окно материализации индивидуальных постоянных занятий: активный подходящий абонемент используется первым, иначе snapshot фиксирует списание с личного счёта.
+- [CHANGE] Существующие групповые занятия сохраняются; завершение создаёт отдельный client charge fact для каждого зафиксированного участника и ровно один teacher compensation fact на занятие.
+- [KEEP] Начисление преподавателю остаётся только `fixed/hourly/none` из snapshot; процентная оплата не добавляется.
+- [CHANGE] Оставшиеся неоднозначные account/teacher/subscription rows закрываются только подтверждённой владельцем manual mapping table и до этого остаются release blockers.
