@@ -13,6 +13,7 @@ export interface LessonCompletionResultRef {
   state: "successfully_completed";
   transitionId: string;
   clientFinancialFactId: string;
+  clientFinancialFactIds: string[];
   teacherFinancialFactId: string;
 }
 

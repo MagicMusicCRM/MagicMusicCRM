@@ -165,6 +165,37 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
       await cleanupFixture(pool, fixture);
     }
   });
+
+  it("creates one client fact per frozen group participant and one teacher fact", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      const parallel = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          service.settleStandalone(fixture.groupLessonId),
+        ),
+      );
+      for (const result of parallel) expect(result).toEqual(parallel[0]);
+      expect(parallel[0]!.clientFacts).toHaveLength(2);
+      expect(parallel[0]!.clientFacts.map((fact) => fact.clientId).sort())
+        .toEqual([fixture.studentId, fixture.secondStudentId].sort());
+      expect(parallel[0]!.clientFacts.every(
+        (fact) => fact.chargeType === "personal_account" && fact.amountMinor === "80000",
+      )).toBe(true);
+      expect(parallel[0]!.teacherFact).toMatchObject({
+        teacherId: fixture.teacherId,
+        compensationType: "fixed",
+        amountMinor: "90000",
+      });
+      const counts = await pool.query<{ client_count: number; teacher_count: number }>(`
+        select
+          (select count(*)::int from app.lesson_client_charge_facts where lesson_id = $1) as client_count,
+          (select count(*)::int from app.lesson_teacher_compensation_facts where lesson_id = $1) as teacher_count
+      `, [fixture.groupLessonId]);
+      expect(counts.rows[0]).toEqual({ client_count: 2, teacher_count: 1 });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
 });
 
 async function createFixture(
@@ -187,33 +218,40 @@ async function createFixture(
       values
         ($1, 'manager', now()),
         ($2, 'teacher', now()),
-        ($3, 'client', now())
+        ($3, 'client', now()),
+        ($4, 'client', now())
       returning id, role::text as role
     `,
     [
       `settlement-manager-${randomUUID()}@example.test`,
       `settlement-teacher-${randomUUID()}@example.test`,
       `settlement-client-${randomUUID()}@example.test`,
+      `settlement-client-two-${randomUUID()}@example.test`,
     ],
   );
   const managerId = users.rows.find((row) => row.role === "manager")!.id;
   const teacherUserId = users.rows.find((row) => row.role === "teacher")!.id;
   const clientUserId = users.rows.find((row) => row.role === "client")!.id;
+  const clientUserIds = users.rows.filter((row) => row.role === "client").map((row) => row.id);
   const profiles = await pool.query<{ id: string; user_id: string }>(
     `
       insert into app.profiles (user_id, first_name, last_name)
       values
         ($1, 'Settlement', 'Teacher'),
-        ($2, 'Settlement', 'Student')
+        ($2, 'Settlement', 'Student'),
+        ($3, 'Settlement', 'Student Two')
       returning id, user_id
     `,
-    [teacherUserId, clientUserId],
+    [teacherUserId, clientUserIds[0], clientUserIds[1]],
   );
   const teacherProfileId = profiles.rows.find(
     (row) => row.user_id === teacherUserId,
   )!.id;
   const studentProfileId = profiles.rows.find(
-    (row) => row.user_id === clientUserId,
+    (row) => row.user_id === clientUserIds[0],
+  )!.id;
+  const secondStudentProfileId = profiles.rows.find(
+    (row) => row.user_id === clientUserIds[1],
   )!.id;
   const teacher = await pool.query<{ id: string }>(
     "insert into app.teachers (profile_id) values ($1) returning id",
@@ -229,6 +267,22 @@ async function createFixture(
     [studentProfileId, branchId],
   );
   const studentId = student.rows[0]!.id;
+  const secondStudent = await pool.query<{ id: string }>(
+    `insert into app.students (profile_id, branch_id) values ($1, $2) returning id`,
+    [secondStudentProfileId, branchId],
+  );
+  const secondStudentId = secondStudent.rows[0]!.id;
+  const group = await pool.query<{ id: string }>(
+    `insert into app.groups (teacher_id, branch_id, name, price_per_lesson)
+     values ($1, $2, $3, 800) returning id`,
+    [teacherId, branchId, `Settlement group ${randomUUID()}`],
+  );
+  const groupId = group.rows[0]!.id;
+  await pool.query(
+    `insert into app.group_students (group_id, student_id, joined_at)
+     values ($1, $2, '2026-01-01'), ($1, $3, '2026-01-01')`,
+    [groupId, studentId, secondStudentId],
+  );
   const lessons = await pool.query<{ id: string; duration_minutes: number }>(
     `
       insert into app.lessons (
@@ -252,6 +306,15 @@ async function createFixture(
   const fixedLessonId = lessons.rows[0]!.id;
   const hourlyLessonId = lessons.rows[1]!.id;
   const noneLessonId = lessons.rows[2]!.id;
+  const groupLesson = await pool.query<{ id: string }>(
+    `insert into app.lessons (
+       group_id, teacher_id, branch_id, scheduled_at, duration_minutes,
+       status, created_by
+     ) values ($1, $2, $3, '2026-07-29T13:00:00Z', 60, 'completed', $4)
+     returning id`,
+    [groupId, teacherId, branchId, managerId],
+  );
+  const groupLessonId = groupLesson.rows[0]!.id;
   const lifecycle = new LessonLifecycleRepository(database);
   await database.transaction(async (client) => {
     await lifecycle.createSnapshot(client, {
@@ -264,6 +327,19 @@ async function createFixture(
       teacherCompensationType: "fixed",
       teacherCompensationValue: 700,
       trial: false,
+    });
+    await lifecycle.createGroupSnapshot(client, {
+      lessonId: groupLessonId,
+      groupId,
+      completionType: "standard.success",
+      teacherCompensationType: "fixed",
+      teacherCompensationValue: 900,
+      trial: false,
+      participants: [studentId, secondStudentId].map((participantId) => ({
+        studentId: participantId,
+        chargeType: "personal_account" as const,
+        chargeValue: 800,
+      })),
     });
     await lifecycle.createSnapshot(client, {
       lessonId: hourlyLessonId,
@@ -300,13 +376,16 @@ async function createFixture(
     branchId,
     teacherId,
     studentId,
+    secondStudentId,
+    groupId,
     managerId,
-    userIds: [managerId, teacherUserId, clientUserId],
+    userIds: [managerId, teacherUserId, ...clientUserIds],
     profileIds: profiles.rows.map((row) => row.id),
-    lessonIds: lessons.rows.map((row) => row.id),
+    lessonIds: [...lessons.rows.map((row) => row.id), groupLessonId],
     fixedLessonId,
     hourlyLessonId,
     noneLessonId,
+    groupLessonId,
   };
 }
 
@@ -327,6 +406,10 @@ async function cleanupFixture(
       [fixture.lessonIds],
     );
     await client.query(
+      "delete from app.lesson_snapshot_participants where lesson_id = any($1::uuid[])",
+      [fixture.lessonIds],
+    );
+    await client.query(
       "delete from app.lesson_snapshots where lesson_id = any($1::uuid[])",
       [fixture.lessonIds],
     );
@@ -337,8 +420,10 @@ async function cleanupFixture(
     await client.query("delete from app.lessons where id = any($1::uuid[])", [
       fixture.lessonIds,
     ]);
-    await client.query("delete from app.students where id = $1", [
-      fixture.studentId,
+    await client.query("delete from app.group_students where group_id = $1", [fixture.groupId]);
+    await client.query("delete from app.groups where id = $1", [fixture.groupId]);
+    await client.query("delete from app.students where id = any($1::uuid[])", [
+      [fixture.studentId, fixture.secondStudentId],
     ]);
     await client.query("delete from app.teachers where id = $1", [
       fixture.teacherId,

@@ -109,11 +109,15 @@ export class LessonCompletionService {
       reasonCode: "worker.end-at-reached",
       workerId: claim.workerId,
       financialDecision: {
-        chargeClient: settled.clientFact.chargeType !== "none",
+        chargeClient: settled.clientFacts.some(
+          (fact) => fact.chargeType !== "none",
+        ),
+        clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
         compensateTeacher:
           settled.teacherFact.compensationType !== "none",
       },
       clientFinancialFactId: settled.clientFact.id,
+      clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
       teacherFinancialFactId: settled.teacherFact.id,
     });
     const transitionId = String(transition.rows[0]!.id);
@@ -121,6 +125,7 @@ export class LessonCompletionService {
       claim,
       transitionId,
       clientFinancialFactId: settled.clientFact.id,
+      clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
       teacherFinancialFactId: settled.teacherFact.id,
     });
     return {
@@ -128,6 +133,7 @@ export class LessonCompletionService {
       state: "successfully_completed",
       transitionId,
       clientFinancialFactId: settled.clientFact.id,
+      clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
       teacherFinancialFactId: settled.teacherFact.id,
     };
   }

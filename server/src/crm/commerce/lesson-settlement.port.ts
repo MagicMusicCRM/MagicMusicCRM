@@ -9,7 +9,7 @@ export type TeacherCompensationFactType = "fixed" | "hourly" | "none";
 
 export interface LessonSettlementResult {
   lessonId: string;
-  clientFact: {
+  clientFacts: Array<{
     id: string;
     clientType: "lead" | "student";
     clientId: string;
@@ -19,7 +19,9 @@ export interface LessonSettlementResult {
     amountMinor: string;
     units: string;
     currencyCode: string;
-  };
+  }>;
+  /** First fact retained for compatibility with individual-lesson callers. */
+  clientFact: LessonSettlementResult["clientFacts"][number];
   teacherFact: {
     id: string;
     teacherId: string;

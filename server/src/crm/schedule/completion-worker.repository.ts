@@ -138,6 +138,7 @@ export class LessonCompletionWorkerRepository {
               completed_at = null,
               transition_id = null,
               client_financial_fact_id = null,
+              client_financial_fact_ids = '{}'::uuid[],
               teacher_financial_fact_id = null,
               terminal_state = null,
               updated_at = now()
@@ -207,6 +208,7 @@ export class LessonCompletionWorkerRepository {
       claim: LessonCompletionClaim;
       transitionId: string;
       clientFinancialFactId: string;
+      clientFinancialFactIds: string[];
       teacherFinancialFactId: string;
     },
   ): Promise<void> {
@@ -219,7 +221,8 @@ export class LessonCompletionWorkerRepository {
             completed_at = now(),
             transition_id = $4,
             client_financial_fact_id = $5,
-            teacher_financial_fact_id = $6,
+            client_financial_fact_ids = $6::uuid[],
+            teacher_financial_fact_id = $7,
             terminal_state = 'successfully_completed',
             last_error = null,
             updated_at = now()
@@ -234,6 +237,7 @@ export class LessonCompletionWorkerRepository {
         input.claim.attempts,
         input.transitionId,
         input.clientFinancialFactId,
+        input.clientFinancialFactIds,
         input.teacherFinancialFactId,
       ],
     );

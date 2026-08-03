@@ -124,85 +124,66 @@ export class SubscriptionReservationService {
     client: PoolClient,
     lessonId: string,
   ): Promise<void> {
-    const candidate = await client.query<{
-      snapshot_subscription_id: string | null;
-      reservation_subscription_id: string | null;
-    }>(
+    const candidates = await client.query<{ subscription_id: string }>(
       `
-        select
-          snapshot.subscription_id as snapshot_subscription_id,
-          reservation.subscription_id as reservation_subscription_id
-        from app.lesson_snapshots snapshot
-        left join lateral (
-          select subscription_id
-          from app.lesson_reservations
-          where lesson_id = snapshot.lesson_id
-            and state = 'reserved'
-          order by created_at desc, id desc
-          limit 1
-        ) reservation on true
-        where snapshot.lesson_id = $1
+        select distinct source.subscription_id
+        from (
+          select subscription_id from app.lesson_snapshots where lesson_id = $1
+          union all
+          select subscription_id from app.lesson_snapshot_participants where lesson_id = $1
+          union all
+          select subscription_id from app.lesson_reservations where lesson_id = $1
+        ) source
+        where source.subscription_id is not null
+        order by source.subscription_id
       `,
       [lessonId],
     );
-    const firstSubscriptionId =
-      candidate.rows[0]?.reservation_subscription_id ??
-      candidate.rows[0]?.snapshot_subscription_id ??
-      null;
-    if (firstSubscriptionId) {
-      await this.lockSubscription(client, firstSubscriptionId);
+    for (const candidate of candidates.rows) {
+      await this.lockSubscription(client, candidate.subscription_id);
     }
 
-    const reservation = await client.query<ReservationRow>(
+    await client.query<ReservationRow>(
       `
         select id, subscription_id, state
         from app.lesson_reservations
         where lesson_id = $1
-        order by created_at desc, id desc
-        limit 1
+        order by subscription_id, created_at, id
         for update
       `,
       [lessonId],
     );
-    const currentSubscriptionId =
-      reservation.rows[0]?.state === "reserved"
-        ? reservation.rows[0].subscription_id
-        : null;
-    if (
-      currentSubscriptionId &&
-      currentSubscriptionId !== firstSubscriptionId
-    ) {
-      await this.lockSubscription(client, currentSubscriptionId);
-    }
   }
 
   async terminalize(
     client: PoolClient,
     settled: LessonSettlementResult,
   ): Promise<void> {
-    const result = await client.query(
+    let consumed = 0;
+    for (const fact of settled.clientFacts) {
+      if (fact.chargeType !== "subscription" || !fact.subscriptionId) continue;
+      const result = await client.query(
+        `
+          update app.lesson_reservations
+          set state = 'consumed', financial_fact_id = $3::uuid
+          where lesson_id = $1 and subscription_id = $2 and state = 'reserved'
+        `,
+        [settled.lessonId, fact.subscriptionId, fact.id],
+      );
+      consumed += result.rowCount ?? 0;
+    }
+    await client.query(
       `
         update app.lesson_reservations
-        set state = case
-              when $2 = 'subscription' then 'consumed'
-              else 'released'
-            end,
-            financial_fact_id = case
-              when $2 = 'subscription' then $3::uuid
-              else null
-            end
+        set state = 'released', financial_fact_id = null
         where lesson_id = $1 and state = 'reserved'
       `,
-      [
-        settled.lessonId,
-        settled.clientFact.chargeType,
-        settled.clientFact.id,
-      ],
+      [settled.lessonId],
     );
-    if (
-      settled.clientFact.chargeType === "subscription" &&
-      result.rowCount !== 1
-    ) {
+    const expected = settled.clientFacts.filter(
+      (fact) => fact.chargeType === "subscription",
+    ).length;
+    if (consumed !== expected) {
       throw new UnprocessableEntityException({
         code: "SUBSCRIPTION_RESERVATION_LOST",
         lessonId: settled.lessonId,
@@ -240,36 +221,34 @@ export class SubscriptionReservationService {
   async publishLessonSettlementPostCommit(lessonId: string): Promise<void> {
     try {
       const result = await this.database.query<{
-        student_id: string | null;
+        student_id: string;
         subscription_id: string | null;
       }>(
         `
           select
-            lesson.student_id,
+            fact.client_id as student_id,
             fact.subscription_id
-          from app.lessons lesson
-          left join app.lesson_client_charge_facts fact
-            on fact.lesson_id = lesson.id
-          where lesson.id = $1
+          from app.lesson_client_charge_facts fact
+          where fact.lesson_id = $1 and fact.client_type = 'student'
         `,
         [lessonId],
       );
-      const row = result.rows[0];
-      if (!row) return;
-      const userIds = row.student_id
-        ? await this.clientUserIds(row.student_id)
-        : [];
+      const userIds = Array.from(new Set((await Promise.all(
+        result.rows.map((row) => this.clientUserIds(row.student_id)),
+      )).flat()));
       this.realtime.emitCrmChanged({
         entity: "lesson",
         action: "updated",
         id: lessonId,
         affectedUserIds: userIds,
       });
-      if (row.subscription_id) {
+      for (const subscriptionId of new Set(
+        result.rows.map((row) => row.subscription_id).filter(Boolean),
+      )) {
         this.realtime.emitCrmChanged({
           entity: "subscription",
           action: "updated",
-          id: row.subscription_id,
+          id: subscriptionId,
           affectedUserIds: userIds,
         });
       }

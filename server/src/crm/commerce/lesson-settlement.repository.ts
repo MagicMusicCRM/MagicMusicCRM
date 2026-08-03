@@ -10,6 +10,7 @@ interface SettlementSourceRow {
   lesson_id: string;
   lifecycle_state: string;
   teacher_id: string | null;
+  group_id: string | null;
   client_type: "lead" | "student" | null;
   client_id: string | null;
   client_charge_type: ClientChargeFactType | null;
@@ -21,6 +22,7 @@ interface SettlementSourceRow {
   reservation_state: string | null;
   duration_minutes: number | null;
   validation_state: string | null;
+  participant_count: number | string;
 }
 
 @Injectable()
@@ -43,6 +45,7 @@ export class LessonSettlementRepository {
           lesson.id as lesson_id,
           lesson.lifecycle_state,
           lesson.teacher_id,
+          snapshot.group_id,
           snapshot.client_type,
           snapshot.client_id,
           snapshot.client_charge_type,
@@ -54,6 +57,11 @@ export class LessonSettlementRepository {
           reservation.state as reservation_state,
           snapshot.duration_minutes,
           snapshot.validation_state
+          ,(
+            select count(*)
+            from app.lesson_snapshot_participants participant
+            where participant.lesson_id = lesson.id
+          ) as participant_count
         from app.lessons lesson
         left join app.lesson_snapshots snapshot
           on snapshot.lesson_id = lesson.id
@@ -74,20 +82,56 @@ export class LessonSettlementRepository {
     if (!source) throw new NotFoundException("Урок не найден.");
     this.assertSettleable(source);
 
-    const effectiveChargeType =
-      source.client_charge_type === "subscription" &&
-      source.reservation_state !== "reserved"
-        ? "none"
-        : source.client_charge_type;
-    const effectiveChargeValue =
-      effectiveChargeType === "none" ? "0" : source.client_charge_value;
-    const effectiveSubscriptionId =
-      effectiveChargeType === "subscription"
-        ? source.reservation_subscription_id
-        : null;
-
     await client.query(
       `
+        with charges as (
+          select
+            snapshot.client_type,
+            snapshot.client_id,
+            snapshot.client_charge_type as charge_type,
+            snapshot.client_charge_value as charge_value,
+            snapshot.subscription_id
+          from app.lesson_snapshots snapshot
+          where snapshot.lesson_id = $1 and snapshot.group_id is null
+          union all
+          select
+            'student'::text,
+            participant.student_id,
+            participant.charge_type,
+            participant.charge_value,
+            participant.subscription_id
+          from app.lesson_snapshot_participants participant
+          where participant.lesson_id = $1
+        ), effective as (
+          select charges.*,
+            case
+              when charges.charge_type = 'subscription'
+                and coverage.subscription_id is null then 'none'
+              else charges.charge_type
+            end as effective_charge_type,
+            coverage.subscription_id as effective_subscription_id
+          from charges
+          left join lateral (
+            select reservation.subscription_id
+            from app.lesson_reservations reservation
+            join app.subscriptions subscription
+              on subscription.id = reservation.subscription_id
+            where reservation.lesson_id = $1
+              and reservation.state = 'reserved'
+              and (
+                reservation.subscription_id = charges.subscription_id
+                or (
+                  charges.client_type = 'student'
+                  and subscription.student_id = charges.client_id
+                )
+              )
+            order by
+              (reservation.subscription_id = charges.subscription_id) desc,
+              reservation.created_at,
+              reservation.id
+            limit 1
+          ) coverage on charges.charge_type = 'subscription'
+        )
         insert into app.lesson_client_charge_facts (
           lesson_id,
           client_type,
@@ -98,29 +142,24 @@ export class LessonSettlementRepository {
           amount_minor,
           units
         )
-        values (
-          $1, $2, $3, $4,
-          case when $4 = 'none' then 0 else $5::text::numeric end,
-          $6,
+        select
+          $1, client_type, client_id, effective_charge_type,
+          case when effective_charge_type = 'none' then 0 else charge_value end,
+          case when effective_charge_type = 'subscription'
+            then effective_subscription_id else null end,
           case
-            when $4 = 'personal_account'
-              then round($5::text::numeric * 100)::bigint
+            when effective_charge_type = 'personal_account'
+              then round(charge_value * 100)::bigint
             else 0
           end,
           case
-            when $4 = 'subscription' then $5::text::numeric
+            when effective_charge_type = 'subscription' then charge_value
             else 0
           end
-        )
+        from effective
+        order by client_type, client_id
       `,
-      [
-        lessonId,
-        source.client_type,
-        source.client_id,
-        effectiveChargeType,
-        effectiveChargeValue,
-        effectiveSubscriptionId,
-      ],
+      [lessonId],
     );
 
     await client.query(
@@ -176,7 +215,7 @@ export class LessonSettlementRepository {
     client: PoolClient,
     lessonId: string,
   ): Promise<LessonSettlementResult | null> {
-    const facts = await client.query<{
+    const clientFacts = await client.query<{
       client_fact_id: string | null;
       client_type: "lead" | "student" | null;
       client_id: string | null;
@@ -186,14 +225,6 @@ export class LessonSettlementRepository {
       client_amount_minor: string | null;
       units: string | null;
       client_currency_code: string | null;
-      teacher_fact_id: string | null;
-      teacher_id: string | null;
-      compensation_type: TeacherCompensationFactType | null;
-      teacher_snapshot_rate: string | null;
-      rate_minor: string | null;
-      duration_minutes: number | null;
-      teacher_amount_minor: string | null;
-      teacher_currency_code: string | null;
     }>(
       `
         select
@@ -205,69 +236,67 @@ export class LessonSettlementRepository {
           client_fact.subscription_id,
           client_fact.amount_minor as client_amount_minor,
           client_fact.units,
-          client_fact.currency_code as client_currency_code,
-          teacher_fact.id as teacher_fact_id,
-          teacher_fact.teacher_id,
-          teacher_fact.compensation_type,
-          teacher_fact.snapshot_rate as teacher_snapshot_rate,
-          teacher_fact.rate_minor,
-          teacher_fact.duration_minutes,
-          teacher_fact.amount_minor as teacher_amount_minor,
-          teacher_fact.currency_code as teacher_currency_code
+          client_fact.currency_code as client_currency_code
         from app.lesson_client_charge_facts client_fact
-        full join app.lesson_teacher_compensation_facts teacher_fact
-          on teacher_fact.lesson_id = client_fact.lesson_id
-        where coalesce(client_fact.lesson_id, teacher_fact.lesson_id) = $1
+        where client_fact.lesson_id = $1
+        order by client_fact.client_type, client_fact.client_id
       `,
       [lessonId],
     );
-    const row = facts.rows[0];
-    if (!row) return null;
-    if (
-      !row.client_fact_id ||
-      !row.client_type ||
-      !row.client_id ||
-      !row.charge_type ||
-      row.client_snapshot_value === null ||
-      row.client_amount_minor === null ||
-      row.units === null ||
-      !row.client_currency_code ||
-      !row.teacher_fact_id ||
-      !row.teacher_id ||
-      !row.compensation_type ||
-      row.teacher_snapshot_rate === null ||
-      row.rate_minor === null ||
-      row.duration_minutes === null ||
-      row.teacher_amount_minor === null ||
-      !row.teacher_currency_code
-    ) {
+    const teacherFacts = await client.query<{
+      teacher_fact_id: string;
+      teacher_id: string;
+      compensation_type: TeacherCompensationFactType;
+      teacher_snapshot_rate: string;
+      rate_minor: string;
+      duration_minutes: number;
+      teacher_amount_minor: string;
+      teacher_currency_code: string;
+    }>(`
+      select id as teacher_fact_id, teacher_id, compensation_type,
+        snapshot_rate as teacher_snapshot_rate, rate_minor, duration_minutes,
+        amount_minor as teacher_amount_minor, currency_code as teacher_currency_code
+      from app.lesson_teacher_compensation_facts
+      where lesson_id = $1
+    `, [lessonId]);
+    if (clientFacts.rows.length === 0 && teacherFacts.rows.length === 0) return null;
+    const invalidClient = clientFacts.rows.some((row) =>
+      !row.client_fact_id || !row.client_type || !row.client_id ||
+      !row.charge_type || row.client_snapshot_value === null ||
+      row.client_amount_minor === null || row.units === null ||
+      !row.client_currency_code,
+    );
+    const teacher = teacherFacts.rows[0];
+    if (invalidClient || clientFacts.rows.length === 0 || !teacher) {
       throw new ConflictException({
         code: "PARTIAL_LESSON_SETTLEMENT",
         lessonId,
       });
     }
+    const normalizedClientFacts = clientFacts.rows.map((row) => ({
+      id: row.client_fact_id!,
+      clientType: row.client_type!,
+      clientId: row.client_id!,
+      chargeType: row.charge_type!,
+      snapshotValue: row.client_snapshot_value!,
+      subscriptionId: row.subscription_id,
+      amountMinor: row.client_amount_minor!,
+      units: row.units!,
+      currencyCode: row.client_currency_code!,
+    }));
     return {
       lessonId,
-      clientFact: {
-        id: row.client_fact_id,
-        clientType: row.client_type,
-        clientId: row.client_id,
-        chargeType: row.charge_type,
-        snapshotValue: row.client_snapshot_value,
-        subscriptionId: row.subscription_id,
-        amountMinor: row.client_amount_minor,
-        units: row.units,
-        currencyCode: row.client_currency_code,
-      },
+      clientFacts: normalizedClientFacts,
+      clientFact: normalizedClientFacts[0]!,
       teacherFact: {
-        id: row.teacher_fact_id,
-        teacherId: row.teacher_id,
-        compensationType: row.compensation_type,
-        snapshotRate: row.teacher_snapshot_rate,
-        rateMinor: row.rate_minor,
-        durationMinutes: Number(row.duration_minutes),
-        amountMinor: row.teacher_amount_minor,
-        currencyCode: row.teacher_currency_code,
+        id: teacher.teacher_fact_id,
+        teacherId: teacher.teacher_id,
+        compensationType: teacher.compensation_type,
+        snapshotRate: teacher.teacher_snapshot_rate,
+        rateMinor: teacher.rate_minor,
+        durationMinutes: Number(teacher.duration_minutes),
+        amountMinor: teacher.teacher_amount_minor,
+        currencyCode: teacher.teacher_currency_code,
       },
     };
   }
@@ -283,13 +312,14 @@ export class LessonSettlementRepository {
     if (
       source.validation_state !== "valid" ||
       !source.teacher_id ||
-      !source.client_type ||
-      !source.client_id ||
       !source.client_charge_type ||
       source.client_charge_value === null ||
       !source.teacher_compensation_type ||
       source.teacher_compensation_value === null ||
-      !source.duration_minutes
+      !source.duration_minutes ||
+      (source.group_id
+        ? Number(source.participant_count) === 0
+        : !source.client_type || !source.client_id)
     ) {
       throw new ConflictException({
         code: "LESSON_SETTLEMENT_SNAPSHOT_INCOMPLETE",

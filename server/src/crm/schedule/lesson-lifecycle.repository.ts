@@ -32,6 +32,7 @@ export interface LessonTransitionInput {
   successorId?: string;
   financialDecision?: Record<string, unknown>;
   clientFinancialFactId?: string;
+  clientFinancialFactIds?: string[];
   teacherFinancialFactId?: string;
 }
 
@@ -49,6 +50,15 @@ export class LessonLifecycleRepository {
           lesson.predecessor_id,
           lesson.successor_id,
           row_to_json(snapshot.*) as snapshot,
+          coalesce(
+            (
+              select jsonb_agg(to_jsonb(participant.*)
+                order by participant.student_id)
+              from app.lesson_snapshot_participants participant
+              where participant.lesson_id = lesson.id
+            ),
+            '[]'::jsonb
+          ) as snapshot_participants,
           coalesce(
             (
               select jsonb_agg(to_jsonb(transition.*)
@@ -111,6 +121,64 @@ export class LessonLifecycleRepository {
     );
   }
 
+  async createGroupSnapshot(
+    client: PoolClient,
+    input: {
+      lessonId: string;
+      groupId: string;
+      completionType: string;
+      teacherCompensationType: "fixed" | "hourly" | "none";
+      teacherCompensationValue: number;
+      trial: boolean;
+      participants: Array<{
+        studentId: string;
+        chargeType: "subscription" | "personal_account" | "none";
+        chargeValue: number;
+        subscriptionId?: string;
+      }>;
+    },
+  ) {
+    const snapshot = await client.query(
+      `
+        insert into app.lesson_snapshots (
+          lesson_id, group_id, completion_type,
+          client_charge_type, client_charge_value,
+          teacher_compensation_type, teacher_compensation_value,
+          trial, duration_minutes
+        ) values (
+          $1, $2, $3, 'none', 0, $4, $5, $6,
+          (select duration_minutes from app.lessons where id = $1)
+        )
+        returning *
+      `,
+      [
+        input.lessonId,
+        input.groupId,
+        input.completionType,
+        input.teacherCompensationType,
+        input.teacherCompensationValue,
+        input.trial,
+      ],
+    );
+    for (const participant of input.participants) {
+      await client.query(
+        `
+          insert into app.lesson_snapshot_participants (
+            lesson_id, student_id, charge_type, charge_value, subscription_id
+          ) values ($1, $2, $3, $4, $5)
+        `,
+        [
+          input.lessonId,
+          participant.studentId,
+          participant.chargeType,
+          participant.chargeValue,
+          participant.subscriptionId ?? null,
+        ],
+      );
+    }
+    return snapshot;
+  }
+
   appendTransition(client: PoolClient, input: LessonTransitionInput) {
     return client.query(
       `
@@ -126,10 +194,12 @@ export class LessonLifecycleRepository {
           successor_id,
           financial_decision,
           client_financial_fact_id,
+          client_financial_fact_ids,
           teacher_financial_fact_id
         )
         values (
-          $1, 'scheduled', $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11
+          $1, 'scheduled', $2, $3, $4, $5, $6, $7, $8, $9::jsonb,
+          $10, $11::uuid[], $12
         )
         returning *
       `,
@@ -144,6 +214,7 @@ export class LessonLifecycleRepository {
         input.successorId ?? null,
         JSON.stringify(input.financialDecision ?? {}),
         input.clientFinancialFactId ?? null,
+        input.clientFinancialFactIds ?? [],
         input.teacherFinancialFactId ?? null,
       ],
     );
