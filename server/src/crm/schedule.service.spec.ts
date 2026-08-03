@@ -13,6 +13,8 @@ import { ScheduleService } from "./schedule.service";
 describe("ScheduleService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
 
+  afterEach(() => jest.useRealTimers());
+
   const buildDeps = () => {
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const notifications = {
@@ -524,6 +526,8 @@ describe("ScheduleService", () => {
   });
 
   it("applies a series edit, preserves exceptions and explicitly clears a finite end", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-18T09:00:00.000Z"));
     const { service, query } = createServiceWithQueryResults([
       {
         rows: [
@@ -676,6 +680,8 @@ describe("ScheduleService", () => {
   });
 
   it("serializes series edits and rejects a second continuation", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-18T09:00:00.000Z"));
     const { service, query } = createServiceWithQueryResults([
       {
         rows: [
