@@ -6,6 +6,18 @@
 
 **Статус пакета:** READY FOR OWNER EXECUTION
 
+## Engineering UAT candidate — 2026-08-04
+
+- App: `1.2.2+148`
+- Git: `c71ecb1512f4c69d1040bc2537ed2bfb8ee3d03d`
+- Windows release: `build/windows/x64/runner/Release/magic_music_crm.exe`
+- SHA-256: `013A392C01B63A219C49A4DEFA80B5ACF81D7738731B7510E98CBA41BA6B1341`
+- Preflight: `flutter analyze` PASS, Flutter `604/604` PASS,
+  v6 inventory PASS (`routes=22`, `reachable=260`, `unowned=0`).
+- Owner must still record device and backend versions for every executed row;
+  this engineering candidate does not replace the required real-account
+  signature.
+
 ## How to record V6-701
 
 Run each row on the signed build with the named role and scope. Record
