@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_state_view.dart';
@@ -12,6 +12,7 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -26,8 +27,7 @@ final reportFileOpenerProvider = Provider<ReportFileOpener>((ref) {
       directory = downloads;
     } else if (Platform.isAndroid) {
       directory =
-          await getExternalStorageDirectory() ??
-          await getTemporaryDirectory();
+          await getExternalStorageDirectory() ?? await getTemporaryDirectory();
     } else {
       directory = await getTemporaryDirectory();
     }
@@ -38,26 +38,112 @@ final reportFileOpenerProvider = Provider<ReportFileOpener>((ref) {
   };
 });
 
+@immutable
+class DashboardFilter {
+  const DashboardFilter({required this.from, required this.to, this.branchId});
+
+  factory DashboardFilter.defaults() {
+    final now = DateTime.now();
+    return DashboardFilter(
+      from: DateTime(now.year, now.month - 5, 1),
+      to: DateTime(now.year, now.month, now.day),
+    );
+  }
+
+  factory DashboardFilter.fromContext(
+    ContextViewState? state,
+    Map<String, dynamic>? directFilter,
+  ) {
+    final fallback = DashboardFilter.defaults();
+    final raw = <String, dynamic>{...?state?.filters, ...?directFilter};
+    final from = DateTime.tryParse(
+      raw['dashboardFrom']?.toString() ?? raw['from']?.toString() ?? '',
+    );
+    final to = DateTime.tryParse(
+      raw['dashboardTo']?.toString() ?? raw['to']?.toString() ?? '',
+    );
+    final branch = raw['branchId']?.toString().trim();
+    if (from == null || to == null || from.isAfter(to)) return fallback;
+    return DashboardFilter(
+      from: DateTime(from.year, from.month, from.day),
+      to: DateTime(to.year, to.month, to.day),
+      branchId: branch == null || branch.isEmpty ? null : branch,
+    );
+  }
+
+  final DateTime from;
+  final DateTime to;
+  final String? branchId;
+
+  Map<String, dynamic> get apiFilter => {
+    'from': from.toUtc().toIso8601String(),
+    'to': to.add(const Duration(days: 1)).toUtc().toIso8601String(),
+    if (branchId != null) 'branchId': branchId,
+  };
+
+  ContextViewState toContextViewState() => ContextViewState(
+    filters: {
+      'dashboardFrom': from.toIso8601String(),
+      'dashboardTo': to.toIso8601String(),
+      if (branchId != null) 'branchId': branchId,
+    },
+  );
+
+  DashboardFilter copyWithRange(DateTimeRange range) => DashboardFilter(
+    from: DateTime(range.start.year, range.start.month, range.start.day),
+    to: DateTime(range.end.year, range.end.month, range.end.day),
+    branchId: branchId,
+  );
+
+  DashboardFilter copyWithBranch(String? value) =>
+      DashboardFilter(from: from, to: to, branchId: value);
+
+  @override
+  bool operator ==(Object other) =>
+      other is DashboardFilter &&
+      other.from == from &&
+      other.to == to &&
+      other.branchId == branchId;
+
+  @override
+  int get hashCode => Object.hash(from, to, branchId);
+}
+
 class ReportingV4Panel extends ConsumerStatefulWidget {
   const ReportingV4Panel({
     super.key,
     required this.role,
     this.onOpenEntity,
+    this.filter,
+    this.reloadToken = 0,
+    this.accessSnapshot,
   });
 
   final String role;
   final ValueChanged<EntityLink>? onOpenEntity;
+  final DashboardFilter? filter;
+  final int reloadToken;
+  final CapabilitySnapshot? accessSnapshot;
 
   @override
   ConsumerState<ReportingV4Panel> createState() => _ReportingV4PanelState();
 }
 
 class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
+  final _scrollController = ScrollController();
   bool _loading = true;
   bool _forbidden = false;
-  Object? _error;
+  bool _statusLoading = true;
+  bool _lessonLoading = true;
+  bool _tasksLoading = true;
+  bool _financeLoading = true;
+  Object? _statusError;
+  Object? _lessonError;
+  Object? _tasksError;
+  Object? _financeError;
   Map<String, dynamic> _statusSummary = const {};
   Map<String, dynamic> _lessonSuccess = const {};
+  Map<String, dynamic> _tasks = const {};
   Map<String, dynamic>? _schoolFinance;
   EntityLink? _drilldownLink;
   Map<String, dynamic>? _drilldown;
@@ -70,12 +156,16 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   bool _disposed = false;
 
   bool get _canReadStatus =>
-      widget.role == 'manager' ||
-      widget.role == 'director' ||
-      widget.role == 'system_admin';
+      widget.accessSnapshot?.allows('report.status.read') ??
+      (widget.role == 'manager' ||
+          widget.role == 'director' ||
+          widget.role == 'system_admin');
 
   bool get _canReadSchoolFinance =>
-      widget.role == 'director' || widget.role == 'system_admin';
+      widget.accessSnapshot?.allows('commerce.school_finance.read') ??
+      (widget.role == 'director' || widget.role == 'system_admin');
+
+  DashboardFilter get _filter => widget.filter ?? DashboardFilter.defaults();
 
   @override
   void initState() {
@@ -84,8 +174,21 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   }
 
   @override
+  void didUpdateWidget(covariant ReportingV4Panel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filter != widget.filter ||
+        oldWidget.reloadToken != widget.reloadToken ||
+        oldWidget.role != widget.role ||
+        oldWidget.accessSnapshot?.accessVersion !=
+            widget.accessSnapshot?.accessVersion) {
+      unawaited(_load());
+    }
+  }
+
+  @override
   void dispose() {
     _disposed = true;
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -98,41 +201,115 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       return;
     }
     setState(() {
-      _loading = true;
+      _loading = false;
       _forbidden = false;
-      _error = null;
+      _statusLoading = true;
+      _lessonLoading = true;
+      _tasksLoading = true;
+      _financeLoading = _canReadSchoolFinance;
+      _statusError = null;
+      _lessonError = null;
+      _tasksError = null;
+      _financeError = null;
     });
-    try {
-      final service = ref.read(magicCrmServiceProvider);
-      final results = await Future.wait<Map<String, dynamic>>([
-        service.getV4ClientStatusSummary(),
-        service.getV4LessonSuccess(),
-        if (_canReadSchoolFinance) service.getV4SchoolFinance(),
-      ]);
-      if (!mounted) return;
+    await Future.wait([
+      _loadStatus(),
+      _loadLessons(),
+      _loadTasks(),
+      if (_canReadSchoolFinance) _loadFinance(),
+    ]);
+  }
+
+  Future<void> _loadStatus() {
+    final filter = _filter.apiFilter;
+    return _loadSection(
+      () => ref
+          .read(magicCrmServiceProvider)
+          .getV4ClientStatusSummary(
+            branchId: filter['branchId']?.toString(),
+            from: filter['from']?.toString(),
+            to: filter['to']?.toString(),
+          ),
+      (value) => _statusSummary = value,
+      (value) => _statusError = value,
+      (value) => _statusLoading = value,
+    );
+  }
+
+  Future<void> _loadLessons() {
+    final filter = _filter.apiFilter;
+    return _loadSection(
+      () => ref
+          .read(magicCrmServiceProvider)
+          .getV4LessonSuccess(
+            branchId: filter['branchId']?.toString(),
+            from: filter['from']?.toString(),
+            to: filter['to']?.toString(),
+          ),
+      (value) => _lessonSuccess = value,
+      (value) => _lessonError = value,
+      (value) => _lessonLoading = value,
+    );
+  }
+
+  Future<void> _loadTasks() => _loadSection(
+    () => ref
+        .read(magicCrmServiceProvider)
+        .listSharedTasks(state: 'open', limit: 1),
+    (value) => _tasks = value,
+    (value) => _tasksError = value,
+    (value) => _tasksLoading = value,
+  );
+
+  Future<void> _loadFinance() {
+    final filter = _filter.apiFilter;
+    return _loadSection(
+      () => ref
+          .read(magicCrmServiceProvider)
+          .getV4SchoolFinance(
+            branchId: filter['branchId']?.toString(),
+            from: filter['from']?.toString(),
+            to: filter['to']?.toString(),
+          ),
+      (value) => _schoolFinance = value,
+      (value) => _financeError = value,
+      (value) => _financeLoading = value,
+    );
+  }
+
+  Future<void> _loadSection(
+    Future<Map<String, dynamic>> Function() load,
+    void Function(Map<String, dynamic>) apply,
+    void Function(Object?) setError,
+    void Function(bool) setLoading,
+  ) async {
+    if (mounted) {
       setState(() {
-        _statusSummary = results[0];
-        _lessonSuccess = results[1];
-        _schoolFinance = _canReadSchoolFinance ? results[2] : null;
-        _loading = false;
+        setError(null);
+        setLoading(true);
       });
-    } on MagicApiException catch (error) {
+    }
+    try {
+      final value = await load();
       if (!mounted) return;
       setState(() {
-        _forbidden = error.statusCode == 403;
-        _error = error;
-        _loading = false;
+        apply(value);
+        setError(null);
+        setLoading(false);
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error;
-        _loading = false;
+        setError(error);
+        setLoading(false);
       });
     }
   }
 
-  Future<void> _openDrilldown(Map<String, dynamic> rawLink) async {
+  Future<void> _openDrilldown(
+    Map<String, dynamic> rawLink, {
+    int? expectedCount,
+  }) async {
     final link = EntityLink.fromJson(rawLink);
     final resolution = EntityRouteRegistry().resolve(link, _snapshot);
     if (!resolution.canOpen) {
@@ -143,7 +320,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       });
       return;
     }
-    final filter = link.optionalFocus?.filter ?? const <String, dynamic>{};
+    final filter = {..._filter.apiFilter, ...?link.optionalFocus?.filter};
     setState(() {
       _drilldownLink = link;
       _drilldownLoading = true;
@@ -153,6 +330,9 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       final response = await ref
           .read(magicCrmServiceProvider)
           .getV4ClientStatusList(filter: filter);
+      if (expectedCount != null && _int(response['total']) != expectedCount) {
+        throw StateError('Количество в карточке и детализации не совпадает.');
+      }
       if (!mounted) return;
       setState(() {
         _drilldown = response;
@@ -176,8 +356,10 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     });
     try {
       final service = ref.read(magicCrmServiceProvider);
-      final filter =
-          _drilldownLink?.optionalFocus?.filter ?? const <String, dynamic>{};
+      final filter = {
+        ..._filter.apiFilter,
+        ...?_drilldownLink?.optionalFocus?.filter,
+      };
       final requested = await service.requestV4ReportExport(
         reportKey: reportKey,
         format: format,
@@ -232,6 +414,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   }
 
   CapabilitySnapshot get _snapshot {
+    if (widget.accessSnapshot != null) return widget.accessSnapshot!;
     final serverSnapshot = ref.read(capabilitySnapshotProvider).value;
     if (serverSnapshot != null) return serverSnapshot;
     return CapabilitySnapshot(
@@ -261,76 +444,221 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
         state: EntityRouteState.forbidden,
       );
     }
-    if (_error != null) {
-      return _ReportingError(error: _error!, onRetry: _load);
-    }
     if (_financeDetail != null) return _buildFinanceDetail(context);
     if (_drilldownLink != null) return _buildDrilldown(context);
 
     final statusItems = _mapList(_statusSummary['items']);
-    final lessonTotal = _int(_lessonSuccess['totalLessons']);
     final financeRows = _mapList(_schoolFinance?['rows']);
-    final isEmpty =
-        statusItems.isEmpty && lessonTotal == 0 && financeRows.isEmpty;
-    if (isEmpty) {
-      return RefreshIndicator(
+
+    return MagicDesktopScrollbar(
+      axis: Axis.vertical,
+      controller: _scrollController,
+      builder: (context, controller) => RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          key: const ValueKey('reporting-empty'),
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: const [
-            SizedBox(height: 120),
-            Icon(Icons.query_stats, size: 40),
-            SizedBox(height: 12),
-            Center(child: Text('За выбранный период данных нет')),
+          key: const ValueKey('reporting-content'),
+          controller: controller,
+          padding: const EdgeInsets.all(16),
+          children: [
+            _header(context),
+            const SizedBox(height: 16),
+            _section(
+              key: const ValueKey('dashboard-lessons-section'),
+              title: 'Занятия',
+              subtitle: 'Успешность за выбранный период и филиал',
+              loading: _lessonLoading,
+              error: _lessonError,
+              onRetry: _loadLessons,
+              child: _lessonCard(),
+            ),
+            const SizedBox(height: 16),
+            _section(
+              key: const ValueKey('dashboard-clients-section'),
+              title: 'Клиенты и воронка',
+              subtitle: 'Статусы с теми же периодом и филиалом',
+              loading: _statusLoading,
+              error: _statusError,
+              onRetry: _loadStatus,
+              child: statusItems.isEmpty
+                  ? const Text('За выбранный период клиентов нет')
+                  : Column(children: statusItems.map(_statusCard).toList()),
+            ),
+            const SizedBox(height: 16),
+            _section(
+              key: const ValueKey('dashboard-tasks-section'),
+              title: 'Задачи',
+              subtitle:
+                  'Текущая очередь · период и филиал к этому показателю не применяются',
+              loading: _tasksLoading,
+              error: _tasksError,
+              onRetry: _loadTasks,
+              child: _taskSummary(),
+            ),
+            if (_canReadSchoolFinance) ...[
+              const SizedBox(height: 16),
+              _section(
+                key: const ValueKey('dashboard-finance-section'),
+                title: 'Финансы школы',
+                subtitle: 'Выручка и расходы за выбранный период и филиал',
+                loading: _financeLoading,
+                error: _financeError,
+                onRetry: _loadFinance,
+                child: financeRows.isEmpty
+                    ? const Text('За выбранный период финансовых данных нет')
+                    : _financeChart(financeRows),
+              ),
+            ],
+            if (_exportStatus != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _exportStatus!,
+                key: const ValueKey('report-export-progress'),
+              ),
+            ],
+            if (_exportError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Ошибка экспорта: $_exportError',
+                key: const ValueKey('report-export-error'),
+                style: const TextStyle(color: AppColor.danger),
+              ),
+            ],
           ],
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        key: const ValueKey('reporting-content'),
-        padding: const EdgeInsets.all(16),
-        children: [
-          _header(context),
-          const SizedBox(height: 16),
-          _lessonCard(),
-          const SizedBox(height: 16),
-          Text(
-            'Статусы клиентов',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          ...statusItems.map(_statusCard),
-          if (_canReadSchoolFinance) ...[
-            const SizedBox(height: 20),
-            Text(
-              'Финансы школы',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            ...financeRows.map(_financeRow),
-          ],
-          if (_exportStatus != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              _exportStatus!,
-              key: const ValueKey('report-export-progress'),
-            ),
-          ],
-          if (_exportError != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Ошибка экспорта: $_exportError',
-              key: const ValueKey('report-export-error'),
-              style: const TextStyle(color: AppColor.danger),
-            ),
-          ],
-        ],
       ),
     );
+  }
+
+  Widget _section({
+    required Key key,
+    required String title,
+    required String subtitle,
+    required bool loading,
+    required Object? error,
+    required Future<void> Function() onRetry,
+    required Widget child,
+  }) {
+    return Card(
+      key: key,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (loading)
+              const Center(
+                child: SizedBox.square(
+                  dimension: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else if (error != null)
+              Row(
+                children: [
+                  const Icon(Icons.error_outline, color: AppColor.danger),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('Не удалось загрузить раздел')),
+                  TextButton(
+                    onPressed: onRetry,
+                    child: const Text('Повторить'),
+                  ),
+                ],
+              )
+            else
+              child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _taskSummary() {
+    final counters = _stringMap(_tasks['counters']);
+    final open = _int(counters['open']);
+    final overdue = _int(counters['overdue']);
+    return Wrap(
+      spacing: 24,
+      runSpacing: 8,
+      children: [Text('Открыто: $open'), Text('Просрочено: $overdue')],
+    );
+  }
+
+  Widget _financeChart(List<Map<String, dynamic>> rows) {
+    final max = rows
+        .map((row) {
+          final revenue =
+              BigInt.tryParse(row['revenueMinor']?.toString() ?? '') ??
+              BigInt.zero;
+          final expenses =
+              BigInt.tryParse(row['expensesMinor']?.toString() ?? '') ??
+              BigInt.zero;
+          return revenue > expenses ? revenue : expenses;
+        })
+        .fold<BigInt>(BigInt.one, (value, item) => item > value ? item : value);
+    return Column(
+      children: rows.map((row) {
+        final revenue =
+            BigInt.tryParse(row['revenueMinor']?.toString() ?? '') ??
+            BigInt.zero;
+        final expenses =
+            BigInt.tryParse(row['expensesMinor']?.toString() ?? '') ??
+            BigInt.zero;
+        double ratio(BigInt value) => value.toDouble() / max.toDouble();
+        return InkWell(
+          onTap: () => _openFinanceRow(row),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Text(row['monthStart']?.toString() ?? '')),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Semantics(
+                  label: 'Выручка $revenue копеек',
+                  child: LinearProgressIndicator(
+                    value: ratio(revenue),
+                    minHeight: 8,
+                    color: AppColor.success,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Semantics(
+                  label: 'Расходы $expenses копеек',
+                  child: LinearProgressIndicator(
+                    value: ratio(expenses),
+                    minHeight: 8,
+                    color: AppColor.danger,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  void _openFinanceRow(Map<String, dynamic> row) {
+    final link = EntityLink.fromJson(_stringMap(row['link']));
+    if (widget.onOpenEntity != null) {
+      widget.onOpenEntity!(link);
+    } else {
+      setState(() => _financeDetail = row);
+    }
   }
 
   Widget _header(BuildContext context) {
@@ -339,7 +667,10 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text('Отчёты', style: Theme.of(context).textTheme.headlineSmall),
+        Text(
+          'Единый dashboard',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
         OutlinedButton.icon(
           onPressed: _exporting
               ? null
@@ -387,37 +718,9 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
         title: Text(item['label']?.toString() ?? 'Без статуса'),
         subtitle: Text(item['clientType']?.toString() ?? ''),
         trailing: Text('${_int(item['count'])}'),
-        onTap: rawLink.isEmpty ? null : () => _openDrilldown(rawLink),
-      ),
-    );
-  }
-
-  Widget _financeRow(Map<String, dynamic> row) {
-    final revenue =
-        BigInt.tryParse(row['revenueMinor']?.toString() ?? '') ?? BigInt.zero;
-    final expenses =
-        BigInt.tryParse(row['expensesMinor']?.toString() ?? '') ?? BigInt.zero;
-    final formatter = NumberFormat.currency(
-      locale: 'ru',
-      symbol: '₽',
-      decimalDigits: 2,
-    );
-    return Card(
-      child: ListTile(
-        title: Text(row['monthStart']?.toString() ?? ''),
-        subtitle: Text(
-          'Выручка ${formatter.format(revenue.toDouble() / 100)} · '
-          'Расходы ${formatter.format(expenses.toDouble() / 100)}',
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          final link = EntityLink.fromJson(_stringMap(row['link']));
-          if (widget.onOpenEntity != null) {
-            widget.onOpenEntity!(link);
-          } else {
-            setState(() => _financeDetail = row);
-          }
-        },
+        onTap: rawLink.isEmpty
+            ? null
+            : () => _openDrilldown(rawLink, expectedCount: _int(item['count'])),
       ),
     );
   }

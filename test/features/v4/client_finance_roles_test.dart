@@ -469,7 +469,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final initialReports = count(reportsApi, '/crm/reports/finance');
+      final initialReports = count(reportsApi, '/analytics/v4/school-finance');
 
       reportEvents.add(
         const CrmChangedEvent(entity: 'finance', action: 'updated'),
@@ -477,7 +477,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 850));
       await tester.pumpAndSettle();
-      expect(count(reportsApi, '/crm/reports/finance'), initialReports + 1);
+      expect(
+        count(reportsApi, '/analytics/v4/school-finance'),
+        initialReports + 1,
+      );
     },
   );
 }

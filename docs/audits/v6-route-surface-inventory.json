@@ -3,8 +3,8 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 272,
-    "production_reachable_files": 261,
+    "dart_files": 270,
+    "production_reachable_files": 259,
     "go_routes": 21,
     "screens": 20,
     "production_screens": 20,
@@ -1020,7 +1020,7 @@
         "retry": false
       },
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 502
+      "line": 505
     },
     {
       "kind": "dialog",

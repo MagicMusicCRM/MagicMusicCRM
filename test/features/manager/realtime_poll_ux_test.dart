@@ -181,13 +181,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final initialReports = api.count('/crm/reports/finance');
+    final initialReports = api.count('/analytics/v4/school-finance');
     expect(initialReports, 1);
 
     realtime.add(const CrmChangedEvent(entity: 'lesson', action: 'poll'));
     await tester.pump(const Duration(milliseconds: 1000));
 
-    expect(api.count('/crm/reports/finance'), initialReports);
+    expect(api.count('/analytics/v4/school-finance'), initialReports);
   });
 
   testWidgets('StudentsBoardWidget ignores fallback realtime poll refreshes', (

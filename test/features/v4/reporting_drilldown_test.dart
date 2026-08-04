@@ -8,10 +8,33 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
 
 void main() {
+  test('dashboard filter restores from workspace and direct-link state', () {
+    final restored = DashboardFilter.fromContext(
+      ContextViewState(
+        filters: {
+          'dashboardFrom': '2026-06-01T00:00:00.000',
+          'dashboardTo': '2026-06-30T00:00:00.000',
+          'branchId': '11111111-1111-4111-8111-111111111111',
+        },
+      ),
+      const {'branchId': '22222222-2222-4222-8222-222222222222'},
+    );
+
+    expect(restored.from, DateTime(2026, 6, 1));
+    expect(restored.to, DateTime(2026, 6, 30));
+    expect(restored.branchId, '22222222-2222-4222-8222-222222222222');
+    expect(
+      DashboardFilter.fromContext(restored.toContextViewState(), null),
+      restored,
+    );
+  });
+
   testWidgets('manager opens exact status drilldown and restores report', (
     tester,
   ) async {
@@ -60,6 +83,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(find.text('Финансы школы'), 300);
     expect(find.text('Финансы школы'), findsOneWidget);
     await tester.tap(find.text('2026-07-01'));
     await tester.pumpAndSettle();
@@ -77,6 +101,7 @@ void main() {
     expect(api.jobPolls, greaterThanOrEqualTo(1));
     expect(filename, 'client-status.xlsx');
     expect(openedBytes, [0x50, 0x4b, 0x03, 0x04]);
+    await tester.scrollUntilVisible(find.text('Файл готов'), 300);
     expect(find.text('Файл готов'), findsOneWidget);
   });
 
@@ -86,17 +111,17 @@ void main() {
     final waitingApi = _ReportingApi(wait: true);
     await tester.pumpWidget(_app(waitingApi, role: 'manager'));
     await tester.pump();
-    expect(find.byKey(const ValueKey('reporting-loading')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
     waitingApi.release();
     await tester.pumpAndSettle();
 
     await tester.pumpWidget(_app(_ReportingApi(empty: true), role: 'manager'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('reporting-empty')), findsOneWidget);
+    expect(find.text('За выбранный период клиентов нет'), findsOneWidget);
 
     await tester.pumpWidget(_app(_ReportingApi(fail: true), role: 'manager'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('reporting-error')), findsOneWidget);
+    expect(find.text('Не удалось загрузить раздел'), findsNWidgets(3));
 
     await tester.pumpWidget(_app(_ReportingApi(), role: 'admin'));
     await tester.pumpAndSettle();
@@ -114,6 +139,104 @@ void main() {
     }
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+  });
+
+  testWidgets('dashboard sections share one normalized filter', (tester) async {
+    final api = _ReportingApi();
+    final filter = DashboardFilter(
+      from: DateTime(2026, 7, 1),
+      to: DateTime(2026, 7, 31),
+      branchId: '11111111-1111-4111-8111-111111111111',
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicCrmServiceProvider.overrideWithValue(MagicCrmService(api)),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ReportingV4Panel(role: 'director', filter: filter),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final path in const [
+      '/analytics/v4/client-status/summary',
+      '/analytics/v4/lesson-success',
+      '/analytics/v4/school-finance',
+    ]) {
+      for (final entry in filter.apiFilter.entries) {
+        expect(
+          api.queries[path],
+          containsPair(entry.key, entry.value),
+          reason: path,
+        );
+      }
+    }
+    expect(api.queries['/crm/shared-tasks'], {'state': 'open', 'limit': 1});
+  });
+
+  testWidgets('one failed section keeps the rest of dashboard usable', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        _ReportingApi(failPath: '/analytics/v4/lesson-success'),
+        role: 'manager',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Новые'), findsOneWidget);
+    expect(find.text('Открыто: 3'), findsOneWidget);
+    expect(find.text('Не удалось загрузить раздел'), findsOneWidget);
+  });
+
+  testWidgets('forbidden dashboard roles issue no report requests', (
+    tester,
+  ) async {
+    for (final role in const ['client', 'teacher', 'admin']) {
+      final api = _ReportingApi();
+      await tester.pumpWidget(_app(api, role: role));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('reporting-forbidden')), findsOneWidget);
+      expect(api.queries, isEmpty, reason: role);
+    }
+  });
+
+  testWidgets('capability snapshot removes finance before providers load', (
+    tester,
+  ) async {
+    final api = _ReportingApi();
+    final snapshot = CapabilitySnapshot(
+      accountId: 'manager-account',
+      role: 'manager',
+      accessVersion: 4,
+      capabilities: const {'report.status.read', 'workflow.task.read'},
+      scopes: const {'branch': 'assigned'},
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicCrmServiceProvider.overrideWithValue(MagicCrmService(api)),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ReportingV4Panel(role: 'director', accessSnapshot: snapshot),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('dashboard-finance-section')),
+      findsNothing,
+    );
+    expect(api.queries, isNot(contains('/analytics/v4/school-finance')));
+    expect(api.queries, contains('/analytics/v4/client-status/summary'));
   });
 }
 
@@ -144,17 +267,17 @@ class _ReportingApi extends MagicApiClient {
     this.fail = false,
     this.wait = false,
     this.asyncExport = false,
-  }) : super(
-         baseUrl: 'http://localhost',
-         tokenStore: MemoryMagicTokenStore(),
-       );
+    this.failPath,
+  }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final bool empty;
   final bool fail;
   final bool wait;
   final bool asyncExport;
+  final String? failPath;
   final _gate = Completer<void>();
   Map<String, dynamic>? lastListFilter;
+  final Map<String, Map<String, dynamic>> queries = {};
   int jobPolls = 0;
 
   void release() {
@@ -168,9 +291,10 @@ class _ReportingApi extends MagicApiClient {
     bool authenticated = true,
   }) async {
     if (wait) await _gate.future;
-    if (fail) {
+    if (fail || path == failPath) {
       throw const MagicApiException(message: 'network', statusCode: 500);
     }
+    queries[path] = Map<String, dynamic>.from(queryParameters ?? const {});
     if (path == '/analytics/v4/client-status/summary') {
       return <String, dynamic>{
             'total': empty ? 0 : 2,
@@ -181,7 +305,7 @@ class _ReportingApi extends MagicApiClient {
                       'clientType': 'lead',
                       'status': 'new',
                       'label': 'Новые',
-                      'count': 2,
+                      'count': 1,
                       'drilldown': {
                         'entityType': 'client_status_list',
                         'entityId': 'lead:new',
@@ -238,6 +362,13 @@ class _ReportingApi extends MagicApiClient {
                       },
                     },
                   ],
+          }
+          as T;
+    }
+    if (path == '/crm/shared-tasks') {
+      return <String, dynamic>{
+            'items': <dynamic>[],
+            'counters': {'open': empty ? 0 : 3, 'overdue': empty ? 0 : 1},
           }
           as T;
     }

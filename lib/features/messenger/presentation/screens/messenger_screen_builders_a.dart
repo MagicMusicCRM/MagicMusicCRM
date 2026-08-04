@@ -280,6 +280,9 @@ extension _MessengerBuildersA on _MessengerScreenState {
       7 when isDesktop && _hasManagerAccess => ReportsWidget(
         role: widget.role,
         initialTab: _selectedReportsTab,
+        initialLink: widget.initialLink,
+        initialViewState: widget.initialViewState,
+        accessSnapshot: _accessSnapshot,
       ),
       _ => _buildMessengerShell(context),
     };

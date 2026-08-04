@@ -26,10 +26,11 @@ class _FakeApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     return <String, dynamic>{
-      'items': <dynamic>[],
-      'monthly': <dynamic>[],
-      'summary': <String, dynamic>{},
-    } as T;
+          'items': <dynamic>[],
+          'monthly': <dynamic>[],
+          'summary': <String, dynamic>{},
+        }
+        as T;
   }
 }
 
@@ -80,10 +81,10 @@ void main() {
     final key = GlobalKey<_RebuildableState>();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          magicApiClientProvider.overrideWithValue(_FakeApiClient()),
-        ],
-        child: MaterialApp(home: Scaffold(body: _Rebuildable(key: key))),
+        overrides: [magicApiClientProvider.overrideWithValue(_FakeApiClient())],
+        child: MaterialApp(
+          home: Scaffold(body: _Rebuildable(key: key)),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -93,10 +94,10 @@ void main() {
     final controller = tester.widget<TabBar>(find.byType(TabBar)).controller!;
     expect(controller.index, 0);
 
-    // Move to «Управление» (index 3), as a tab tap would.
-    controller.index = 3;
+    // Move to «Управление» (index 2), as a tab tap would.
+    controller.index = 2;
     await tester.pump();
-    expect(controller.index, 3);
+    expect(controller.index, 2);
 
     // Force a parent rebuild with the SAME initialTab — the realtime-event
     // scenario that used to yank the tab back.
@@ -105,7 +106,7 @@ void main() {
 
     expect(
       controller.index,
-      3,
+      2,
       reason: 'a rebuild with an unchanged initialTab must not reset the tab',
     );
   });
