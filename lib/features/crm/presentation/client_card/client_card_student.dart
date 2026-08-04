@@ -87,59 +87,73 @@ extension _ClientCardStudent on _ClientCardState {
   }
 
   // ── Student tab: Занятия (flat list; Phase 5 adds past/upcoming) ──────────
-  Widget _buildLessonsTab(ColorScheme cs) {
+  Widget _buildLessonsTab(ColorScheme cs, {required bool canWriteSchedule}) {
     return _studentGuard(cs, () {
-      if (_lessons.isEmpty) {
-        return Center(
-          child: Text(
-            'Занятий не найдено',
-            style: TextStyle(color: cs.onSurfaceVariant),
-          ),
-        );
-      }
-
-      // Split into «Предстоящие» (scheduled_at >= now, ascending) and
-      // «Прошедшие» (scheduled_at < now, descending). Lessons without a parsable
-      // time fold into «Прошедшие» so they are never silently dropped.
       final now = DateTime.now();
       final upcoming = <Lesson>[];
       final past = <Lesson>[];
-      for (final l in _lessons) {
-        final dt = DateTime.tryParse(l.scheduledAt ?? '');
-        if (dt != null && !dt.isBefore(now)) {
-          upcoming.add(l);
+      for (final lesson in _lessons) {
+        final date = DateTime.tryParse(lesson.scheduledAt ?? '');
+        if (date != null && !date.isBefore(now)) {
+          upcoming.add(lesson);
         } else {
-          past.add(l);
+          past.add(lesson);
         }
       }
-      int byTime(Lesson a, Lesson b) {
-        final ad = DateTime.tryParse(a.scheduledAt ?? '');
-        final bd = DateTime.tryParse(b.scheduledAt ?? '');
-        if (ad == null && bd == null) return 0;
-        if (ad == null) return 1;
-        if (bd == null) return -1;
-        return ad.compareTo(bd);
+      int byTime(Lesson left, Lesson right) {
+        final leftDate = DateTime.tryParse(left.scheduledAt ?? '');
+        final rightDate = DateTime.tryParse(right.scheduledAt ?? '');
+        if (leftDate == null && rightDate == null) return 0;
+        if (leftDate == null) return 1;
+        if (rightDate == null) return -1;
+        return leftDate.compareTo(rightDate);
       }
 
-      upcoming.sort(byTime); // ascending (soonest first)
-      past.sort((a, b) => byTime(b, a)); // descending (most recent first)
+      upcoming.sort(byTime);
+      past.sort((left, right) => byTime(right, left));
 
       return ListView(
         padding: const EdgeInsets.all(AppSpace.xl),
         children: [
-          if (upcoming.isNotEmpty) ...[
-            _sectionTitle('Предстоящие'),
-            ...upcoming.map(
-              (l) => _lessonRow(cs, l, onOpenSchedule: _openScheduleForLesson),
-            ),
-          ],
-          if (upcoming.isNotEmpty && past.isNotEmpty)
-            const SizedBox(height: AppSpace.md),
-          if (past.isNotEmpty) ...[
-            _sectionTitle('Прошедшие'),
-            ...past.map(
-              (l) => _lessonRow(cs, l, onOpenSchedule: _openScheduleForLesson),
-            ),
+          StudentScheduleSection(
+            clientType: 'student',
+            clientId: _studentId,
+            lessons: _lessons.map((lesson) => lesson.raw).toList(),
+            branches: _branches,
+            defaultBranchId: _clientBranchId,
+            legacyPreference: _customDataForEntity(
+              'students',
+            )['preferredSchedule']?.toString(),
+            canWrite: canWriteSchedule,
+            onChanged: _fetchStudentData,
+          ),
+          const SizedBox(height: AppSpace.xl),
+          _sectionTitle('Фактические занятия'),
+          if (_lessons.isEmpty)
+            _emptyHint(cs, 'Занятий пока нет')
+          else ...[
+            if (upcoming.isNotEmpty) ...[
+              _sectionTitle('Предстоящие'),
+              ...upcoming.map(
+                (lesson) => _lessonRow(
+                  cs,
+                  lesson,
+                  onOpenSchedule: _openScheduleForLesson,
+                ),
+              ),
+            ],
+            if (upcoming.isNotEmpty && past.isNotEmpty)
+              const SizedBox(height: AppSpace.md),
+            if (past.isNotEmpty) ...[
+              _sectionTitle('Прошедшие'),
+              ...past.map(
+                (lesson) => _lessonRow(
+                  cs,
+                  lesson,
+                  onOpenSchedule: _openScheduleForLesson,
+                ),
+              ),
+            ],
           ],
         ],
       );

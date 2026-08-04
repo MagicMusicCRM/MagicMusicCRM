@@ -108,6 +108,149 @@ void main() {
     expect(api.getRequests, isEmpty);
   });
 
+  testWidgets('lead preferred schedule lives only in canonical Lessons', (
+    tester,
+  ) async {
+    const lead = {
+      'id': 'lead-1',
+      'firstName': 'Пётр',
+      'lastName': 'Соколов',
+      'customData': {'preferredSchedule': 'Вечером по будням'},
+    };
+    final api = FakeCardApiClient(role: 'admin', lead: lead);
+    await tester.pumpWidget(
+      _app(
+        api,
+        const ClientCard(
+          lead: {'id': 'lead-1'},
+          entityType: 'lead',
+          routed: true,
+          capabilitySnapshot: CapabilitySnapshot(
+            accountId: 'account-1',
+            role: 'admin',
+            accessVersion: 1,
+            capabilities: {
+              'crm.client.read.basic',
+              'schedule.lesson.read.assigned',
+              'schedule.lesson.write',
+            },
+            scopes: {'schedule': 'branch'},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Предпочтительное расписание'), findsNothing);
+    await tester.tap(find.text('Занятия'));
+    await tester.pumpAndSettle();
+    expect(find.text('Предпочтительное расписание'), findsOneWidget);
+    expect(find.textContaining('Вечером по будням'), findsOneWidget);
+    final call = api.getCalls.singleWhere(
+      (request) => request.path == '/crm/schedule-series',
+    );
+    expect(call.query, {'clientType': 'lead', 'clientId': 'lead-1'});
+  });
+
+  testWidgets('preferred schedule creates branch-scoped weekday slots', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    const lead = {
+      'id': 'lead-1',
+      'firstName': 'Пётр',
+      'branchId': 'branch-a',
+      'customData': <String, dynamic>{},
+    };
+    final api = FakeCardApiClient(
+      role: 'admin',
+      lead: lead,
+      branches: const [
+        {'id': 'branch-a', 'name': 'Сокол'},
+      ],
+      teachers: const [
+        {'id': 'teacher-a', 'firstName': 'Мария', 'lastName': 'Иванова'},
+      ],
+      rooms: const [
+        {
+          'id': 'room-a',
+          'branchId': 'branch-a',
+          'branchName': 'Сокол',
+          'name': 'Класс 1',
+        },
+      ],
+    );
+    await tester.pumpWidget(
+      _app(
+        api,
+        const ClientCard(
+          lead: {'id': 'lead-1'},
+          entityType: 'lead',
+          routed: true,
+          initialSection: 'lessons',
+          capabilitySnapshot: CapabilitySnapshot(
+            accountId: 'account-1',
+            role: 'admin',
+            accessVersion: 1,
+            capabilities: {
+              'crm.client.read.basic',
+              'schedule.lesson.read.assigned',
+              'schedule.lesson.write',
+            },
+            scopes: {'schedule': 'branch'},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Добавить предпочтение'));
+    await tester.pumpAndSettle();
+    final initialDay = DateTime.now().weekday;
+    final addedDay = initialDay == DateTime.monday
+        ? DateTime.tuesday
+        : DateTime.monday;
+    await tester.tap(
+      find.byKey(ValueKey('preferred-schedule-weekday-$addedDay')),
+    );
+    await tester.tap(find.text('Выберите педагога'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Мария Иванова'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выберите аудиторию'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Класс 1'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('preferred-schedule-lessons-per-day')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('preferred-schedule-save')),
+    );
+    await tester.tap(find.byKey(const ValueKey('preferred-schedule-save')));
+    await tester.pumpAndSettle();
+
+    final creates = api.postRequests
+        .where((request) => request.path == '/crm/schedule-series')
+        .toList();
+    expect(creates, hasLength(4));
+    for (final request in creates) {
+      expect(request.data['clientRef'], {'type': 'lead', 'id': 'lead-1'});
+      expect(request.data['branchId'], 'branch-a');
+      expect(request.data['validUntil'], isNotNull);
+    }
+    expect(creates.map((request) => request.data['beginTime']).toSet(), {
+      '15:00',
+      '16:00',
+    });
+    await tester.pump(const Duration(seconds: 4));
+  });
+
   testWidgets('production desktop host mounts the routed client workspace', (
     tester,
   ) async {

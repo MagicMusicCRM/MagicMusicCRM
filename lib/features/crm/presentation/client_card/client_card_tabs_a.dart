@@ -468,14 +468,6 @@ extension _ClientCardTabsA on _ClientCardState {
                 ),
               ]),
             ],
-            if (_studentId.isNotEmpty) ...[
-              const SizedBox(height: AppSpace.lg),
-              StudentScheduleSection(
-                studentId: _studentId,
-                lessons: _lessons.map((l) => l.raw).toList(),
-                onChanged: _fetchStudentData,
-              ),
-            ],
             if (_balance != null) ...[
               const SizedBox(height: AppSpace.lg),
               _buildLedgerSection(cs),

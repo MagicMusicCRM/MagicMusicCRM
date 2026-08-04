@@ -29,6 +29,7 @@ import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/models/subscription.dart';
 import 'package:magic_music_crm/core/models/lesson.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'client_card_aggregation.dart';
 import 'client_card_staff_api.dart';
 import 'client_archive_button.dart';
@@ -74,12 +75,14 @@ class ClientCard extends ConsumerStatefulWidget {
     this.initialSection = 'overview',
     this.onSectionChanged,
     this.onClose,
+    this.capabilitySnapshot,
   });
 
   final bool routed;
   final String initialSection;
   final ValueChanged<String>? onSectionChanged;
   final ValueChanged<bool?>? onClose;
+  final CapabilitySnapshot? capabilitySnapshot;
 
   @override
   ConsumerState<ClientCard> createState() => _ClientCardState();
@@ -160,6 +163,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   static const List<(IconData, String, String)> _leadTabs = [
     (Icons.dashboard_outlined, 'Обзор', 'overview'),
+    (Icons.event_note_rounded, 'Занятия', 'lessons'),
     (Icons.history_rounded, 'История и задачи', 'history_tasks'),
     (Icons.people_alt_outlined, 'Контакты', 'contacts'),
     (Icons.folder_outlined, 'Документы', 'documents'),
@@ -336,6 +340,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     // справочника (GET /api/admin/staff); своя строка-пикер.
     'responsible',
     'responsibleUserId',
+    'preferredSchedule',
   };
 
   // `blacklisted` здесь больше нет: ✔ решение владельца 17.07 сделало чёрный
@@ -427,6 +432,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final cs = Theme.of(context).colorScheme;
     final actorRole = ref.watch(releaseGateStatusProvider).asData?.value.role;
     final canReadClientFinance = crmHasClientCardFinanceAccess(actorRole ?? '');
+    final canWriteSchedule =
+        widget.capabilitySnapshot?.allows('schedule.lesson.write') ??
+        crmHasManagerAccess(actorRole ?? '');
     final tabs = _tabsFor(canReadClientFinance: canReadClientFinance);
     final visibleTabIndex = tabs.indexWhere(
       (tab) => tab.$3 == _selectedSection,
@@ -469,6 +477,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                     curStatus,
                     tab.$3,
                     canReadClientFinance: canReadClientFinance,
+                    canWriteSchedule: canWriteSchedule,
                   ),
               ],
             ),

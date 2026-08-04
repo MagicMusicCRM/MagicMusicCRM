@@ -57,7 +57,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 648
+      "line": 652
     },
     {
       "verb": "POST",
@@ -66,7 +66,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 701
+      "line": 712
     },
     {
       "verb": "PATCH",
@@ -75,7 +75,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 729
+      "line": 740
     },
     {
       "verb": "DELETE",
@@ -84,7 +84,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 739
+      "line": 750
     },
     {
       "verb": "GET",

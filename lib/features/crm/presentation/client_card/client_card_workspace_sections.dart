@@ -6,10 +6,15 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     StatusRecord currentStatus,
     String section, {
     required bool canReadClientFinance,
+    required bool canWriteSchedule,
   }) {
     return switch (section) {
       'overview' => _buildClientInfoTab(cs, currentStatus),
-      'lessons' when _isStudent => _buildLessonsTab(cs),
+      'lessons' when _isStudent => _buildLessonsTab(
+        cs,
+        canWriteSchedule: canWriteSchedule,
+      ),
+      'lessons' => _buildLeadLessonsTab(cs, canWriteSchedule: canWriteSchedule),
       'payments' when _isStudent && canReadClientFinance => _buildPaymentsTab(
         cs,
       ),
@@ -24,6 +29,32 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       'custom_fields' => _buildCustomFieldsTab(cs),
       _ => _buildClientInfoTab(cs, currentStatus),
     };
+  }
+
+  Widget _buildLeadLessonsTab(
+    ColorScheme cs, {
+    required bool canWriteSchedule,
+  }) {
+    return ListView(
+      padding: const EdgeInsets.all(AppSpace.xl),
+      children: [
+        StudentScheduleSection(
+          clientType: 'lead',
+          clientId: _leadId,
+          lessons: const [],
+          branches: _branches,
+          defaultBranchId: _clientBranchId,
+          legacyPreference: _customDataForEntity(
+            'leads',
+          )['preferredSchedule']?.toString(),
+          canWrite: canWriteSchedule,
+          onChanged: () {},
+        ),
+        const SizedBox(height: AppSpace.lg),
+        _sectionTitle('Фактические занятия'),
+        _emptyHint(cs, 'Занятия появятся после создания постоянной серии'),
+      ],
+    );
   }
 
   Widget _buildHistoryAndTasksTab(ColorScheme cs) {

@@ -165,6 +165,7 @@ class ClientCardRouteSurface extends StatelessWidget {
         entityType: entityType,
         routed: true,
         initialSection: routedSection,
+        capabilitySnapshot: snapshot,
         onSectionChanged: sectionChanged,
         onClose: close,
       ),

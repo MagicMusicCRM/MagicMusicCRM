@@ -5,8 +5,8 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
-import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
-import 'package:magic_music_crm/core/widgets/searchable_select.dart';
+
+import 'preferred_schedule_editor.dart';
 
 /// KVA-236: «График занятий» в карточке ученика — серии постоянного
 /// расписания (UX HolliHop image2/3: строка «день · время · педагог ·
@@ -14,14 +14,24 @@ import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 /// серые, будущие зелёные, пропуски тёмные с красным уголком; tooltip со
 /// статусом и заметкой).
 class StudentScheduleSection extends ConsumerStatefulWidget {
-  final String studentId;
+  final String clientType;
+  final String clientId;
   final List<Map<String, dynamic>> lessons;
+  final List<Map<String, dynamic>> branches;
+  final String? defaultBranchId;
+  final String? legacyPreference;
+  final bool canWrite;
   final VoidCallback onChanged;
 
   const StudentScheduleSection({
     super.key,
-    required this.studentId,
+    required this.clientType,
+    required this.clientId,
     required this.lessons,
+    required this.branches,
+    required this.defaultBranchId,
+    required this.canWrite,
+    this.legacyPreference,
     required this.onChanged,
   });
 
@@ -44,10 +54,22 @@ class _StudentScheduleSectionState
     _seriesFuture = _loadSeries();
   }
 
+  @override
+  void didUpdateWidget(covariant StudentScheduleSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.clientType != widget.clientType ||
+        oldWidget.clientId != widget.clientId) {
+      _seriesFuture = _loadSeries();
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _loadSeries() {
     return ref
         .read(magicCrmServiceProvider)
-        .listScheduleSeries(studentId: widget.studentId);
+        .listScheduleSeries(
+          clientType: widget.clientType,
+          clientId: widget.clientId,
+        );
   }
 
   void _reloadSeries() {
@@ -67,26 +89,43 @@ class _StudentScheduleSectionState
           children: [
             const Expanded(
               child: Text(
-                'График занятий',
+                'Предпочтительное расписание',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
               ),
             ),
-            TextButton.icon(
-              onPressed: () => _openEditor(),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColor.gold,
-                visualDensity: VisualDensity.compact,
-                textStyle: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+            if (widget.canWrite)
+              TextButton.icon(
+                onPressed: () => _openEditor(),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColor.gold,
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
                 ),
+                icon: const Icon(Icons.add_rounded, size: 15),
+                label: const Text('Добавить предпочтение'),
               ),
-              icon: const Icon(Icons.add_rounded, size: 15),
-              label: const Text('Добавить'),
-            ),
           ],
         ),
         const SizedBox(height: 4),
+        if ((widget.legacyPreference ?? '').trim().isNotEmpty) ...[
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: AppSpace.sm),
+            padding: const EdgeInsets.all(AppSpace.sm),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              border: Border.all(color: cs.outlineVariant),
+            ),
+            child: Text(
+              'Ранее записанное пожелание: ${widget.legacyPreference!.trim()}',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+          ),
+        ],
         FutureBuilder<List<Map<String, dynamic>>>(
           key: ValueKey('series-$_refreshKey'),
           future: _seriesFuture,
@@ -228,20 +267,22 @@ class _StudentScheduleSectionState
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ),
-          IconButton(
-            onPressed: () => _openEditor(series: s),
-            icon: const Icon(Icons.edit_outlined, size: 16),
-            color: AppColor.gold,
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Изменить (со следующей даты)',
-          ),
-          IconButton(
-            onPressed: () => _stopSeries(s),
-            icon: const Icon(Icons.stop_circle_outlined, size: 16),
-            color: cs.error,
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Остановить серию',
-          ),
+          if (widget.canWrite) ...[
+            IconButton(
+              onPressed: () => _openEditor(series: s),
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              color: AppColor.gold,
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Изменить (со следующей даты)',
+            ),
+            IconButton(
+              onPressed: () => _stopSeries(s),
+              icon: const Icon(Icons.stop_circle_outlined, size: 16),
+              color: cs.error,
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Остановить серию',
+            ),
+          ],
         ],
       ),
     );
@@ -401,18 +442,18 @@ class _StudentScheduleSectionState
     List<Map<String, dynamic>> teachers;
     List<Map<String, dynamic>> rooms;
     try {
-      final [t, r] = await Future.wait([
+      final [teacherRows, roomRows] = await Future.wait([
         crm.listTeachers(limit: 100),
         crm.listRooms(limit: 100),
       ]);
-      teachers = List<Map<String, dynamic>>.from(t);
-      rooms = List<Map<String, dynamic>>.from(r);
-    } catch (e) {
+      teachers = List<Map<String, dynamic>>.from(teacherRows);
+      rooms = List<Map<String, dynamic>>.from(roomRows);
+    } catch (error) {
       if (mounted) {
         MagicToast.show(
           context,
-          'Не удалось загрузить данные',
-          detail: '$e',
+          'Не удалось загрузить справочники расписания',
+          detail: '$error',
           type: MagicToastType.danger,
         );
       }
@@ -421,260 +462,93 @@ class _StudentScheduleSectionState
     if (!mounted) return;
 
     final isEdit = series != null;
-    var weekday = isEdit
-        ? ((series['weekday'] as num?)?.toInt() ?? 1)
-        : DateTime.now().weekday;
-    var time = isEdit ? (series['begin_time'] ?? '15:00').toString() : '15:00';
-    var duration = isEdit
-        ? ((series['duration_minutes'] as num?)?.toInt() ?? 60)
-        : 60;
-    String? teacherId = isEdit ? series['teacher_id']?.toString() : null;
-    String? roomId = isEdit ? series['room_id']?.toString() : null;
-    // Создание: старт серии; правка: дата применения («со следующей даты»).
-    DateTime startDate = DateTime.now().add(const Duration(days: 1));
-    var infinite = isEdit ? series['valid_until'] == null : true;
-    DateTime? untilDate = isEdit && series['valid_until'] != null
-        ? DateTime.tryParse('${series['valid_until']}')
-        : null;
-
-    final cs = Theme.of(context).colorScheme;
-    final confirmed = await showMagicSheet<bool>(
+    final draft = await showMagicSheet<PreferredScheduleDraft>(
       context,
-      title: isEdit ? 'Изменить расписание' : 'Постоянное расписание',
+      title: isEdit
+          ? 'Изменить предпочтительное расписание'
+          : 'Добавить предпочтение',
       subtitle: isEdit
-          ? 'Правка применится с выбранной даты; прошедшие занятия не изменятся'
-          : 'Занятия будут создаваться автоматически',
+          ? 'Изменения применятся с выбранной даты'
+          : 'План хранится отдельно от списка фактических занятий',
       icon: Icons.event_repeat_rounded,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: weekday,
-                    decoration: const InputDecoration(
-                      labelText: 'День недели',
-                      isDense: true,
-                    ),
-                    items: [
-                      for (var i = 1; i <= 7; i++)
-                        DropdownMenuItem(
-                          value: i,
-                          child: Text(_weekdays[i - 1]),
-                        ),
-                    ],
-                    onChanged: (v) =>
-                        setSheetState(() => weekday = v ?? weekday),
-                  ),
-                ),
-                const SizedBox(width: AppSpace.sm),
-                Expanded(
-                  child: InkWell(
-                    onTap: () async {
-                      final parts = time.split(':');
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay(
-                          hour: int.tryParse(parts.first) ?? 15,
-                          minute: int.tryParse(parts.last) ?? 0,
-                        ),
-                      );
-                      if (picked != null) {
-                        setSheetState(
-                          () => time =
-                              '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}',
-                        );
-                      }
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Время',
-                        isDense: true,
-                      ),
-                      child: Text(time),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpace.sm),
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: duration,
-                    decoration: const InputDecoration(
-                      labelText: 'Мин.',
-                      isDense: true,
-                    ),
-                    items: const [30, 45, 60, 90, 120]
-                        .map(
-                          (d) => DropdownMenuItem(value: d, child: Text('$d')),
-                        )
-                        .toList(),
-                    onChanged: (v) =>
-                        setSheetState(() => duration = v ?? duration),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpace.md),
-            SearchablePickerField(
-              label: 'Педагог',
-              placeholder: 'Выберите педагога',
-              selectedId: teacherId,
-              items: [
-                for (final t in teachers)
-                  SearchableSelectItem(
-                    id: t['id'].toString(),
-                    label: '${t['first_name'] ?? ''} ${t['last_name'] ?? ''}'
-                        .trim(),
-                  ),
-              ],
-              onSelected: (item) => setSheetState(() => teacherId = item?.id),
-            ),
-            const SizedBox(height: AppSpace.md),
-            SearchablePickerField(
-              label: 'Аудитория',
-              placeholder: 'Выберите аудиторию',
-              selectedId: roomId,
-              items: [
-                for (final r in rooms)
-                  SearchableSelectItem(
-                    id: r['id'].toString(),
-                    label: r['name']?.toString() ?? '—',
-                  ),
-              ],
-              onSelected: (item) => setSheetState(() => roomId = item?.id),
-            ),
-            const SizedBox(height: AppSpace.md),
-            InkWell(
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: startDate,
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                );
-                if (picked != null) setSheetState(() => startDate = picked);
-              },
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: isEdit ? 'Применить с даты' : 'Начало занятий',
-                  isDense: true,
-                ),
-                child: Text(DateFormat('dd.MM.yyyy').format(startDate)),
-              ),
-            ),
-            const SizedBox(height: AppSpace.sm),
-            Row(
-              children: [
-                Checkbox(
-                  value: infinite,
-                  activeColor: AppColor.gold,
-                  onChanged: (v) => setSheetState(() => infinite = v ?? true),
-                ),
-                const Text('До бесконечности', style: TextStyle(fontSize: 13)),
-                const Spacer(),
-                if (!infinite)
-                  TextButton(
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: untilDate ?? startDate,
-                        firstDate: startDate,
-                        lastDate: DateTime.now().add(const Duration(days: 730)),
-                      );
-                      if (picked != null) {
-                        setSheetState(() => untilDate = picked);
-                      }
-                    },
-                    child: Text(
-                      untilDate == null
-                          ? 'Дата окончания…'
-                          : 'по ${DateFormat('dd.MM.yyyy').format(untilDate!)}',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
+      builder: (_) => PreferredScheduleEditor(
+        branches: widget.branches,
+        teachers: teachers,
+        rooms: rooms,
+        defaultBranchId: widget.defaultBranchId,
+        series: series,
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColor.gold,
-            foregroundColor: AppColor.onGold,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.control),
-            ),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          child: Text(isEdit ? 'Применить' : 'Создать'),
-        ),
-      ],
     );
-    if (confirmed != true) return;
+    if (draft == null || !mounted) return;
 
+    String slotTime(int index) {
+      final parts = draft.beginTime.split(':');
+      final totalMinutes =
+          (int.tryParse(parts.first) ?? 0) * 60 +
+          (int.tryParse(parts.last) ?? 0) +
+          draft.durationMinutes * index;
+      return '${(totalMinutes ~/ 60).toString().padLeft(2, '0')}:${(totalMinutes % 60).toString().padLeft(2, '0')}';
+    }
+
+    var saved = 0;
     try {
-      final dateStr = DateFormat('yyyy-MM-dd').format(startDate);
-      final untilStr = infinite || untilDate == null
-          ? null
-          : DateFormat('yyyy-MM-dd').format(untilDate!);
-      String? branchId;
-      for (final room in rooms) {
-        if (room['id']?.toString() == roomId) {
-          branchId = room['branch_id']?.toString();
-          break;
-        }
-      }
+      final validFrom = DateFormat('yyyy-MM-dd').format(draft.validFrom);
+      final validUntil = DateFormat('yyyy-MM-dd').format(draft.validUntil);
       if (isEdit) {
         await crm.updateScheduleSeries(
           series['id'].toString(),
-          teacherId: teacherId,
-          roomId: roomId,
-          weekday: weekday,
-          beginTime: time,
-          durationMinutes: duration,
-          validUntil: untilStr,
-          clearValidUntil: infinite,
-          effectiveFrom: dateStr,
+          teacherId: draft.teacherId,
+          roomId: draft.roomId,
+          weekday: draft.weekdays.first,
+          beginTime: draft.beginTime,
+          durationMinutes: draft.durationMinutes,
+          validUntil: validUntil,
+          effectiveFrom: validFrom,
+          notes: draft.notes,
         );
+        saved = 1;
       } else {
-        await crm.createScheduleSeries(
-          studentId: widget.studentId,
-          teacherId: teacherId,
-          roomId: roomId,
-          branchId: branchId,
-          weekday: weekday,
-          beginTime: time,
-          durationMinutes: duration,
-          validFrom: dateStr,
-          validUntil: untilStr,
-        );
+        final weekdays = draft.weekdays.toList()..sort();
+        for (final weekday in weekdays) {
+          for (var slot = 0; slot < draft.lessonsPerDay; slot++) {
+            await crm.createScheduleSeries(
+              clientType: widget.clientType,
+              clientId: widget.clientId,
+              branchId: draft.branchId,
+              teacherId: draft.teacherId,
+              roomId: draft.roomId,
+              weekday: weekday,
+              beginTime: slotTime(slot),
+              durationMinutes: draft.durationMinutes,
+              validFrom: validFrom,
+              validUntil: validUntil,
+              notes: draft.notes,
+            );
+            saved++;
+          }
+        }
       }
       if (mounted) {
         _reloadSeries();
         widget.onChanged();
         MagicToast.show(
           context,
-          isEdit ? 'Расписание обновлено' : 'Расписание создано',
+          isEdit ? 'Предпочтение обновлено' : 'Создано предпочтений: $saved',
           type: MagicToastType.success,
         );
       }
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
+        _reloadSeries();
+        widget.onChanged();
         MagicToast.show(
           context,
-          'Ошибка сохранения',
-          detail: '$e',
+          saved == 0
+              ? 'Не удалось сохранить предпочтение'
+              : 'Сохранено $saved; остальные не созданы',
+          detail: saved == 0
+              ? '$error'
+              : 'Обновите список перед повторной попыткой. $error',
           type: MagicToastType.danger,
         );
       }

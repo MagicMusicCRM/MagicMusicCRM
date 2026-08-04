@@ -3,8 +3,8 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 268,
-    "production_reachable_files": 261,
+    "dart_files": 269,
+    "production_reachable_files": 262,
     "go_routes": 21,
     "screens": 20,
     "production_screens": 20,
@@ -716,7 +716,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 685
+      "line": 559
     },
     {
       "kind": "magic-sheet",
@@ -732,7 +732,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 441
+      "line": 465
     },
     {
       "kind": "dialog",
@@ -748,7 +748,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 237
+      "line": 241
     },
     {
       "kind": "magic-sheet",

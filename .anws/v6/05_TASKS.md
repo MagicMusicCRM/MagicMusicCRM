@@ -222,7 +222,7 @@ flowchart TD
   - **Проверка:** Admin/Manager/Director + deny cases on 360/840/1200; API trace parity.
   - **Оценка:** 8 ч · **Зависимости:** INT-S3 · **Приоритет:** P0.
 
-- [ ] **V6-402** `[REQ-CLIENT-001]` — Перенести preferred schedule в section `Занятия`.
+- [x] **V6-402** `[REQ-CLIENT-001]` — Перенести preferred schedule в section `Занятия`.
   - **Работа:** remove duplicate Info placement; editor supports date range, weekdays, time/duration, lessons/day, description and effective scope through existing domain path.
   - **Критерий:** one canonical editor/list; default client branch; school option only when valid/capable; preferred plan remains distinct from actual lessons.
   - **Проверка:** CRUD + branch/school + validation + Back/dirty form tests.

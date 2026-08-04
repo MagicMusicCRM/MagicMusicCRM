@@ -637,11 +637,15 @@ extension MagicCrmSchedule on MagicCrmService {
 
   /// KVA-236: серии постоянного расписания.
   Future<List<Map<String, dynamic>>> listScheduleSeries({
+    String? clientType,
+    String? clientId,
     String? studentId,
     String? groupId,
     bool includeExpired = false,
   }) async {
     final queryParameters = <String, dynamic>{};
+    if (clientType != null) queryParameters['clientType'] = clientType;
+    if (clientId != null) queryParameters['clientId'] = clientId;
     if (studentId != null) queryParameters['studentId'] = studentId;
     if (groupId != null) queryParameters['groupId'] = groupId;
     if (includeExpired) queryParameters['includeExpired'] = 'true';
@@ -653,6 +657,8 @@ extension MagicCrmSchedule on MagicCrmService {
         .map(
           (item) => {
             'id': item['id'],
+            'client_type': item['clientType'],
+            'client_id': item['clientId'],
             'student_id': item['studentId'],
             'group_id': item['groupId'],
             'teacher_id': item['teacherId'],
@@ -673,6 +679,8 @@ extension MagicCrmSchedule on MagicCrmService {
   }
 
   Future<Map<String, dynamic>> createScheduleSeries({
+    String? clientType,
+    String? clientId,
     String? studentId,
     String? groupId,
     String? teacherId,
@@ -690,6 +698,9 @@ extension MagicCrmSchedule on MagicCrmService {
       'beginTime': beginTime,
       'validFrom': validFrom,
     };
+    if (clientType != null && clientId != null) {
+      data['clientRef'] = {'type': clientType, 'id': clientId};
+    }
     if (studentId != null) data['studentId'] = studentId;
     if (groupId != null) data['groupId'] = groupId;
     if (teacherId != null) data['teacherId'] = teacherId;

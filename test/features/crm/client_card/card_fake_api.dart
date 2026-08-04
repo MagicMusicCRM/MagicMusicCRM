@@ -15,6 +15,7 @@ typedef IdempotentCardCall = ({
   MagicMutationIdentity identity,
 });
 typedef CardPostCall = ({String path, Map<String, dynamic> data});
+typedef CardGetCall = ({String path, Map<String, dynamic> query});
 
 /// Фейк на шве API-клиента (НЕ `implements MagicCrmService` — его методы живут
 /// на extension'ах и резолвятся статически, так что такой фейк не был бы
@@ -30,6 +31,10 @@ class FakeCardApiClient extends MagicApiClient {
     this.studentSubscriptions = const [],
     this.studentAccounts = const [],
     this.studentMovements = const [],
+    this.branches = const [],
+    this.teachers = const [],
+    this.rooms = const [],
+    this.scheduleSeries = const [],
     this.replacementPreview,
     this.replacementResult,
     this.replacementFailures = 0,
@@ -53,6 +58,10 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> studentSubscriptions;
   final List<Map<String, dynamic>> studentAccounts;
   final List<Map<String, dynamic>> studentMovements;
+  final List<Map<String, dynamic>> branches;
+  final List<Map<String, dynamic>> teachers;
+  final List<Map<String, dynamic>> rooms;
+  final List<Map<String, dynamic>> scheduleSeries;
   final Map<String, dynamic>? replacementPreview;
   final Map<String, dynamic>? replacementResult;
   int replacementFailures;
@@ -64,6 +73,7 @@ class FakeCardApiClient extends MagicApiClient {
   Map<String, dynamic>? updateStudentBody;
   final List<String> requests = [];
   final List<String> getRequests = [];
+  final List<CardGetCall> getCalls = [];
   final List<CardPostCall> postRequests = [];
   final List<IdempotentCardCall> idempotentRequests = [];
   int studentCardLoadCount = 0;
@@ -75,6 +85,7 @@ class FakeCardApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     getRequests.add(path);
+    getCalls.add((path: path, query: {...?queryParameters}));
     if (path == '/legal/gate') {
       return <String, dynamic>{
             'role': role,
@@ -86,6 +97,18 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (path == '/settings/crm-custom-fields') {
       return <String, dynamic>{'fields': <dynamic>[]} as T;
+    }
+    if (path == '/crm/branches') {
+      return <String, dynamic>{'items': branches} as T;
+    }
+    if (path == '/crm/teachers') {
+      return <String, dynamic>{'items': teachers} as T;
+    }
+    if (path == '/crm/rooms') {
+      return <String, dynamic>{'items': rooms} as T;
+    }
+    if (path == '/crm/schedule-series') {
+      return <String, dynamic>{'items': scheduleSeries} as T;
     }
     if (path == '/admin/staff') {
       return <dynamic>[

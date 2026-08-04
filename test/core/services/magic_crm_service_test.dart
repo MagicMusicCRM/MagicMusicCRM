@@ -2758,6 +2758,47 @@ void main() {
       expect(adapter.requests.single.body['weekday'], DateTime.tuesday);
       expect(adapter.requests.single.body['beginTime'], '12:00');
     });
+
+    test(
+      'client preferred schedule uses typed clientRef and finite range',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/schedule-series',
+            statusCode: 201,
+            body: {'id': 'series-a'},
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        await service.createScheduleSeries(
+          clientType: 'lead',
+          clientId: 'lead-a',
+          teacherId: 'teacher-a',
+          roomId: 'room-a',
+          branchId: 'branch-a',
+          weekday: DateTime.monday,
+          beginTime: '15:00',
+          durationMinutes: 60,
+          validFrom: '2026-08-10',
+          validUntil: '2026-11-10',
+          notes: 'После школы',
+        );
+
+        expect(adapter.requests.single.body, {
+          'weekday': DateTime.monday,
+          'beginTime': '15:00',
+          'validFrom': '2026-08-10',
+          'clientRef': {'type': 'lead', 'id': 'lead-a'},
+          'teacherId': 'teacher-a',
+          'roomId': 'room-a',
+          'branchId': 'branch-a',
+          'durationMinutes': 60,
+          'validUntil': '2026-11-10',
+          'notes': 'После школы',
+        });
+      },
+    );
   });
 }
 
