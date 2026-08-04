@@ -228,7 +228,7 @@ flowchart TD
   - **Проверка:** CRUD + branch/school + validation + Back/dirty form tests.
   - **Оценка:** 7 ч · **Зависимости:** V6-401 · **Приоритет:** P0.
 
-- [ ] **V6-403** `[REQ-CLIENT-001, REQ-NAV-001]` — Добавить client Month/Week/Day calendar.
+- [x] **V6-403** `[REQ-CLIENT-001, REQ-NAV-001]` — Добавить client Month/Week/Day calendar.
   - **Работа:** actor-scoped viewport query, branch selector, selected-client green+marker, other visible lessons neutral gray, lifecycle/trial/conflict independent; lesson quick link.
   - **Критерий:** no unbounded school fetch or hidden client fields; mode/date/scope restore after linked navigation; non-color legend present.
   - **Проверка:** lifecycle × relation matrix, viewport/network assertions, Windows/Android drilldown.

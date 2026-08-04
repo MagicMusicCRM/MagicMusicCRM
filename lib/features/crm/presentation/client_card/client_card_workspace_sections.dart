@@ -6,15 +6,21 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     StatusRecord currentStatus,
     String section, {
     required bool canReadClientFinance,
+    required bool canReadSchedule,
     required bool canWriteSchedule,
   }) {
     return switch (section) {
       'overview' => _buildClientInfoTab(cs, currentStatus),
       'lessons' when _isStudent => _buildLessonsTab(
         cs,
+        canReadSchedule: canReadSchedule,
         canWriteSchedule: canWriteSchedule,
       ),
-      'lessons' => _buildLeadLessonsTab(cs, canWriteSchedule: canWriteSchedule),
+      'lessons' => _buildLeadLessonsTab(
+        cs,
+        canReadSchedule: canReadSchedule,
+        canWriteSchedule: canWriteSchedule,
+      ),
       'payments' when _isStudent && canReadClientFinance => _buildPaymentsTab(
         cs,
       ),
@@ -33,6 +39,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
 
   Widget _buildLeadLessonsTab(
     ColorScheme cs, {
+    required bool canReadSchedule,
     required bool canWriteSchedule,
   }) {
     return ListView(
@@ -51,8 +58,20 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
           onChanged: () {},
         ),
         const SizedBox(height: AppSpace.lg),
-        _sectionTitle('Фактические занятия'),
-        _emptyHint(cs, 'Занятия появятся после создания постоянной серии'),
+        ClientScheduleCalendar(
+          clientType: 'lead',
+          clientId: _leadId,
+          clientName: [
+            _clientFirstName,
+            _clientLastName,
+          ].whereType<String>().join(' '),
+          branches: _branches,
+          defaultBranchId: _clientBranchId,
+          canRead: canReadSchedule,
+          active: _selectedSection == 'lessons',
+          initialViewState: widget.initialViewState,
+          onViewStateChanged: widget.onViewStateChanged,
+        ),
       ],
     );
   }

@@ -23,7 +23,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/core/router/app_router.dart",
-      "line": 414
+      "line": 430
     },
     {
       "kind": "SingleChildScrollView",
@@ -265,7 +265,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/client_card_student.dart",
-      "line": 115
+      "line": 119
     },
     {
       "kind": "Scrollbar",
@@ -353,7 +353,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 451
+      "line": 456
     },
     {
       "kind": "ListView.builder",
@@ -375,7 +375,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/client_card_workspace_sections.dart",
-      "line": 38
+      "line": 45
     },
     {
       "kind": "ListView",
@@ -386,7 +386,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/client_card_workspace_sections.dart",
-      "line": 99
+      "line": 118
     },
     {
       "kind": "SingleChildScrollView",
@@ -397,7 +397,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/client_card_workspace_sections.dart",
-      "line": 169
+      "line": 188
     },
     {
       "kind": "SingleChildScrollView",
@@ -2090,16 +2090,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 494
-    },
-    {
-      "kind": "imperative-exit",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 545
+      "line": 499
     },
     {
       "kind": "imperative-exit",
@@ -2117,7 +2108,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 624
+      "line": 555
     },
     {
       "kind": "imperative-exit",
@@ -2134,8 +2125,8 @@
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 250
+      "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+      "line": 634
     },
     {
       "kind": "imperative-exit",
@@ -2144,7 +2135,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 255
+      "line": 256
     },
     {
       "kind": "imperative-exit",
@@ -2153,7 +2144,16 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 272
+      "line": 261
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/crm/presentation/client_card/client_card.dart",
+      "line": 278
     },
     {
       "kind": "PopScope",
@@ -2162,7 +2162,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 495
+      "line": 506
     },
     {
       "kind": "imperative-exit",
@@ -2180,7 +2180,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 490
+      "line": 495
     },
     {
       "kind": "imperative-exit",

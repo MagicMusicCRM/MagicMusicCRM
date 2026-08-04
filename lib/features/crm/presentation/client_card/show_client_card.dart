@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
@@ -48,12 +49,14 @@ class ClientCardRouteScreen extends StatelessWidget {
     required this.entityType,
     required this.entityId,
     this.initialSection = 'overview',
+    this.initialViewState,
     super.key,
   });
 
   final String entityType;
   final String entityId;
   final String initialSection;
+  final ContextViewState? initialViewState;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +68,7 @@ class ClientCardRouteScreen extends StatelessWidget {
             entityType: entityType,
             entityId: entityId,
             initialSection: initialSection,
+            viewState: initialViewState,
           ),
         ),
       ),
@@ -149,6 +153,31 @@ class ClientCardRouteSurface extends StatelessWidget {
       );
     }
 
+    void viewStateChanged(ContextViewState next) {
+      if (workspace?.isDesktop == true) {
+        final controller = workspace!.controller;
+        controller.updateCurrentView(controller.state.activeTabId, next);
+        return;
+      }
+      final router = GoRouter.of(context);
+      final current = router.routerDelegate.currentConfiguration.uri;
+      router.replace(
+        Uri(
+          path: current.path,
+          queryParameters: {
+            ...current.queryParameters,
+            'section': 'lessons',
+            if (next.filters['clientCalendarMode'] case final String mode)
+              'calendarMode': mode,
+            if (next.filters['clientCalendarBranchId'] case final String branch)
+              'branchId': branch,
+            if (next.date != null)
+              'calendarDate': DateFormat('yyyy-MM-dd').format(next.date!),
+          },
+        ).toString(),
+      );
+    }
+
     if (snapshot.role == 'teacher') {
       return Material(
         child: TeacherClientCard(
@@ -166,6 +195,8 @@ class ClientCardRouteSurface extends StatelessWidget {
         routed: true,
         initialSection: routedSection,
         capabilitySnapshot: snapshot,
+        initialViewState: viewState,
+        onViewStateChanged: viewStateChanged,
         onSectionChanged: sectionChanged,
         onClose: close,
       ),

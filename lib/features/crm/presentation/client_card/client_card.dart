@@ -30,6 +30,7 @@ import 'package:magic_music_crm/core/models/subscription.dart';
 import 'package:magic_music_crm/core/models/lesson.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'client_card_aggregation.dart';
 import 'client_card_staff_api.dart';
 import 'client_archive_button.dart';
@@ -41,6 +42,7 @@ import 'subscription_cancel_sheet.dart';
 import 'subscription_issue_sheet.dart';
 import 'subscription_replace_sheet.dart';
 import 'student_schedule_section.dart';
+import 'client_schedule_calendar.dart';
 
 part 'client_card_widgets.dart';
 part 'client_card_display.dart';
@@ -76,6 +78,8 @@ class ClientCard extends ConsumerStatefulWidget {
     this.onSectionChanged,
     this.onClose,
     this.capabilitySnapshot,
+    this.initialViewState,
+    this.onViewStateChanged,
   });
 
   final bool routed;
@@ -83,6 +87,8 @@ class ClientCard extends ConsumerStatefulWidget {
   final ValueChanged<String>? onSectionChanged;
   final ValueChanged<bool?>? onClose;
   final CapabilitySnapshot? capabilitySnapshot;
+  final ContextViewState? initialViewState;
+  final ValueChanged<ContextViewState>? onViewStateChanged;
 
   @override
   ConsumerState<ClientCard> createState() => _ClientCardState();
@@ -435,6 +441,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final canWriteSchedule =
         widget.capabilitySnapshot?.allows('schedule.lesson.write') ??
         crmHasManagerAccess(actorRole ?? '');
+    final canReadSchedule = widget.capabilitySnapshot == null
+        ? crmHasManagerAccess(actorRole ?? '')
+        : widget.capabilitySnapshot!.allows('schedule.lesson.read.assigned') ||
+              canWriteSchedule;
     final tabs = _tabsFor(canReadClientFinance: canReadClientFinance);
     final visibleTabIndex = tabs.indexWhere(
       (tab) => tab.$3 == _selectedSection,
@@ -477,6 +487,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                     curStatus,
                     tab.$3,
                     canReadClientFinance: canReadClientFinance,
+                    canReadSchedule: canReadSchedule,
                     canWriteSchedule: canWriteSchedule,
                   ),
               ],

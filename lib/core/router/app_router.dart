@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/services/access_invalidation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_shell.dart';
@@ -47,6 +48,18 @@ String _roleToRoute(String role) {
     default:
       return '/client';
   }
+}
+
+ContextViewState _clientRouteViewState(GoRouterState state) {
+  final query = state.uri.queryParameters;
+  return ContextViewState(
+    filters: {
+      'section': query['section'] ?? 'overview',
+      'clientCalendarMode': ?query['calendarMode'],
+      'clientCalendarBranchId': ?query['branchId'],
+    },
+    date: DateTime.tryParse(query['calendarDate'] ?? ''),
+  );
 }
 
 enum _RouteGatePhase { authLoading, signedOut, gateLoading, gateError, ready }
@@ -289,6 +302,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           entityType: 'student',
           entityId: state.pathParameters['id']!,
           initialSection: state.uri.queryParameters['section'] ?? 'overview',
+          initialViewState: _clientRouteViewState(state),
         ),
       ),
       GoRoute(
@@ -307,6 +321,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           entityType: 'student',
           entityId: state.pathParameters['id']!,
           initialSection: state.uri.queryParameters['section'] ?? 'overview',
+          initialViewState: _clientRouteViewState(state),
         ),
       ),
       GoRoute(
@@ -315,6 +330,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           entityType: 'lead',
           entityId: state.pathParameters['id']!,
           initialSection: state.uri.queryParameters['section'] ?? 'overview',
+          initialViewState: _clientRouteViewState(state),
         ),
       ),
       GoRoute(

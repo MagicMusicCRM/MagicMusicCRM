@@ -3,8 +3,8 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 269,
-    "production_reachable_files": 262,
+    "dart_files": 270,
+    "production_reachable_files": 263,
     "go_routes": 21,
     "screens": 20,
     "production_screens": 20,
@@ -20,147 +20,147 @@
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 223
+      "line": 236
     },
     {
       "path": "/login",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 227
+      "line": 240
     },
     {
       "path": "/register",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 228
+      "line": 241
     },
     {
       "path": "/email-otp",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 232
+      "line": 245
     },
     {
       "path": "/password-reset",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 245
+      "line": 258
     },
     {
       "path": "/onboarding",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 249
+      "line": 262
     },
     {
       "path": "/legal-consent",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 253
+      "line": 266
     },
     {
       "path": "/legal-documents",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 257
+      "line": 270
     },
     {
       "path": "/account-deletion-status",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 262
+      "line": 275
     },
     {
       "path": "/client",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 266
+      "line": 279
     },
     {
       "path": "/admin",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 272
+      "line": 285
     },
     {
       "path": "/teacher",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 277
+      "line": 290
     },
     {
       "path": "/manager",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 281
+      "line": 294
     },
     {
       "path": "/student/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 286
+      "line": 299
     },
     {
       "path": "/admin/profiles/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 294
+      "line": 308
     },
     {
       "path": "/students/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 304
+      "line": 318
     },
     {
       "path": "/leads/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 312
+      "line": 327
     },
     {
       "path": "/lessons/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 320
+      "line": 336
     },
     {
       "path": "/profile",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 325
+      "line": 341
     },
     {
       "path": "/auth-methods",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 329
+      "line": 345
     },
     {
       "path": "/delete-account",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 333
+      "line": 349
     }
   ],
   "screens": [
@@ -180,7 +180,7 @@
       "state_contract": "boot-gate",
       "state_na_reason": "The route is itself the loading state; router error/retry owns failure.",
       "file": "lib/core/router/app_router.dart",
-      "line": 353
+      "line": 369
     },
     {
       "name": "AuthMethodsScreen",
@@ -288,7 +288,7 @@
       "state_contract": "composition-shell",
       "state_na_reason": "Mounted sections own loading, empty, error, forbidden and retry states.",
       "file": "lib/features/crm/presentation/client_card/show_client_card.dart",
-      "line": 46
+      "line": 47
     },
     {
       "name": "ClientPortalScreen",
@@ -486,7 +486,7 @@
       "state_contract": "data",
       "state_na_reason": null,
       "file": "lib/core/router/app_router.dart",
-      "line": 540
+      "line": 556
     },
     {
       "name": "ProfileScreen",
@@ -748,7 +748,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 241
+      "line": 247
     },
     {
       "kind": "magic-sheet",
@@ -764,7 +764,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 596
+      "line": 601
     },
     {
       "kind": "dialog",
@@ -780,7 +780,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 535
+      "line": 540
     },
     {
       "kind": "dialog",
@@ -796,7 +796,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-      "line": 446
+      "line": 451
     },
     {
       "kind": "magic-sheet",

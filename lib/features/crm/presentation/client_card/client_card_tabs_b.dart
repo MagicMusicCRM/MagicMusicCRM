@@ -190,8 +190,13 @@ extension _ClientCardTabsB on _ClientCardState {
   String? get _clientBranchId {
     final studentCustom = _student?['custom_data'];
     if (_isStudent && studentCustom is Map) {
-      return _nonEmpty(studentCustom['branchId'] ?? studentCustom['branch_id']);
+      return _nonEmpty(
+        studentCustom['branchId'] ??
+            studentCustom['branch_id'] ??
+            _student?['branch_id'],
+      );
     }
+    if (_isStudent) return _nonEmpty(_student?['branch_id']);
     return _nonEmpty(_leadData['branch_id']);
   }
 

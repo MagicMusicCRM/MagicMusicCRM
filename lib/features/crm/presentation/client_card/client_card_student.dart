@@ -87,7 +87,11 @@ extension _ClientCardStudent on _ClientCardState {
   }
 
   // ── Student tab: Занятия (flat list; Phase 5 adds past/upcoming) ──────────
-  Widget _buildLessonsTab(ColorScheme cs, {required bool canWriteSchedule}) {
+  Widget _buildLessonsTab(
+    ColorScheme cs, {
+    required bool canReadSchedule,
+    required bool canWriteSchedule,
+  }) {
     return _studentGuard(cs, () {
       final now = DateTime.now();
       final upcoming = <Lesson>[];
@@ -126,6 +130,21 @@ extension _ClientCardStudent on _ClientCardState {
             )['preferredSchedule']?.toString(),
             canWrite: canWriteSchedule,
             onChanged: _fetchStudentData,
+          ),
+          const SizedBox(height: AppSpace.xl),
+          ClientScheduleCalendar(
+            clientType: 'student',
+            clientId: _studentId,
+            clientName: [
+              _clientFirstName,
+              _clientLastName,
+            ].whereType<String>().join(' '),
+            branches: _branches,
+            defaultBranchId: _clientBranchId,
+            canRead: canReadSchedule,
+            active: _selectedSection == 'lessons',
+            initialViewState: widget.initialViewState,
+            onViewStateChanged: widget.onViewStateChanged,
           ),
           const SizedBox(height: AppSpace.xl),
           _sectionTitle('Фактические занятия'),

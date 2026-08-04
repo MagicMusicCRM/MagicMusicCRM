@@ -35,6 +35,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.teachers = const [],
     this.rooms = const [],
     this.scheduleSeries = const [],
+    this.scheduleMatrix = const [],
     this.replacementPreview,
     this.replacementResult,
     this.replacementFailures = 0,
@@ -62,6 +63,7 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> teachers;
   final List<Map<String, dynamic>> rooms;
   final List<Map<String, dynamic>> scheduleSeries;
+  final List<Map<String, dynamic>> scheduleMatrix;
   final Map<String, dynamic>? replacementPreview;
   final Map<String, dynamic>? replacementResult;
   int replacementFailures;
@@ -109,6 +111,27 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (path == '/crm/schedule-series') {
       return <String, dynamic>{'items': scheduleSeries} as T;
+    }
+    if (path == '/crm/schedule/matrix') {
+      final studentId = queryParameters?['studentId']?.toString();
+      final leadId = queryParameters?['leadId']?.toString();
+      final items = scheduleMatrix
+          .where((item) {
+            if (studentId != null) {
+              return item['studentId']?.toString() == studentId;
+            }
+            if (leadId != null) {
+              return item['leadId']?.toString() == leadId;
+            }
+            return true;
+          })
+          .toList(growable: false);
+      return <String, dynamic>{
+            'items': items,
+            'groups': <dynamic>[],
+            'conflicts': <dynamic>[],
+          }
+          as T;
     }
     if (path == '/admin/staff') {
       return <dynamic>[
