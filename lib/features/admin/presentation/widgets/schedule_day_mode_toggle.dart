@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'schedule_shared.dart';
 
 /// Segmented toggle between the by-room and by-teacher day layouts. Extracted
@@ -18,56 +19,45 @@ class ScheduleDayModeToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      child: Row(
-        children: [
-          _toggleButton(
-            context,
-            'По аудиториям',
-            mode == DayViewMode.byRoom,
-            () => onModeChanged(DayViewMode.byRoom),
-          ),
-          const SizedBox(width: 8),
-          _toggleButton(
-            context,
-            'По педагогу',
-            mode == DayViewMode.byTeacher,
-            () => onModeChanged(DayViewMode.byTeacher),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _toggleButton(
-    BuildContext context,
-    String label,
-    bool isActive,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive
-              ? Theme.of(context).colorScheme.surface
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive
-                ? Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80)
-                : Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(40),
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive
-                ? Theme.of(context).colorScheme.onSurface
-                : Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 13,
-            fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SegmentedButton<DayViewMode>(
+          key: const ValueKey('schedule-day-mode-switcher'),
+          segments: const [
+            ButtonSegment(
+              value: DayViewMode.byRoom,
+              icon: Icon(Icons.meeting_room_outlined, size: 17),
+              label: Text('По аудиториям'),
+            ),
+            ButtonSegment(
+              value: DayViewMode.byTeacher,
+              icon: Icon(Icons.person_outline_rounded, size: 17),
+              label: Text('По педагогу'),
+            ),
+          ],
+          selected: {mode},
+          showSelectedIcon: false,
+          onSelectionChanged: (selection) => onModeChanged(selection.single),
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            minimumSize: const WidgetStatePropertyAll(Size(0, 38)),
+            backgroundColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? AppColor.goldSoft
+                  : Colors.transparent,
+            ),
+            foregroundColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? AppColor.gold
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            side: WidgetStatePropertyAll(
+              BorderSide(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurfaceVariant.withAlpha(48),
+              ),
+            ),
           ),
         ),
       ),

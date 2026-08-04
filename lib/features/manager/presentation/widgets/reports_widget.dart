@@ -16,6 +16,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/subscription_catalog_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
@@ -67,6 +68,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
 
   List<int> get _visibleReportTabs => [
     if (_canSeeStatus) 0,
+    if (_canSeeFinance) 1,
     2,
     3,
     4,
@@ -74,7 +76,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   ];
 
   int _positionForCanonicalTab(int canonical) {
-    if (canonical == 1 || canonical == 6) canonical = 0;
+    if (canonical == 6) canonical = 0;
     final position = _visibleReportTabs.indexOf(canonical.clamp(0, 6));
     return position < 0 ? 0 : position;
   }
@@ -196,7 +198,8 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
           indicatorColor: AppColor.gold,
           tabs: [
-            if (_canSeeStatus) const Tab(text: 'Аналитика'),
+            if (_canSeeStatus) const Tab(text: 'Сводка'),
+            if (_canSeeFinance) const Tab(text: 'Финансовые операции'),
             const Tab(text: 'Активность'),
             const Tab(text: 'Управление'),
             const Tab(text: 'Абонементы'),
@@ -208,6 +211,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             controller: _tabController,
             children: [
               if (_canSeeStatus) _buildUnifiedDashboard(),
+              if (_canSeeFinance) _buildFinanceOperations(),
               const _ActivityLogTab(),
               ManagementDashboardWidget(role: widget.role),
               SubscriptionCatalogWidget(role: widget.role),
@@ -220,100 +224,117 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   }
 
   Widget _buildUnifiedDashboard() {
-    final colors = Theme.of(context).colorScheme;
-    final dateFormat = DateFormat('dd.MM.yyyy');
     return Column(
       key: const ValueKey('unified-dashboard'),
       children: [
-        Material(
-          color: colors.surfaceContainerLow,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  'Обзор школы',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey('dashboard-period'),
-                  onPressed: _pickDashboardPeriod,
-                  icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                  label: Text(
-                    '${dateFormat.format(_dashboardFilter.from)} — '
-                    '${dateFormat.format(_dashboardFilter.to)}',
-                  ),
-                ),
-                SizedBox(
-                  width: 260,
-                  child: DropdownButtonFormField<String?>(
-                    key: const ValueKey('dashboard-scope'),
-                    initialValue: _dashboardFilter.branchId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Филиал',
-                      isDense: true,
-                    ),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(
-                          _canSeeFinance
-                              ? 'Вся школа'
-                              : 'Все доступные филиалы',
-                        ),
-                      ),
-                      if (_dashboardFilter.branchId != null &&
-                          !_branches.any(
-                            (branch) =>
-                                branch['id']?.toString() ==
-                                _dashboardFilter.branchId,
-                          ))
-                        DropdownMenuItem<String?>(
-                          value: _dashboardFilter.branchId,
-                          child: const Text('Выбранный филиал'),
-                        ),
-                      ..._branches.map(
-                        (branch) => DropdownMenuItem<String?>(
-                          value: branch['id']?.toString(),
-                          child: Text(
-                            branch['name']?.toString() ?? 'Без названия',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ],
-                    onChanged: _branchesLoading
-                        ? null
-                        : (value) => _setDashboardFilter(
-                            _dashboardFilter.copyWithBranch(value),
-                          ),
-                  ),
-                ),
-                if (_branchesLoading)
-                  const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                if (_branchesError != null)
-                  TextButton.icon(
-                    onPressed: _loadBranches,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Повторить загрузку филиалов'),
-                  ),
-              ],
-            ),
-          ),
-        ),
+        _buildDashboardFilterBar(title: 'Обзор школы'),
         Expanded(
           child: ReportingV4Panel(
             role: widget.role,
             filter: _dashboardFilter,
             reloadToken: _dashboardRevision,
             accessSnapshot: widget.accessSnapshot,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDashboardFilterBar({required String title}) {
+    final colors = Theme.of(context).colorScheme;
+    final dateFormat = DateFormat('dd.MM.yyyy');
+    return Material(
+      color: colors.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            OutlinedButton.icon(
+              key: const ValueKey('dashboard-period'),
+              onPressed: _pickDashboardPeriod,
+              icon: const Icon(Icons.calendar_today_outlined, size: 18),
+              label: Text(
+                '${dateFormat.format(_dashboardFilter.from)} — '
+                '${dateFormat.format(_dashboardFilter.to)}',
+              ),
+            ),
+            SizedBox(
+              width: 260,
+              child: DropdownButtonFormField<String?>(
+                key: const ValueKey('dashboard-scope'),
+                initialValue: _dashboardFilter.branchId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Филиал',
+                  isDense: true,
+                ),
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(
+                      _canSeeFinance ? 'Вся школа' : 'Все доступные филиалы',
+                    ),
+                  ),
+                  if (_dashboardFilter.branchId != null &&
+                      !_branches.any(
+                        (branch) =>
+                            branch['id']?.toString() ==
+                            _dashboardFilter.branchId,
+                      ))
+                    DropdownMenuItem<String?>(
+                      value: _dashboardFilter.branchId,
+                      child: const Text('Выбранный филиал'),
+                    ),
+                  ..._branches.map(
+                    (branch) => DropdownMenuItem<String?>(
+                      value: branch['id']?.toString(),
+                      child: Text(
+                        branch['name']?.toString() ?? 'Без названия',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+                onChanged: _branchesLoading
+                    ? null
+                    : (value) => _setDashboardFilter(
+                        _dashboardFilter.copyWithBranch(value),
+                      ),
+              ),
+            ),
+            if (_branchesLoading)
+              const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            if (_branchesError != null)
+              TextButton.icon(
+                onPressed: _loadBranches,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Повторить загрузку филиалов'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFinanceOperations() {
+    return Column(
+      key: const ValueKey('finance-operations'),
+      children: [
+        _buildDashboardFilterBar(title: 'Финансовые операции'),
+        Expanded(
+          child: FinanceWidget(
+            filterRange: DateTimeRange(
+              start: _dashboardFilter.from,
+              end: _dashboardFilter.to,
+            ),
+            branchId: _dashboardFilter.branchId,
           ),
         ),
       ],

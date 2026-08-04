@@ -281,7 +281,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
-          _buildHeader(),
+          _buildScheduleToolbar(firstLoad: firstLoad),
           SizedBox(
             height: 2,
             child: refreshing
@@ -292,9 +292,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                   )
                 : null,
           ),
-          if (!firstLoad) _buildViewSwitcher(),
           if (!firstLoad) ...[
-            _buildBranchSelector(),
             if (_currentView == ScheduleView.day)
               ScheduleDayModeToggle(
                 mode: _dayViewMode,
@@ -305,7 +303,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 },
               ),
           ],
-          _buildDateNavigation(),
           if (!firstLoad && _filterClientId != null) _buildClientFilterBanner(),
           if (!firstLoad && _currentView != ScheduleView.month) ...[
             ScheduleDayLegend(week: _currentView == ScheduleView.week),
@@ -316,19 +313,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           Expanded(child: _buildScheduleContent()),
         ],
       ),
-      floatingActionButton: firstLoad
-          ? null
-          : FloatingActionButton(
-              tooltip: 'Новое занятие',
-              onPressed: () => _showAddLessonDialog(
-                _currentView == ScheduleView.month
-                    ? DateTime.now()
-                    : _selectedDate,
-                null,
-              ),
-              backgroundColor: AppColor.gold,
-              child: Icon(Icons.add_rounded, color: Colors.white),
-            ),
     );
   }
 }

@@ -364,8 +364,34 @@ class AppTheme {
   }
 }
 
-/// A scroll behavior that removes the glow effect.
-class NoGlowScrollBehavior extends ScrollBehavior {
+/// App-wide pointer UX: no mobile glow and a persistent, draggable scrollbar
+/// for every desktop scrollable, including horizontal lists.
+class NoGlowScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    final platform = getPlatform(context);
+    final isDesktop =
+        platform == TargetPlatform.windows ||
+        platform == TargetPlatform.linux ||
+        platform == TargetPlatform.macOS;
+    if (!isDesktop) return child;
+    return Scrollbar(
+      controller: details.controller,
+      thumbVisibility: true,
+      trackVisibility: true,
+      interactive: true,
+      scrollbarOrientation:
+          axisDirectionToAxis(details.direction) == Axis.horizontal
+          ? ScrollbarOrientation.bottom
+          : ScrollbarOrientation.right,
+      child: child,
+    );
+  }
+
   @override
   Widget buildOverscrollIndicator(
     BuildContext context,

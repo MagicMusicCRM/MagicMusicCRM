@@ -43,7 +43,12 @@ String _expenseCategoryLabel(String? key) {
 }
 
 class FinanceWidget extends ConsumerStatefulWidget {
-  const FinanceWidget({super.key});
+  const FinanceWidget({super.key, this.filterRange, this.branchId});
+
+  /// Shared filter from the unified Analytics shell. When present, the local
+  /// period picker is hidden so Finance and Summary cannot drift apart.
+  final DateTimeRange? filterRange;
+  final String? branchId;
 
   @override
   ConsumerState<FinanceWidget> createState() => _FinanceWidgetState();
@@ -80,8 +85,25 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   @override
   void initState() {
     super.initState();
+    _customRange = widget.filterRange;
     _loadPayments();
     _loadExpenses();
+  }
+
+  @override
+  void didUpdateWidget(covariant FinanceWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldRange = oldWidget.filterRange;
+    final range = widget.filterRange;
+    final rangeChanged =
+        oldRange?.start != range?.start || oldRange?.end != range?.end;
+    if (rangeChanged) {
+      _customRange = range;
+      unawaited(_loadPayments());
+      unawaited(_loadExpenses());
+    } else if (oldWidget.branchId != widget.branchId) {
+      unawaited(_loadExpenses());
+    }
   }
 
   @override
@@ -198,6 +220,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
       final res = await ref
           .read(magicCrmServiceProvider)
           .listExpenses(
+            branchId: widget.branchId,
             from: _periodStart().toIso8601String(),
             to: _periodEnd().toIso8601String(),
             limit: 50,
@@ -385,19 +408,6 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addingPayment ? null : _addPayment,
-        child: _addingPayment
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.add),
-      ),
       body: Column(
         children: [
           Container(
@@ -408,105 +418,137 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: colors.outlineVariant.withAlpha(90)),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Итого поступлений',
+            child: LayoutBuilder(
+              builder: (context, constraints) => Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: constraints.maxWidth >= 760
+                        ? 300
+                        : constraints.maxWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Итого поступлений',
+                          style: TextStyle(
+                            color: colors.onSurfaceVariant,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          '${fmt.format(_total)} ₽',
+                          style: const TextStyle(
+                            color: AppTheme.success,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (_customRange != null && widget.filterRange == null)
+                          Text(
+                            '${DateFormat('d MMM yyyy', 'ru').format(_customRange!.start)} — '
+                            '${DateFormat('d MMM yyyy', 'ru').format(_customRange!.end)}',
+                            style: TextStyle(
+                              color: colors.onSurfaceVariant,
+                              fontSize: 11,
+                            ),
+                          ),
+                        if (_totalCount > _payments.length)
+                          Text(
+                            'Всего платежей: $_totalCount · '
+                            'показаны первые ${_payments.length}',
+                            style: TextStyle(
+                              color: colors.onSurfaceVariant,
+                              fontSize: 11,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  FilledButton.icon(
+                    key: const ValueKey('add-payment'),
+                    onPressed: _addingPayment ? null : _addPayment,
+                    icon: _addingPayment
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.add_rounded),
+                    label: const Text('Добавить оплату'),
+                  ),
+                  if (widget.filterRange == null)
+                    IconButton(
+                      tooltip: 'Выбрать диапазон',
+                      onPressed: _pickRange,
+                      icon: Icon(
+                        Icons.calendar_today_rounded,
+                        size: 20,
+                        color: _customRange != null
+                            ? AppTheme.success
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                  if (_customRange != null && widget.filterRange == null)
+                    IconButton(
+                      tooltip: 'Сбросить диапазон',
+                      onPressed: () {
+                        setState(() => _customRange = null);
+                        _loadPayments();
+                        _loadExpenses();
+                      },
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 20,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  if (widget.filterRange == null)
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'week', label: Text('Нед.')),
+                        ButtonSegment(value: 'month', label: Text('Мес.')),
+                        ButtonSegment(value: 'year', label: Text('Год')),
+                      ],
+                      selected: {_period},
+                      onSelectionChanged: (s) {
+                        setState(() {
+                          _period = s.first;
+                          _customRange = null;
+                        });
+                        _loadPayments();
+                        _loadExpenses();
+                      },
+                      style: ButtonStyle(
+                        backgroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? AppTheme.success.withAlpha(30)
+                              : Colors.transparent,
+                        ),
+                        foregroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? AppTheme.success
+                              : colors.onSurfaceVariant,
+                        ),
+                        side: WidgetStateProperty.all(
+                          BorderSide(color: colors.outlineVariant),
+                        ),
+                      ),
+                    ),
+                  if (widget.branchId != null)
+                    SizedBox(
+                      width: constraints.maxWidth,
+                      child: Text(
+                        'Филиал применён к расходам; платежи показаны по всей школе.',
                         style: TextStyle(
                           color: colors.onSurfaceVariant,
-                          fontSize: 13,
+                          fontSize: 12,
                         ),
                       ),
-                      Text(
-                        '${fmt.format(_total)} ₽',
-                        style: const TextStyle(
-                          color: AppTheme.success,
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      if (_customRange != null)
-                        Text(
-                          '${DateFormat('d MMM yyyy', 'ru').format(_customRange!.start)} — '
-                          '${DateFormat('d MMM yyyy', 'ru').format(_customRange!.end)}',
-                          style: TextStyle(
-                            color: colors.onSurfaceVariant,
-                            fontSize: 11,
-                          ),
-                        ),
-                      if (_totalCount > _payments.length)
-                        Text(
-                          'Всего платежей: $_totalCount · '
-                          'показаны первые ${_payments.length}',
-                          style: TextStyle(
-                            color: colors.onSurfaceVariant,
-                            fontSize: 11,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Выбрать диапазон',
-                  onPressed: _pickRange,
-                  icon: Icon(
-                    Icons.calendar_today_rounded,
-                    size: 20,
-                    color: _customRange != null
-                        ? AppTheme.success
-                        : colors.onSurfaceVariant,
-                  ),
-                ),
-                if (_customRange != null)
-                  IconButton(
-                    tooltip: 'Сбросить диапазон',
-                    onPressed: () {
-                      setState(() => _customRange = null);
-                      _loadPayments();
-                      _loadExpenses();
-                    },
-                    icon: Icon(
-                      Icons.close_rounded,
-                      size: 20,
-                      color: colors.onSurfaceVariant,
                     ),
-                  ),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'week', label: Text('Нед.')),
-                    ButtonSegment(value: 'month', label: Text('Мес.')),
-                    ButtonSegment(value: 'year', label: Text('Год')),
-                  ],
-                  selected: {_period},
-                  onSelectionChanged: (s) {
-                    setState(() {
-                      _period = s.first;
-                      _customRange = null;
-                    });
-                    _loadPayments();
-                    _loadExpenses();
-                  },
-                  style: ButtonStyle(
-                    backgroundColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? AppTheme.success.withAlpha(30)
-                          : Colors.transparent,
-                    ),
-                    foregroundColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? AppTheme.success
-                          : colors.onSurfaceVariant,
-                    ),
-                    side: WidgetStateProperty.all(
-                      BorderSide(color: colors.outlineVariant),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           _ExportBar(

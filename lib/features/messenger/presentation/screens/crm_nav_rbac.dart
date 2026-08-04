@@ -10,7 +10,7 @@
 ///
 /// Canonical (non-teacher) tab index meaning:
 ///   0 Чат · 1 Обзор · 2 Расписание · 3 Клиенты ·
-///   4 Пользователи · 5 Финансы · 6 Задачи · 7 Отчёты.
+///   4 Пользователи · 5 Финансы (legacy deep link) · 6 Задачи · 7 Аналитика.
 /// Teacher reuses 0/1/2 for Чат/Расписание/Ученики.
 ///
 /// The numbers are CANONICAL (alert_policy.dart's CrmSection and the unseen
@@ -78,9 +78,7 @@ List<int> crmVisibleTabs(String role, {required bool isDesktop}) {
   // work, however, so manager-tier roles must be able to open them on a phone
   // too (directly from Overview or through the nav shell's «Ещё» menu).
   if (!isDesktop) return const [0, 1, 2, 3, 4, 6];
-  return crmHasSchoolFinanceAccess(role)
-      ? const [0, 1, 2, 3, 4, 5, 6, 7]
-      : const [0, 1, 2, 3, 4, 6, 7];
+  return const [0, 1, 2, 3, 4, 6, 7];
 }
 
 /// Server-sourced destination matrix used by the live shell. Role-based
@@ -120,9 +118,6 @@ List<int> crmVisibleTabsForCapabilities(
   if (snapshot.allows('schedule.lesson.read.assigned')) tabs.add(2);
   if (snapshot.allows('crm.client.read.basic')) tabs.add(3);
   if (snapshot.allows('system.settings.manage')) tabs.add(4);
-  if (isDesktop && snapshot.allows('commerce.school_finance.read')) {
-    tabs.add(5);
-  }
   if (canReadTasks && !tabs.contains(6)) tabs.add(6);
   if (isDesktop && snapshot.allows('report.status.read')) tabs.add(7);
   return tabs;
@@ -140,6 +135,9 @@ int crmResolveVisibleTab({
     throw ArgumentError.value(visibleTabs, 'visibleTabs', 'must not be empty');
   }
   if (visibleTabs.contains(requestedTab)) return requestedTab;
+  // v7 unified Finance and Reports under Analytics. Keep old tab-5 links
+  // useful without exposing a duplicate top-level destination.
+  if (requestedTab == 5 && visibleTabs.contains(7)) return 7;
   if (visibleTabs.contains(currentTab)) return currentTab;
   return visibleTabs.first;
 }

@@ -30,53 +30,60 @@ class _FakeScheduleApiClient extends MagicApiClient {
     final iso = _today().toIso8601String();
     if (path == '/crm/branches') {
       return <String, dynamic>{
-        'items': [
-          {'id': _branchId, 'name': 'Главный филиал', 'utcOffsetMinutes': 0},
-        ],
-      } as T;
+            'items': [
+              {
+                'id': _branchId,
+                'name': 'Главный филиал',
+                'utcOffsetMinutes': 0,
+              },
+            ],
+          }
+          as T;
     }
     if (path == '/crm/rooms') {
       return <String, dynamic>{
-        'items': [
-          {'id': _roomId, 'branchId': _branchId, 'name': 'Кабинет 1'},
-        ],
-      } as T;
+            'items': [
+              {'id': _roomId, 'branchId': _branchId, 'name': 'Кабинет 1'},
+            ],
+          }
+          as T;
     }
     if (path == '/crm/schedule/matrix') {
       return <String, dynamic>{
-        'items': [
-          {
-            'id': 'lesson-normal',
-            'studentId': 'student-a',
-            'studentName': 'Анна Обычная',
-            'teacherId': 'teacher-a',
-            'teacherName': 'Педагог А',
-            'branchId': _branchId,
-            'roomId': _roomId,
-            'roomName': 'Кабинет 1',
-            'scheduledAt': iso,
-            'durationMinutes': 60,
-            'status': 'scheduled',
-            'isTrial': false,
-          },
-          {
-            'id': 'lesson-trial',
-            'studentId': 'student-b',
-            'studentName': 'Борис Пробный',
-            'teacherId': 'teacher-b',
-            'teacherName': 'Педагог Б',
-            'branchId': _branchId,
-            'roomId': _roomId,
-            'roomName': 'Кабинет 1',
-            'scheduledAt': iso,
-            'durationMinutes': 60,
-            'status': 'scheduled',
-            'isTrial': true,
-          },
-        ],
-        'groups': const [],
-        'conflicts': const [],
-      } as T;
+            'items': [
+              {
+                'id': 'lesson-normal',
+                'studentId': 'student-a',
+                'studentName': 'Анна Обычная',
+                'teacherId': 'teacher-a',
+                'teacherName': 'Педагог А',
+                'branchId': _branchId,
+                'roomId': _roomId,
+                'roomName': 'Кабинет 1',
+                'scheduledAt': iso,
+                'durationMinutes': 60,
+                'status': 'scheduled',
+                'isTrial': false,
+              },
+              {
+                'id': 'lesson-trial',
+                'studentId': 'student-b',
+                'studentName': 'Борис Пробный',
+                'teacherId': 'teacher-b',
+                'teacherName': 'Педагог Б',
+                'branchId': _branchId,
+                'roomId': _roomId,
+                'roomName': 'Кабинет 1',
+                'scheduledAt': iso,
+                'durationMinutes': 60,
+                'status': 'scheduled',
+                'isTrial': true,
+              },
+            ],
+            'groups': const [],
+            'conflicts': const [],
+          }
+          as T;
     }
     if (path == '/crm/schedule/month-summary') {
       return <String, dynamic>{'items': const []} as T;
@@ -125,7 +132,7 @@ void main() {
     expect(find.text('Борис Пробный'), findsOneWidget);
 
     // Open the filters sheet, turn on «Только пробные», apply.
-    await tester.tap(find.byTooltip('Фильтры'));
+    await tester.tap(find.byTooltip('Фильтры расписания'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Только пробные'));
     await tester.pumpAndSettle();
@@ -147,9 +154,9 @@ void main() {
     await tester.pumpWidget(_host(const ScheduleWidget()));
     await tester.pumpAndSettle();
 
-    // Month view is the default. The gold legend «Сегодня» is gone; only the
-    // date-nav «сегодня» (white, lower-case) remains.
-    expect(find.text('Сегодня'), findsNothing);
-    expect(find.text('сегодня'), findsOneWidget);
+    // Month view is the default. The gold legend duplicate is gone; the
+    // toolbar exposes one clearly labelled date action.
+    expect(find.text('Сегодня'), findsOneWidget);
+    expect(find.text('сегодня'), findsNothing);
   });
 }

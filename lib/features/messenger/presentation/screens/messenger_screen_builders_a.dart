@@ -200,6 +200,7 @@ extension _MessengerBuildersA on _MessengerScreenState {
     required bool isDesktop,
   }) {
     final targetTab = _overviewTargetTab(index, subIndex);
+    final reportsTab = index == 5 ? 1 : subIndex;
     final visibleTabs = _visibleCrmTabs(isDesktop);
     // Canonical tab ids are sparse and role-specific (admin is [0, 6, 2, 3]),
     // so numeric clamping can silently route Tasks (6) to Clients (3).
@@ -211,13 +212,14 @@ extension _MessengerBuildersA on _MessengerScreenState {
       ),
     );
     _emitState(() {
-      if (isDesktop && targetTab == 7 && subIndex != null) {
-        _selectedReportsTab = subIndex.clamp(0, 2);
+      if (isDesktop && targetTab == 7 && reportsTab != null) {
+        _selectedReportsTab = reportsTab.clamp(0, 5);
       }
     });
   }
 
   int _overviewTargetTab(int index, int? subIndex) {
+    if (index == 5) return 7;
     if (index == 1 && subIndex != null) {
       if (subIndex == 3 || subIndex == 4) return 2;
       return 4;
@@ -357,7 +359,7 @@ extension _MessengerBuildersA on _MessengerScreenState {
         return const V7NavDestination(
           icon: Icons.insert_chart_outlined_rounded,
           selectedIcon: Icons.insert_chart_rounded,
-          label: 'Отчёты',
+          label: 'Аналитика',
         );
       default:
         return const V7NavDestination(

@@ -84,6 +84,30 @@ void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
 
   group('KVA-195 schedule redesign', () {
+    testWidgets('responsive toolbar has one labelled create action', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(_host(const ScheduleWidget()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Расписание'), findsOneWidget);
+      expect(find.text('Создать занятие'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('schedule-create-lesson')),
+        findsOneWidget,
+      );
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(
+        find.byKey(const ValueKey('schedule-view-switcher')),
+        findsOneWidget,
+      );
+      expect(find.text('Филиал'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('Месяц / Неделя / День switcher changes the view', (
       tester,
     ) async {

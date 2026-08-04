@@ -4,9 +4,9 @@ import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_
 /// 6-role RBAC matrix for CRM navigation (KVA-239):
 /// client < teacher < admin < manager < director < system_admin.
 /// Operational CRM work is shared by admin/manager/director/system_admin;
-/// раздел «Финансы» (tab 5) — только director/system_admin (общешкольные
-/// финансы отключены у manager/admin); role editing is still enforced
-/// separately by backend policy.
+/// Общешкольные финансовые операции доступны только director/system_admin,
+/// но v7 показывает их внутри единой «Аналитики» (tab 7), а не отдельным
+/// пунктом навигации.
 void main() {
   group('crmHasManagerAccess — operational CRM access', () {
     test(
@@ -97,14 +97,13 @@ void main() {
       expect(crmVisibleTabs('manager', isDesktop: false), [0, 1, 2, 3, 4, 6]);
     });
 
-    test('Директор: полный набор, включая «Финансы» (5)', () {
+    test('Директор: единая «Аналитика» без дублирующей вкладки 5', () {
       expect(crmVisibleTabs('director', isDesktop: true), [
         0,
         1,
         2,
         3,
         4,
-        5,
         6,
         7,
       ]);
@@ -160,18 +159,25 @@ void main() {
       expect(crmVisibleTabs('admin', isDesktop: false), isNot(contains(6)));
     });
 
-    test(
-      '«Финансы» (5) скрыт у manager/admin, виден director/system_admin',
-      () {
-        expect(crmVisibleTabs('manager', isDesktop: true), isNot(contains(5)));
-        expect(crmVisibleTabs('admin', isDesktop: true), isNot(contains(5)));
-        expect(crmVisibleTabs('director', isDesktop: true), contains(5));
-        expect(crmVisibleTabs('system_admin', isDesktop: true), contains(5));
-      },
-    );
+    test('legacy «Финансы» (5) не дублирует «Аналитику» в навигации', () {
+      for (final role in ['admin', 'manager', 'director', 'system_admin']) {
+        expect(crmVisibleTabs(role, isDesktop: true), isNot(contains(5)));
+      }
+    });
   });
 
   group('crmResolveVisibleTab — canonical deep-link membership', () {
+    test('старый desktop deep link «Финансы» открывает «Аналитику»', () {
+      final visible = crmVisibleTabs('director', isDesktop: true);
+      expect(
+        crmResolveVisibleTab(
+          visibleTabs: visible,
+          requestedTab: 5,
+          currentTab: 0,
+        ),
+        7,
+      );
+    });
     test(
       'manager mobile opens Tasks and keeps Overview for hidden Finance',
       () {

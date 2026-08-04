@@ -29,117 +29,204 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
     };
   }
 
-  // ── Header ────────────────────────────────────────────────────────────────
-  Widget _buildHeader() {
-    final title = switch (_currentView) {
-      ScheduleView.month =>
-        '${monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}',
-      ScheduleView.week => 'Расписание / Неделя',
-      ScheduleView.day => 'Расписание / День',
-    };
+  // ── One responsive schedule toolbar ───────────────────────────────────────
+  // Date, mode, scope and the single primary action belong to one surface.
+  // Keeping them together removes the old stack of unrelated header strips and
+  // makes the same controls predictable at desktop and phone widths.
+  Widget _buildScheduleToolbar({required bool firstLoad}) {
+    final cs = Theme.of(context).colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 720;
+        final createButton = FilledButton.icon(
+          key: const ValueKey('schedule-create-lesson'),
+          onPressed: firstLoad ? null : _openLessonCreate,
+          icon: const Icon(Icons.add_rounded, size: 19),
+          label: const Text('Создать занятие'),
+          style: FilledButton.styleFrom(
+            minimumSize: Size(0, compact ? 42 : 44),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
+            backgroundColor: AppColor.gold,
+            foregroundColor: AppColor.onGold,
+          ),
+        );
+        final controls = <Widget>[
+          _buildViewSwitcher(),
+          _buildDateNavigation(),
+          _buildBranchSelector(),
+        ];
+
+        return Container(
+          margin: EdgeInsets.fromLTRB(
+            compact ? AppSpace.sm : AppSpace.lg,
+            AppSpace.sm,
+            compact ? AppSpace.sm : AppSpace.lg,
+            AppSpace.xs,
+          ),
+          padding: EdgeInsets.all(compact ? AppSpace.md : AppSpace.lg),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(color: cs.onSurfaceVariant.withAlpha(32)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Расписание',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: cs.onSurface,
+                            fontSize: compact ? 19 : 22,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (!firstLoad)
+                          Text(
+                            _schedulePeriodLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: cs.onSurfaceVariant,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.search_rounded, size: 21),
+                    color: cs.onSurfaceVariant,
+                    tooltip: 'Найти занятие',
+                    onPressed: firstLoad ? null : _showScheduleSearch,
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      _hasExtraFilters
+                          ? Icons.filter_alt_rounded
+                          : Icons.tune_rounded,
+                      size: 21,
+                    ),
+                    color: _hasExtraFilters
+                        ? AppColor.gold
+                        : cs.onSurfaceVariant,
+                    tooltip: _hasExtraFilters
+                        ? 'Фильтры расписания применены'
+                        : 'Фильтры расписания',
+                    onPressed: firstLoad ? null : _showScheduleFilters,
+                  ),
+                  if (!compact)
+                    IconButton(
+                      tooltip: 'Обновить расписание',
+                      icon: const Icon(Icons.refresh_rounded, size: 21),
+                      color: cs.onSurfaceVariant,
+                      onPressed: _fetchAll,
+                    ),
+                  if (!compact) ...[
+                    const SizedBox(width: AppSpace.xs),
+                    createButton,
+                  ],
+                ],
               ),
-            ),
+              if (compact) ...[
+                const SizedBox(height: AppSpace.sm),
+                SizedBox(width: double.infinity, child: createButton),
+              ],
+              if (!firstLoad) ...[
+                const SizedBox(height: AppSpace.md),
+                if (compact)
+                  ...controls.expand(
+                    (control) => [
+                      control,
+                      if (control != controls.last)
+                        const SizedBox(height: AppSpace.sm),
+                    ],
+                  )
+                else
+                  Wrap(
+                    spacing: AppSpace.md,
+                    runSpacing: AppSpace.sm,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: controls,
+                  ),
+              ],
+            ],
           ),
-          IconButton(
-            icon: Icon(
-              Icons.search_rounded,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              size: 22,
-            ),
-            tooltip: 'Поиск',
-            onPressed: _showScheduleSearch,
-          ),
-          IconButton(
-            icon: Icon(
-              // A dot on the funnel signals filters are active — otherwise a
-              // half-empty grid reads as «нет занятий», not «отфильтровано».
-              _hasExtraFilters ? Icons.filter_alt_rounded : Icons.tune_rounded,
-              color: _hasExtraFilters
-                  ? AppColor.gold
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
-              size: 22,
-            ),
-            tooltip: 'Фильтры',
-            onPressed: _showScheduleFilters,
-          ),
-          IconButton(
-            tooltip: 'Обновить расписание',
-            icon: Icon(
-              Icons.refresh_rounded,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              size: 22,
-            ),
-            onPressed: _fetchAll,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  // ── Месяц / Неделя / День segmented control (primary navigation) ──────────
-  Widget _buildViewSwitcher() {
-    Widget seg(String label, ScheduleView view) {
-      final active = _currentView == view;
-      return Expanded(
-        child: GestureDetector(
-          onTap: () => _switchView(view),
-          child: AnimatedContainer(
-            duration: AppMotion.fast,
-            curve: AppMotion.ease,
-            height: 38,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: active ? AppColor.gold : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: active
-                    ? AppColor.onGold
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ),
+  void _openLessonCreate() {
+    var date = _selectedDate;
+    if (_currentView == ScheduleView.month &&
+        (_selectedDate.year != _displayedMonth.year ||
+            _selectedDate.month != _displayedMonth.month)) {
+      final lastDay = DateTime(
+        _displayedMonth.year,
+        _displayedMonth.month + 1,
+        0,
+      ).day;
+      final todayDay = DateTime.now().day;
+      date = DateTime(
+        _displayedMonth.year,
+        _displayedMonth.month,
+        todayDay > lastDay ? lastDay : todayDay,
       );
     }
+    _showAddLessonDialog(date, null);
+  }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 2, 20, 4),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(AppRadius.control + 4),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(28),
+  String get _schedulePeriodLabel => switch (_currentView) {
+    ScheduleView.month =>
+      '${monthNamesNominative[_displayedMonth.month]} ${_displayedMonth.year}',
+    ScheduleView.week => 'Неделя · ${_dateNavigationLabel()}',
+    ScheduleView.day => 'День · ${_dateNavigationLabel()}',
+  };
+
+  // ── Месяц / Неделя / День segmented control (primary navigation) ──────────
+  Widget _buildViewSwitcher() {
+    final cs = Theme.of(context).colorScheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 280, maxWidth: 340),
+      child: SegmentedButton<ScheduleView>(
+        key: const ValueKey('schedule-view-switcher'),
+        segments: const [
+          ButtonSegment(value: ScheduleView.month, label: Text('Месяц')),
+          ButtonSegment(value: ScheduleView.week, label: Text('Неделя')),
+          ButtonSegment(value: ScheduleView.day, label: Text('День')),
+        ],
+        selected: {_currentView},
+        showSelectedIcon: false,
+        onSelectionChanged: (selection) => _switchView(selection.single),
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size(88, 40)),
+          visualDensity: VisualDensity.compact,
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
           ),
-        ),
-        child: Row(
-          children: [
-            seg('Месяц', ScheduleView.month),
-            const SizedBox(width: 4),
-            seg('Неделя', ScheduleView.week),
-            const SizedBox(width: 4),
-            seg('День', ScheduleView.day),
-          ],
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? AppColor.gold
+                : cs.surface,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? AppColor.onGold
+                : cs.onSurfaceVariant,
+          ),
+          side: WidgetStatePropertyAll(
+            BorderSide(color: cs.onSurfaceVariant.withAlpha(42)),
+          ),
         ),
       ),
     );
@@ -163,66 +250,56 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
   // ── Branch selector pills ─────────────────────────────────────────────────
   Widget _buildBranchSelector() {
     if (_branches.isEmpty) return const SizedBox.shrink();
+    final selectedExists = _branches.any(
+      (branch) => branch['id']?.toString() == _selectedBranchId,
+    );
+    final value = selectedExists
+        ? _selectedBranchId
+        : _branches.first['id']?.toString();
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 230, maxWidth: 330),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          ..._branches.map((b) {
-            final id = b['id'].toString();
-            final isSelected = id == _selectedBranchId;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(
-                  b['name'].toString(),
-                  style: TextStyle(
-                    color: isSelected
-                        ? AppColor.gold
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    fontSize: 14,
-                  ),
-                ),
-                selected: isSelected,
-                onSelected: (_) {
-                  _emitState(() {
-                    _clearHighlight();
-                    _selectedBranchId = id;
-                  });
-                  _fetchAll();
-                },
-                backgroundColor: Theme.of(context).colorScheme.surface,
-                selectedColor: AppColor.gold.withAlpha(25),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: isSelected
-                        ? AppColor.gold
-                        : Theme.of(
-                            context,
-                          ).colorScheme.onSurfaceVariant.withAlpha(60),
-                    width: 1,
-                  ),
-                ),
-                showCheckmark: false,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('schedule-branch-selector-${value ?? 'none'}'),
+              initialValue: value,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Филиал',
+                prefixIcon: Icon(Icons.location_on_outlined, size: 19),
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12),
               ),
-            );
-          }),
-          if (_selectedBranchId != null)
-            TextButton.icon(
-              onPressed: _editBranchTimezone,
-              icon: const Icon(Icons.schedule_rounded, size: 16),
-              label: Text(offsetLabel(_selectedBranchOffset)),
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-                visualDensity: VisualDensity.compact,
-              ),
+              items: [
+                for (final branch in _branches)
+                  DropdownMenuItem(
+                    value: branch['id']?.toString(),
+                    child: Text(
+                      branch['name']?.toString() ?? 'Филиал',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (id) {
+                if (id == null || id == _selectedBranchId) return;
+                _emitState(() {
+                  _clearHighlight();
+                  _selectedBranchId = id;
+                });
+                _fetchAll();
+              },
             ),
+          ),
+          const SizedBox(width: AppSpace.xs),
+          IconButton(
+            onPressed: _selectedBranchId == null ? null : _editBranchTimezone,
+            tooltip: 'Часовой пояс: ${offsetLabel(_selectedBranchOffset)}',
+            icon: const Icon(Icons.schedule_rounded, size: 19),
+          ),
         ],
       ),
     );
@@ -271,97 +348,75 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
 
   // ── Date navigation ───────────────────────────────────────────────────────
   Widget _buildDateNavigation() {
-    String dateLabel;
     VoidCallback onPrev, onNext;
 
     if (_currentView == ScheduleView.month) {
-      dateLabel =
-          '${monthNamesGenitive[_displayedMonth.month].toLowerCase()} ${_displayedMonth.year}';
       onPrev = _prevMonth;
       onNext = _nextMonth;
     } else if (_currentView == ScheduleView.week) {
-      final monday = _selectedDate.subtract(
-        Duration(days: _selectedDate.weekday - 1),
-      );
-      final sunday = monday.add(const Duration(days: 6));
-      dateLabel =
-          '${monday.day} ${monthNamesGenitive[monday.month]} — '
-          '${sunday.day} ${monthNamesGenitive[sunday.month]} ${sunday.year}';
       onPrev = _prevWeek;
       onNext = _nextWeek;
     } else {
-      final weekDayNames = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
-      final wd = weekDayNames[_selectedDate.weekday - 1];
-      dateLabel =
-          '$wd, ${_selectedDate.day} ${monthNamesGenitive[_selectedDate.month]} ${_selectedDate.year}';
       onPrev = _prevDay;
       onNext = _nextDay;
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+    final unit = switch (_currentView) {
+      ScheduleView.month => 'месяц',
+      ScheduleView.week => 'неделю',
+      ScheduleView.day => 'день',
+    };
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 280, maxWidth: 390),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          InkWell(
-            onTap: onPrev,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(
-                Icons.chevron_left_rounded,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                size: 22,
-              ),
-            ),
+          IconButton(
+            onPressed: onPrev,
+            tooltip: 'Предыдущий $unit',
+            icon: const Icon(Icons.chevron_left_rounded, size: 22),
           ),
           Expanded(
             child: Text(
-              dateLabel,
+              _dateNavigationLabel(),
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 15,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          GestureDetector(
-            onTap: _goToToday,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurfaceVariant.withAlpha(80),
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                'сегодня',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
-          InkWell(
-            onTap: onNext,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(
-                Icons.chevron_right_rounded,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                size: 22,
-              ),
-            ),
+          TextButton(onPressed: _goToToday, child: const Text('Сегодня')),
+          IconButton(
+            onPressed: onNext,
+            tooltip: 'Следующий $unit',
+            icon: const Icon(Icons.chevron_right_rounded, size: 22),
           ),
         ],
       ),
     );
+  }
+
+  String _dateNavigationLabel() {
+    if (_currentView == ScheduleView.month) {
+      return '${monthNamesGenitive[_displayedMonth.month].toLowerCase()} '
+          '${_displayedMonth.year}';
+    }
+    if (_currentView == ScheduleView.week) {
+      final monday = _selectedDate.subtract(
+        Duration(days: _selectedDate.weekday - 1),
+      );
+      final sunday = monday.add(const Duration(days: 6));
+      return '${monday.day} ${monthNamesGenitive[monday.month]} — '
+          '${sunday.day} ${monthNamesGenitive[sunday.month]} ${sunday.year}';
+    }
+    const weekDayNames = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+    final wd = weekDayNames[_selectedDate.weekday - 1];
+    return '$wd, ${_selectedDate.day} '
+        '${monthNamesGenitive[_selectedDate.month]} ${_selectedDate.year}';
   }
 
   Widget _buildWeekView() {

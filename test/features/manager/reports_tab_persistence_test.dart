@@ -94,10 +94,12 @@ void main() {
     final controller = tester.widget<TabBar>(find.byType(TabBar)).controller!;
     expect(controller.index, 0);
 
-    // Move to «Управление» (index 2), as a tab tap would.
-    controller.index = 2;
+    expect(find.text('Финансовые операции'), findsOneWidget);
+
+    // Move to «Управление» (index 3), as a tab tap would.
+    controller.index = 3;
     await tester.pump();
-    expect(controller.index, 2);
+    expect(controller.index, 3);
 
     // Force a parent rebuild with the SAME initialTab — the realtime-event
     // scenario that used to yank the tab back.
@@ -106,8 +108,31 @@ void main() {
 
     expect(
       controller.index,
-      2,
+      3,
       reason: 'a rebuild with an unchanged initialTab must not reset the tab',
     );
+  });
+
+  testWidgets('financial operations live inside Analytics with one action', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(_FakeApiClient())],
+        child: const MaterialApp(
+          home: Scaffold(body: ReportsWidget(role: 'director', initialTab: 1)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('finance-operations')), findsOneWidget);
+    expect(find.byKey(const ValueKey('add-payment')), findsOneWidget);
+    expect(find.text('Добавить оплату'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
   });
 }

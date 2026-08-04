@@ -207,7 +207,7 @@ class ScheduleMonthView extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    width: 22,
+                    width: 20,
                     height: 22,
                     alignment: Alignment.center,
                     decoration: isToday

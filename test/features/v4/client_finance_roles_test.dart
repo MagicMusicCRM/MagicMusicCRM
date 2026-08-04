@@ -407,8 +407,10 @@ void main() {
 
     expect(crmVisibleTabs('admin', isDesktop: true), isNot(contains(5)));
     expect(crmVisibleTabs('manager', isDesktop: true), isNot(contains(5)));
-    expect(crmVisibleTabs('director', isDesktop: true), contains(5));
-    expect(crmVisibleTabs('system_admin', isDesktop: true), contains(5));
+    expect(crmVisibleTabs('director', isDesktop: true), isNot(contains(5)));
+    expect(crmVisibleTabs('system_admin', isDesktop: true), isNot(contains(5)));
+    expect(crmVisibleTabs('director', isDesktop: true), contains(7));
+    expect(crmVisibleTabs('system_admin', isDesktop: true), contains(7));
   });
 
   testWidgets(
