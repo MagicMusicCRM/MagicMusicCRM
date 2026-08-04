@@ -245,6 +245,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
                               style: const TextStyle(fontSize: 13),
                             ),
                             trailing: IconButton(
+                              tooltip: 'Удалить $displayName из группы',
                               icon: const Icon(
                                 Icons.remove_circle_outline,
                                 color: AppTheme.danger,

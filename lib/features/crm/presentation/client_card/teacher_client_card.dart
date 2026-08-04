@@ -113,6 +113,7 @@ class _TeacherClientCardState extends ConsumerState<TeacherClientCard> {
                 ),
               ),
               IconButton(
+                tooltip: 'Закрыть карточку',
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close_rounded),
               ),

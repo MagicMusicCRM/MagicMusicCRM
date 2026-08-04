@@ -142,6 +142,7 @@ class _DateField extends StatelessWidget {
         suffixIcon: value == null
             ? const Icon(Icons.calendar_today_rounded, size: 16)
             : IconButton(
+                tooltip: 'Очистить дату',
                 icon: const Icon(Icons.clear_rounded, size: 16),
                 onPressed: () => onChanged(null),
               ),

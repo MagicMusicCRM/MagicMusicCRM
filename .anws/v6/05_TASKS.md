@@ -189,7 +189,7 @@ flowchart TD
   - **Проверка:** Windows device scenarios for all inventory rows at narrow/wide window sizes.
   - **Оценка:** 6 ч · **Зависимости:** V6-301 · **Приоритет:** P0.
 
-- [ ] **V6-303** `[REQ-UX-001]` — Системный keyboard/focus/tooltip/semantics pass.
+- [x] **V6-303** `[REQ-UX-001]` — Системный keyboard/focus/tooltip/semantics pass.
   - **Работа:** logical focus traversal, visible focus ring, Enter/Space/Escape, Back shortcuts where safe, semantic labels/tooltips for icon-only actions.
   - **Критерий:** icon-only unlabeled controls=0; every primary workflow completes keyboard-only; Escape never discards dirty input.
   - **Проверка:** automated semantics/focus checks + Windows keyboard-only UAT.

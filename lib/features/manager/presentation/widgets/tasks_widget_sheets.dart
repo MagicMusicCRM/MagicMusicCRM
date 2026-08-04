@@ -179,6 +179,7 @@ class _TaskTimelineSheetState extends ConsumerState<_TaskTimelineSheet>
                     icon: const Icon(Icons.add_comment_rounded),
                   ),
                   IconButton(
+                    tooltip: 'Закрыть задачу',
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
                   ),
@@ -282,6 +283,7 @@ class _TaskHistoryFeedSheetState extends ConsumerState<_TaskHistoryFeedSheet> {
                     ),
                   ),
                   IconButton(
+                    tooltip: 'Закрыть фильтры',
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
                   ),

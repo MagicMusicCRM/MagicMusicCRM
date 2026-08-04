@@ -429,6 +429,7 @@ class _FullScreenImageViewer extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Закрыть просмотр',
           icon: const Icon(Icons.close_rounded, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),

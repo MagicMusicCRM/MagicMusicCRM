@@ -271,6 +271,7 @@ class _SearchableSelectState extends State<SearchableSelect> {
                   prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
+                          tooltip: 'Очистить поиск',
                           icon: const Icon(Icons.clear_rounded),
                           onPressed: () => _searchController.clear(),
                         )

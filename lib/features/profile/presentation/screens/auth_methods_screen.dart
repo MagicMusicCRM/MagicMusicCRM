@@ -263,6 +263,9 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                             labelText: 'Новый пароль',
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
+                              tooltip: _obscurePassword
+                                  ? 'Показать пароль'
+                                  : 'Скрыть пароль',
                               icon: Icon(
                                 _obscurePassword
                                     ? Icons.visibility_outlined

@@ -372,6 +372,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
                   suffixIcon: _query.isEmpty
                       ? null
                       : IconButton(
+                          tooltip: 'Очистить поиск',
                           icon: const Icon(Icons.close_rounded, size: 18),
                           onPressed: () {
                             _searchCtrl.clear();

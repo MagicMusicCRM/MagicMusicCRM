@@ -215,6 +215,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
+                  tooltip: 'Остановить и отправить запись',
                   icon: const Icon(Icons.send_rounded, color: Colors.white),
                   onPressed: _isRecording ? _stopAndSend : null,
                 ),

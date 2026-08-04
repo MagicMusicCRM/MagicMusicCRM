@@ -107,6 +107,7 @@ class _NotificationPreferencesDialogState
                     ),
                   ),
                   IconButton(
+                    tooltip: 'Закрыть',
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
                   ),

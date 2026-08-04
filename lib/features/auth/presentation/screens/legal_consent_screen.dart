@@ -349,6 +349,7 @@ class _ConsentRow extends StatelessWidget {
               ),
               const SizedBox(width: AppSpace.sm),
               IconButton(
+                tooltip: 'Открыть документ',
                 onPressed: onOpen,
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,

@@ -1102,6 +1102,7 @@ class _CalendarHeader extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
+            tooltip: 'Предыдущий период',
             onPressed: onPrev,
             icon: const Icon(Icons.chevron_left_rounded),
           ),
@@ -1132,6 +1133,7 @@ class _CalendarHeader extends StatelessWidget {
             ),
           ),
           IconButton(
+            tooltip: 'Следующий период',
             onPressed: onNext,
             icon: const Icon(Icons.chevron_right_rounded),
           ),

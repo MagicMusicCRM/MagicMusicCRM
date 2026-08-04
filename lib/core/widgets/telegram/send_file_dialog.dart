@@ -139,6 +139,7 @@ class _SendFileDialogState extends State<SendFileDialog> {
                   ),
                   const Spacer(),
                   IconButton(
+                    tooltip: 'Закрыть',
                     icon: const Icon(Icons.close_rounded),
                     onPressed: () => Navigator.pop(context),
                     splashRadius: 20,

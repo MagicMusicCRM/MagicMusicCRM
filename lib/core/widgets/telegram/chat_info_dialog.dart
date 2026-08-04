@@ -600,6 +600,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
                 ),
                 leading: widget.onClose != null
                     ? IconButton(
+                        tooltip: 'Закрыть',
                         icon: const Icon(Icons.close),
                         onPressed: widget.onClose,
                       )

@@ -77,6 +77,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
             onPressed: _showScheduleFilters,
           ),
           IconButton(
+            tooltip: 'Обновить расписание',
             icon: Icon(
               Icons.refresh_rounded,
               color: Theme.of(context).colorScheme.onSurfaceVariant,

@@ -514,6 +514,7 @@ class MessageBubble extends StatelessWidget {
                     children: ['👍', '❤️', '🔥', '😂', '😮', '😢', '🙏', '💯']
                         .map((emoji) {
                           return IconButton(
+                            tooltip: 'Реакция $emoji',
                             icon: Text(
                               emoji,
                               style: const TextStyle(fontSize: 24),

@@ -841,6 +841,7 @@ extension _ClientCardTabsB on _ClientCardState {
             ),
           ),
           IconButton(
+            tooltip: 'Закрыть форму',
             onPressed: _handleClose,
             icon: const Icon(Icons.close_rounded),
             iconSize: 20,

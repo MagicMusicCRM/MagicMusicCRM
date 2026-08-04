@@ -275,6 +275,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       appBar: AppBar(
         leading: widget.onBack != null
             ? IconButton(
+                tooltip: 'Назад',
                 icon: const Icon(Icons.arrow_back),
                 onPressed: widget.onBack,
               )
@@ -294,6 +295,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
       floatingActionButton: (isDesktop && _hasChanges)
           ? FloatingActionButton(
+              tooltip: 'Сохранить',
               backgroundColor: AppTheme.primaryGold,
               onPressed: _isSaving ? null : _saveChanges,
               child: checkmarkIcon,

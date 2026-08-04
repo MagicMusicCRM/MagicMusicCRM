@@ -512,6 +512,7 @@ extension _LeadsActions on _LeadsWidgetState {
                       suffixIcon: _searchCtrl.text.isEmpty
                           ? null
                           : IconButton(
+                              tooltip: 'Очистить поиск',
                               icon: const Icon(Icons.close_rounded, size: 18),
                               onPressed: _clearSearch,
                             ),

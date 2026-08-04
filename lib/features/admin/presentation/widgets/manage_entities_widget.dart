@@ -174,6 +174,7 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
                   ),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
+                          tooltip: 'Очистить поиск',
                           icon: Icon(Icons.close_rounded, size: 20),
                           onPressed: () {
                             _searchDebounce?.cancel();
