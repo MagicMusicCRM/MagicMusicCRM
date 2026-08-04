@@ -54,6 +54,7 @@ extension _ClientCardStudent on _ClientCardState {
   Widget _buildStudentTasksTab(ColorScheme cs) {
     return _studentGuard(cs, () {
       return SingleChildScrollView(
+        controller: _taskScrollController,
         padding: const EdgeInsets.fromLTRB(
           AppSpace.xl,
           AppSpace.lg,
@@ -78,6 +79,28 @@ extension _ClientCardStudent on _ClientCardState {
                 (row) => _TaskTile(
                   task: row,
                   origin: _isConverted ? row['_origin']?.toString() : null,
+                  onOpen: row['id']?.toString().isNotEmpty == true
+                      ? (sourceContext, target) => _openLinkedRecord(
+                          sourceContext,
+                          EntityLink.typed(
+                            entityType: EntityLinkType.task,
+                            entityId: row['id'].toString(),
+                            optionalFocus: EntityLinkFocus(
+                              focus: 'task',
+                              filter: {
+                                'taskId': row['id'].toString(),
+                                'entityType':
+                                    row['entity_type']?.toString() ??
+                                    (_isStudent ? 'student' : 'lead'),
+                                'entityId':
+                                    row['entity_id']?.toString() ??
+                                    (_isStudent ? _studentId : _leadId),
+                              },
+                            ),
+                          ),
+                          target,
+                        )
+                      : null,
                 ),
               ),
           ],
@@ -218,6 +241,25 @@ extension _ClientCardStudent on _ClientCardState {
         onCreate: () => _emitState(() => _creatingPayment = true),
         onCancel: () => _emitState(() => _creatingPayment = false),
         onSubmit: _recordClientPayment,
+        scrollController: _paymentScrollController,
+        highlightedPaymentId: widget.initialViewState?.filters['paymentId']
+            ?.toString(),
+        onOpenPayment: (sourceContext, paymentId, target) => _openLinkedRecord(
+          sourceContext,
+          EntityLink.typed(
+            entityType: EntityLinkType.payment,
+            entityId: paymentId,
+            optionalFocus: EntityLinkFocus(
+              focus: 'payment',
+              filter: {
+                'studentId': _studentId,
+                'section': 'payments',
+                'paymentId': paymentId,
+              },
+            ),
+          ),
+          target,
+        ),
       ),
     );
   }

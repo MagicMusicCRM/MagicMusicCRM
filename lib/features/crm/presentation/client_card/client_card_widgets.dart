@@ -307,7 +307,8 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
 class _TaskTile extends StatefulWidget {
   final Map<String, dynamic> task;
   final String? origin;
-  const _TaskTile({required this.task, this.origin});
+  final void Function(BuildContext context, EntityOpenTarget target)? onOpen;
+  const _TaskTile({required this.task, this.origin, this.onOpen});
 
   @override
   State<_TaskTile> createState() => _TaskTileState();
@@ -444,6 +445,10 @@ class _TaskTileState extends State<_TaskTile> {
                       ClientOriginChip(entityType: widget.origin!),
                     ],
                     const SizedBox(width: 4),
+                    if (widget.onOpen != null)
+                      _EntityOpenButtons(
+                        onOpen: (target) => widget.onOpen!(context, target),
+                      ),
                     Icon(
                       _expanded
                           ? Icons.expand_less_rounded
@@ -502,12 +507,42 @@ class _TaskTileState extends State<_TaskTile> {
   }
 }
 
+class _EntityOpenButtons extends StatelessWidget {
+  const _EntityOpenButtons({required this.onOpen});
+
+  final ValueChanged<EntityOpenTarget> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final desktop =
+        WorkspaceNavigationScope.maybeOf(context)?.isDesktop == true;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: 'Открыть связанную запись',
+          onPressed: () => onOpen(EntityOpenTarget.current),
+          icon: const Icon(Icons.chevron_right_rounded, size: 20),
+        ),
+        if (desktop)
+          IconButton(
+            tooltip: 'Открыть в новой вкладке',
+            onPressed: () => onOpen(EntityOpenTarget.newTab),
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+          ),
+      ],
+    );
+  }
+}
+
 /// One labelled info row for compact read-only card sections.
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final Widget? trailing;
+  final void Function(BuildContext context, EntityOpenTarget target)? onOpen;
+  final bool highlighted;
 
   /// Мелкая приписка под значением — провенанс («из HolliHop») там, где важно
   /// отличать настоящие данные от подставленных приложением.
@@ -524,60 +559,89 @@ class _InfoRow extends StatelessWidget {
     this.hint,
     this.hintColor,
     this.trailing,
+    this.onOpen,
+    this.highlighted = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 18,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
-                ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (hint != null)
+    final content = DecoratedBox(
+      decoration: highlighted
+          ? BoxDecoration(
+              border: Border.all(color: AppColor.gold, width: 2),
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            )
+          : const BoxDecoration(),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.xs,
+          vertical: 6,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    hint!,
+                    label,
                     style: TextStyle(
-                      fontSize: 10,
-                      color:
-                          hintColor ??
-                          Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontWeight: hintColor == null
-                          ? FontWeight.normal
-                          : FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 11,
                     ),
                   ),
-              ],
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (hint != null)
+                    Text(
+                      hint!,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color:
+                            hintColor ??
+                            Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: hintColor == null
+                            ? FontWeight.normal
+                            : FontWeight.w700,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          if (trailing != null) ...[
-            const SizedBox(width: AppSpace.sm),
-            trailing!,
+            if (trailing != null) ...[
+              const SizedBox(width: AppSpace.sm),
+              trailing!,
+            ],
+            if (onOpen != null)
+              _EntityOpenButtons(onOpen: (target) => onOpen!(context, target)),
           ],
-        ],
+        ),
+      ),
+    );
+    if (onOpen == null) return content;
+    return Semantics(
+      button: true,
+      link: true,
+      label: '$label: $value',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          onTap: () => onOpen!(context, EntityOpenTarget.current),
+          child: content,
+        ),
       ),
     );
   }

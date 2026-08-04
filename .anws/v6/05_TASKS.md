@@ -246,7 +246,7 @@ flowchart TD
   - **Проверка:** config publish/branch override/rollback + create from both legacy redirect and canonical route.
   - **Оценка:** 7 ч · **Зависимости:** V6-401, config backend readiness · **Приоритет:** P0.
 
-- [ ] **V6-406** `[REQ-NAV-001, REQ-NAV-002]` — Завершить links из lesson/client contexts.
+- [x] **V6-406** `[REQ-NAV-001, REQ-NAV-002]` — Завершить links из lesson/client contexts.
   - **Работа:** clickable typed Student/Lead/Teacher/Room/Lesson/Task/Payment/Subscription refs with current-tab/new-tab policy and safe unavailable state.
   - **Критерий:** all matrix refs have visible focus/semantic affordance; Back returns exact client section/calendar/list state.
   - **Проверка:** full entity-link matrix for allow/missing/archived/forbidden on Windows/Android.

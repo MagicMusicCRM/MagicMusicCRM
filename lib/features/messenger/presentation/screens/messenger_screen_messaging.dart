@@ -425,7 +425,7 @@ extension _MessengerMessaging on _MessengerScreenState {
     }
 
     if (includeCrmTabs && _selectedCrmTab != 0) {
-      _emitState(() => _selectedCrmTab = 0);
+      _selectCrmTab(0);
     }
   }
 

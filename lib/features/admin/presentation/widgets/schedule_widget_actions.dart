@@ -342,6 +342,19 @@ extension _ScheduleActions on _ScheduleWidgetState {
         _teacherNames = tNames;
         _studentNames = sNames;
       });
+      if (!_highlightUnavailableShown &&
+          _highlightLessonId != null &&
+          !dayLessons.any(
+            (lesson) => lesson['id']?.toString() == _highlightLessonId,
+          )) {
+        _highlightUnavailableShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Связанная запись недоступна.')),
+          );
+        });
+      }
     } catch (e) {
       debugPrint('Error fetching day lessons: $e');
     }
@@ -372,6 +385,9 @@ extension _ScheduleActions on _ScheduleWidgetState {
           l['teacher_id']?.toString() != _filterTeacherId) {
         return false;
       }
+      if (_filterRoomId != null && l['room_id']?.toString() != _filterRoomId) {
+        return false;
+      }
       if (_filterClientId != null) {
         final key = _filterClientType == 'lead' ? 'lead_id' : 'student_id';
         if (l[key]?.toString() != _filterClientId) return false;
@@ -397,6 +413,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       _onlyTrial ||
       _onlyConflicts ||
       _filterTeacherId != null ||
+      _filterRoomId != null ||
       _filterClientId != null;
 
   List<Map<String, dynamic>> _lessonsForDate(DateTime date) {

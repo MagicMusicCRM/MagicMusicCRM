@@ -13,6 +13,43 @@ import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'client_card.dart';
 import 'teacher_client_card.dart';
 
+Widget? buildClientWorkspaceSurface({
+  required CapabilitySnapshot snapshot,
+  required ContextRouteState route,
+  required String tabId,
+}) {
+  final link = route.link;
+  final isClient = link.entityType == EntityLinkType.client;
+  final isClientCommerce =
+      link.entityType == EntityLinkType.payment ||
+      link.entityType == EntityLinkType.subscription;
+  final studentId = isClientCommerce
+      ? link.optionalFocus?.filter['studentId']?.toString()
+      : null;
+  if (!isClient && (studentId == null || studentId.isEmpty)) return null;
+  final filter = {...route.viewState.filters, ...?link.optionalFocus?.filter};
+  final section =
+      filter['section']?.toString() ??
+      (link.entityType == EntityLinkType.payment
+          ? 'payments'
+          : link.entityType == EntityLinkType.subscription
+          ? 'subscriptions'
+          : 'overview');
+  return ClientCardRouteSurface(
+    key: ValueKey('workspace-client-$tabId'),
+    snapshot: snapshot,
+    entityType: isClient && link.rawEntityType == 'lead' ? 'lead' : 'student',
+    entityId: isClient ? link.entityId : studentId!,
+    initialSection: section,
+    viewState: ContextViewState(
+      filters: filter,
+      date: route.viewState.date,
+      scrollOffset: route.viewState.scrollOffset,
+      selectedColumn: route.viewState.selectedColumn,
+    ),
+  );
+}
+
 /// Compatibility launcher retained for existing list/board callers. It now
 /// opens the canonical routed client workspace instead of a second dialog.
 Future<bool?> showClientCard(

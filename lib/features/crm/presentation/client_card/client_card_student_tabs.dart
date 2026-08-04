@@ -10,6 +10,14 @@ Widget _paymentsView(
   required VoidCallback onCreate,
   required VoidCallback onCancel,
   required ClientPaymentSubmit onSubmit,
+  required void Function(
+    BuildContext context,
+    String paymentId,
+    EntityOpenTarget target,
+  )
+  onOpenPayment,
+  String? highlightedPaymentId,
+  ScrollController? scrollController,
 }) {
   final account = commerce == null || commerce.accounts.isEmpty
       ? null
@@ -30,9 +38,14 @@ Widget _paymentsView(
         ({CommerceSubscription subscription, CommerceInstallment installment})
       >[];
   final balanceMinor = account?.balanceMinor ?? BigInt.zero;
+  final paymentAvailable =
+      highlightedPaymentId == null ||
+      movements.any((item) => item.id == highlightedPaymentId) ||
+      fallbackPayments.any((item) => item.id == highlightedPaymentId);
 
   return ListView(
     key: const Key('client-payments-tab'),
+    controller: scrollController,
     padding: const EdgeInsets.all(AppSpace.xl),
     children: [
       Row(
@@ -115,6 +128,13 @@ Widget _paymentsView(
         },
       ),
       const SizedBox(height: AppSpace.xl),
+      if (!paymentAvailable) ...[
+        const _PaymentEmpty(
+          icon: Icons.link_off_rounded,
+          text: 'Связанная запись недоступна',
+        ),
+        const SizedBox(height: AppSpace.lg),
+      ],
       _PaymentSectionHeader(
         title: 'Поступления и списания',
         count: movements.length,
@@ -126,10 +146,24 @@ Widget _paymentsView(
           text: 'Операций пока нет',
         )
       else if (movements.isNotEmpty)
-        ...movements.map((movement) => _PaymentMovementRow(movement: movement))
+        ...movements.map(
+          (movement) => _PaymentMovementRow(
+            movement: movement,
+            highlighted: movement.id == highlightedPaymentId,
+            onOpen: (context, target) =>
+                onOpenPayment(context, movement.id, target),
+          ),
+        )
       else
         ...fallbackPayments.map(
-          (payment) => _LegacyPaymentRow(payment: payment),
+          (payment) => _LegacyPaymentRow(
+            payment: payment,
+            highlighted: payment.id == highlightedPaymentId,
+            onOpen: payment.id == null
+                ? null
+                : (context, target) =>
+                      onOpenPayment(context, payment.id!, target),
+          ),
         ),
       const SizedBox(height: AppSpace.xl),
       _PaymentSectionHeader(
@@ -228,9 +262,15 @@ class _PaymentSectionHeader extends StatelessWidget {
 }
 
 class _PaymentMovementRow extends StatelessWidget {
-  const _PaymentMovementRow({required this.movement});
+  const _PaymentMovementRow({
+    required this.movement,
+    required this.onOpen,
+    this.highlighted = false,
+  });
 
   final CommerceMovement movement;
+  final void Function(BuildContext context, EntityOpenTarget target) onOpen;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -254,50 +294,77 @@ class _PaymentMovementRow extends StatelessWidget {
       if (movement.status == 'paid') 'Проведён',
       movement.acceptedByName,
     ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
-    return Container(
+    return Semantics(
       key: ValueKey('commerce-movement-${movement.id}'),
-      margin: const EdgeInsets.only(bottom: AppSpace.sm),
-      padding: const EdgeInsets.all(AppSpace.md),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        border: Border.all(color: AppColor.divider),
-        borderRadius: BorderRadius.circular(AppRadius.control),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            credit ? Icons.south_west_rounded : Icons.north_east_rounded,
-            color: credit ? AppTheme.success : cs.error,
+      button: true,
+      link: true,
+      label: '$title, ${formatPaymentMinor(movement.amountMinor)}',
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.sm),
+        child: Material(
+          color: cs.surface,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(
+              color: highlighted ? AppColor.gold : AppColor.divider,
+              width: highlighted ? 2 : 1,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.control),
           ),
-          const SizedBox(width: AppSpace.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                if (movement.comment?.isNotEmpty == true)
-                  Text(movement.comment!, style: const TextStyle(fontSize: 13)),
-                const SizedBox(height: AppSpace.xs),
-                Text(
-                  details,
-                  style: const TextStyle(color: AppColor.text2, fontSize: 12),
-                ),
-              ],
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            onTap: () => onOpen(context, EntityOpenTarget.current),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpace.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    credit
+                        ? Icons.south_west_rounded
+                        : Icons.north_east_rounded,
+                    color: credit ? AppTheme.success : cs.error,
+                  ),
+                  const SizedBox(width: AppSpace.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        if (movement.comment?.isNotEmpty == true)
+                          Text(
+                            movement.comment!,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        const SizedBox(height: AppSpace.xs),
+                        Text(
+                          details,
+                          style: const TextStyle(
+                            color: AppColor.text2,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Text(
+                    '${credit ? '+' : '−'}${formatPaymentMinor(movement.amountMinor)}',
+                    style: TextStyle(
+                      color: credit ? AppTheme.success : cs.error,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  _EntityOpenButtons(
+                    onOpen: (target) => onOpen(context, target),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: AppSpace.sm),
-          Text(
-            '${credit ? '+' : '−'}${formatPaymentMinor(movement.amountMinor)}',
-            style: TextStyle(
-              color: credit ? AppTheme.success : cs.error,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -340,16 +407,34 @@ class _InstallmentRow extends StatelessWidget {
 }
 
 class _LegacyPaymentRow extends StatelessWidget {
-  const _LegacyPaymentRow({required this.payment});
+  const _LegacyPaymentRow({
+    required this.payment,
+    this.onOpen,
+    this.highlighted = false,
+  });
 
   final Payment payment;
+  final void Function(BuildContext context, EntityOpenTarget target)? onOpen;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
+      shape: highlighted
+          ? RoundedRectangleBorder(
+              side: const BorderSide(color: AppColor.gold, width: 2),
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            )
+          : null,
       leading: const Icon(Icons.payments_outlined, color: AppTheme.success),
       title: Text('${payment.amountRaw} ₽'),
       subtitle: Text(payment.paymentDate ?? 'Дата не указана'),
+      onTap: onOpen == null
+          ? null
+          : () => onOpen!(context, EntityOpenTarget.current),
+      trailing: onOpen == null
+          ? null
+          : _EntityOpenButtons(onOpen: (target) => onOpen!(context, target)),
     );
   }
 }

@@ -6,13 +6,11 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
-import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_schedule_calendar.dart';
-import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 
 import '../crm/client_card/card_fake_api.dart';
@@ -354,6 +352,7 @@ void main() {
     tester.view.physicalSize = const Size(412, 900);
     addTearDown(tester.view.reset);
     final api = FakeCardApiClient(scheduleMatrix: _lessons);
+    var openedQuery = <String, String>{};
     final router = GoRouter(
       initialLocation: '/students/student-1',
       routes: [
@@ -382,7 +381,10 @@ void main() {
         ),
         GoRoute(
           path: '/admin',
-          builder: (_, _) => const Scaffold(body: Text('Расписание host')),
+          builder: (_, state) {
+            openedQuery = state.uri.queryParameters;
+            return const Scaffold(body: Text('Расписание host'));
+          },
         ),
       ],
     );
@@ -417,21 +419,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Расписание host'), findsOneWidget);
-    final container = ProviderScope.containerOf(
-      tester.element(find.text('Расписание host')),
-    );
-    expect(
-      container.read(scheduleNavigationProvider)?.highlightLessonId,
-      'lesson-selected',
-    );
-    expect(
-      container
-          .read(crmNavigationRequestProvider)
-          ?.link
-          .optionalFocus
-          ?.filter['clientId'],
-      'student-1',
-    );
+    expect(openedQuery['entityType'], 'lesson');
+    expect(openedQuery['entityId'], 'lesson-selected');
+    expect(openedQuery['focus'], 'lesson');
+    expect(openedQuery['f.clientId'], 'student-1');
+    expect(openedQuery['f.branchId'], 'branch-a');
     router.pop();
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('client-calendar-grid')), findsOneWidget);

@@ -278,6 +278,25 @@ class WorkspaceController extends ChangeNotifier {
     });
   }
 
+  /// Replaces a lateral section root without adding it to chronological
+  /// history. Entity drill-downs are pushed on top of this route, so Back
+  /// returns to the section the user was actually viewing.
+  void replaceCurrentLink(
+    String tabId,
+    EntityLink link, {
+    ContextViewState? viewState,
+  }) {
+    _requireSupported(link);
+    _updateTab(tabId, (tab) {
+      final routes = [...tab.routeStack];
+      routes[routes.length - 1] = routes.last.copyWith(
+        link: link,
+        viewState: viewState ?? ContextViewState(),
+      );
+      return tab.copyWith(routeStack: routes, forwardStack: const []);
+    });
+  }
+
   void registerForm(
     String tabId,
     String formKey, {

@@ -115,6 +115,7 @@ class EntityLink {
       'homework' => EntityLinkType.homework,
       'chat' => EntityLinkType.chat,
       'report' ||
+      'overview' ||
       'client_status_list' ||
       'lesson_list' ||
       'school_finance_month' => EntityLinkType.report,

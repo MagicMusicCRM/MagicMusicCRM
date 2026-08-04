@@ -109,6 +109,15 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
 
   Widget _buildSubscriptionsTab(ColorScheme cs) {
     return _studentGuard(cs, () {
+      final focusedId = widget.initialViewState?.filters['subscriptionId']
+          ?.toString();
+      if (focusedId != null &&
+          !_subscriptions.any((subscription) => subscription.id == focusedId)) {
+        return const MagicPageState(
+          kind: MagicPageStateKind.empty,
+          title: 'Связанная запись недоступна',
+        );
+      }
       if (_subscriptions.isEmpty) {
         return const MagicPageState(
           kind: MagicPageStateKind.empty,
@@ -116,6 +125,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         );
       }
       return ListView(
+        controller: _subscriptionScrollController,
         padding: const EdgeInsets.all(AppSpace.xl),
         children: [
           _sectionTitle('Абонементы'),
@@ -138,6 +148,28 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
                     _subscriptionOverpayment(subscription)?.isDebt == true
                     ? AppTheme.danger
                     : AppTheme.success,
+                highlighted:
+                    subscription.id ==
+                    widget.initialViewState?.filters['subscriptionId']
+                        ?.toString(),
+                onOpen: subscription.id?.isNotEmpty == true
+                    ? (sourceContext, target) => _openLinkedRecord(
+                        sourceContext,
+                        EntityLink.typed(
+                          entityType: EntityLinkType.subscription,
+                          entityId: subscription.id!,
+                          optionalFocus: EntityLinkFocus(
+                            focus: 'subscription',
+                            filter: {
+                              'studentId': _studentId,
+                              'section': 'subscriptions',
+                              'subscriptionId': subscription.id!,
+                            },
+                          ),
+                        ),
+                        target,
+                      )
+                    : null,
                 trailing:
                     subscription.isActive &&
                         (subscription.id?.isNotEmpty ?? false)

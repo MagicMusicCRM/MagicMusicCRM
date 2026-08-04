@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -31,6 +33,9 @@ import 'package:magic_music_crm/core/models/student_funnel.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'client_card_aggregation.dart';
 import 'client_card_staff_api.dart';
 import 'client_archive_button.dart';
@@ -133,6 +138,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
   String? _duplicateDecisionId;
 
   String _selectedSection = 'overview';
+  late final ScrollController _taskScrollController;
+  late final ScrollController _paymentScrollController;
+  late final ScrollController _subscriptionScrollController;
 
   // ── Aggregation (Phase 4) ─────────────────────────────────────────────────
   // The card opens for one entity (widget.entityType / widget.lead['id']) but a
@@ -360,6 +368,20 @@ class _ClientCardState extends ConsumerState<ClientCard>
   void initState() {
     super.initState();
     _selectedSection = widget.initialSection;
+    final restoredOffset = widget.initialViewState?.scrollOffset ?? 0;
+    _taskScrollController = ScrollController(
+      initialScrollOffset: _selectedSection == 'history_tasks'
+          ? restoredOffset
+          : 0,
+    );
+    _paymentScrollController = ScrollController(
+      initialScrollOffset: _selectedSection == 'payments' ? restoredOffset : 0,
+    );
+    _subscriptionScrollController = ScrollController(
+      initialScrollOffset: _selectedSection == 'subscriptions'
+          ? restoredOffset
+          : 0,
+    );
     _leadData = Map<String, dynamic>.from(widget.lead);
     _commentCtrl = TextEditingController();
     if (widget.entityType == 'student') {
@@ -409,9 +431,36 @@ class _ClientCardState extends ConsumerState<ClientCard>
     if (mounted) setState(fn);
   }
 
+  void _openLinkedRecord(
+    BuildContext sourceContext,
+    EntityLink link,
+    EntityOpenTarget target,
+  ) {
+    final previous = widget.initialViewState;
+    final scrollable = Scrollable.maybeOf(sourceContext);
+    unawaited(
+      openEntityLink(
+        context,
+        ref,
+        link,
+        target: target,
+        sourceViewState: ContextViewState(
+          filters: {...?previous?.filters, 'section': _selectedSection},
+          date: previous?.date,
+          scrollOffset:
+              scrollable?.position.pixels ?? previous?.scrollOffset ?? 0,
+          selectedColumn: previous?.selectedColumn,
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _commentCtrl.dispose();
+    _taskScrollController.dispose();
+    _paymentScrollController.dispose();
+    _subscriptionScrollController.dispose();
     super.dispose();
   }
 

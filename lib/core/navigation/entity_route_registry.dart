@@ -198,7 +198,20 @@ class EntityRouteRegistry {
             'reports' => 'report',
             _ => '',
           };
-      link = EntityLink.fromJson({'entityType': rawType, 'entityId': entityId});
+      final focus = uri.queryParameters['focus'];
+      final filter = <String, dynamic>{
+        for (final entry in uri.queryParameters.entries)
+          if (entry.key.startsWith('f.')) entry.key.substring(2): entry.value,
+      };
+      link = EntityLink.fromJson({
+        'entityType': rawType,
+        'entityId': entityId,
+        if ((focus != null && focus.isNotEmpty) || filter.isNotEmpty)
+          'optionalFocus': {
+            if (focus != null && focus.isNotEmpty) 'focus': focus,
+            if (filter.isNotEmpty) 'filter': filter,
+          },
+      });
     }
     if (link == null || !link.isSupported) {
       return EntityRouteResolution(
@@ -250,13 +263,13 @@ class EntityRouteRegistry {
                 routeName: 'section:$section',
                 title: _sectionTitle(section),
                 location: rootLocation,
-                link: _sectionRootLink(section),
+                link: sectionRootLink(section),
               ),
             ],
     );
   }
 
-  static EntityLink _sectionRootLink(String section) {
+  static EntityLink sectionRootLink(String section) {
     final focus = EntityLinkFocus(focus: 'section');
     return switch (section) {
       'clients' => EntityLink.typed(
@@ -295,6 +308,12 @@ class EntityRouteRegistry {
         entityId: '__section__',
         optionalFocus: focus,
       ),
+      'overview' => EntityLink.typed(
+        entityType: EntityLinkType.report,
+        entityId: '__section__',
+        optionalFocus: focus,
+        variant: 'overview',
+      ),
       _ => EntityLink.typed(
         entityType: EntityLinkType.chat,
         entityId: 'home',
@@ -313,6 +332,7 @@ class EntityRouteRegistry {
               'conflictList',
             }.contains(link.optionalFocus?.focus) =>
       'schedule',
+    EntityLinkType.report when link.rawEntityType == 'overview' => 'overview',
     EntityLinkType.client ||
     EntityLinkType.subscription ||
     EntityLinkType.comment ||
@@ -343,6 +363,7 @@ class EntityRouteRegistry {
     'homework' => 'Домашние задания',
     'chat' => 'Чат',
     'reports' => 'Аналитика',
+    'overview' => 'Обзор',
     _ => 'Главная',
   };
 
@@ -412,12 +433,17 @@ class EntityRouteRegistry {
   }
 
   static String _staffSection(EntityLink link, String section, String home) {
+    final focus = link.optionalFocus;
     return Uri(
       path: home,
       queryParameters: {
         'section': section,
         'entityId': link.entityId,
         'entityType': link.rawEntityType,
+        if (focus?.focus?.isNotEmpty == true) 'focus': focus!.focus,
+        for (final entry
+            in focus?.filter.entries ?? const <MapEntry<String, dynamic>>[])
+          'f.${entry.key}': entry.value.toString(),
       },
     ).toString();
   }
@@ -459,8 +485,8 @@ class EntityRouteRegistry {
         'schedule.lesson.read.assigned',
         'schedule.lesson.write',
       }),
-      buildLocation: (link, _) =>
-          '/lessons/${Uri.encodeComponent(link.entityId)}',
+      buildLocation: (link, snapshot) =>
+          _staffRoute(link, snapshot, 'schedule'),
     ),
     EntityLinkType.task: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.allows('workflow.task.read'),
@@ -478,8 +504,9 @@ class EntityRouteRegistry {
     ),
     EntityLinkType.user: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.allows('system.settings.manage'),
-      buildLocation: (link, _) =>
-          '/admin/profiles/${Uri.encodeComponent(link.entityId)}',
+      buildLocation: (link, snapshot) => link.entityId == '__section__'
+          ? _staffRoute(link, snapshot, 'users')
+          : '/admin/profiles/${Uri.encodeComponent(link.entityId)}',
     ),
     EntityLinkType.homework: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.allows('crm.client.read.basic'),
@@ -537,7 +564,15 @@ class EntityRouteRegistry {
               'schedule',
               'conflictList',
             }.contains(link.optionalFocus?.focus);
-        return _staffRoute(link, snapshot, isSchedule ? 'schedule' : 'reports');
+        return _staffRoute(
+          link,
+          snapshot,
+          isSchedule
+              ? 'schedule'
+              : link.rawEntityType == 'overview'
+              ? 'overview'
+              : 'reports',
+        );
       },
     ),
     EntityLinkType.teacher: EntityRouteRegistration(

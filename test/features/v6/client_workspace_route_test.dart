@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
@@ -36,6 +37,51 @@ Widget _app(FakeCardApiClient api, Widget child) {
 }
 
 void main() {
+  test('payment and subscription refs reuse the canonical client sections', () {
+    const snapshot = CapabilitySnapshot(
+      accountId: 'account-1',
+      role: 'manager',
+      accessVersion: 1,
+      capabilities: {'crm.client.read.basic', 'commerce.client_finance.read'},
+      scopes: {},
+    );
+    for (final entry in const [
+      (type: EntityLinkType.payment, section: 'payments', idKey: 'paymentId'),
+      (
+        type: EntityLinkType.subscription,
+        section: 'subscriptions',
+        idKey: 'subscriptionId',
+      ),
+    ]) {
+      final surface = buildClientWorkspaceSurface(
+        snapshot: snapshot,
+        route: ContextRouteState(
+          link: EntityLink.typed(
+            entityType: entry.type,
+            entityId: 'commerce-1',
+            optionalFocus: EntityLinkFocus(
+              focus: entry.type.name,
+              filter: {
+                'studentId': 'student-1',
+                'section': entry.section,
+                entry.idKey: 'commerce-1',
+              },
+            ),
+          ),
+          viewState: ContextViewState(scrollOffset: 144),
+        ),
+        tabId: 'tab-1',
+      );
+
+      expect(surface, isA<ClientCardRouteSurface>());
+      final card = surface! as ClientCardRouteSurface;
+      expect(card.entityId, 'student-1');
+      expect(card.initialSection, entry.section);
+      expect(card.viewState?.filters[entry.idKey], 'commerce-1');
+      expect(card.viewState?.scrollOffset, 144);
+    }
+  });
+
   for (final role in const ['admin', 'manager', 'director']) {
     for (final width in const [360.0, 840.0, 1200.0]) {
       testWidgets('$role fills ${width.toInt()} and restores section', (

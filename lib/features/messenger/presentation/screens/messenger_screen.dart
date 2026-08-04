@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/alert_policy.dart';
 import 'package:magic_music_crm/core/services/section_unseen_service.dart';
@@ -53,6 +55,7 @@ import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_st
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:mime/mime.dart';
 import 'package:magic_music_crm/features/messenger/data/chat_archive_api.dart';
 import 'package:magic_music_crm/features/messenger/inbox_logic.dart';
@@ -76,7 +79,13 @@ void _logMessenger(String message) {
 class MessengerScreen extends ConsumerStatefulWidget {
   final String role; // 'client', 'admin', 'system_admin', 'manager', 'teacher'
   final EntityLink? initialLink;
-  const MessengerScreen({super.key, required this.role, this.initialLink});
+  final ContextViewState? initialViewState;
+  const MessengerScreen({
+    super.key,
+    required this.role,
+    this.initialLink,
+    this.initialViewState,
+  });
 
   @override
   ConsumerState<MessengerScreen> createState() => _MessengerScreenState();
@@ -242,6 +251,37 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     if (mounted) setState(fn);
   }
 
+  void _selectCrmTab(int tab, {bool resetReports = false}) {
+    _emitState(() {
+      _selectedCrmTab = tab;
+      if (resetReports && tab == 7) _selectedReportsTab = 0;
+    });
+    final section = switch ((widget.role, tab)) {
+      ('teacher', 1) => 'schedule',
+      ('teacher', 2) => 'clients',
+      (_, 0) => 'chat',
+      (_, 1) => 'overview',
+      (_, 2) => 'schedule',
+      (_, 3) => 'clients',
+      (_, 4) => 'users',
+      (_, 5) => 'finance',
+      (_, 6) => 'tasks',
+      (_, 7) => 'reports',
+      _ => null,
+    };
+    final workspace = WorkspaceNavigationScope.maybeOf(context);
+    if (section == null || workspace == null) return;
+    final controller = workspace.controller;
+    final link = EntityRouteRegistry.sectionRootLink(section);
+    final current = controller.state.activeTab.currentRoute.link;
+    if (current.rawEntityType == link.rawEntityType &&
+        current.entityId == link.entityId &&
+        current.optionalFocus?.focus == link.optionalFocus?.focus) {
+      return;
+    }
+    controller.replaceCurrentLink(controller.state.activeTabId, link);
+  }
+
   @override
   void dispose() {
     _typingStopTimer?.cancel();
@@ -374,10 +414,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
               onSelected: (pos) {
                 if (!mounted) return; // «Ещё» menu resolves async
                 final canonical = visibleCrmTabs[pos];
-                _emitState(() {
-                  _selectedCrmTab = canonical;
-                  if (canonical == 7) _selectedReportsTab = 0;
-                });
+                _selectCrmTab(canonical, resetReports: true);
               },
             ),
             Expanded(child: bodyContent),
@@ -400,7 +437,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
                   selectedIndex: visibleCrmTabs.indexOf(selectedCrmTab),
                   onSelected: (pos) {
                     if (!mounted) return; // «Ещё» menu resolves async
-                    _emitState(() => _selectedCrmTab = visibleCrmTabs[pos]);
+                    _selectCrmTab(visibleCrmTabs[pos]);
                   },
                 ),
         ),

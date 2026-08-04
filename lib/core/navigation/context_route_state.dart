@@ -65,9 +65,9 @@ class ContextRouteState {
   final EntityLink link;
   final ContextViewState viewState;
 
-  ContextRouteState copyWith({ContextViewState? viewState}) {
+  ContextRouteState copyWith({EntityLink? link, ContextViewState? viewState}) {
     return ContextRouteState(
-      link: link,
+      link: link ?? this.link,
       viewState: viewState ?? this.viewState,
     );
   }

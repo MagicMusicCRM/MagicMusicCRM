@@ -201,15 +201,16 @@ extension _MessengerBuildersA on _MessengerScreenState {
   }) {
     final targetTab = _overviewTargetTab(index, subIndex);
     final visibleTabs = _visibleCrmTabs(isDesktop);
-    _emitState(() {
-      // Canonical tab ids are sparse and role-specific (admin is
-      // [0, 6, 2, 3]), so numeric clamping can silently route Tasks (6) to
-      // Clients (3). Resolve by membership instead.
-      _selectedCrmTab = crmResolveVisibleTab(
+    // Canonical tab ids are sparse and role-specific (admin is [0, 6, 2, 3]),
+    // so numeric clamping can silently route Tasks (6) to Clients (3).
+    _selectCrmTab(
+      crmResolveVisibleTab(
         visibleTabs: visibleTabs,
         requestedTab: targetTab,
         currentTab: _selectedCrmTab,
-      );
+      ),
+    );
+    _emitState(() {
       if (isDesktop && targetTab == 7 && subIndex != null) {
         _selectedReportsTab = subIndex.clamp(0, 2);
       }
@@ -259,7 +260,10 @@ extension _MessengerBuildersA on _MessengerScreenState {
                   isDesktop: isDesktop,
                 ),
               ),
-      2 => const ScheduleWidget(),
+      2 => ScheduleWidget(
+        initialLink: widget.initialLink,
+        initialViewState: widget.initialViewState,
+      ),
       3 => const ClientsWidget(),
       4 when _hasManagerAccess => UserRolesWidget(
         currentRole: widget.role,
@@ -269,7 +273,7 @@ extension _MessengerBuildersA on _MessengerScreenState {
       // Не desktop-only: у Администратора «Задачи» — основная вкладка и на
       // телефоне (#17). Роли без 6 в crmVisibleTabs сюда не попадут — выбор
       // нормализуется по видимому списку в messenger_screen.dart.
-      6 when _hasManagerAccess => const TasksWidget(),
+      6 when _hasManagerAccess => TasksWidget(initialLink: widget.initialLink),
       7 when isDesktop && _hasManagerAccess => ReportsWidget(
         role: widget.role,
         initialTab: _selectedReportsTab,

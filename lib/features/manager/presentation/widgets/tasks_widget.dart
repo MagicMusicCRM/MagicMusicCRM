@@ -21,7 +21,9 @@ part 'tasks_widget_cards.dart';
 part 'tasks_widget_sheets.dart';
 
 class TasksWidget extends ConsumerStatefulWidget {
-  const TasksWidget({super.key});
+  const TasksWidget({super.key, this.initialLink});
+
+  final EntityLink? initialLink;
 
   @override
   ConsumerState<TasksWidget> createState() => _TasksWidgetState();
@@ -53,6 +55,9 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
     DateTime.now().month,
     DateTime.now().day,
   );
+  String? _focusTaskId;
+  String? _focusEntityId;
+  bool _focusConsumed = false;
 
   // Calendar: год / месяц / день. Opens on «день» = today, per owner rule.
   String _calView = 'day';
@@ -83,6 +88,17 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
   /// only overdue). Consumed once, before the first load, so the deep-linked
   /// filter is what the board shows on open.
   void _applyOverviewFocus() {
+    final linkFocus = widget.initialLink?.entityType == EntityLinkType.task
+        ? widget.initialLink?.optionalFocus?.filter
+        : null;
+    if (widget.initialLink?.entityType == EntityLinkType.task &&
+        widget.initialLink?.entityId != '__section__') {
+      _focusTaskId =
+          linkFocus?['taskId']?.toString() ?? widget.initialLink?.entityId;
+      _focusEntityId = linkFocus?['entityId']?.toString();
+      _entityTypeFilter = linkFocus?['entityType']?.toString() ?? 'all';
+      _dueFilter = 'all';
+    }
     final focus = ref.read(crmSectionFocusProvider.notifier).consume('tasks');
     if (focus == null) return;
     final due = focus.filters['due'];
@@ -145,6 +161,7 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
             q: _searchCtrl.text,
             status: _statusFilter == 'all' ? null : _statusFilter,
             entityType: _entityTypeFilter == 'all' ? null : _entityTypeFilter,
+            entityId: _focusEntityId,
             assignedTo: _assigneeFilter == 'all' ? null : _assigneeFilter,
             branchId: _branchFilter == 'all' ? null : _branchFilter,
             priority: _priorityFilter == 'all' ? null : _priorityFilter,
@@ -157,6 +174,22 @@ class _TasksWidgetState extends ConsumerState<TasksWidget> {
         _tasks = data;
         _loading = false;
       });
+      if (!_focusConsumed && _focusTaskId != null) {
+        _focusConsumed = true;
+        final task = data
+            .where((item) => item['id']?.toString() == _focusTaskId)
+            .firstOrNull;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (task == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Связанная запись недоступна.')),
+            );
+            return;
+          }
+          unawaited(_showTaskTimeline(task));
+        });
+      }
     } catch (e) {
       if (mounted && sequence == _taskLoadSequence) {
         setState(() {

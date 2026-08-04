@@ -66,6 +66,11 @@ void main() {
           variant: 'student',
         ),
         EntityLink.typed(
+          entityType: EntityLinkType.client,
+          entityId: 'lead-1',
+          variant: 'lead',
+        ),
+        EntityLink.typed(
           entityType: EntityLinkType.lesson,
           entityId: 'lesson-1',
         ),
@@ -204,15 +209,26 @@ void main() {
       ),
       lifecycle: EntityLifecycleState.archived,
     );
+    final deleted = await navigateEntityLink(
+      navigationKey.currentContext!,
+      teacher,
+      EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: 'deleted-client',
+      ),
+      lifecycle: EntityLifecycleState.deleted,
+    );
     await tester.pump();
 
     expect(forbidden.state, EntityRouteState.forbidden);
     expect(missing.state, EntityRouteState.unknown);
     expect(tombstone.state, EntityRouteState.archived);
+    expect(deleted.state, EntityRouteState.deleted);
     expect(workspace.state.activeTab.routeStack, hasLength(1));
     expect(find.text('Связанная запись недоступна.'), findsOneWidget);
     expect(find.textContaining('secret-payment'), findsNothing);
     expect(find.textContaining('archived-client'), findsNothing);
+    expect(find.textContaining('deleted-client'), findsNothing);
   });
 
   testWidgets('compact policy uses the mobile router stack', (tester) async {

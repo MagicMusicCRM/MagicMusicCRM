@@ -626,6 +626,7 @@ extension _ClientCardTabsA on _ClientCardState {
         ? const <Map<String, dynamic>>[]
         : _list(card['tasks']);
     return SingleChildScrollView(
+      controller: _taskScrollController,
       padding: const EdgeInsets.fromLTRB(
         AppSpace.xl,
         AppSpace.lg,
@@ -648,7 +649,29 @@ extension _ClientCardTabsA on _ClientCardState {
           else
             // #12: задача раскрывается по тапу — полный текст, автор,
             // исполнитель, срок.
-            ...tasks.map((row) => _TaskTile(task: row)),
+            ...tasks.map(
+              (row) => _TaskTile(
+                task: row,
+                onOpen: row['id']?.toString().isNotEmpty == true
+                    ? (sourceContext, target) => _openLinkedRecord(
+                        sourceContext,
+                        EntityLink.typed(
+                          entityType: EntityLinkType.task,
+                          entityId: row['id'].toString(),
+                          optionalFocus: EntityLinkFocus(
+                            focus: 'task',
+                            filter: {
+                              'taskId': row['id'].toString(),
+                              'entityType': 'lead',
+                              'entityId': _leadId,
+                            },
+                          ),
+                        ),
+                        target,
+                      )
+                    : null,
+              ),
+            ),
         ],
       ),
     );

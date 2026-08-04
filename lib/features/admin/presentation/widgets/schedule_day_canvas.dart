@@ -109,6 +109,8 @@ class ScheduleDayCanvas extends StatefulWidget {
   onResize;
 
   final void Function(Map<String, dynamic> lesson) onOpenLesson;
+  final double initialVerticalOffset;
+  final ValueChanged<double>? onVerticalOffsetChanged;
 
   const ScheduleDayCanvas({
     super.key,
@@ -119,6 +121,8 @@ class ScheduleDayCanvas extends StatefulWidget {
     required this.onMove,
     required this.onResize,
     required this.onOpenLesson,
+    this.initialVerticalOffset = 0,
+    this.onVerticalOffsetChanged,
   });
 
   @override
@@ -174,8 +178,24 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
   @override
   void initState() {
     super.initState();
-    _bodyV.addListener(_syncGutter);
+    _bodyV.addListener(_handleVerticalScroll);
     _bodyH.addListener(_syncHeader);
+    if (widget.initialVerticalOffset > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_bodyV.hasClients) return;
+        _bodyV.jumpTo(
+          widget.initialVerticalOffset.clamp(
+            0.0,
+            _bodyV.position.maxScrollExtent,
+          ),
+        );
+      });
+    }
+  }
+
+  void _handleVerticalScroll() {
+    _syncGutter();
+    widget.onVerticalOffsetChanged?.call(_bodyV.offset);
   }
 
   @override

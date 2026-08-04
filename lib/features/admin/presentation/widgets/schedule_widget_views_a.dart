@@ -433,6 +433,8 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           _moveLessonOptimistic(lesson, start, null, preserveRoom: true),
       onResize: _resizeLesson,
       onOpenLesson: _showLessonDetails,
+      initialVerticalOffset: _dayScrollOffset,
+      onVerticalOffsetChanged: (value) => _dayScrollOffset = value,
     );
   }
 
@@ -678,6 +680,8 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       onMove: _moveLessonOptimistic,
       onResize: _resizeLesson,
       onOpenLesson: _showLessonDetails,
+      initialVerticalOffset: _dayScrollOffset,
+      onVerticalOffsetChanged: (value) => _dayScrollOffset = value,
     );
   }
 

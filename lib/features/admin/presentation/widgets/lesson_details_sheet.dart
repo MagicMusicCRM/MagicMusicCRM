@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 
@@ -62,6 +64,74 @@ String conflictLabel(String type) {
   };
 }
 
+class LessonEntityReference {
+  const LessonEntityReference({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.link,
+    this.available = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final EntityLink? link;
+  final bool available;
+}
+
+Widget _referenceRow(
+  BuildContext context,
+  LessonEntityReference reference,
+  ValueChanged<EntityOpenTarget> onOpen,
+  bool showNewTabAction,
+) {
+  final canOpen = reference.link != null && reference.available;
+  if (!canOpen) {
+    return detailRow(
+      context,
+      reference.icon,
+      reference.label,
+      reference.available ? reference.value : 'Связанная запись недоступна',
+    );
+  }
+  return Semantics(
+    button: true,
+    link: true,
+    label: '${reference.label}: ${reference.value}',
+    child: InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      onTap: () => onOpen(EntityOpenTarget.current),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+        child: Row(
+          children: [
+            Icon(reference.icon, size: 18, color: AppColor.gold),
+            const SizedBox(width: AppSpace.sm),
+            Expanded(
+              child: Text(
+                '${reference.label}: ${reference.value}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (showNewTabAction)
+              IconButton(
+                tooltip: 'Открыть в новой вкладке',
+                onPressed: () => onOpen(EntityOpenTarget.newTab),
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              ),
+            const Icon(Icons.chevron_right_rounded, size: 20),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 /// Lesson details bottom sheet: student/teacher/room/time/status + conflicts,
 /// with read-only lifecycle state plus Edit / Delete actions.
 /// Extracted from _ScheduleWidgetState._showLessonDetails — presentation only,
@@ -71,6 +141,9 @@ Future<void> showLessonDetailsSheet(
   required String teacherName,
   required String studentName,
   required String roomName,
+  List<LessonEntityReference>? references,
+  void Function(EntityLink link, EntityOpenTarget target)? onOpenReference,
+  bool showNewTabAction = false,
   required String timeRange,
   required String currentStatus,
   required List<String> conflicts,
@@ -87,12 +160,31 @@ Future<void> showLessonDetailsSheet(
     builder: (surfaceContext) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        detailRow(surfaceContext, Icons.person_rounded, 'Ученик', studentName),
-        const SizedBox(height: 10),
-        detailRow(surfaceContext, Icons.school_rounded, 'Педагог', teacherName),
-        const SizedBox(height: 10),
-        detailRow(surfaceContext, Icons.room_rounded, 'Аудитория', roomName),
-        const SizedBox(height: 10),
+        for (final reference
+            in references ??
+                [
+                  LessonEntityReference(
+                    icon: Icons.person_rounded,
+                    label: 'Ученик',
+                    value: studentName,
+                  ),
+                  LessonEntityReference(
+                    icon: Icons.school_rounded,
+                    label: 'Педагог',
+                    value: teacherName,
+                  ),
+                  LessonEntityReference(
+                    icon: Icons.room_rounded,
+                    label: 'Аудитория',
+                    value: roomName,
+                  ),
+                ]) ...[
+          _referenceRow(surfaceContext, reference, (target) {
+            Navigator.pop(surfaceContext);
+            onOpenReference?.call(reference.link!, target);
+          }, showNewTabAction),
+          const SizedBox(height: 10),
+        ],
         detailRow(
           surfaceContext,
           Icons.access_time_rounded,

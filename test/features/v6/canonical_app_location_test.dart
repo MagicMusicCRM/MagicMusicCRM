@@ -62,6 +62,34 @@ void main() {
     expect(resolution.canonicalLocation?.ancestors.single.title, 'Задачи');
   });
 
+  test(
+    'query deep link round-trips typed focus without display-name lookup',
+    () {
+      final registry = EntityRouteRegistry();
+      final link = EntityLink.typed(
+        entityType: EntityLinkType.lesson,
+        entityId: 'lesson-1',
+        optionalFocus: EntityLinkFocus(
+          focus: 'lesson',
+          filter: const {
+            'date': '2026-08-04T00:00:00.000',
+            'branchId': 'branch-1',
+            'clientId': 'student-1',
+          },
+        ),
+      );
+
+      final location = registry.resolve(link, snapshot).location!;
+      final restored = registry.resolveLocation(location, snapshot);
+
+      expect(restored.state, EntityRouteState.resolved);
+      expect(restored.link.entityType, EntityLinkType.lesson);
+      expect(restored.link.entityId, 'lesson-1');
+      expect(restored.link.optionalFocus?.focus, 'lesson');
+      expect(restored.link.optionalFocus?.filter, link.optionalFocus?.filter);
+    },
+  );
+
   test('forbidden direct URL fails closed before canonical metadata', () {
     const teacher = CapabilitySnapshot(
       accountId: 'teacher-1',

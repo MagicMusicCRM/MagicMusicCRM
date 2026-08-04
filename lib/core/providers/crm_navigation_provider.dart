@@ -84,6 +84,10 @@ int? crmTabForEntityLink(EntityLink link, String role) {
   if (isScheduleReport) {
     return role == 'teacher' ? 1 : 2;
   }
+  if (link.entityType == EntityLinkType.report &&
+      link.rawEntityType == 'overview') {
+    return role == 'teacher' ? null : 1;
+  }
   if (role == 'teacher') {
     return switch (link.entityType) {
       EntityLinkType.lesson ||

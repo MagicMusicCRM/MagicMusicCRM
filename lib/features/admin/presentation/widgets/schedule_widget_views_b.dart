@@ -695,6 +695,106 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     final conflicts = conflictTypes(lesson['conflict_types']);
     final lessonId = lesson['id']?.toString();
     final currentStatus = lesson['status']?.toString() ?? 'scheduled';
+    final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
+    final registry = EntityRouteRegistry();
+    LessonEntityReference reference({
+      required IconData icon,
+      required String label,
+      required String value,
+      required EntityLink? link,
+    }) => LessonEntityReference(
+      icon: icon,
+      label: label,
+      value: value,
+      link: link,
+      available:
+          link == null ||
+          (snapshot != null && registry.resolve(link, snapshot).canOpen),
+    );
+    final studentId = lesson['student_id']?.toString();
+    final leadId = lesson['lead_id']?.toString();
+    final teacherId = lesson['teacher_id']?.toString();
+    final groupId = lesson['group_id']?.toString();
+    final branchId = lesson['branch_id']?.toString();
+    final branchName = lesson['branch_name']?.toString() ?? 'Филиал';
+    final groupName = lesson['group_name']?.toString() ?? 'Группа';
+    final dateFilter = DateTime(
+      start.year,
+      start.month,
+      start.day,
+    ).toIso8601String();
+    final references = [
+      reference(
+        icon: Icons.person_rounded,
+        label: leadId?.isNotEmpty == true ? 'Лид' : 'Ученик',
+        value: studentName,
+        link: (studentId?.isNotEmpty == true || leadId?.isNotEmpty == true)
+            ? EntityLink.typed(
+                entityType: EntityLinkType.client,
+                entityId: leadId?.isNotEmpty == true ? leadId! : studentId!,
+                variant: leadId?.isNotEmpty == true ? 'lead' : 'student',
+              )
+            : null,
+      ),
+      reference(
+        icon: Icons.school_rounded,
+        label: 'Педагог',
+        value: teacherName,
+        link: teacherId?.isNotEmpty == true
+            ? EntityLink.typed(
+                entityType: EntityLinkType.teacher,
+                entityId: teacherId!,
+                optionalFocus: EntityLinkFocus(
+                  focus: 'schedule',
+                  filter: {'teacherId': teacherId, 'date': dateFilter},
+                ),
+              )
+            : null,
+      ),
+      reference(
+        icon: Icons.room_rounded,
+        label: 'Аудитория',
+        value: roomName,
+        link: roomId?.isNotEmpty == true
+            ? EntityLink.typed(
+                entityType: EntityLinkType.room,
+                entityId: roomId!,
+                optionalFocus: EntityLinkFocus(
+                  focus: 'schedule',
+                  filter: {'roomId': roomId, 'date': dateFilter},
+                ),
+              )
+            : null,
+      ),
+      if (groupId?.isNotEmpty == true)
+        reference(
+          icon: Icons.groups_rounded,
+          label: 'Группа',
+          value: groupName,
+          link: EntityLink.typed(
+            entityType: EntityLinkType.group,
+            entityId: groupId!,
+            optionalFocus: EntityLinkFocus(
+              focus: 'schedule',
+              filter: {'date': dateFilter},
+            ),
+          ),
+        ),
+      if (branchId?.isNotEmpty == true)
+        reference(
+          icon: Icons.apartment_rounded,
+          label: 'Филиал',
+          value: branchName,
+          link: EntityLink.typed(
+            entityType: EntityLinkType.branch,
+            entityId: branchId!,
+            optionalFocus: EntityLinkFocus(
+              focus: 'schedule',
+              filter: {'branchId': branchId, 'date': dateFilter},
+            ),
+          ),
+        ),
+    ];
 
     final timeRange =
         '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – '
@@ -704,6 +804,23 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       teacherName: teacherName,
       studentName: studentName,
       roomName: roomName,
+      references: references,
+      onOpenReference: (link, target) {
+        Future.microtask(() {
+          if (!mounted) return;
+          unawaited(
+            openEntityLink(
+              context,
+              ref,
+              link,
+              target: target,
+              sourceViewState: _scheduleViewState(),
+            ),
+          );
+        });
+      },
+      showNewTabAction:
+          WorkspaceNavigationScope.maybeOf(context)?.isDesktop == true,
       timeRange: timeRange,
       currentStatus: currentStatus,
       conflicts: conflicts,

@@ -289,7 +289,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/teacher',
-        builder: (context, state) => const TeacherDashboardScreen(),
+        builder: (context, state) =>
+            TeacherDashboardScreen(initialLink: _dashboardEntityLink(state)),
       ),
       GoRoute(
         path: '/manager',
@@ -362,6 +363,16 @@ EntityLink? _dashboardEntityLink(GoRouterState state) {
     'version': EntityLink.schemaVersion,
     'entityType': type,
     'entityId': id,
+    if (state.uri.queryParameters['focus']?.isNotEmpty == true ||
+        state.uri.queryParameters.keys.any((key) => key.startsWith('f.')))
+      'optionalFocus': {
+        if (state.uri.queryParameters['focus']?.isNotEmpty == true)
+          'focus': state.uri.queryParameters['focus'],
+        'filter': {
+          for (final entry in state.uri.queryParameters.entries)
+            if (entry.key.startsWith('f.')) entry.key.substring(2): entry.value,
+        },
+      },
   });
   return link.isSupported ? link : null;
 }

@@ -3,10 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -14,6 +19,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 
 import 'create_lesson_dialog.dart';
 import 'schedule_day_canvas.dart';
@@ -54,7 +60,10 @@ const List<Color> _roomColors = [
 //  Main Widget
 // ═══════════════════════════════════════════════════════════════════════════
 class ScheduleWidget extends ConsumerStatefulWidget {
-  const ScheduleWidget({super.key});
+  const ScheduleWidget({super.key, this.initialLink, this.initialViewState});
+
+  final EntityLink? initialLink;
+  final ContextViewState? initialViewState;
 
   @override
   ConsumerState<ScheduleWidget> createState() => _ScheduleWidgetState();
@@ -100,6 +109,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   bool _onlyTrial = false;
   bool _onlyConflicts = false;
   String? _filterTeacherId;
+  String? _filterRoomId;
   String? _filterClientType;
   String? _filterClientId;
   String? _filterClientName;
@@ -120,6 +130,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // render a transient gold pulse on the matched lesson (by `id`). The day
   // canvas owns its own scroll, so no scroll controller lives here anymore.
   String? _highlightLessonId;
+  bool _highlightUnavailableShown = false;
+  double _dayScrollOffset = 0;
   // Auto-clears the gold highlight a few seconds after it lands.
   Timer? _highlightClearTimer;
 
@@ -135,6 +147,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   @override
   void initState() {
     super.initState();
+    _restoreNavigationState();
     // A filter deep-linked from the overview («Пробные занятия» / «Конфликты
     // расписания») — consumed once before the first fetch so the grid opens
     // filtered. Day view is what actually renders these filters, so switch to it.
@@ -156,6 +169,64 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (focus != null) _applyScheduleFocus(focus);
     });
   }
+
+  void _restoreNavigationState() {
+    final state = widget.initialViewState;
+    final filters = <String, dynamic>{
+      ...?state?.filters,
+      ...?widget.initialLink?.optionalFocus?.filter,
+    };
+    _selectedBranchId = filters['branchId']?.toString();
+    _filterTeacherId = filters['teacherId']?.toString();
+    _filterRoomId = filters['roomId']?.toString();
+    _filterClientType = filters['clientType']?.toString();
+    _filterClientId = filters['clientId']?.toString();
+    _filterClientName = filters['clientName']?.toString();
+    _onlyTrial = filters['trial'] == true || filters['trial'] == '1';
+    _onlyConflicts =
+        filters['conflicts'] == true || filters['conflicts'] == '1';
+    _currentView = ScheduleView.values.firstWhere(
+      (value) => value.name == filters['view'],
+      orElse: () => _currentView,
+    );
+    _dayViewMode = DayViewMode.values.firstWhere(
+      (value) => value.name == filters['dayMode'],
+      orElse: () => _dayViewMode,
+    );
+    final date =
+        state?.date ?? DateTime.tryParse(filters['date']?.toString() ?? '');
+    if (date != null) {
+      _selectedDate = DateTime(date.year, date.month, date.day);
+      _displayedMonth = DateTime(date.year, date.month);
+      if (widget.initialLink?.optionalFocus?.focus == 'schedule') {
+        _currentView = ScheduleView.day;
+      }
+    }
+    _dayScrollOffset = state?.scrollOffset ?? 0;
+    _selectedTeacherId = state?.selectedColumn;
+    if (widget.initialLink?.entityType == EntityLinkType.lesson) {
+      _highlightLessonId = widget.initialLink!.entityId;
+      _currentView = ScheduleView.day;
+    }
+  }
+
+  ContextViewState _scheduleViewState() => ContextViewState(
+    filters: {
+      'view': _currentView.name,
+      'dayMode': _dayViewMode.name,
+      if (_selectedBranchId != null) 'branchId': _selectedBranchId,
+      if (_filterTeacherId != null) 'teacherId': _filterTeacherId,
+      if (_filterRoomId != null) 'roomId': _filterRoomId,
+      if (_filterClientType != null) 'clientType': _filterClientType,
+      if (_filterClientId != null) 'clientId': _filterClientId,
+      if (_filterClientName != null) 'clientName': _filterClientName,
+      if (_onlyTrial) 'trial': true,
+      if (_onlyConflicts) 'conflicts': true,
+    },
+    date: _selectedDate,
+    scrollOffset: _dayScrollOffset,
+    selectedColumn: _selectedTeacherId,
+  );
 
   @override
   void dispose() {

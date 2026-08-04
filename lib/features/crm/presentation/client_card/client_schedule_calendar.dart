@@ -2,18 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
-import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
-import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
-import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
-import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 
 typedef ClientCalendarViewport = ({DateTime start, DateTime endExclusive});
@@ -372,34 +367,26 @@ class _ClientScheduleCalendarState
   Future<void> _openLesson(Appointment appointment) async {
     final id = appointment.id?.toString();
     if (id == null || id.isEmpty) return;
-    if (WorkspaceNavigationScope.maybeOf(context)?.isDesktop != true) {
-      ref
-          .read(scheduleNavigationProvider.notifier)
-          .focus(appointment.startTime, id);
-      ref
-          .read(crmNavigationRequestProvider.notifier)
-          .navigateTo(
-            CrmNavigationRequest.schedule(
-              date: appointment.startTime,
-              lessonId: id,
-              clientType: widget.clientType,
-              clientId: widget.clientId,
-            ),
-          );
-      final snapshot = await ref.read(capabilitySnapshotProvider.future);
-      if (!mounted) return;
-      final home = switch (snapshot.role) {
-        'admin' || 'system_admin' => '/admin',
-        'teacher' => '/teacher',
-        _ => '/manager',
-      };
-      await context.push<void>(home);
-      return;
-    }
     await openEntityLink(
       context,
       ref,
-      EntityLink.typed(entityType: EntityLinkType.lesson, entityId: id),
+      EntityLink.typed(
+        entityType: EntityLinkType.lesson,
+        entityId: id,
+        optionalFocus: EntityLinkFocus(
+          focus: 'lesson',
+          filter: {
+            'date': DateTime(
+              appointment.startTime.year,
+              appointment.startTime.month,
+              appointment.startTime.day,
+            ).toIso8601String(),
+            if (_branchId != null) 'branchId': _branchId,
+            'clientType': widget.clientType,
+            'clientId': widget.clientId,
+          },
+        ),
+      ),
       sourceViewState: _viewState(),
     );
   }

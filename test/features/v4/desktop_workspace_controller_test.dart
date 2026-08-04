@@ -73,6 +73,42 @@ void main() {
     );
   });
 
+  test('lateral section replacement becomes the Back source for drilldown', () {
+    final workspace = controller();
+    final schedule = EntityLink.typed(
+      entityType: EntityLinkType.report,
+      entityId: '__section__',
+      variant: 'lesson_list',
+      optionalFocus: EntityLinkFocus(focus: 'schedule'),
+    );
+    workspace.replaceCurrentLink(
+      'tab-1',
+      schedule,
+      viewState: ContextViewState(
+        filters: const {'branchId': 'branch-1', 'view': 'week'},
+        date: DateTime(2026, 8, 4),
+        scrollOffset: 320,
+      ),
+    );
+    workspace.push(
+      'tab-1',
+      EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: 'student-1',
+        variant: 'student',
+      ),
+      currentViewState: workspace.state.activeTab.currentRoute.viewState,
+    );
+
+    workspace.back('tab-1');
+    final restored = workspace.state.activeTab.currentRoute;
+    expect(restored.link, same(schedule));
+    expect(restored.viewState.filters['view'], 'week');
+    expect(restored.viewState.filters['branchId'], 'branch-1');
+    expect(restored.viewState.date, DateTime(2026, 8, 4));
+    expect(restored.viewState.scrollOffset, 320);
+  });
+
   testWidgets('top strip switches tabs without replacing shared scope', (
     tester,
   ) async {
