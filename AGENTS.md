@@ -121,8 +121,8 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v6` (Configurable CRM & Product UX Completion)
-- **Активный список задач**: `.anws/v6/05_TASKS.md` — V6-501 закрыта, следующая задача V6-502
-- **Количество задач v6 к выполнению**: 17 (14 implementation + 3 INT)
+- **Активный список задач**: `.anws/v6/05_TASKS.md` — V6-502 закрыта, следующая задача V6-503
+- **Количество задач v6 к выполнению**: 16 (13 implementation + 3 INT)
 - **Последнее обновление**: `2026-08-04`
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
@@ -142,6 +142,8 @@ _`V6-401..406` и `INT-S4` закрыты 2026-08-04: canonical Student/Lead wor
 
 ### 🌊 Wave v6/S5 — Tasks, Analytics & Configurable CRM
 _`V6-501` закрыта 2026-08-04: production destination, client cards, Lead quick action и Overview используют один SharedTask provider/model; legacy UUID losslessly resolve-ится через canonical link, detail/history и typed entity transition общие. Write controls fail-closed от уже загруженного capability snapshot, duplicate production routes/providers/actions=0. Gate: Flutter analyze clean, targeted 14/14 и full 590/590; backend typecheck/build, task 5/5, route-policy batch 41/41 и full 151/151 suites + 1169/1169 tests; inventory routes=21/reachable=261/wire=261/261/unowned=0 (`docs/audits/v6-canonical-tasks.md`). Следующий шаг `/forge`: `V6-502` task audience/branch UX и language audit._
+
+_`V6-502` закрыта 2026-08-04: backend preview показывает fixed people и dynamic branch/school membership до отправки, дедуплицирует пересечения и возвращает reconciled count после create/update; неизвестный preview блокирует submit. Picker исключает Client accounts, school selector заменяет избыточные узкие selectors, task language унифицирован. Editor использует v7 adaptive drawer на Windows и expandable full-width sheet на Android. Gate: Flutter analyze clean, targeted 33/33 и full 593/593; Windows/Android 15 device 2/2; backend typecheck/build, tasks 6/6, route policy 37/37 и full 151/151 suites + 1170/1170 tests; inventory routes=21/reachable=261/wire=262/262/unowned=0 (`docs/audits/v6-task-audience-ux.md`). Следующий шаг `/forge`: `V6-503` unified dashboard filters._
 
 ### 🌊 Wave v4/S0 — Baseline & Evidence
 _`INT-S0` закрыт 2026-07-25: detached clean revision прошёл current-state inventory, lock install, backend typecheck/build, explicit platform PostgreSQL 5/5, full backend 103/103 suites и 929/929 tests, два стабильных read-only preflight-run, signed clean/drift reconciliation, Flutter analyze и 400/400 tests; skipped integration suites=0, lock/tracked diff=0._

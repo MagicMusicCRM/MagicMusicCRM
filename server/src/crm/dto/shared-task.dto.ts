@@ -80,6 +80,14 @@ export class CreateSharedTaskDto {
   reminders?: SharedTaskReminderDto[];
 }
 
+export class PreviewSharedTaskAudienceDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => SharedTaskAudienceDto)
+  audiences!: SharedTaskAudienceDto[];
+}
+
 export class UpdateSharedTaskDto extends CreateSharedTaskDto {
   @Type(() => Number)
   @IsInt()

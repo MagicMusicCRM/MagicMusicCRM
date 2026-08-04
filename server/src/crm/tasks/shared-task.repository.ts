@@ -629,6 +629,123 @@ export class SharedTaskRepository {
     );
   }
 
+  previewAudienceRecipients(
+    audiences: readonly {
+      type: "user" | "branch" | "allBranches";
+      targetId?: string;
+    }[],
+  ) {
+    return this.database.query<{
+      selector_index: number;
+      selector_type: "user" | "branch" | "allBranches";
+      target_id: string | null;
+      selector_label: string | null;
+      user_id: string | null;
+      first_name: string | null;
+      last_name: string | null;
+      email: string | null;
+      role: string | null;
+    }>(
+      `
+        with selectors as (
+          select (entry.ordinality - 1)::int as selector_index,
+            entry.value->>'type' as selector_type,
+            nullif(entry.value->>'targetId', '')::uuid as target_id
+          from jsonb_array_elements($1::jsonb)
+            with ordinality as entry(value, ordinality)
+        ), matches as (
+          select selector.selector_index, actor.id as user_id
+          from selectors selector
+          join app.users actor
+            on selector.selector_type = 'user'
+           and actor.id = selector.target_id
+           and actor.deleted_at is null
+           and actor.role::text = any($2::text[])
+          union all
+          select selector.selector_index, link.user_id
+          from selectors selector
+          join app.staff_branch_assignments assignment
+            on selector.selector_type = 'branch'
+           and assignment.branch_id = selector.target_id
+           and assignment.deleted_at is null
+          join app.staff_members staff
+            on staff.id = assignment.staff_member_id
+           and staff.deleted_at is null
+          join app.user_crm_links link
+            on link.entity_type::text = 'staff'
+           and link.entity_id = staff.id
+           and link.deleted_at is null
+          join app.users actor
+            on actor.id = link.user_id
+           and actor.deleted_at is null
+           and actor.role::text = any($2::text[])
+          union all
+          select selector.selector_index, link.user_id
+          from selectors selector
+          join app.teacher_branches assignment
+            on selector.selector_type = 'branch'
+           and assignment.branch_id = selector.target_id
+           and assignment.active_from <= now()
+           and (assignment.active_until is null or assignment.active_until > now())
+          join app.teachers teacher
+            on teacher.id = assignment.teacher_id
+           and teacher.deleted_at is null
+          join app.user_crm_links link
+            on link.entity_type::text = 'teacher'
+           and link.entity_id = teacher.id
+           and link.deleted_at is null
+          join app.users actor
+            on actor.id = link.user_id
+           and actor.deleted_at is null
+           and actor.role::text = any($2::text[])
+          union all
+          select selector.selector_index, actor.id
+          from selectors selector
+          join app.users actor
+            on selector.selector_type = 'allBranches'
+           and actor.deleted_at is null
+           and actor.role::text = any($2::text[])
+        ), unique_matches as (
+          select distinct selector_index, user_id from matches
+        )
+        select selector.selector_index, selector.selector_type,
+          selector.target_id,
+          case
+            when selector.selector_type = 'allBranches' then 'Вся школа'
+            when selector.selector_type = 'branch' then branch.name
+            else coalesce(
+              nullif(trim(concat_ws(' ', target_profile.first_name,
+                target_profile.last_name)), ''), target_user.email
+            )
+          end as selector_label,
+          matched.user_id, recipient_profile.first_name,
+          recipient_profile.last_name, recipient.email,
+          recipient.role::text as role
+        from selectors selector
+        left join unique_matches matched
+          on matched.selector_index = selector.selector_index
+        left join app.users recipient on recipient.id = matched.user_id
+        left join app.profiles recipient_profile
+          on recipient_profile.user_id = recipient.id
+         and recipient_profile.deleted_at is null
+        left join app.branches branch
+          on selector.selector_type = 'branch'
+         and branch.id = selector.target_id
+        left join app.users target_user
+          on selector.selector_type = 'user'
+         and target_user.id = selector.target_id
+        left join app.profiles target_profile
+          on target_profile.user_id = target_user.id
+         and target_profile.deleted_at is null
+        order by selector.selector_index, matched.user_id nulls last
+      `,
+      [
+        JSON.stringify(audiences),
+        ["teacher", "admin", "manager", "director", "system_admin"],
+      ],
+    );
+  }
+
   markReminderDelivered(reminderId: string, workerId: string) {
     return this.database.query(
       `
@@ -727,11 +844,21 @@ export class SharedTaskRepository {
     targetId?: string,
   ): Promise<boolean> {
     if (type === "allBranches") return targetId === undefined;
-    const table = type === "user" ? "users" : "branches";
-    const result = await this.database.query(
-      `select 1 from app.${table} where id = $1 and deleted_at is null`,
-      [targetId],
-    );
+    const result =
+      type === "user"
+        ? await this.database.query(
+            `select 1 from app.users
+             where id = $1 and deleted_at is null
+               and role::text = any($2::text[])`,
+            [
+              targetId,
+              ["teacher", "admin", "manager", "director", "system_admin"],
+            ],
+          )
+        : await this.database.query(
+            "select 1 from app.branches where id = $1 and deleted_at is null",
+            [targetId],
+          );
     return result.rowCount === 1;
   }
 }

@@ -1,5 +1,8 @@
 import { ConfigService } from "@nestjs/config";
-import { NotFoundException } from "@nestjs/common";
+import {
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
@@ -70,6 +73,18 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     const first = await tasks.create(fixture.director, dto, metadata);
     const replay = await tasks.create(fixture.director, dto, metadata);
     expect(replay).toEqual(first);
+    expect(first.recipientSummary).toMatchObject({
+      totalRecipients: 1,
+      hasDynamicMembership: true,
+      selectors: [
+        expect.objectContaining({
+          type: "branch",
+          label: fixture.branchName,
+          mode: "dynamic",
+          currentRecipientCount: 1,
+        }),
+      ],
+    });
 
     const focused = await tasks.list(fixture.director, {
       taskId: first.id,
@@ -125,6 +140,50 @@ describe("SharedTask API domain (PostgreSQL)", () => {
         },
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+    await pool.query(
+      `update app.staff_branch_assignments set deleted_at = null where id = $1`,
+      [fixture.assignmentId],
+    );
+  });
+
+  it("previews fixed and dynamic recipients without duplicate people", async () => {
+    const preview = await tasks.previewAudience(fixture.director, [
+      { type: "user", targetId: fixture.manager.userId },
+      { type: "branch", targetId: fixture.branchId },
+      { type: "allBranches" },
+    ]);
+
+    expect(preview).toMatchObject({
+      hasDynamicMembership: true,
+      selectors: [
+        expect.objectContaining({
+          type: "user",
+          mode: "fixed",
+          currentRecipientCount: 1,
+        }),
+        expect.objectContaining({
+          type: "branch",
+          label: fixture.branchName,
+          mode: "dynamic",
+          currentRecipientCount: 1,
+        }),
+        expect.objectContaining({
+          type: "allBranches",
+          label: "Вся школа",
+          mode: "dynamic",
+        }),
+      ],
+    });
+    expect(preview.totalRecipients).toBeGreaterThanOrEqual(4);
+    expect(preview.selectors[2]!.currentRecipientCount).toBe(
+      preview.totalRecipients,
+    );
+    expect(preview.recipients).toHaveLength(preview.totalRecipients);
+    await expect(
+      tasks.previewAudience(fixture.director, [
+        { type: "user", targetId: fixture.client.userId },
+      ]),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
 
   it("resolves allBranches dynamically for every task-capable role", async () => {
@@ -239,7 +298,8 @@ async function createFixture(pool: Pool) {
         ($1, 'director', now()),
         ($2, 'admin', now()),
         ($3, 'manager', now()),
-        ($4, 'teacher', now())
+        ($4, 'teacher', now()),
+        ($5, 'client', now())
       returning id, role::text as role
     `,
     [
@@ -247,9 +307,10 @@ async function createFixture(pool: Pool) {
       `${marker}-admin@example.test`,
       `${marker}-manager@example.test`,
       `${marker}-teacher@example.test`,
+      `${marker}-client@example.test`,
     ],
   );
-  const [directorRow, adminRow, managerRow, teacherRow] = users.rows;
+  const [directorRow, adminRow, managerRow, teacherRow, clientRow] = users.rows;
   const branch = await pool.query<{ id: string }>(
     "insert into app.branches (name) values ($1) returning id",
     [`${marker}-branch`],
@@ -307,6 +368,7 @@ async function createFixture(pool: Pool) {
     marker,
     userIds: users.rows.map((row) => row.id),
     branchId: branch.rows[0]!.id,
+    branchName: `${marker}-branch`,
     profileId: profile.rows[0]!.id,
     studentProfileId: studentProfile.rows[0]!.id,
     studentId: student.rows[0]!.id,
@@ -316,6 +378,7 @@ async function createFixture(pool: Pool) {
     admin: { userId: adminRow!.id, role: "admin" } as ActorContext,
     manager: { userId: managerRow!.id, role: "manager" } as ActorContext,
     teacher: { userId: teacherRow!.id, role: "teacher" } as ActorContext,
+    client: { userId: clientRow!.id, role: "client" } as ActorContext,
   };
 }
 

@@ -45,6 +45,15 @@ extension MagicCrmSchedule on MagicCrmService {
         : <Map<String, dynamic>>[];
   }
 
+  Future<Map<String, dynamic>> previewSharedTaskAudience(
+    List<Map<String, dynamic>> audiences,
+  ) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/shared-tasks/audience-preview',
+      data: {'audiences': audiences},
+    );
+  }
+
   Future<Map<String, dynamic>> createSharedTask({
     required Map<String, dynamic> data,
     required MagicMutationIdentity identity,

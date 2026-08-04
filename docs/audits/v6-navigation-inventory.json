@@ -731,7 +731,7 @@
       "definition_only": false,
       "status": "typed-context",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 408
+      "line": 468
     },
     {
       "kind": "navigator",
@@ -1091,7 +1091,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 630
+      "line": 690
     },
     {
       "kind": "navigator",
@@ -1101,7 +1101,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 1187
+      "line": 1253
     },
     {
       "kind": "navigator",
@@ -1111,7 +1111,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 1233
+      "line": 1458
     },
     {
       "kind": "navigator",

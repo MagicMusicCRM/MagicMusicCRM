@@ -107,7 +107,7 @@ export class SharedTaskService {
       action: "created",
       id: taskId,
     });
-    return this.load(taskId);
+    return this.loadWithAudiencePreview(taskId);
   }
 
   async update(
@@ -183,7 +183,7 @@ export class SharedTaskService {
       action: "updated",
       id: taskId,
     });
-    return this.load(taskId);
+    return this.loadWithAudiencePreview(taskId);
   }
 
   async list(actor: ActorContext, query: SharedTaskListQuery) {
@@ -230,6 +230,15 @@ export class SharedTaskService {
             : row.created_at,
       })),
     };
+  }
+
+  async previewAudience(
+    actor: ActorContext,
+    audiences: CreateSharedTaskDto["audiences"],
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    await this.validateAudiences(audiences);
+    return this.buildAudiencePreview(audiences);
   }
 
   async close(
@@ -324,26 +333,7 @@ export class SharedTaskService {
     if (!dto.allDay && (!end || end <= start)) {
       this.invalid("endAt", "Окончание должно быть позже начала.");
     }
-    const seen = new Set<string>();
-    for (const audience of dto.audiences) {
-      if (
-        audience.type === "allBranches" &&
-        audience.targetId !== undefined
-      ) {
-        this.invalid("audiences", "allBranches не принимает targetId.");
-      }
-      const key = `${audience.type}:${audience.targetId ?? ""}`;
-      if (seen.has(key)) this.invalid("audiences", "Audience не должен повторяться.");
-      seen.add(key);
-      if (
-        !(await this.repository.audienceTargetExists(
-          audience.type,
-          audience.targetId,
-        ))
-      ) {
-        this.invalid("audiences", "Audience target не найден или неактивен.");
-      }
-    }
+    await this.validateAudiences(dto.audiences);
     if (
       dto.linkedEntity &&
       !(await this.repository.entityExists(
@@ -382,6 +372,85 @@ export class SharedTaskService {
         dueAt: new Date(reminder.dueAt).toISOString(),
         channel: reminder.channel,
       })),
+    };
+  }
+
+  private async validateAudiences(
+    audiences: CreateSharedTaskDto["audiences"],
+  ) {
+    const seen = new Set<string>();
+    for (const audience of audiences) {
+      if (
+        audience.type === "allBranches" &&
+        audience.targetId !== undefined
+      ) {
+        this.invalid(
+          "audiences",
+          "Для всей школы идентификатор филиала не используется.",
+        );
+      }
+      const key = `${audience.type}:${audience.targetId ?? ""}`;
+      if (seen.has(key)) {
+        this.invalid("audiences", "Получатель не должен повторяться.");
+      }
+      seen.add(key);
+      if (
+        !(await this.repository.audienceTargetExists(
+          audience.type,
+          audience.targetId,
+        ))
+      ) {
+        this.invalid("audiences", "Получатель не найден или недоступен.");
+      }
+    }
+  }
+
+  private async loadWithAudiencePreview(taskId: string) {
+    const task = await this.load(taskId);
+    return {
+      ...task,
+      recipientSummary: await this.buildAudiencePreview(task.audiences),
+    };
+  }
+
+  private async buildAudiencePreview(
+    audiences: CreateSharedTaskDto["audiences"],
+  ) {
+    const rows = (await this.repository.previewAudienceRecipients(audiences)).rows;
+    const selectors = audiences.map((audience, index) => {
+      const matches = rows.filter(
+        (row) => row.selector_index === index && row.user_id != null,
+      );
+      const row = rows.find((item) => item.selector_index === index);
+      return {
+        type: audience.type,
+        ...(audience.targetId ? { targetId: audience.targetId } : {}),
+        label: row?.selector_label ??
+          (audience.type === "allBranches" ? "Вся школа" : "Получатель"),
+        mode: audience.type === "user" ? "fixed" : "dynamic",
+        currentRecipientCount: new Set(matches.map((item) => item.user_id)).size,
+      };
+    });
+    const recipients = new Map<
+      string,
+      { userId: string; name: string; role: string | null }
+    >();
+    for (const row of rows) {
+      if (!row.user_id || recipients.has(row.user_id)) continue;
+      recipients.set(row.user_id, {
+        userId: row.user_id,
+        name:
+          [row.first_name, row.last_name].filter(Boolean).join(" ") ||
+          row.email ||
+          "Сотрудник",
+        role: row.role,
+      });
+    }
+    return {
+      totalRecipients: recipients.size,
+      hasDynamicMembership: audiences.some((item) => item.type !== "user"),
+      selectors,
+      recipients: [...recipients.values()],
     };
   }
 

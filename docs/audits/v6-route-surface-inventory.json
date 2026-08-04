@@ -908,7 +908,7 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 387
+      "line": 447
     },
     {
       "kind": "bottom-sheet",
@@ -924,7 +924,7 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 624
+      "line": 684
     },
     {
       "kind": "adaptive-surface",

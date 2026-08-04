@@ -267,7 +267,7 @@ flowchart TD
   - **Проверка:** route/provider inventory duplicate=0; create/edit/close/link flows and API trace parity.
   - **Оценка:** 8 ч · **Зависимости:** INT-S4 · **Приоритет:** P0.
 
-- [ ] **V6-502** `[REQ-TASK-002]` — Завершить task audience/branch UX и language audit.
+- [x] **V6-502** `[REQ-TASK-002]` — Завершить task audience/branch UX и language audit.
   - **Работа:** distinguish explicit users vs dynamic branch/school recipients before submit; normalize labels and confirmations across task actions.
   - **Критерий:** single/multi user, one branch/all permitted branches show accurate preview and result; ambiguous icon-only actions=0.
   - **Проверка:** Windows/Android real-account-ready matrix with resulting recipient reconciliation.

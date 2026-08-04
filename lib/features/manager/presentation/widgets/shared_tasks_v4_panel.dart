@@ -26,6 +26,10 @@ abstract class SharedTasksDataSource {
 
   Future<List<Map<String, dynamic>>> history(String taskId);
 
+  Future<Map<String, dynamic>> previewAudience(
+    List<Map<String, dynamic>> audiences,
+  );
+
   Future<Map<String, dynamic>> create(
     Map<String, dynamic> data,
     MagicMutationIdentity identity,
@@ -58,6 +62,9 @@ class SharedTaskAudienceOption {
   final String label;
 }
 
+typedef SharedTaskAudiencePreviewLoader =
+    Future<Map<String, dynamic>> Function(List<Map<String, dynamic>> audiences);
+
 class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
   _ServiceSharedTasksDataSource(this.ref);
 
@@ -83,6 +90,15 @@ class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
   @override
   Future<List<Map<String, dynamic>>> history(String taskId) {
     return ref.read(magicCrmServiceProvider).listSharedTaskHistory(taskId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> previewAudience(
+    List<Map<String, dynamic>> audiences,
+  ) {
+    return ref
+        .read(magicCrmServiceProvider)
+        .previewSharedTaskAudience(audiences);
   }
 
   @override
@@ -123,13 +139,22 @@ class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
 
   @override
   Future<List<SharedTaskAudienceOption>> audienceOptions() async {
+    const taskRoles = {
+      'teacher',
+      'admin',
+      'manager',
+      'director',
+      'system_admin',
+    };
     final result = await Future.wait([
       ref.read(magicProfileAdminServiceProvider).listProfiles(limit: 200),
       ref.read(magicCrmServiceProvider).listBranches(limit: 200),
     ]);
     return [
       ...result[0]
-          .where((row) => row['user_id'] != null)
+          .where(
+            (row) => row['user_id'] != null && taskRoles.contains(row['role']),
+          )
           .map(
             (row) => SharedTaskAudienceOption(
               type: 'user',
@@ -148,6 +173,17 @@ class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
   }
 }
 
+String _taskSavedMessage(Map<String, dynamic> result, {required bool created}) {
+  final summary = result['recipientSummary'];
+  final total = summary is Map<String, dynamic>
+      ? summary['totalRecipients']
+      : null;
+  final action = created ? 'Задача создана.' : 'Задача сохранена.';
+  return total is num
+      ? '$action Получателей сейчас: ${total.toInt()}.'
+      : action;
+}
+
 Future<void> showCreateSharedTask(
   BuildContext context,
   WidgetRef ref, {
@@ -162,22 +198,30 @@ Future<void> showCreateSharedTask(
     // The all-branches audience remains usable without directory data.
   }
   if (!context.mounted) return;
-  final payload = await showDialog<Map<String, dynamic>>(
-    context: context,
-    builder: (context) =>
-        SharedTaskEditor(audienceOptions: options, linkedEntity: linkedEntity),
+  final payload = await showMagicAdaptiveSurface<Map<String, dynamic>>(
+    context,
+    kind: AppSurfaceKind.selection,
+    title: 'Новая задача',
+    subtitle: 'Срок, получатели и напоминание',
+    icon: Icons.add_task_rounded,
+    builder: (context) => SharedTaskEditor(
+      audienceOptions: options,
+      audiencePreview: source.previewAudience,
+      linkedEntity: linkedEntity,
+      embedded: true,
+    ),
   );
   if (payload == null || !context.mounted) return;
   final identity = MagicMutationIdentity.create('shared-task-create');
 
   Future<void> persist() async {
     try {
-      await source.create(payload, identity);
+      final result = await source.create(payload, identity);
       onSaved?.call();
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Задача создана.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_taskSavedMessage(result, created: true))),
+        );
       }
     } catch (_) {
       if (!context.mounted) return;
@@ -325,6 +369,11 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       await _dataSource.close(id, version, identity);
       _closeIdentities.remove(id);
       await _load(showLoading: false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Задача закрыта.')));
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _closeErrors[id] = error);
@@ -350,12 +399,18 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       // allBranches remains available even if directory loading failed.
     }
     if (!mounted) return;
-    final payload = await showDialog<Map<String, dynamic>>(
-      context: context,
+    final payload = await showMagicAdaptiveSurface<Map<String, dynamic>>(
+      context,
+      kind: AppSurfaceKind.selection,
+      title: task == null ? 'Новая задача' : 'Изменить задачу',
+      subtitle: 'Срок, получатели и напоминание',
+      icon: task == null ? Icons.add_task_rounded : Icons.edit_note_rounded,
       builder: (context) => SharedTaskEditor(
         task: task,
         audienceOptions: options,
+        audiencePreview: _dataSource.previewAudience,
         linkedEntity: widget.linkedEntity,
+        embedded: true,
       ),
     );
     if (payload == null || !mounted) return;
@@ -363,12 +418,17 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       task == null ? 'shared-task-create' : 'shared-task-update',
     );
     try {
-      if (task == null) {
-        await _dataSource.create(payload, identity);
-      } else {
-        await _dataSource.update(task['id'].toString(), payload, identity);
-      }
+      final result = task == null
+          ? await _dataSource.create(payload, identity)
+          : await _dataSource.update(task['id'].toString(), payload, identity);
       await _load(showLoading: false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_taskSavedMessage(result, created: task == null)),
+          ),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -918,7 +978,7 @@ class _SharedTaskCard extends StatelessWidget {
                     icon: closed
                         ? Icons.check_circle_outline
                         : Icons.groups_outlined,
-                    label: closed ? 'Закрыта' : 'Общая',
+                    label: closed ? 'Закрыта' : 'Открыта',
                   ),
                   if (task['hasReminder'] == true)
                     const _MetaChip(
@@ -1005,11 +1065,15 @@ class SharedTaskEditor extends StatefulWidget {
     required this.audienceOptions,
     this.task,
     this.linkedEntity,
+    this.audiencePreview,
+    this.embedded = false,
   });
 
   final List<SharedTaskAudienceOption> audienceOptions;
   final Map<String, dynamic>? task;
   final EntityLink? linkedEntity;
+  final SharedTaskAudiencePreviewLoader? audiencePreview;
+  final bool embedded;
 
   @override
   State<SharedTaskEditor> createState() => _SharedTaskEditorState();
@@ -1026,6 +1090,10 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   final List<Map<String, dynamic>> _audiences = [];
   List<Map<String, dynamic>> _existingReminders = const [];
   bool _reminder = false;
+  Map<String, dynamic>? _preview;
+  Object? _previewError;
+  bool _previewLoading = false;
+  int _previewGeneration = 0;
 
   @override
   void initState() {
@@ -1053,6 +1121,9 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
           .map((item) => {'dueAt': item['dueAt'], 'channel': item['channel']})
           .toList();
     }
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _refreshAudiencePreview(),
+    );
   }
 
   @override
@@ -1067,136 +1138,158 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     final options = widget.audienceOptions
         .where((option) => option.type == _audienceType)
         .toList();
-    return AlertDialog(
-      title: Text(
-        widget.task == null ? 'Новая общая задача' : 'Изменить задачу',
-      ),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                key: const Key('shared-task-title'),
-                controller: _title,
-                decoration: const InputDecoration(labelText: 'Название'),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _body,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(labelText: 'Описание'),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('На весь день'),
-                value: _allDay,
-                onChanged: (value) => setState(() {
-                  _allDay = value;
-                  _end = value
-                      ? null
-                      : (_end ?? _start.add(const Duration(hours: 1)));
-                }),
-              ),
+    final content = SizedBox(
+      width: 560,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              key: const Key('shared-task-title'),
+              controller: _title,
+              decoration: const InputDecoration(labelText: 'Название'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _body,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(labelText: 'Описание'),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('На весь день'),
+              value: _allDay,
+              onChanged: (value) => setState(() {
+                _allDay = value;
+                _end = value
+                    ? null
+                    : (_end ?? _start.add(const Duration(hours: 1)));
+              }),
+            ),
+            _DateTimeButton(
+              label: 'Начало',
+              value: _start,
+              dateOnly: _allDay,
+              onChanged: (value) => setState(() => _start = value),
+            ),
+            if (!_allDay)
               _DateTimeButton(
-                label: 'Начало',
-                value: _start,
-                dateOnly: _allDay,
-                onChanged: (value) => setState(() => _start = value),
+                label: 'Окончание',
+                value: _end ?? _start.add(const Duration(hours: 1)),
+                onChanged: (value) => setState(() => _end = value),
               ),
-              if (!_allDay)
-                _DateTimeButton(
-                  label: 'Окончание',
-                  value: _end ?? _start.add(const Duration(hours: 1)),
-                  onChanged: (value) => setState(() => _end = value),
-                ),
-              const Divider(height: 28),
-              Text('Кому', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'user', label: Text('Сотрудники')),
-                  ButtonSegment(value: 'branch', label: Text('Филиал')),
-                  ButtonSegment(
-                    value: 'allBranches',
-                    label: Text('Все филиалы'),
-                  ),
-                ],
-                selected: {_audienceType},
-                onSelectionChanged: (selection) => setState(() {
-                  _audienceType = selection.first;
-                  _targetId = null;
-                }),
-              ),
-              if (_audienceType != 'allBranches') ...[
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _targetId,
-                  decoration: InputDecoration(
-                    labelText: _audienceType == 'user' ? 'Сотрудник' : 'Филиал',
-                  ),
-                  items: options
-                      .map(
-                        (option) => DropdownMenuItem(
-                          value: option.id,
-                          child: Text(option.label),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) => setState(() => _targetId = value),
-                ),
+            const Divider(height: 28),
+            Text('Кому', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'user', label: Text('Сотрудники')),
+                ButtonSegment(value: 'branch', label: Text('Один филиал')),
+                ButtonSegment(value: 'allBranches', label: Text('Вся школа')),
               ],
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: _canAddAudience ? _addAudience : null,
-                icon: const Icon(Icons.group_add_outlined),
-                label: const Text('Добавить получателей'),
-              ),
-              Wrap(
-                spacing: 6,
-                children: _audiences
+              selected: {_audienceType},
+              onSelectionChanged: (selection) => setState(() {
+                _audienceType = selection.first;
+                _targetId = null;
+              }),
+            ),
+            if (_audienceType != 'allBranches') ...[
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _targetId,
+                decoration: InputDecoration(
+                  labelText: _audienceType == 'user' ? 'Сотрудник' : 'Филиал',
+                ),
+                items: options
                     .map(
-                      (audience) => InputChip(
-                        label: Text(_audienceLabel(audience)),
-                        onDeleted: _audiences.length == 1
-                            ? null
-                            : () => setState(() => _audiences.remove(audience)),
+                      (option) => DropdownMenuItem(
+                        value: option.id,
+                        child: Text(option.label),
                       ),
                     )
                     .toList(),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Напомнить в приложении'),
-                subtitle: const Text('Не блокирует текущую работу'),
-                value: _reminder,
-                onChanged: (value) => setState(() {
-                  _reminder = value;
-                  if (!value) _existingReminders = const [];
-                }),
+                onChanged: (value) => setState(() => _targetId = value),
               ),
             ],
-          ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _canAddAudience ? _addAudience : null,
+              icon: const Icon(Icons.group_add_outlined),
+              label: const Text('Добавить получателя'),
+            ),
+            Wrap(
+              spacing: 6,
+              children: _audiences
+                  .map(
+                    (audience) => InputChip(
+                      label: Text(_audienceLabel(audience)),
+                      onDeleted: _audiences.length == 1
+                          ? null
+                          : () => _removeAudience(audience),
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            _buildAudiencePreview(context),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Напомнить в приложении'),
+              subtitle: const Text('Не блокирует текущую работу'),
+              value: _reminder,
+              onChanged: (value) => setState(() {
+                _reminder = value;
+                if (!value) _existingReminders = const [];
+              }),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: _title.text.trim().isEmpty ? null : _submit,
-          child: Text(widget.task == null ? 'Создать' : 'Сохранить'),
-        ),
-      ],
+    );
+    final actions = <Widget>[
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Отмена'),
+      ),
+      FilledButton(
+        onPressed: _canSubmit ? _submit : null,
+        child: Text(widget.task == null ? 'Создать' : 'Сохранить'),
+      ),
+    ];
+    if (widget.embedded) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          content,
+          const SizedBox(height: AppSpace.md),
+          Row(
+            children: [
+              for (var i = 0; i < actions.length; i++) ...[
+                if (i > 0) const SizedBox(width: AppSpace.sm),
+                Expanded(child: actions[i]),
+              ],
+            ],
+          ),
+        ],
+      );
+    }
+    return AlertDialog(
+      title: Text(widget.task == null ? 'Новая задача' : 'Изменить задачу'),
+      content: content,
+      actions: actions,
     );
   }
 
   bool get _canAddAudience =>
       _audienceType == 'allBranches' || _targetId != null;
+
+  bool get _canSubmit =>
+      _title.text.trim().isNotEmpty &&
+      (widget.audiencePreview == null ||
+          (!_previewLoading && _previewError == null && _preview != null));
 
   void _addAudience() {
     final audience = {
@@ -1209,16 +1302,148 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     )) {
       return;
     }
-    setState(() => _audiences.add(audience));
+    setState(() {
+      if (_audienceType == 'allBranches') {
+        _audiences
+          ..clear()
+          ..add(audience);
+      } else {
+        _audiences.removeWhere((item) => item['type'] == 'allBranches');
+        _audiences.add(audience);
+      }
+    });
+    _refreshAudiencePreview();
+  }
+
+  void _removeAudience(Map<String, dynamic> audience) {
+    setState(() => _audiences.remove(audience));
+    _refreshAudiencePreview();
   }
 
   String _audienceLabel(Map<String, dynamic> audience) {
-    if (audience['type'] == 'allBranches') return 'Все филиалы';
+    if (audience['type'] == 'allBranches') return 'Вся школа';
     final id = audience['targetId']?.toString();
     for (final option in widget.audienceOptions) {
       if (option.id == id) return option.label;
     }
     return audience['type'] == 'user' ? 'Сотрудник' : 'Филиал';
+  }
+
+  void _refreshAudiencePreview() {
+    final loader = widget.audiencePreview;
+    if (loader == null || !mounted) return;
+    final generation = ++_previewGeneration;
+    setState(() {
+      _previewLoading = true;
+      _previewError = null;
+      _preview = null;
+    });
+    loader(_audiences.map(Map<String, dynamic>.from).toList()).then(
+      (preview) {
+        if (!mounted || generation != _previewGeneration) return;
+        setState(() {
+          _preview = preview;
+          _previewLoading = false;
+        });
+      },
+      onError: (Object error) {
+        if (!mounted || generation != _previewGeneration) return;
+        setState(() {
+          _previewError = error;
+          _previewLoading = false;
+        });
+      },
+    );
+  }
+
+  Widget _buildAudiencePreview(BuildContext context) {
+    if (widget.audiencePreview == null) {
+      return const Text(
+        'Сотрудники назначаются лично. Филиал и вся школа используют '
+        'актуальный состав на момент показа задачи.',
+      );
+    }
+    return Container(
+      key: const Key('shared-task-audience-preview'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Кто получит задачу',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: AppSpace.xs),
+          if (_previewLoading)
+            const LinearProgressIndicator(
+              key: Key('shared-task-audience-preview-loading'),
+            )
+          else if (_previewError != null) ...[
+            const Text(
+              'Не удалось проверить получателей. Задача не будет отправлена '
+              'без точного расчёта.',
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _refreshAudiencePreview,
+                child: const Text('Повторить расчёт'),
+              ),
+            ),
+          ] else if (_preview case final preview?) ...[
+            Text(
+              'Сейчас получат: ${preview['totalRecipients'] ?? 0}',
+              key: const Key('shared-task-recipient-total'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            for (final selector in _previewSelectors(preview))
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpace.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      selector['mode'] == 'fixed'
+                          ? Icons.person_outline_rounded
+                          : Icons.account_tree_outlined,
+                      size: 18,
+                    ),
+                    const SizedBox(width: AppSpace.sm),
+                    Expanded(
+                      child: Text(
+                        '${selector['label'] ?? 'Получатель'} — '
+                        '${selector['mode'] == 'fixed' ? 'лично' : 'динамический состав'}; '
+                        'сейчас ${selector['currentRecipientCount'] ?? 0}',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (preview['hasDynamicMembership'] == true) ...[
+              const SizedBox(height: AppSpace.sm),
+              const Text(
+                'Для филиала и всей школы состав обновляется автоматически: '
+                'задачу увидят сотрудники, которые входят туда на момент работы.',
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _previewSelectors(Map<String, dynamic> preview) {
+    final selectors = preview['selectors'];
+    return selectors is List
+        ? selectors.whereType<Map<String, dynamic>>().toList()
+        : const [];
   }
 
   void _submit() {

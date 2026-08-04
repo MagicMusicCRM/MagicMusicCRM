@@ -16,6 +16,7 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import {
   CloseSharedTaskDto,
   CreateSharedTaskDto,
+  PreviewSharedTaskAudienceDto,
   SharedTaskListQuery,
   UpdateSharedTaskDto,
 } from "./dto/shared-task.dto";
@@ -40,6 +41,14 @@ export class SharedTaskController {
     @Param("taskId", ParseUUIDPipe) taskId: string,
   ) {
     return this.tasks.history(actor, taskId);
+  }
+
+  @Post("audience-preview")
+  audiencePreview(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: PreviewSharedTaskAudienceDto,
+  ) {
+    return this.tasks.previewAudience(actor, dto.audiences);
   }
 
   @Post()

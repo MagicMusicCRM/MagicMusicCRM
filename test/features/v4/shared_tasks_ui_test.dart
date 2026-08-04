@@ -16,6 +16,7 @@ class _FakeSharedTasks implements SharedTasksDataSource {
   String? listedTaskId;
   String? listedEntityType;
   String? listedEntityId;
+  bool failAudiencePreview = false;
 
   Map<String, dynamic> get task => {
     'id': '11111111-1111-4111-8111-111111111111',
@@ -63,6 +64,42 @@ class _FakeSharedTasks implements SharedTasksDataSource {
   ];
 
   @override
+  Future<Map<String, dynamic>> previewAudience(
+    List<Map<String, dynamic>> audiences,
+  ) async {
+    if (failAudiencePreview) throw StateError('preview unavailable');
+    final selectors = audiences.map((audience) {
+      final type = audience['type'];
+      final id = audience['targetId']?.toString();
+      SharedTaskAudienceOption? option;
+      for (final candidate in audienceOptionsSync) {
+        if (candidate.id == id) option = candidate;
+      }
+      final count = switch (type) {
+        'user' => 1,
+        'branch' => 3,
+        _ => 8,
+      };
+      return <String, dynamic>{
+        'type': type,
+        'targetId': ?id,
+        'label': type == 'allBranches' ? 'Вся школа' : option?.label,
+        'mode': type == 'user' ? 'fixed' : 'dynamic',
+        'currentRecipientCount': count,
+      };
+    }).toList();
+    return {
+      'totalRecipients': selectors.fold<int>(
+        0,
+        (sum, item) => sum + (item['currentRecipientCount'] as int),
+      ),
+      'hasDynamicMembership': audiences.any((item) => item['type'] != 'user'),
+      'selectors': selectors,
+      'recipients': const <Map<String, dynamic>>[],
+    };
+  }
+
+  @override
   Future<Map<String, dynamic>> close(
     String taskId,
     int expectedVersion,
@@ -88,7 +125,12 @@ class _FakeSharedTasks implements SharedTasksDataSource {
     MagicMutationIdentity identity,
   ) async {
     createCalls++;
-    return data;
+    return {
+      ...data,
+      'recipientSummary': await previewAudience(
+        (data['audiences'] as List).whereType<Map<String, dynamic>>().toList(),
+      ),
+    };
   }
 
   @override
@@ -98,15 +140,24 @@ class _FakeSharedTasks implements SharedTasksDataSource {
     MagicMutationIdentity identity,
   ) async {
     updateCalls++;
-    return data;
+    return {
+      ...data,
+      'recipientSummary': await previewAudience(
+        (data['audiences'] as List).whereType<Map<String, dynamic>>().toList(),
+      ),
+    };
   }
 
-  @override
-  Future<List<SharedTaskAudienceOption>> audienceOptions() async => const [
+  List<SharedTaskAudienceOption> get audienceOptionsSync => const [
     SharedTaskAudienceOption(
       type: 'user',
       id: '22222222-2222-4222-8222-222222222222',
       label: 'Анна Петрова',
+    ),
+    SharedTaskAudienceOption(
+      type: 'user',
+      id: '55555555-5555-4555-8555-555555555555',
+      label: 'Олег Сидоров',
     ),
     SharedTaskAudienceOption(
       type: 'branch',
@@ -114,6 +165,10 @@ class _FakeSharedTasks implements SharedTasksDataSource {
       label: 'Центральный',
     ),
   ];
+
+  @override
+  Future<List<SharedTaskAudienceOption>> audienceOptions() async =>
+      audienceOptionsSync;
 }
 
 Widget _host(
@@ -166,9 +221,11 @@ void main() {
       'Новая задача',
     );
     await tester.pump();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Создать'));
     await tester.tap(find.widgetWithText(FilledButton, 'Создать'));
     await tester.pumpAndSettle();
     expect(source.createCalls, 1);
+    expect(find.text('Задача создана. Получателей сейчас: 8.'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Изменить'));
     await tester.pumpAndSettle();
@@ -177,6 +234,7 @@ void main() {
       'Изменённая задача',
     );
     await tester.pump();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Сохранить'));
     await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
     await tester.pumpAndSettle();
     expect(source.updateCalls, 1);
@@ -247,6 +305,29 @@ void main() {
     );
   });
 
+  testWidgets('mobile task editor opens as an expandable full-width sheet', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      _host(_FakeSharedTasks(), size: const Size(390, 844)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Новая задача'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
+    expect(find.text('Развернуть'), findsOneWidget);
+    expect(find.text('Сейчас получат: 8'), findsOneWidget);
+
+    await tester.tap(find.text('Развернуть'));
+    await tester.pumpAndSettle();
+    expect(find.text('Свернуть'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('editor exposes every audience and time mode', (tester) async {
     tester.view.physicalSize = const Size(1000, 1000);
     tester.view.devicePixelRatio = 1;
@@ -274,14 +355,115 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Сотрудники'), findsOneWidget);
-    expect(find.text('Филиал'), findsOneWidget);
-    expect(find.text('Все филиалы'), findsWidgets);
+    expect(find.text('Один филиал'), findsOneWidget);
+    expect(find.text('Вся школа'), findsWidgets);
     expect(find.text('На весь день'), findsOneWidget);
 
     await tester.tap(find.text('На весь день'));
     await tester.pumpAndSettle();
     expect(find.text('Окончание'), findsOneWidget);
     expect(find.text('Напомнить в приложении'), findsOneWidget);
+  });
+
+  testWidgets('recipient preview distinguishes people, branch and school', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final source = _FakeSharedTasks();
+    await tester.pumpWidget(_host(source));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Новая задача'));
+    await tester.pumpAndSettle();
+    expect(find.text('Сейчас получат: 8'), findsOneWidget);
+    expect(
+      find.textContaining('Вся школа — динамический состав'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Сотрудники'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Анна Петрова').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Добавить получателя'));
+    await tester.pumpAndSettle();
+    expect(find.text('Сейчас получат: 1'), findsOneWidget);
+    expect(find.textContaining('Анна Петрова — лично'), findsOneWidget);
+    expect(
+      find.textContaining('Вся школа — динамический состав'),
+      findsNothing,
+    );
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Олег Сидоров').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Добавить получателя'));
+    await tester.pumpAndSettle();
+    expect(find.text('Сейчас получат: 2'), findsOneWidget);
+
+    await tester.tap(find.text('Один филиал'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Центральный').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Добавить получателя'));
+    await tester.pumpAndSettle();
+    expect(find.text('Сейчас получат: 5'), findsOneWidget);
+    expect(
+      find.textContaining('Центральный — динамический состав'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Вся школа').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Добавить получателя'));
+    await tester.pumpAndSettle();
+    expect(find.text('Сейчас получат: 8'), findsOneWidget);
+    expect(find.textContaining('Анна Петрова — лично'), findsNothing);
+    expect(
+      find.textContaining('Центральный — динамический состав'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('failed recipient preview blocks submit until retry succeeds', (
+    tester,
+  ) async {
+    final source = _FakeSharedTasks()..failAudiencePreview = true;
+    await tester.pumpWidget(_host(source));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Новая задача'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('shared-task-title')),
+      'Проверить получателей',
+    );
+    await tester.pump();
+
+    expect(find.text('Повторить расчёт'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Создать'))
+          .onPressed,
+      isNull,
+    );
+
+    source.failAudiencePreview = false;
+    await tester.ensureVisible(find.text('Повторить расчёт'));
+    await tester.tap(find.text('Повторить расчёт'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Создать'))
+          .onPressed,
+      isNotNull,
+    );
   });
 
   testWidgets('direct task link uses canonical filters and opens history', (
