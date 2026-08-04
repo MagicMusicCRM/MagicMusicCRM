@@ -1,7 +1,55 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/models/student_funnel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 
 void main() {
+  group('groupStudentsByStatus', () {
+    const stages = [
+      StudentFunnelStage(
+        key: 'consultation',
+        label: 'Консультация',
+        style: 'cyan',
+        active: true,
+        allowedTransitions: ['learning'],
+      ),
+      StudentFunnelStage(
+        key: 'learning',
+        label: 'Обучается',
+        style: 'green',
+        active: true,
+        allowedTransitions: [],
+      ),
+    ];
+
+    test('uses configured stages and order without built-in status names', () {
+      final columns = groupStudentsByStatus([
+        {'id': 's1', 'status': 'learning'},
+        {'id': 's2', 'status': 'consultation'},
+      ], stages);
+
+      expect(columns.map((column) => column['name']), [
+        'Консультация',
+        'Обучается',
+      ]);
+      expect(columns.first['allowedTransitions'], ['learning']);
+      expect((columns.first['students'] as List).single['id'], 's2');
+    });
+
+    test('keeps unknown legacy values in the remediation bucket', () {
+      final columns = groupStudentsByStatus([
+        {'id': 's3', 'status': 'legacy_pause'},
+        {'id': 's4'},
+      ], stages);
+
+      expect(columns.last['status'], isNull);
+      expect(columns.last['name'], 'Требуют сопоставления');
+      expect((columns.last['students'] as List).map((item) => item['id']), [
+        's3',
+        's4',
+      ]);
+    });
+  });
+
   group('groupStudentsByDiscipline', () {
     final disciplines = [
       {'discipline_id': 'd1', 'name': 'Вокал', 'sort_order': 0},

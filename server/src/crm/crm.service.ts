@@ -63,6 +63,7 @@ import { CrmPolicy } from "./crm.policy";
 import { TasksService } from "./tasks.service";
 import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
+import { StudentFunnelService } from "./student-funnel.service";
 
 interface StudentSearchRow extends StudentRow {
   branch_id: string | null;
@@ -106,6 +107,7 @@ export class CrmService {
     private readonly notifications: NotificationsService,
     private readonly chatWork: ChatWorkTimelineService,
     private readonly realtime: RealtimeBus,
+    private readonly studentFunnel: StudentFunnelService,
   ) {}
 
   async getMySummary(actor: ActorContext) {
@@ -315,6 +317,7 @@ export class CrmService {
 
     try {
       const result = await this.database.transaction(async (client) => {
+        await this.studentFunnel.assertCreateStatus(client, branchId, status);
         if (leadId) {
           await client.query(
             "select pg_advisory_xact_lock(hashtextextended($1::uuid::text, 0))",
@@ -625,6 +628,20 @@ export class CrmService {
               [studentId],
             )
           ).rows[0] ?? null;
+        if (before && dto.status != null) {
+          await this.studentFunnel.assertTransition(
+            client,
+            branchId ?? before.branch_id,
+            before.status,
+            dto.status.trim(),
+          );
+        } else if (before && branchId && branchId !== before.branch_id) {
+          await this.studentFunnel.assertCreateStatus(
+            client,
+            branchId,
+            before.status ?? "",
+          );
+        }
         let customDataPatch = { ...initialCustomData };
         if (before && requestedResponsibleId) {
           const responsible = await assertEligibleResponsible(

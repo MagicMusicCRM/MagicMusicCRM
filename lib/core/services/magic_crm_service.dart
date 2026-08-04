@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/models/commerce_projection.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
+import 'package:magic_music_crm/core/models/student_funnel.dart';
 
 part 'magic_crm_service_core.dart';
 part 'magic_crm_service_org.dart';

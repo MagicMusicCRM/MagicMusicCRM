@@ -73,6 +73,22 @@ class _CountingApiClient extends MagicApiClient {
             'items': <dynamic>[],
             'total_count': 0,
           },
+          '/crm/student-funnel' => <String, dynamic>{
+            'branchId': queryParameters?['branchId'],
+            'source': 'school',
+            'schoolVersion': 1,
+            'branchVersion': 0,
+            'stages': <dynamic>[
+              <String, dynamic>{
+                'key': 'learning',
+                'label': 'Обучаются',
+                'style': 'green',
+                'active': true,
+                'allowedTransitions': <dynamic>[],
+              },
+            ],
+            'remediationStatuses': <dynamic>[],
+          },
           _ => <String, dynamic>{'items': <dynamic>[]},
         }
         as T;
@@ -83,20 +99,19 @@ Widget _host({
   required Widget child,
   required _CountingApiClient api,
   required Stream<CrmChangedEvent> realtime,
+  CapabilitySnapshot snapshot = const CapabilitySnapshot(
+    accountId: 'manager-test',
+    role: 'manager',
+    accessVersion: 1,
+    capabilities: <String>{},
+    scopes: <String, String>{},
+  ),
 }) {
   return ProviderScope(
     overrides: [
       magicApiClientProvider.overrideWithValue(api),
       crmRealtimeProvider.overrideWith((ref) => realtime),
-      capabilitySnapshotProvider.overrideWith(
-        (ref) async => const CapabilitySnapshot(
-          accountId: 'manager-test',
-          role: 'manager',
-          accessVersion: 1,
-          capabilities: <String>{},
-          scopes: <String, String>{},
-        ),
-      ),
+      capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
     ],
     child: MaterialApp(home: Scaffold(body: child)),
   );
@@ -193,10 +208,52 @@ void main() {
 
     final initialSearch = api.count('/crm/students/search');
     expect(initialSearch, 1);
+    expect(find.byKey(const ValueKey('students-create')), findsNothing);
 
     realtime.add(const CrmChangedEvent(entity: 'student', action: 'poll'));
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(api.count('/crm/students/search'), initialSearch);
   });
+
+  testWidgets(
+    'student board actions remain usable at phone/tablet/desktop widths',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final sizes = [
+        const Size(360, 690),
+        const Size(840, 900),
+        const Size(1200, 800),
+      ];
+      for (final size in sizes) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        final api = _CountingApiClient();
+        final realtime = StreamController<CrmChangedEvent>.broadcast();
+        await tester.pumpWidget(
+          _host(
+            api: api,
+            realtime: realtime.stream,
+            snapshot: const CapabilitySnapshot(
+              accountId: 'director-test',
+              role: 'director',
+              accessVersion: 1,
+              capabilities: <String>{'crm.client.write'},
+              scopes: <String, String>{},
+            ),
+            child: const StudentsBoardWidget(),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const ValueKey('students-create')), findsOneWidget);
+        expect(find.byTooltip('Настроить воронку'), findsOneWidget);
+        expect(tester.takeException(), isNull, reason: 'viewport $size');
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await realtime.close();
+      }
+    },
+  );
 }

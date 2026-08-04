@@ -1,58 +1,63 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/models/student_funnel.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 /// The disciplines configured for a branch (the Ученики board's columns).
 final branchDisciplinesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, branchId) {
-  return ref.watch(magicCrmServiceProvider).listBranchDisciplines(branchId);
-});
+      return ref.watch(magicCrmServiceProvider).listBranchDisciplines(branchId);
+    });
 
 /// Sentinel branch id for the «Без филиала» board — students with no branch.
 /// Must equal `kNoBranchValue` in the transfer controller (both `__none__`).
 const String kNoBranchBoardId = '__none__';
 
-/// The Ученики board for a branch: STATUS columns (Пробные / Активные / Пауза /
-/// Неактивные / Прочие) + grouped students. Mirrors how the Leads board is
-/// organised so the board can act as a status-based draggable kanban.
+/// Effective school + optional branch funnel used by every student workflow.
+final studentFunnelProvider =
+    FutureProvider.family<StudentFunnelConfiguration, String>((ref, branchId) {
+      return ref
+          .watch(magicCrmServiceProvider)
+          .getStudentFunnel(
+            branchId: branchId == kNoBranchBoardId ? null : branchId,
+          );
+    });
+
+/// The Ученики board for a branch: effective configured funnel columns plus
+/// grouped students. Mirrors how the Leads board is organised so the board can
+/// act as a status-based draggable kanban.
 ///
 /// Pass [kNoBranchBoardId] to load students that have no branch at all.
 final studentBoardProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((
-  ref,
-  branchId,
-) async {
-  final service = ref.watch(magicCrmServiceProvider);
-  // TODO: добавить серверную пагинацию/board-эндпоинт, если ветка превышает этот лимит.
-  final search = branchId == kNoBranchBoardId
-      ? await service.searchStudents(noBranch: true, limit: 500)
-      : await service.searchStudents(branchId: branchId, limit: 500);
-  final students =
-      (search['items'] as List? ?? const []).whereType<Map<String, dynamic>>().toList();
-  return groupStudentsByStatus(students);
-});
-
-/// The student statuses that act as the board's draggable columns.
-/// `key` is the value sent to the backend (`status`), `name` is the Russian
-/// column title. Backend stores `status` as free text, so these are the canonical
-/// set the UI writes (drop into a column → that status).
-const List<({String key, String name})> studentStatusColumns = [
-  (key: 'trial', name: 'Пробные'),
-  (key: 'active', name: 'Активные'),
-  (key: 'paused', name: 'Пауза'),
-  (key: 'inactive', name: 'Неактивные'),
-];
+      ref,
+      branchId,
+    ) async {
+      final service = ref.watch(magicCrmServiceProvider);
+      final funnel = await ref.watch(studentFunnelProvider(branchId).future);
+      // TODO: добавить серверную пагинацию/board-эндпоинт, если ветка превышает этот лимит.
+      final search = branchId == kNoBranchBoardId
+          ? await service.searchStudents(noBranch: true, limit: 500)
+          : await service.searchStudents(branchId: branchId, limit: 500);
+      final students = (search['items'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      return groupStudentsByStatus(students, funnel.activeStages);
+    });
 
 /// Pure: bucket students into the column whose `status` matches (case-
-/// insensitive). Active/inactive are the draggable targets; any unknown status
-/// (or missing status) lands in a trailing «Прочие» column.
+/// insensitive). Configured active stages are the draggable targets; any
+/// unknown status (or missing status) lands in the remediation column.
 List<Map<String, dynamic>> groupStudentsByStatus(
   List<Map<String, dynamic>> students,
+  List<StudentFunnelStage> stages,
 ) {
   final columns = <Map<String, dynamic>>[
-    for (final s in studentStatusColumns)
+    for (final stage in stages)
       {
-        'status': s.key,
-        'name': s.name,
+        'status': stage.key,
+        'name': stage.label,
+        'style': stage.style,
+        'allowedTransitions': stage.allowedTransitions,
         'students': <Map<String, dynamic>>[],
       },
   ];
@@ -60,7 +65,9 @@ List<Map<String, dynamic>> groupStudentsByStatus(
   // non-droppable column (the widget only accepts drops onto real statuses).
   final other = <String, dynamic>{
     'status': null,
-    'name': 'Прочие',
+    'name': 'Требуют сопоставления',
+    'style': 'red',
+    'allowedTransitions': const <String>[],
     'students': <Map<String, dynamic>>[],
   };
 
@@ -79,7 +86,7 @@ List<Map<String, dynamic>> groupStudentsByStatus(
     }
   }
 
-  // Only show «Прочие» when it actually holds students.
+  // Only show remediation when it actually holds students.
   if ((other['students'] as List).isEmpty) {
     return columns;
   }
@@ -94,9 +101,11 @@ List<Map<String, dynamic>> groupStudentsByDiscipline(
   List<Map<String, dynamic>> students,
 ) {
   final ordered = [...disciplines]
-    ..sort((a, b) =>
-        ((a['sort_order'] as num?) ?? (1 << 30))
-            .compareTo((b['sort_order'] as num?) ?? (1 << 30)));
+    ..sort(
+      (a, b) => ((a['sort_order'] as num?) ?? (1 << 30)).compareTo(
+        (b['sort_order'] as num?) ?? (1 << 30),
+      ),
+    );
 
   final columns = <Map<String, dynamic>>[
     for (final d in ordered)
@@ -114,7 +123,8 @@ List<Map<String, dynamic>> groupStudentsByDiscipline(
 
   final byName = <String, List<Map<String, dynamic>>>{
     for (final c in columns)
-      (c['name'] as String).toLowerCase(): c['students'] as List<Map<String, dynamic>>,
+      (c['name'] as String).toLowerCase():
+          c['students'] as List<Map<String, dynamic>>,
   };
 
   for (final student in students) {

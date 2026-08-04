@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
@@ -10,9 +11,11 @@ import 'package:magic_music_crm/core/widgets/no_open_tasks_highlight.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/student_funnel_editor.dart';
 
 part 'students_board_widgets.dart';
 
@@ -102,6 +105,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   void _refreshBoard() {
     if (_selectedBranchId != null) {
+      ref.invalidate(studentFunnelProvider(_selectedBranchId!));
       ref.invalidate(studentBoardProvider(_selectedBranchId!));
     }
   }
@@ -245,6 +249,31 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     if (changed == true) _refreshBoard();
   }
 
+  Future<void> _createStudent() async {
+    final branchId = _selectedBranchId == kNoBranchBoardId
+        ? null
+        : _selectedBranchId;
+    final student = await showStudentCreateSurface(
+      context,
+      initialBranchId: branchId,
+    );
+    if (!mounted || student == null) return;
+    _refreshBoard();
+    await _openStudent(student);
+  }
+
+  Future<void> _configureFunnel() async {
+    final changed = await showStudentFunnelEditor(
+      context,
+      branches: _branches,
+      initialBranchId: _selectedBranchId == kNoBranchBoardId
+          ? null
+          : _selectedBranchId,
+      onPublished: _refreshBoard,
+    );
+    if (changed == true) _refreshBoard();
+  }
+
   /// Re-bucket the board's columns honoring any in-flight optimistic moves so
   /// the dragged card appears in its target column immediately.
   List<_StatusColumnData> _applyOptimistic(List<Map<String, dynamic>> columns) {
@@ -254,6 +283,11 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
         _StatusColumnData(
           status: column['status'] as String?,
           name: column['name']?.toString() ?? 'Без названия',
+          style: column['style']?.toString() ?? 'gray',
+          allowedTransitions:
+              (column['allowedTransitions'] as List? ?? const [])
+                  .map((value) => value.toString())
+                  .toSet(),
           students: column['students'] is List
               ? (column['students'] as List)
                     .whereType<Map<String, dynamic>>()
@@ -294,6 +328,10 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   }
 
   Widget _buildBranchSelector() {
+    final access = ref.watch(capabilitySnapshotProvider).asData?.value;
+    final canWrite = access?.allows('crm.client.write') == true;
+    final canConfigure =
+        access?.role == 'director' || access?.role == 'system_admin';
     final seen = <String>{};
     final items =
         _branches
@@ -316,82 +354,103 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
             ),
           );
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.school_rounded,
-            size: 20,
-            color: AppTheme.primaryGold,
-          ),
-          const SizedBox(width: 10),
-          const Text(
-            'Ученики',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(width: 16),
-          if (!_branchesLoaded && _branchLoadError == null)
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else if (_branchLoadError != null)
-            // error inline placeholder — full error block is in build()
-            const SizedBox.shrink()
-          else if (_branches.isNotEmpty)
-            SizedBox(
-              width: 220,
-              child: DropdownButtonFormField<String>(
-                key: ValueKey('branch:$_selectedBranchId'),
-                initialValue: _selectedBranchId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Филиал',
-                  isDense: true,
-                ),
-                items: items,
-                onChanged: (value) {
-                  if (value != null && value.isNotEmpty) {
-                    setState(() => _selectedBranchId = value);
-                  }
+    final branchField = DropdownButtonFormField<String>(
+      key: ValueKey('branch:$_selectedBranchId'),
+      initialValue: _selectedBranchId,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'Филиал', isDense: true),
+      items: items,
+      onChanged: (value) {
+        if (value != null && value.isNotEmpty) {
+          setState(() => _selectedBranchId = value);
+        }
+      },
+    );
+    final searchField = TextField(
+      controller: _searchCtrl,
+      decoration: InputDecoration(
+        isDense: true,
+        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+        hintText: 'Имя или телефон',
+        suffixIcon: _query.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Очистить поиск',
+                icon: const Icon(Icons.close_rounded, size: 18),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() => _query = '');
                 },
               ),
-            ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280),
-              child: TextField(
-                controller: _searchCtrl,
-                decoration: InputDecoration(
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                  hintText: 'Имя или телефон',
-                  suffixIcon: _query.isEmpty
-                      ? null
-                      : IconButton(
-                          tooltip: 'Очистить поиск',
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            setState(() => _query = '');
-                          },
-                        ),
-                ),
-                onChanged: (v) =>
-                    setState(() => _query = v.trim().toLowerCase()),
+      ),
+      onChanged: (value) => setState(() => _query = value.trim().toLowerCase()),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 700;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.school_rounded,
+                    size: 20,
+                    color: AppTheme.primaryGold,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Ученики',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (canConfigure)
+                    IconButton(
+                      tooltip: 'Настроить воронку',
+                      onPressed: _configureFunnel,
+                      icon: const Icon(Icons.view_kanban_outlined),
+                    ),
+                  IconButton(
+                    tooltip: 'Обновить',
+                    icon: const Icon(Icons.refresh_rounded),
+                    onPressed: _refreshBoard,
+                  ),
+                  if (canWrite)
+                    FilledButton.icon(
+                      key: const ValueKey('students-create'),
+                      onPressed: _branches.isEmpty ? null : _createStudent,
+                      icon: const Icon(Icons.add_rounded),
+                      label: Text(compact ? 'Создать' : 'Новый ученик'),
+                    ),
+                ],
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            tooltip: 'Обновить',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _refreshBoard,
-          ),
-        ],
+              const SizedBox(height: AppSpace.sm),
+              if (!_branchesLoaded && _branchLoadError == null)
+                const LinearProgressIndicator()
+              else if (_branchLoadError != null || _branches.isEmpty)
+                const SizedBox.shrink()
+              else if (compact) ...[
+                branchField,
+                const SizedBox(height: AppSpace.sm),
+                searchField,
+              ] else
+                Row(
+                  children: [
+                    SizedBox(width: 240, child: branchField),
+                    const SizedBox(width: AppSpace.md),
+                    Expanded(child: searchField),
+                  ],
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -608,33 +667,16 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
                     (c) => _StatusColumnData(
                       status: c.status,
                       name: c.name,
+                      style: c.style,
+                      allowedTransitions: c.allowedTransitions,
                       students: c.students.where(_matchesQuery).toList(),
                     ),
                   )
                   .toList();
-        final total = filtered.fold<int>(
-          0,
-          (sum, c) => sum + c.students.length,
-        );
-        if (total == 0 && !transfer.isActive) {
-          return const Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.people_outline_rounded,
-                  size: 42,
-                  color: Colors.grey,
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'Нет учеников',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          );
-        }
+        final transitions = <String, Set<String>>{
+          for (final item in filtered)
+            if (item.status != null) item.status!: item.allowedTransitions,
+        };
         return MagicDesktopScrollbar(
           axis: Axis.horizontal,
           controller: _boardScrollController,
@@ -647,6 +689,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
               children: filtered.map((column) {
                 final col = _StatusColumn(
                   column: column,
+                  transitions: transitions,
                   pendingStudentIds: _pendingStudentIds,
                   onTap: _openStudent,
                   onMove: _moveStatus,

@@ -1,16 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/models/student_funnel.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
+import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 
 import 'client_forms_api.dart';
 
-const _studentStatuses = <String, String>{
-  'active': 'Занимается',
-  'paused': 'Приостановил',
-  'completed': 'Закончил обучение',
-};
+Future<Map<String, dynamic>?> showStudentCreateSurface(
+  BuildContext context, {
+  String? initialBranchId,
+}) {
+  return showMagicAdaptiveSurface<Map<String, dynamic>>(
+    context,
+    kind: AppSurfaceKind.selection,
+    title: 'Новый ученик',
+    subtitle: 'Карточка будет сразу добавлена в воронку',
+    icon: Icons.person_add_alt_1_rounded,
+    builder: (_) =>
+        StudentCreateDialogV4(initialBranchId: initialBranchId, embedded: true),
+  );
+}
 
 class LeadCreateDialog extends ConsumerStatefulWidget {
   const LeadCreateDialog({super.key});
@@ -243,7 +256,14 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
 }
 
 class StudentCreateDialogV4 extends ConsumerStatefulWidget {
-  const StudentCreateDialogV4({super.key});
+  const StudentCreateDialogV4({
+    super.key,
+    this.initialBranchId,
+    this.embedded = false,
+  });
+
+  final String? initialBranchId;
+  final bool embedded;
 
   @override
   ConsumerState<StudentCreateDialogV4> createState() =>
@@ -256,9 +276,10 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
   final _customValues = <String, Object?>{};
   String _phone = '';
   String? _branchId;
-  String _status = 'active';
+  String? _status;
   List<Map<String, dynamic>> _branches = const [];
   List<Map<String, dynamic>> _fields = const [];
+  List<StudentFunnelStage> _statuses = const [];
   Map<String, String> _fieldErrors = const {};
   String? _loadError;
   String? _submitError;
@@ -290,11 +311,30 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
         api.listFields(entityType: 'student'),
       ]);
       if (!mounted) return;
+      final branches = results[0];
+      final availableIds = branches
+          .map((branch) => branch['id']?.toString())
+          .whereType<String>()
+          .toSet();
+      final selectedBranch = availableIds.contains(widget.initialBranchId)
+          ? widget.initialBranchId
+          : availableIds.contains(_branchId)
+          ? _branchId
+          : branches.length == 1
+          ? branches.first['id']?.toString()
+          : null;
+      final funnel = await ref
+          .read(magicCrmServiceProvider)
+          .getStudentFunnel(branchId: selectedBranch);
+      if (!mounted) return;
+      final statuses = funnel.activeStages;
       setState(() {
-        _branches = results[0];
+        _branches = branches;
         _fields = results[1];
-        if (_branches.length == 1) {
-          _branchId = _branches.first['id']?.toString();
+        _branchId = selectedBranch;
+        _statuses = statuses;
+        if (!statuses.any((stage) => stage.key == _status)) {
+          _status = statuses.firstOrNull?.key;
         }
         _loading = false;
       });
@@ -317,6 +357,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
     }
     if (_phone.isEmpty) errors['phone'] = 'Укажите корректный телефон.';
     if (_branchId == null) errors['branchId'] = 'Выберите филиал.';
+    if (_status == null) errors['status'] = 'Выберите этап воронки.';
     for (final field in _fields.where((item) => item['required'] == true)) {
       final id = field['id']?.toString() ?? '';
       final value = _customValues[id];
@@ -346,7 +387,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
             lastName: _lastName.text,
             phone: _phone,
             branchId: _branchId!,
-            status: _status,
+            status: _status!,
             customFields: _serializedCustomFields(_fields, _customValues),
           );
       if (!mounted) return;
@@ -367,10 +408,40 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
     }
   }
 
+  Future<void> _selectBranch(String? branchId) async {
+    if (branchId == null || branchId == _branchId) return;
+    setState(() {
+      _branchId = branchId;
+      _saving = true;
+      _submitError = null;
+    });
+    try {
+      final funnel = await ref
+          .read(magicCrmServiceProvider)
+          .getStudentFunnel(branchId: branchId);
+      if (!mounted) return;
+      final statuses = funnel.activeStages;
+      setState(() {
+        _statuses = statuses;
+        if (!statuses.any((stage) => stage.key == _status)) {
+          _status = statuses.firstOrNull?.key;
+        }
+        _saving = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _submitError = 'Не удалось загрузить воронку филиала: $error';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return _AdaptiveClientDialog(
       title: 'Новый ученик',
+      embedded: widget.embedded,
       loading: _loading,
       loadError: _loadError,
       onRetry: _loadMetadata,
@@ -439,30 +510,37 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
                           ),
                         )
                         .toList(growable: false),
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _branchId = value),
+                    onChanged: _saving ? null : _selectBranch,
                   ),
                 const SizedBox(height: AppSpace.sm),
-                DropdownButtonFormField<String>(
-                  key: const ValueKey('student-status'),
-                  initialValue: _status,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Статус клиента *',
+                if (_statuses.isEmpty)
+                  const _EmptyMetadata(
+                    message:
+                        'В воронке нет активных этапов. Директор должен обновить настройку.',
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(
+                      'student-status-${_branchId ?? 'school'}-${_statuses.map((stage) => stage.key).join('-')}',
+                    ),
+                    initialValue: _status,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Этап воронки *',
+                      errorText: _fieldErrors['status'],
+                    ),
+                    items: _statuses
+                        .map(
+                          (stage) => DropdownMenuItem(
+                            value: stage.key,
+                            child: Text(stage.label),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _status = value),
                   ),
-                  items: _studentStatuses.entries
-                      .map(
-                        (entry) => DropdownMenuItem(
-                          value: entry.key,
-                          child: Text(entry.value),
-                        ),
-                      )
-                      .toList(growable: false),
-                  onChanged: _saving
-                      ? null
-                      : (value) => setState(() => _status = value ?? 'active'),
-                ),
                 _ClientFieldInputs(
                   fields: _fields,
                   values: _customValues,
@@ -485,6 +563,7 @@ class _AdaptiveClientDialog extends StatelessWidget {
     required this.submitError,
     required this.actions,
     required this.child,
+    this.embedded = false,
   });
 
   final String title;
@@ -494,10 +573,50 @@ class _AdaptiveClientDialog extends StatelessWidget {
   final String? submitError;
   final List<Widget> actions;
   final Widget? child;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (loading)
+          const Padding(
+            padding: EdgeInsets.all(AppSpace.xl),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (loadError != null)
+          _LoadError(message: loadError!, onRetry: onRetry)
+        else
+          ?child,
+        if (submitError != null) ...[
+          const SizedBox(height: AppSpace.md),
+          Text(
+            submitError!,
+            key: const ValueKey('client-form-submit-error'),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+      ],
+    );
+    if (embedded) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          content,
+          const SizedBox(height: AppSpace.lg),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.sm,
+            children: actions,
+          ),
+        ],
+      );
+    }
     return AlertDialog(
       insetPadding: EdgeInsets.symmetric(
         horizontal: width < 480 ? AppSpace.sm : AppSpace.xl,
@@ -510,33 +629,7 @@ class _AdaptiveClientDialog extends StatelessWidget {
           width: width < 480
               ? (width - (AppSpace.sm * 2) - 48).clamp(0, 520).toDouble()
               : 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (loading)
-                  const Padding(
-                    padding: EdgeInsets.all(AppSpace.xl),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (loadError != null)
-                  _LoadError(message: loadError!, onRetry: onRetry)
-                else
-                  ?child,
-                if (submitError != null) ...[
-                  const SizedBox(height: AppSpace.md),
-                  Text(
-                    submitError!,
-                    key: const ValueKey('client-form-submit-error'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          child: SingleChildScrollView(child: content),
         ),
       ),
       actions: [

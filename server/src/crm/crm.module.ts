@@ -93,6 +93,8 @@ import { SharedTaskController } from './shared-task.controller';
 import { SharedTaskRepository } from './tasks/shared-task.repository';
 import { SharedTaskService } from './tasks/shared-task.service';
 import { SharedTaskReminderWorker } from './tasks/shared-task-reminder.worker';
+import { CrmStudentFunnelController } from './crm-student-funnel.controller';
+import { StudentFunnelService } from './student-funnel.service';
 
 @Module({
   imports: [
@@ -123,6 +125,7 @@ import { SharedTaskReminderWorker } from './tasks/shared-task-reminder.worker';
     SubscriptionCommerceController,
     CommerceProjectionController,
     SharedTaskController,
+    CrmStudentFunnelController,
   ],
   providers: [
     CrmService,
@@ -191,6 +194,7 @@ import { SharedTaskReminderWorker } from './tasks/shared-task-reminder.worker';
     SharedTaskRepository,
     SharedTaskService,
     SharedTaskReminderWorker,
+    StudentFunnelService,
     {
       provide: LESSON_SETTLEMENT_PORT,
       useExisting: LessonSettlementService,

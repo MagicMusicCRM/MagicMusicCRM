@@ -27,6 +27,7 @@ import 'package:magic_music_crm/core/models/student_balance.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/models/subscription.dart';
 import 'package:magic_music_crm/core/models/lesson.dart';
+import 'package:magic_music_crm/core/models/student_funnel.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
@@ -205,6 +206,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // Loaded from `getStudentCard` (+ a family fetch). Each section is isolated so
   // a single failed call never blanks the whole card.
   Map<String, dynamic>? _student;
+  StudentFunnelConfiguration? _studentFunnel;
+  String? _studentFunnelError;
   StudentBalance? _balance;
   List<Subscription> _subscriptions = [];
   List<Payment> _payments = [];
@@ -352,12 +355,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'cabinetStatus',
     'noEmail',
   };
-
-  static const List<String> _studentStatusOptions = [
-    'Занимается',
-    'Закончил обучение',
-    'Саморегистрация',
-  ];
 
   @override
   void initState() {

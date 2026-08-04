@@ -146,6 +146,25 @@ class FakeCardApiClient extends MagicApiClient {
     if (path == '/crm/subscription-packages') {
       return <String, dynamic>{'items': subscriptionPackages} as T;
     }
+    if (path == '/crm/student-funnel') {
+      return <String, dynamic>{
+            'branchId': queryParameters?['branchId'],
+            'source': 'school',
+            'schoolVersion': 1,
+            'branchVersion': 0,
+            'stages': [
+              {
+                'key': 'active',
+                'label': 'Занимается',
+                'style': 'green',
+                'active': true,
+                'allowedTransitions': const <String>[],
+              },
+            ],
+            'remediationStatuses': const <Map<String, dynamic>>[],
+          }
+          as T;
+    }
     if (lead != null && path == '/crm/leads/${lead!['id']}/card') {
       return <String, dynamic>{
             'lead': lead,

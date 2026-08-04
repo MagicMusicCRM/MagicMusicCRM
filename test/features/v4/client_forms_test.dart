@@ -11,10 +11,12 @@ class _ClientFormsFakeApi extends MagicApiClient {
   _ClientFormsFakeApi({
     this.failFirstLeadWithInactiveSource = false,
     this.configurationForbidden = false,
+    this.failStudentCreate = false,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final bool failFirstLeadWithInactiveSource;
   final bool configurationForbidden;
+  final bool failStudentCreate;
   int sourceLoads = 0;
   int leadCreates = 0;
   final posts = <({String path, Map<String, dynamic> data})>[];
@@ -76,6 +78,25 @@ class _ClientFormsFakeApi extends MagicApiClient {
           }
           as T;
     }
+    if (path == '/crm/student-funnel') {
+      return <String, dynamic>{
+            'branchId': queryParameters?['branchId'],
+            'source': 'branch_override',
+            'schoolVersion': 2,
+            'branchVersion': 1,
+            'stages': [
+              {
+                'key': 'consultation',
+                'label': 'Консультация',
+                'style': 'cyan',
+                'active': true,
+                'allowedTransitions': const <String>[],
+              },
+            ],
+            'remediationStatuses': const <Map<String, dynamic>>[],
+          }
+          as T;
+    }
     throw StateError('Unexpected GET $path');
   }
 
@@ -104,6 +125,7 @@ class _ClientFormsFakeApi extends MagicApiClient {
       return <String, dynamic>{'id': 'lead-a'} as T;
     }
     if (path == '/crm/students') {
+      if (failStudentCreate) throw StateError('offline');
       return <String, dynamic>{'id': 'student-a'} as T;
     }
     throw StateError('Unexpected POST $path');
@@ -148,6 +170,24 @@ Future<void> _enterLeadMinimum(WidgetTester tester) async {
   await tester.enterText(
     find.byKey(const ValueKey('custom-field-goal')),
     'Вокал',
+  );
+}
+
+Future<void> _enterStudentMinimum(WidgetTester tester) async {
+  await tester.enterText(
+    find.byKey(const ValueKey('student-first-name')),
+    'Пётр',
+  );
+  await tester.enterText(
+    find.byKey(const ValueKey('student-last-name')),
+    'Смирнов',
+  );
+  await tester.enterText(
+    find.descendant(
+      of: find.byKey(const ValueKey('student-phone')),
+      matching: find.byType(TextField),
+    ),
+    '9995554433',
   );
 }
 
@@ -220,21 +260,7 @@ void main() {
     );
     expect(tester.takeException(), isNull);
 
-    await tester.enterText(
-      find.byKey(const ValueKey('student-first-name')),
-      'Пётр',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('student-last-name')),
-      'Смирнов',
-    );
-    await tester.enterText(
-      find.descendant(
-        of: find.byKey(const ValueKey('student-phone')),
-        matching: find.byType(TextField),
-      ),
-      '9995554433',
-    );
+    await _enterStudentMinimum(tester);
     await tester.tap(find.byKey(const ValueKey('student-submit')));
     await tester.pumpAndSettle();
 
@@ -244,9 +270,48 @@ void main() {
       'lastName': 'Смирнов',
       'phone': '+79995554433',
       'branchId': '40000000-0000-4000-8000-000000000001',
-      'status': 'active',
+      'status': 'consultation',
       'customFields': const <Map<String, dynamic>>[],
     });
+  });
+
+  testWidgets('student network error keeps the entered draft', (tester) async {
+    final api = _ClientFormsFakeApi(failStudentCreate: true);
+    await _pump(tester, const StudentCreateDialogV4(), api);
+    await _enterStudentMinimum(tester);
+
+    await tester.tap(find.byKey(const ValueKey('student-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Пётр'), findsOneWidget);
+    expect(find.text('Смирнов'), findsOneWidget);
+    expect(find.textContaining('Не удалось создать ученика'), findsOneWidget);
+  });
+
+  testWidgets('student create helper uses the expandable mobile surface', (
+    tester,
+  ) async {
+    final api = _ClientFormsFakeApi();
+    await _pump(
+      tester,
+      Builder(
+        builder: (context) => FilledButton(
+          onPressed: () => showStudentCreateSurface(
+            context,
+            initialBranchId: '40000000-0000-4000-8000-000000000001',
+          ),
+          child: const Text('Новый ученик'),
+        ),
+      ),
+      api,
+    );
+
+    await tester.tap(find.text('Новый ученик'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
+    expect(find.text('Консультация'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('configuration control is hidden and 403 is handled in-dialog', (

@@ -8,6 +8,7 @@ import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
+import { StudentFunnelService } from "./student-funnel.service";
 import { TasksService } from "./tasks.service";
 import { CrmPolicy } from "./crm.policy";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
@@ -75,6 +76,10 @@ describe("CrmService", () => {
         listForEntity: jest.fn().mockResolvedValue([]),
       } as unknown as ChatWorkTimelineService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
+      {
+        assertCreateStatus: jest.fn(),
+        assertTransition: jest.fn(),
+      } as unknown as StudentFunnelService,
     );
 
     return { service, query, audit, policy, tasks, notifications, database };
@@ -138,6 +143,10 @@ describe("CrmService", () => {
         listForEntity: jest.fn().mockResolvedValue([]),
       } as unknown as ChatWorkTimelineService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
+      {
+        assertCreateStatus: jest.fn(),
+        assertTransition: jest.fn(),
+      } as unknown as StudentFunnelService,
     );
 
     return { service, query, audit, policy, tasks, notifications, database };

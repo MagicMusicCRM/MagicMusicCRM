@@ -215,8 +215,19 @@ extension _ClientCardData on _ClientCardState {
       final student = card['student'] is Map<String, dynamic>
           ? card['student'] as Map<String, dynamic>
           : <String, dynamic>{};
+      StudentFunnelConfiguration? funnel;
+      String? funnelError;
+      try {
+        funnel = await crm.getStudentFunnel(
+          branchId: student['branch_id']?.toString(),
+        );
+      } catch (error) {
+        funnelError = 'Не удалось загрузить воронку: $error';
+      }
       _emitState(() {
         _student = student;
+        _studentFunnel = funnel;
+        _studentFunnelError = funnelError;
         _editorEpoch++;
         // Never merge finance keys from the broad base-card response. Teacher
         // therefore performs zero commerce requests and still cannot surface

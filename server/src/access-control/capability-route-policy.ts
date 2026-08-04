@@ -123,6 +123,24 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  if (path === "/crm/student-funnel" && read) {
+    return policy(
+      "crm.client.read.basic",
+      "branch",
+      teacherAndStaffRoles,
+      "StudentFunnelService operational effective configuration",
+    );
+  }
+
+  if (path.startsWith("/crm/student-funnel")) {
+    return policy(
+      "system.settings.manage",
+      "global",
+      rootBusinessRoles,
+      "StudentFunnelService director-only revision configuration",
+    );
+  }
+
   if (
     path.includes("/export") ||
     path.endsWith(".xlsx") ||

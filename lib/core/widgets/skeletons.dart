@@ -216,27 +216,29 @@ class KanbanSkeleton extends StatelessWidget {
               ).colorScheme.surface.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Skeleton(width: 10, height: 10, borderRadius: 5),
-                    SizedBox(width: 8),
-                    Skeleton(width: 120, height: 16),
-                    Spacer(),
-                    Skeleton(width: 28, height: 18, borderRadius: 9),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                ...List.generate(
-                  cardsPerColumn,
-                  (index) => const Padding(
-                    padding: EdgeInsets.only(bottom: 10),
-                    child: CardSkeleton(),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Skeleton(width: 10, height: 10, borderRadius: 5),
+                      SizedBox(width: 8),
+                      Skeleton(width: 120, height: 16),
+                      Spacer(),
+                      Skeleton(width: 28, height: 18, borderRadius: 9),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 14),
+                  ...List.generate(
+                    cardsPerColumn,
+                    (index) => const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: CardSkeleton(),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

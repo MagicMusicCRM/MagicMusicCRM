@@ -734,6 +734,7 @@ extension _ClientCardStudent on _ClientCardState {
     String? label,
     String? hint,
     String? helperText,
+    String? errorText,
     bool isDense = false,
     Widget? suffixIcon,
   }) => clientCardInputDecoration(
@@ -741,6 +742,7 @@ extension _ClientCardStudent on _ClientCardState {
     label: label,
     hint: hint,
     helperText: helperText,
+    errorText: errorText,
     isDense: isDense,
     suffixIcon: suffixIcon,
   );
@@ -803,28 +805,60 @@ extension _ClientCardStudent on _ClientCardState {
 
   Widget _buildStudentStatusPicker(ColorScheme cs) {
     final current = _student?['status']?.toString() ?? '';
-    final options = [
-      if (current.isNotEmpty &&
-          !_ClientCardState._studentStatusOptions.contains(current))
-        current,
-      ..._ClientCardState._studentStatusOptions,
-    ];
+    final funnel = _studentFunnel;
+    if (funnel == null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.md),
+        child: InputDecorator(
+          decoration: _inputDecoration(
+            cs,
+            label: 'Этап воронки',
+            errorText: _studentFunnelError,
+          ),
+          child: const Text('Этап недоступен'),
+        ),
+      );
+    }
+    final configuredCurrent = funnel.stages
+        .where((stage) => stage.key == current)
+        .firstOrNull;
+    final options = funnel.activeStages
+        .where(
+          (stage) =>
+              configuredCurrent == null ||
+              stage.key == current ||
+              configuredCurrent.allowedTransitions.contains(stage.key),
+        )
+        .toList(growable: false);
+    final currentConfigured = funnel.stages.any(
+      (stage) => stage.key == current && stage.active,
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: DropdownButtonFormField<String>(
+        key: ValueKey('student-funnel-status-${funnel.scopeVersion}-$current'),
         initialValue: current.isEmpty ? null : current,
         isExpanded: true,
         decoration: _inputDecoration(
           cs,
-          label: 'Статус ученика',
-          helperText: _hhStatusHelper,
+          label: 'Этап воронки',
+          helperText: configuredCurrent == null && current.isNotEmpty
+              ? 'Старый статус нужно сопоставить с этапом.'
+              : 'Доступны только разрешённые переходы.',
           isDense: true,
         ),
-        items: options
-            .map(
-              (status) => DropdownMenuItem(value: status, child: Text(status)),
-            )
-            .toList(),
+        items: [
+          if (current.isNotEmpty && !currentConfigured)
+            DropdownMenuItem(
+              value: current,
+              enabled: false,
+              child: Text('Требует сопоставления: $current'),
+            ),
+          ...options.map(
+            (stage) =>
+                DropdownMenuItem(value: stage.key, child: Text(stage.label)),
+          ),
+        ],
         onChanged: (value) {
           if (value == null) return;
           _emitState(() {

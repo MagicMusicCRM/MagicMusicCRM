@@ -240,7 +240,7 @@ flowchart TD
   - **Проверка:** money/idempotency/reconciliation tests, role/scope negative requests, network failure preserves input.
   - **Оценка:** 8 ч · **Зависимости:** V6-401, approved commerce backend readiness · **Приоритет:** P0.
 
-- [ ] **V6-405** `[REQ-STUDENT-001, REQ-STUDENT-002, REQ-CFG-001..005]` — Подключить configurable Student UX и создание из main section.
+- [x] **V6-405** `[REQ-STUDENT-001, REQ-STUDENT-002, REQ-CFG-001..005]` — Подключить configurable Student UX и создание из main section.
   - **Работа:** replace hard-coded `Пробные/Пауза` with effective funnel config; Director configures columns/order; `Создать ученика` available in primary Students flow; reuse one create form.
   - **Критерий:** board and form render effective school defaults + sparse branch overrides; no second Management-only create implementation.
   - **Проверка:** config publish/branch override/rollback + create from both legacy redirect and canonical route.

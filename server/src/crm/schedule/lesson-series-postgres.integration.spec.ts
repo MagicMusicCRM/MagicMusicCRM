@@ -71,7 +71,8 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
   });
 
   it("rolls back an Nth conflict and creates a valid DST-aware series fully", async () => {
-    const fixture = await createFixture(pool);
+    const dates = await nextSeriesDates(pool);
+    const fixture = await createFixture(pool, dates[1]!.nineAt);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const failedKey = `series-failed-${randomUUID()}`;
     const validMetadata = {
@@ -86,8 +87,8 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
       roomId: fixture.roomId,
       weekday: 1,
       durationMinutes: 60,
-      validFrom: "2026-08-03",
-      validUntil: "2026-08-17",
+      validFrom: dates[0]!.localDate,
+      validUntil: dates[2]!.localDate,
       isTrial: false,
       completionType: "standard.success",
       clientChargeType: "none" as const,
@@ -112,9 +113,11 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
         failedIndex: 1,
         occurrence: {
           index: 1,
-          localDate: "2026-08-10",
-          startAt: "2026-08-10T13:00:00.000Z",
-          endAt: "2026-08-10T14:00:00.000Z",
+          localDate: dates[1]!.localDate,
+          startAt: dates[1]!.nineAt.toISOString(),
+          endAt: new Date(
+            dates[1]!.nineAt.getTime() + 3_600_000,
+          ).toISOString(),
           timezone: "America/New_York",
         },
       });
@@ -202,9 +205,9 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
           new Date(value).toISOString(),
         ),
       ).toEqual([
-        "2026-08-03T15:00:00.000Z",
-        "2026-08-10T15:00:00.000Z",
-        "2026-08-17T15:00:00.000Z",
+        dates[0]!.elevenAt.toISOString(),
+        dates[1]!.elevenAt.toISOString(),
+        dates[2]!.elevenAt.toISOString(),
       ]);
 
       const replay = await commands.create(
@@ -355,7 +358,10 @@ async function errorResponse(work: () => Promise<unknown>) {
   }
 }
 
-async function createFixture(pool: Pool) {
+async function createFixture(
+  pool: Pool,
+  conflictStartAt = new Date("2026-08-10T13:00:00.000Z"),
+) {
   const branch = await pool.query<{ id: string }>(
     `
       insert into app.branches (name, timezone_name)
@@ -424,7 +430,7 @@ async function createFixture(pool: Pool) {
       insert into app.teacher_branches (
         teacher_id, branch_id, active_from, active_until
       )
-      values ($1, $2, '2026-01-01', '2026-12-31')
+      values ($1, $2, '2020-01-01', '2100-12-31')
     `,
     [teacherId, branchId],
   );
@@ -436,7 +442,7 @@ async function createFixture(pool: Pool) {
       )
       values (
         $1, 'recurring', true, 'America/New_York', 1,
-        '08:00', '18:00', '2026-01-01', '2026-12-31'
+        '08:00', '18:00', '2020-01-01', '2100-12-31'
       )
     `,
     [teacherId],
@@ -455,7 +461,7 @@ async function createFixture(pool: Pool) {
         student_id, teacher_id, branch_id, room_id,
         scheduled_at, duration_minutes, created_by
       )
-      values ($1, $2, $3, $4, '2026-08-10T13:00:00.000Z', 60, $5)
+      values ($1, $2, $3, $4, $5::timestamptz, 60, $6)
       returning id
     `,
     [
@@ -463,6 +469,7 @@ async function createFixture(pool: Pool) {
       teacherId,
       branchId,
       room.rows[0]!.id,
+      conflictStartAt,
       managerId,
     ],
   );
@@ -477,6 +484,31 @@ async function createFixture(pool: Pool) {
     profileIds: profiles.rows.map((row) => row.id),
     conflictingLessonId: conflictingLesson.rows[0]!.id,
   };
+}
+
+async function nextSeriesDates(pool: Pool) {
+  const result = await pool.query<{
+    local_date: string;
+    nine_at: Date;
+    eleven_at: Date;
+  }>(`
+    select day::date::text as local_date,
+      (day::date + time '09:00') at time zone 'America/New_York' as nine_at,
+      (day::date + time '11:00') at time zone 'America/New_York' as eleven_at
+    from generate_series(
+      current_date + interval '7 days',
+      current_date + interval '35 days',
+      interval '1 day'
+    ) day
+    where extract(isodow from day) = 1
+    order by day
+    limit 3
+  `);
+  return result.rows.map((row) => ({
+    localDate: row.local_date,
+    nineAt: new Date(row.nine_at),
+    elevenAt: new Date(row.eleven_at),
+  }));
 }
 
 async function cleanupFixture(

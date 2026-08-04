@@ -6,12 +6,12 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/lesson_state_badges.dart';
 import '../../../../core/widgets/skeletons.dart';
 import '../../../../core/widgets/v7/v7.dart';
-import 'create_student_dialog.dart';
 import 'create_teacher_dialog.dart';
 import 'create_group_dialog.dart';
 import 'teacher_detail_dialog.dart';
@@ -252,11 +252,17 @@ class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
       return;
     }
 
+    if (_tabController.index == 0) {
+      final student = await showStudentCreateSurface(context);
+      if (student != null) {
+        ref.invalidate(entitiesProvider('students'));
+        ref.invalidate(studentSearchProvider(_searchQuery.trim()));
+      }
+      return;
+    }
+
     Widget? dialog;
     switch (_tabController.index) {
-      case 0:
-        dialog = const CreateStudentDialog();
-        break;
       case 1:
         dialog = const CreateTeacherDialog();
         break;

@@ -11,6 +11,7 @@ InputDecoration clientCardInputDecoration(
   String? label,
   String? hint,
   String? helperText,
+  String? errorText,
   bool isDense = false,
   Widget? suffixIcon,
 }) {
@@ -19,6 +20,7 @@ InputDecoration clientCardInputDecoration(
     labelText: label,
     hintText: hint,
     helperText: helperText,
+    errorText: errorText,
     isDense: isDense,
     suffixIcon: suffixIcon,
     enabledBorder: OutlineInputBorder(

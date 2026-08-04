@@ -5,11 +5,15 @@ part of 'students_board_widget.dart';
 class _StatusColumnData {
   final String? status; // null → «Прочие», non-droppable
   final String name;
+  final String style;
+  final Set<String> allowedTransitions;
   final List<Map<String, dynamic>> students;
 
   _StatusColumnData({
     required this.status,
     required this.name,
+    required this.style,
+    required this.allowedTransitions,
     required this.students,
   });
 }
@@ -18,6 +22,7 @@ class _StatusColumnData {
 
 class _StatusColumn extends StatelessWidget {
   final _StatusColumnData column;
+  final Map<String, Set<String>> transitions;
   final Set<String> pendingStudentIds;
   final ValueChanged<Map<String, dynamic>> onTap;
   final Future<void> Function(Map<String, dynamic>, String) onMove;
@@ -26,6 +31,7 @@ class _StatusColumn extends StatelessWidget {
 
   const _StatusColumn({
     required this.column,
+    required this.transitions,
     required this.pendingStudentIds,
     required this.onTap,
     required this.onMove,
@@ -35,10 +41,18 @@ class _StatusColumn extends StatelessWidget {
 
   bool get _droppable => column.status != null;
 
+  bool _canAccept(Map<String, dynamic> student) {
+    if (!_droppable) return false;
+    final current = student['status']?.toString().trim().toLowerCase() ?? '';
+    if (current == column.status) return false;
+    final allowed = transitions[current];
+    return allowed == null || allowed.contains(column.status);
+  }
+
   @override
   Widget build(BuildContext context) {
     return DragTarget<Map<String, dynamic>>(
-      onWillAcceptWithDetails: (_) => _droppable,
+      onWillAcceptWithDetails: (details) => _canAccept(details.data),
       onAcceptWithDetails: (details) {
         onDragEnd();
         if (column.status != null) {
@@ -46,7 +60,15 @@ class _StatusColumn extends StatelessWidget {
         }
       },
       builder: (context, candidateData, rejectedData) {
-        final hovering = _droppable && candidateData.isNotEmpty;
+        final hovering = candidateData.whereType<Map<String, dynamic>>().any(
+          _canAccept,
+        );
+        final denied = rejectedData.whereType<Map<String, dynamic>>().any(
+          (student) => !_canAccept(student),
+        );
+        final accent = denied
+            ? AppColor.danger
+            : _studentStageColor(column.style);
         final screenWidth = MediaQuery.of(context).size.width;
         final columnWidth = screenWidth < 360
             ? (screenWidth - 24).clamp(220.0, 300.0)
@@ -58,13 +80,11 @@ class _StatusColumn extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             color: hovering
-                ? AppTheme.primaryGold.withAlpha(30)
+                ? accent.withAlpha(30)
                 : Theme.of(context).colorScheme.surface.withAlpha(127),
             borderRadius: BorderRadius.circular(AppRadius.card),
             border: Border.all(
-              color: hovering
-                  ? AppTheme.primaryGold
-                  : AppTheme.primaryGold.withAlpha(45),
+              color: hovering ? accent : accent.withAlpha(65),
               width: hovering ? 1.5 : 1,
             ),
           ),
@@ -75,11 +95,7 @@ class _StatusColumn extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.school_rounded,
-                      size: 14,
-                      color: AppTheme.primaryGold,
-                    ),
+                    Icon(Icons.school_rounded, size: 14, color: accent),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -100,7 +116,7 @@ class _StatusColumn extends StatelessWidget {
                         color: Theme.of(context).colorScheme.surface,
                         borderRadius: BorderRadius.circular(AppRadius.chip),
                         border: Border.all(
-                          color: AppTheme.primaryGold.withAlpha(70),
+                          color: accent.withAlpha(90),
                           width: 1,
                         ),
                       ),
@@ -119,22 +135,24 @@ class _StatusColumn extends StatelessWidget {
               AnimatedSize(
                 duration: const Duration(milliseconds: 160),
                 curve: Curves.easeOut,
-                child: hovering
+                child: hovering || denied
                     ? Container(
                         height: 40,
                         margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                         decoration: BoxDecoration(
-                          border: Border.all(color: AppTheme.primaryGold),
+                          border: Border.all(color: accent),
                           borderRadius: BorderRadius.circular(
                             AppRadius.control,
                           ),
-                          color: AppTheme.primaryGold.withAlpha(25),
+                          color: accent.withAlpha(25),
                         ),
-                        child: const Center(
+                        child: Center(
                           child: Text(
-                            'Отпустите, чтобы перенести',
+                            denied
+                                ? 'Переход запрещён настройками'
+                                : 'Отпустите, чтобы перенести',
                             style: TextStyle(
-                              color: AppTheme.primaryGold,
+                              color: accent,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
@@ -220,6 +238,15 @@ class _StatusColumn extends StatelessWidget {
     );
   }
 }
+
+Color _studentStageColor(String style) => switch (style) {
+  'cyan' => AppColor.transferCyan,
+  'green' => AppColor.success,
+  'amber' => AppColor.warning,
+  'red' => AppColor.danger,
+  'slate' => AppColor.text2,
+  _ => AppColor.gold,
+};
 
 // ── Card ─────────────────────────────────────────────────────────────────────
 
