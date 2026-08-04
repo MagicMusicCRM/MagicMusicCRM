@@ -4,13 +4,13 @@
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
     "dart_files": 272,
-    "production_reachable_files": 264,
+    "production_reachable_files": 261,
     "go_routes": 21,
     "screens": 20,
     "production_screens": 20,
     "isolated_screens": 0,
     "modal_surface_calls": 102,
-    "production_surface_calls": 101,
+    "production_surface_calls": 95,
     "screen_state_gaps": 0,
     "unowned": 0
   },
@@ -556,6 +556,22 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/manage_statuses_dialog.dart",
+      "line": 230
+    },
+    {
+      "kind": "magic-sheet",
+      "call": "showMagicSheet",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": true
+      },
+      "file": "lib/features/manager/presentation/widgets/manage_statuses_dialog.dart",
       "line": 118
     },
     {
@@ -605,22 +621,6 @@
       },
       "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
       "line": 23
-    },
-    {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": false,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 535
     },
     {
       "kind": "dialog",
@@ -879,22 +879,6 @@
       "line": 310
     },
     {
-      "kind": "magic-sheet",
-      "call": "showMagicSheet",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": true
-      },
-      "file": "lib/features/manager/presentation/widgets/manage_statuses_dialog.dart",
-      "line": 230
-    },
-    {
       "kind": "dialog",
       "call": "showDialog",
       "owner": "SYS-PLATFORM-QUALITY",
@@ -911,6 +895,22 @@
       "line": 20
     },
     {
+      "kind": "adaptive-surface",
+      "call": "showMagicAdaptiveSurface",
+      "owner": "SYS-OPERATIONS",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": true,
+        "retry": true
+      },
+      "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
+      "line": 387
+    },
+    {
       "kind": "bottom-sheet",
       "call": "showModalBottomSheet",
       "owner": "SYS-OPERATIONS",
@@ -920,11 +920,11 @@
         "loading": true,
         "empty": true,
         "error": true,
-        "forbidden": false,
+        "forbidden": true,
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 434
+      "line": 624
     },
     {
       "kind": "adaptive-surface",
@@ -1020,7 +1020,7 @@
         "retry": false
       },
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 499
+      "line": 502
     },
     {
       "kind": "dialog",
@@ -1138,8 +1138,8 @@
       "kind": "bottom-sheet",
       "call": "showModalBottomSheet",
       "owner": "SYS-OPERATIONS",
-      "production_reachable": true,
-      "status": "production-callsite",
+      "production_reachable": false,
+      "status": "isolated-or-dead",
       "states": {
         "loading": true,
         "empty": true,
@@ -1154,8 +1154,8 @@
       "kind": "bottom-sheet",
       "call": "showModalBottomSheet",
       "owner": "SYS-OPERATIONS",
-      "production_reachable": true,
-      "status": "production-callsite",
+      "production_reachable": false,
+      "status": "isolated-or-dead",
       "states": {
         "loading": true,
         "empty": true,
@@ -1170,8 +1170,8 @@
       "kind": "dialog",
       "call": "showDialog",
       "owner": "SYS-OPERATIONS",
-      "production_reachable": true,
-      "status": "production-callsite",
+      "production_reachable": false,
+      "status": "isolated-or-dead",
       "states": {
         "loading": true,
         "empty": true,
@@ -1186,8 +1186,8 @@
       "kind": "dialog",
       "call": "showDialog",
       "owner": "SYS-OPERATIONS",
-      "production_reachable": true,
-      "status": "production-callsite",
+      "production_reachable": false,
+      "status": "isolated-or-dead",
       "states": {
         "loading": true,
         "empty": true,
@@ -1202,8 +1202,8 @@
       "kind": "dialog",
       "call": "showDialog",
       "owner": "SYS-OPERATIONS",
-      "production_reachable": true,
-      "status": "production-callsite",
+      "production_reachable": false,
+      "status": "isolated-or-dead",
       "states": {
         "loading": true,
         "empty": true,
@@ -1218,8 +1218,8 @@
       "kind": "dialog",
       "call": "showDialog",
       "owner": "SYS-OPERATIONS",
-      "production_reachable": true,
-      "status": "production-callsite",
+      "production_reachable": false,
+      "status": "isolated-or-dead",
       "states": {
         "loading": true,
         "empty": true,
@@ -1356,7 +1356,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card_data.dart",
-      "line": 618
+      "line": 602
     },
     {
       "kind": "draggable-sheet",

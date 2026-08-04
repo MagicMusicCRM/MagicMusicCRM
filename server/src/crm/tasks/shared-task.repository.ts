@@ -264,7 +264,13 @@ export class SharedTaskRepository {
   listResolved(
     actorUserId: string,
     actorRole: string,
-    input: { state?: "open" | "closed"; limit: number; taskId?: string },
+    input: {
+      state?: "open" | "closed";
+      limit: number;
+      taskId?: string;
+      linkedEntityType?: string;
+      linkedEntityId?: string;
+    },
   ) {
     return this.database.query<ResolvedSharedTaskRow>(
       `
@@ -343,7 +349,18 @@ export class SharedTaskRepository {
         left join app.task_closes close on close.task_id = task.id
         where task.deleted_at is null
           and ($5::text is null or task.state = $5)
-          and ($7::uuid is null or task.id = $7)
+          and (
+            $7::uuid is null
+            or task.id = $7
+            or exists (
+              select 1
+              from app.shared_task_legacy_links legacy
+              where legacy.legacy_task_id = $7
+                and legacy.shared_task_id = task.id
+            )
+          )
+          and ($8::text is null or task.linked_entity_type = $8)
+          and ($9::uuid is null or task.linked_entity_id = $9)
         order by task.start_at, task.id
         limit $6
       `,
@@ -355,7 +372,38 @@ export class SharedTaskRepository {
         input.state ?? null,
         input.limit,
         input.taskId ?? null,
+        input.linkedEntityType ?? null,
+        input.linkedEntityId ?? null,
       ],
+    );
+  }
+
+  history(taskId: string) {
+    return this.database.query<{
+      id: string;
+      action: string;
+      actor_user_id: string | null;
+      actor_first_name: string | null;
+      actor_last_name: string | null;
+      before_ref: Record<string, unknown> | null;
+      after_ref: Record<string, unknown> | null;
+      created_at: Date | string;
+    }>(
+      `
+        select audit.id, audit.action, audit.actor_user_id,
+          profile.first_name as actor_first_name,
+          profile.last_name as actor_last_name,
+          audit.before_ref, audit.after_ref, audit.created_at
+        from app.audit_events audit
+        left join app.profiles profile
+          on profile.user_id = audit.actor_user_id
+         and profile.deleted_at is null
+        where audit.entity_type = 'shared_task'
+          and audit.entity_id = $1::text
+        order by audit.created_at desc, audit.id desc
+        limit 100
+      `,
+      [taskId],
     );
   }
 

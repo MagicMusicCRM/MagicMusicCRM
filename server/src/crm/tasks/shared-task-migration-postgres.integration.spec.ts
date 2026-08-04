@@ -67,6 +67,16 @@ describe("SharedTask conservative migration (PostgreSQL)", () => {
       ]);
       expect(new Set(ambiguous.map((row) => row.shared_task_id)).size).toBe(2);
 
+      const focusedLegacyLink = await new SharedTaskRepository(
+        database,
+      ).listResolved(fixture.userIds[0]!, "manager", {
+        taskId: fixture.exactTaskIds[0],
+        limit: 10,
+      });
+      expect(focusedLegacyLink.rows.map((row) => row.id)).toEqual([
+        exact[0]!.shared_task_id,
+      ]);
+
       const counts = await pool.query<{
         shared_tasks: number;
         audiences: number;

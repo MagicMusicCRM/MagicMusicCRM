@@ -34,6 +34,14 @@ export class SharedTaskController {
     return this.tasks.list(actor, query);
   }
 
+  @Get(":taskId/history")
+  history(
+    @CurrentActor() actor: ActorContext,
+    @Param("taskId", ParseUUIDPipe) taskId: string,
+  ) {
+    return this.tasks.history(actor, taskId);
+  }
+
   @Post()
   create(
     @CurrentActor() actor: ActorContext,

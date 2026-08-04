@@ -9,31 +9,27 @@ final statsProvider = FutureProvider<Map<String, dynamic>>((ref) {
 });
 
 /// Tasks due within the next 24 hours, plus anything already overdue — the
-/// dashboard's "актуальные задачи". Reuses /crm/tasks (its from/to filter due
-/// dates and it already orders by them) rather than growing another endpoint.
+/// dashboard's "актуальные задачи" from the canonical shared-task projection.
 final upcomingTasksProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
   final crm = ref.watch(magicCrmServiceProvider);
   final now = DateTime.now();
-  final results = await Future.wait([
-    crm.listTasks(
-      status: 'open',
-      from: now.toUtc().toIso8601String(),
-      to: now.add(const Duration(hours: 24)).toUtc().toIso8601String(),
-      limit: 20,
-    ),
-    // Overdue work does not stop being current just because its deadline
-    // passed — it is the first thing an admin needs to see.
-    crm.listTasks(
-      status: 'open',
-      to: now.toUtc().toIso8601String(),
-      limit: 20,
-    ),
-  ]);
-  final overdue = results[1];
-  final upcoming = results[0];
-  return [...overdue, ...upcoming];
+  final result = await crm.listSharedTasks(state: 'open', limit: 100);
+  final rawItems = result['items'];
+  final items = rawItems is List
+      ? rawItems.whereType<Map<String, dynamic>>()
+      : const Iterable<Map<String, dynamic>>.empty();
+  final horizon = now.add(const Duration(hours: 24));
+  return items
+      .where((task) {
+        final due = DateTime.tryParse(
+          task['startAt']?.toString() ?? '',
+        )?.toLocal();
+        return due != null && due.isBefore(horizon);
+      })
+      .take(40)
+      .toList(growable: false);
 });
 
 class AdminOverviewWidget extends ConsumerWidget {
@@ -272,20 +268,22 @@ class _UpcomingTaskTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final dueAt = task['due_date'] != null
-        ? DateTime.tryParse(task['due_date'].toString())?.toLocal()
+    final dueAt = task['startAt'] != null
+        ? DateTime.tryParse(task['startAt'].toString())?.toLocal()
         : null;
     final isOverdue = dueAt != null && dueAt.isBefore(DateTime.now());
     final due = dueAt == null
         ? '—'
         : DateFormat('d MMM, HH:mm', 'ru').format(dueAt);
-    final assignee = task['assigned_name']?.toString();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
       elevation: 0,
       color: isOverdue
-          ? Color.alphaBlend(AppTheme.danger.withValues(alpha: 0.06), cs.surface)
+          ? Color.alphaBlend(
+              AppTheme.danger.withValues(alpha: 0.06),
+              cs.surface,
+            )
           : cs.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
@@ -308,10 +306,7 @@ class _UpcomingTaskTile extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
         subtitle: Text(
-          [
-            isOverdue ? 'Просрочена: $due' : 'Срок: $due',
-            if (assignee != null && assignee.trim().isNotEmpty) assignee,
-          ].join(' • '),
+          [isOverdue ? 'Просрочена: $due' : 'Срок: $due'].join(' • '),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(

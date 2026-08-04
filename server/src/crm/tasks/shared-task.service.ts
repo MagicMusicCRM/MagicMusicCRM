@@ -188,15 +188,47 @@ export class SharedTaskService {
 
   async list(actor: ActorContext, query: SharedTaskListQuery) {
     this.policy.assertCanReadOperationalData(actor);
+    if (
+      (query.linkedEntityType == null) !== (query.linkedEntityId == null)
+    ) {
+      this.invalid(
+        "linkedEntity",
+        "Тип и идентификатор связанного объекта обязательны вместе.",
+      );
+    }
     const result = await this.repository.listResolved(actor.userId, actor.role, {
       state: query.state,
       limit: query.limit ?? 100,
+      taskId: query.taskId,
+      linkedEntityType: query.linkedEntityType,
+      linkedEntityId: query.linkedEntityId,
     });
     await this.repository.recordListResolutions(result.rows, actor.userId);
     const items = await this.toDtos(result.rows);
     return {
       items,
       counters: await this.repository.counters(actor.userId, actor.role),
+    };
+  }
+
+  async history(actor: ActorContext, taskId: string) {
+    const task = await this.resolve(actor, taskId);
+    const result = await this.repository.history(task.id);
+    return {
+      items: result.rows.map((row) => ({
+        id: row.id,
+        action: row.action,
+        actorUserId: row.actor_user_id,
+        actorName: [row.actor_first_name, row.actor_last_name]
+          .filter(Boolean)
+          .join(" ") || null,
+        before: row.before_ref,
+        after: row.after_ref,
+        occurredAt:
+          row.created_at instanceof Date
+            ? row.created_at.toISOString()
+            : row.created_at,
+      })),
     };
   }
 

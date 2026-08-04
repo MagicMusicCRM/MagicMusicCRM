@@ -5,6 +5,9 @@ part of 'magic_crm_service.dart';
 extension MagicCrmSchedule on MagicCrmService {
   Future<Map<String, dynamic>> listSharedTasks({
     String? state,
+    String? taskId,
+    String? linkedEntityType,
+    String? linkedEntityId,
     int limit = 100,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
@@ -12,6 +15,11 @@ extension MagicCrmSchedule on MagicCrmService {
       queryParameters: {
         'limit': limit,
         if (state != null && state.isNotEmpty) 'state': state,
+        if (taskId != null && taskId.isNotEmpty) 'taskId': taskId,
+        if (linkedEntityType != null && linkedEntityType.isNotEmpty)
+          'linkedEntityType': linkedEntityType,
+        if (linkedEntityId != null && linkedEntityId.isNotEmpty)
+          'linkedEntityId': linkedEntityId,
       },
     );
     final items = response['items'];
@@ -23,6 +31,18 @@ extension MagicCrmSchedule on MagicCrmService {
           ? response['counters']
           : <String, dynamic>{'open': 0, 'overdue': 0},
     };
+  }
+
+  Future<List<Map<String, dynamic>>> listSharedTaskHistory(
+    String taskId,
+  ) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/shared-tasks/$taskId/history',
+    );
+    final items = response['items'];
+    return items is List
+        ? items.whereType<Map<String, dynamic>>().toList()
+        : <Map<String, dynamic>>[];
   }
 
   Future<Map<String, dynamic>> createSharedTask({

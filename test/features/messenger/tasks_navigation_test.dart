@@ -6,7 +6,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/tasks_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 
 import 'messenger_test_api.dart';
@@ -74,7 +74,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
-    expect(find.byType(TasksWidget), findsOneWidget);
+    expect(find.byType(SharedTasksV4Panel), findsOneWidget);
   });
 
   testWidgets('manager Overview Tasks action opens Tasks instead of Clients', (
@@ -96,7 +96,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
-    expect(find.byType(TasksWidget), findsOneWidget);
+    expect(find.byType(SharedTasksV4Panel), findsOneWidget);
     expect(find.byType(ClientsWidget), findsNothing);
   });
 
@@ -110,7 +110,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
-    expect(find.byType(TasksWidget), findsOneWidget);
+    expect(find.byType(SharedTasksV4Panel), findsOneWidget);
   });
 
   testWidgets('manager Overview KPI callbacks use canonical destinations', (

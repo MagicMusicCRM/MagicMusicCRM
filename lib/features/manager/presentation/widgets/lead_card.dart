@@ -526,53 +526,16 @@ class _LeadCard extends ConsumerWidget {
   }
 
   Future<void> _addTask(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    // On a failed save the dialog reopens with the typed text preserved.
-    var draft = '';
-    while (true) {
-      if (!context.mounted) return;
-      final controller = TextEditingController(text: draft);
-      final title = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Задача по лиду'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(labelText: 'Что сделать?'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, controller.text),
-              child: const Text('Создать'),
-            ),
-          ],
-        ),
-      );
-      if (title == null || title.trim().isEmpty) return;
-      try {
-        await ref
-            .read(magicCrmServiceProvider)
-            .createTask(
-              entityType: 'lead',
-              entityId: lead.id,
-              title: title.trim(),
-            );
-        onRefresh();
-        return;
-      } catch (e) {
-        draft = title;
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Не удалось создать задачу: $e'),
-            backgroundColor: AppColor.danger,
-          ),
-        );
-      }
-    }
+    await showCreateSharedTask(
+      context,
+      ref,
+      linkedEntity: EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: lead.id,
+        variant: 'lead',
+      ),
+      onSaved: onRefresh,
+    );
   }
 
   Future<void> _openChat(BuildContext context, WidgetRef ref) async {

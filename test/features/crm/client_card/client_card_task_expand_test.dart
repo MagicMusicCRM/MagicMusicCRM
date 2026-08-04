@@ -4,8 +4,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'card_fake_api.dart';
 
-/// #12: строка задачи раскрывается тапом — полный текст, автор, исполнитель,
-/// срок (красным и с пометкой, если просрочен).
+/// Client history uses the same canonical shared-task detail and audit flow.
 void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
 
@@ -17,17 +16,27 @@ void main() {
         'statusId': null,
         'customData': <String, dynamic>{},
       },
-      leadTasks: [
+      sharedTasks: [
         {
-          'id': 'task-1',
+          'id': '11111111-1111-4111-8111-111111111111',
           'title': 'Позвонить клиенту',
-          'description': 'Обсудить расписание занятий и удобное время.',
-          'status': 'open',
-          'priority': 'high',
-          'assignedName': 'Мария Петрова',
-          'creatorName': 'Олег Сидоров',
-          'dueAt': '2026-07-10T10:00:00.000Z',
-          'createdAt': '2026-07-01T09:00:00.000Z',
+          'body': 'Обсудить расписание занятий и удобное время.',
+          'state': 'open',
+          'version': 1,
+          'startAt': '2026-08-10T10:00:00.000Z',
+          'allDay': false,
+          'audiences': [
+            {'type': 'allBranches'},
+          ],
+          'linkedEntity': {'type': 'lead', 'id': 'lead-1'},
+        },
+      ],
+      sharedTaskHistory: const [
+        {
+          'id': 'history-1',
+          'action': 'workflow.shared_task_created',
+          'actorName': 'Олег Сидоров',
+          'occurredAt': '2026-08-01T09:00:00.000Z',
         },
       ],
     );
@@ -44,29 +53,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Позвонить клиенту'), findsOneWidget);
-    // Свёрнутая строка не показывает детали.
-    expect(
-      find.text('Обсудить расписание занятий и удобное время.'),
-      findsNothing,
-    );
-    expect(find.text('Олег Сидоров'), findsNothing);
-
-    await tester.tap(find.text('Позвонить клиенту'));
-    await tester.pumpAndSettle();
-
     expect(
       find.text('Обсудить расписание занятий и удобное время.'),
       findsOneWidget,
     );
-    expect(find.text('Олег Сидоров'), findsOneWidget); // Поставил
-    expect(find.text('Мария Петрова'), findsOneWidget); // Исполнитель
-    expect(find.textContaining('просрочена'), findsOneWidget); // срок в прошлом
-    expect(find.textContaining('Создана'), findsOneWidget);
-    expect(find.text('Высокий'), findsOneWidget); // приоритет
-
-    // Повторный тап сворачивает обратно.
-    await tester.tap(find.text('Позвонить клиенту'));
-    await tester.pumpAndSettle();
     expect(find.text('Олег Сидоров'), findsNothing);
+
+    final task = find.text('Позвонить клиенту');
+    await tester.ensureVisible(task);
+    await tester.pumpAndSettle();
+    await tester.tap(task);
+    await tester.pumpAndSettle();
+
+    expect(find.text('История'), findsWidgets);
+    expect(find.text('Задача создана'), findsOneWidget);
+    expect(find.textContaining('Олег Сидоров'), findsOneWidget);
+    expect(find.text('Открыть связанную запись'), findsOneWidget);
   });
 }

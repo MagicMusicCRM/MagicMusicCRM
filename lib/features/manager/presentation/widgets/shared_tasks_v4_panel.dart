@@ -4,14 +4,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 
 abstract class SharedTasksDataSource {
-  Future<Map<String, dynamic>> list({String? state});
+  Future<Map<String, dynamic>> list({
+    String? state,
+    String? taskId,
+    String? linkedEntityType,
+    String? linkedEntityId,
+  });
+
+  Future<List<Map<String, dynamic>>> history(String taskId);
 
   Future<Map<String, dynamic>> create(
     Map<String, dynamic> data,
@@ -51,8 +64,25 @@ class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
   final WidgetRef ref;
 
   @override
-  Future<Map<String, dynamic>> list({String? state}) {
-    return ref.read(magicCrmServiceProvider).listSharedTasks(state: state);
+  Future<Map<String, dynamic>> list({
+    String? state,
+    String? taskId,
+    String? linkedEntityType,
+    String? linkedEntityId,
+  }) {
+    return ref
+        .read(magicCrmServiceProvider)
+        .listSharedTasks(
+          state: state,
+          taskId: taskId,
+          linkedEntityType: linkedEntityType,
+          linkedEntityId: linkedEntityId,
+        );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> history(String taskId) {
+    return ref.read(magicCrmServiceProvider).listSharedTaskHistory(taskId);
   }
 
   @override
@@ -118,11 +148,68 @@ class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
   }
 }
 
+Future<void> showCreateSharedTask(
+  BuildContext context,
+  WidgetRef ref, {
+  EntityLink? linkedEntity,
+  VoidCallback? onSaved,
+}) async {
+  final source = _ServiceSharedTasksDataSource(ref);
+  List<SharedTaskAudienceOption> options = const [];
+  try {
+    options = await source.audienceOptions();
+  } catch (_) {
+    // The all-branches audience remains usable without directory data.
+  }
+  if (!context.mounted) return;
+  final payload = await showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (context) =>
+        SharedTaskEditor(audienceOptions: options, linkedEntity: linkedEntity),
+  );
+  if (payload == null || !context.mounted) return;
+  final identity = MagicMutationIdentity.create('shared-task-create');
+
+  Future<void> persist() async {
+    try {
+      await source.create(payload, identity);
+      onSaved?.call();
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Задача создана.')));
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Не удалось создать задачу.'),
+          action: SnackBarAction(label: 'Повторить', onPressed: persist),
+        ),
+      );
+    }
+  }
+
+  await persist();
+}
+
 class SharedTasksV4Panel extends ConsumerStatefulWidget {
-  const SharedTasksV4Panel({super.key, this.dataSource, this.embedded = false});
+  const SharedTasksV4Panel({
+    super.key,
+    this.dataSource,
+    this.embedded = false,
+    this.initialLink,
+    this.linkedEntity,
+    this.scrollController,
+    this.canWrite,
+  });
 
   final SharedTasksDataSource? dataSource;
   final bool embedded;
+  final EntityLink? initialLink;
+  final EntityLink? linkedEntity;
+  final ScrollController? scrollController;
+  final bool? canWrite;
 
   @override
   ConsumerState<SharedTasksV4Panel> createState() => _SharedTasksV4PanelState();
@@ -139,6 +226,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   final Set<String> _closing = {};
   final Map<String, Object> _closeErrors = {};
   final Map<String, MagicMutationIdentity> _closeIdentities = {};
+  bool _focusConsumed = false;
 
   @override
   void initState() {
@@ -161,8 +249,16 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       });
     }
     try {
+      final focusedTask =
+          widget.initialLink?.entityType == EntityLinkType.task &&
+          widget.initialLink?.entityId != '__section__';
       final result = await _dataSource.list(
-        state: _filter == 'all' || _filter == 'overdue' ? null : _filter,
+        state: focusedTask || _filter == 'all' || _filter == 'overdue'
+            ? null
+            : _filter,
+        taskId: focusedTask ? widget.initialLink?.entityId : null,
+        linkedEntityType: widget.linkedEntity?.rawEntityType,
+        linkedEntityId: widget.linkedEntity?.entityId,
       );
       final rawItems = result['items'];
       var items = rawItems is List
@@ -180,11 +276,30 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       if (!mounted) return;
       setState(() {
         _items = items;
-        _counters = result['counters'] is Map<String, dynamic>
+        _counters = widget.linkedEntity != null
+            ? {
+                'open': items.where((task) => task['state'] == 'open').length,
+                'overdue': items.where(_isOverdueSharedTask).length,
+              }
+            : result['counters'] is Map<String, dynamic>
             ? result['counters'] as Map<String, dynamic>
             : const {'open': 0, 'overdue': 0};
         _loading = false;
       });
+      if (!_focusConsumed &&
+          widget.initialLink?.entityType == EntityLinkType.task) {
+        _focusConsumed = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (items.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Связанная запись недоступна.')),
+            );
+            return;
+          }
+          unawaited(_openDetails(items.first));
+        });
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -219,6 +334,15 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   }
 
   Future<void> _openEditor([Map<String, dynamic>? task]) async {
+    if (task == null && widget.dataSource == null) {
+      await showCreateSharedTask(
+        context,
+        ref,
+        linkedEntity: widget.linkedEntity,
+        onSaved: () => _load(showLoading: false),
+      );
+      return;
+    }
     List<SharedTaskAudienceOption> options = const [];
     try {
       options = await _dataSource.audienceOptions();
@@ -228,8 +352,11 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     if (!mounted) return;
     final payload = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) =>
-          SharedTaskEditor(task: task, audienceOptions: options),
+      builder: (context) => SharedTaskEditor(
+        task: task,
+        audienceOptions: options,
+        linkedEntity: widget.linkedEntity,
+      ),
     );
     if (payload == null || !mounted) return;
     final identity = MagicMutationIdentity.create(
@@ -256,6 +383,38 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     }
   }
 
+  Future<void> _openDetails(Map<String, dynamic> task) async {
+    await showMagicAdaptiveSurface<void>(
+      context,
+      kind: AppSurfaceKind.quickView,
+      title: task['title']?.toString() ?? 'Задача',
+      icon: Icons.task_alt_rounded,
+      builder: (context) => _SharedTaskDetails(
+        task: task,
+        history: _dataSource.history(task['id'].toString()),
+        onOpenEntity: () => _openLinkedEntity(task),
+      ),
+    );
+  }
+
+  Future<void> _openLinkedEntity(Map<String, dynamic> task) async {
+    final raw = task['linkedEntity'];
+    if (raw is! Map) return;
+    final link = EntityLink.fromJson({
+      'entityType': raw['type'],
+      'entityId': raw['id'],
+    });
+    if (!link.isSupported) return;
+    await openEntityLink(
+      context,
+      ref,
+      link,
+      sourceViewState: ContextViewState(
+        filters: {'taskId': task['id']?.toString()},
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.dataSource == null) {
@@ -269,19 +428,29 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
         );
       });
     }
+    final canWrite = widget.canWrite ?? false;
     final content = LayoutBuilder(
       builder: (context, constraints) {
-        final mobile = constraints.maxWidth < 600;
+        final mobile = constraints.maxWidth < 840;
         return Column(
           children: [
             if (_counters['overdue'] case final num overdue when overdue > 0)
               _ReminderBanner(overdue: overdue.toInt()),
             mobile
-                ? _MobileTaskFilter(value: _filter, onChanged: _setFilter)
+                ? _MobileTaskFilter(
+                    value: _filter,
+                    onChanged: _setFilter,
+                    onCreate: widget.embedded && canWrite
+                        ? () => _openEditor()
+                        : null,
+                  )
                 : _DesktopTaskFilter(
                     value: _filter,
                     counters: _counters,
                     onChanged: _setFilter,
+                    onCreate: widget.embedded && canWrite
+                        ? () => _openEditor()
+                        : null,
                   ),
             Expanded(child: _body()),
           ],
@@ -292,8 +461,8 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     final mobile = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Общие задачи'),
-        actions: mobile
+        title: const Text('Задачи'),
+        actions: mobile || !canWrite
             ? null
             : [
                 FilledButton.icon(
@@ -305,7 +474,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
               ],
       ),
       body: content,
-      floatingActionButton: mobile
+      floatingActionButton: mobile && canWrite
           ? FloatingActionButton.extended(
               onPressed: () => _openEditor(),
               icon: const Icon(Icons.add),
@@ -328,7 +497,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     if (_error != null) {
       return MagicPageState(
         kind: MagicPageStateKind.error,
-        title: 'Не удалось загрузить общие задачи',
+        title: 'Не удалось загрузить задачи',
         actionLabel: 'Повторить',
         onAction: _load,
       );
@@ -336,13 +505,14 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     if (_items.isEmpty) {
       return const MagicPageState(
         kind: MagicPageStateKind.empty,
-        title: 'Нет общих задач',
+        title: 'Нет задач',
         message: 'Создайте задачу, чтобы она появилась в этом списке.',
       );
     }
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
+        controller: widget.scrollController,
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
         itemCount: _items.length,
         separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
@@ -355,11 +525,26 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
             closeError: _closeErrors[id],
             onClose: () => _close(task),
             onEdit: () => _openEditor(task),
+            onOpen: () => _openDetails(task),
+            canEdit:
+                widget.canWrite ??
+                ref
+                        .read(capabilitySnapshotProvider)
+                        .value
+                        ?.allows('workflow.task.write') ==
+                    true,
           );
         },
       ),
     );
   }
+}
+
+bool _isOverdueSharedTask(Map<String, dynamic> task) {
+  final start = DateTime.tryParse(task['startAt']?.toString() ?? '');
+  return task['state'] == 'open' &&
+      start != null &&
+      start.isBefore(DateTime.now());
 }
 
 class _ReminderBanner extends StatelessWidget {
@@ -386,7 +571,7 @@ class _ReminderBanner extends StatelessWidget {
             color: AppColor.warning,
           ),
           const SizedBox(width: AppSpace.sm),
-          Expanded(child: Text('Просроченных общих задач: $overdue')),
+          Expanded(child: Text('Просроченных задач: $overdue')),
         ],
       ),
     );
@@ -394,10 +579,15 @@ class _ReminderBanner extends StatelessWidget {
 }
 
 class _MobileTaskFilter extends StatelessWidget {
-  const _MobileTaskFilter({required this.value, required this.onChanged});
+  const _MobileTaskFilter({
+    required this.value,
+    required this.onChanged,
+    this.onCreate,
+  });
 
   final String value;
   final ValueChanged<String> onChanged;
+  final VoidCallback? onCreate;
 
   @override
   Widget build(BuildContext context) {
@@ -444,6 +634,12 @@ class _MobileTaskFilter extends StatelessWidget {
               ),
               icon: const Icon(Icons.tune_rounded),
             ),
+            if (onCreate != null)
+              IconButton.filled(
+                tooltip: 'Новая задача',
+                onPressed: onCreate,
+                icon: const Icon(Icons.add_task_rounded),
+              ),
           ],
         ),
       ),
@@ -456,11 +652,13 @@ class _DesktopTaskFilter extends StatelessWidget {
     required this.value,
     required this.counters,
     required this.onChanged,
+    this.onCreate,
   });
 
   final String value;
   final Map<String, dynamic> counters;
   final ValueChanged<String> onChanged;
+  final VoidCallback? onCreate;
 
   @override
   Widget build(BuildContext context) {
@@ -487,6 +685,14 @@ class _DesktopTaskFilter extends StatelessWidget {
             'Открыто: ${counters['open'] ?? 0}',
             style: const TextStyle(color: AppColor.text2),
           ),
+          if (onCreate != null) ...[
+            const SizedBox(width: AppSpace.md),
+            FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.add_task_rounded),
+              label: const Text('Новая задача'),
+            ),
+          ],
         ],
       ),
     );
@@ -530,6 +736,111 @@ class _AdvancedFilters extends StatelessWidget {
   }
 }
 
+class _SharedTaskDetails extends StatelessWidget {
+  const _SharedTaskDetails({
+    required this.task,
+    required this.history,
+    required this.onOpenEntity,
+  });
+
+  final Map<String, dynamic> task;
+  final Future<List<Map<String, dynamic>>> history;
+  final VoidCallback onOpenEntity;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = DateTime.tryParse(
+      task['startAt']?.toString() ?? '',
+    )?.toLocal();
+    final linked = task['linkedEntity'] is Map;
+    return SingleChildScrollView(
+      padding: AppSpace.sheetBody,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (task['body']?.toString().trim().isNotEmpty == true) ...[
+            Text(task['body'].toString()),
+            const SizedBox(height: AppSpace.lg),
+          ],
+          Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.sm,
+            children: [
+              _MetaChip(
+                icon: task['state'] == 'closed'
+                    ? Icons.check_circle_outline
+                    : Icons.pending_actions_outlined,
+                label: task['state'] == 'closed' ? 'Закрыта' : 'Открыта',
+              ),
+              _MetaChip(
+                icon: Icons.schedule_outlined,
+                label: start == null
+                    ? 'Без даты'
+                    : DateFormat('dd.MM.yyyy HH:mm').format(start),
+              ),
+            ],
+          ),
+          if (linked) ...[
+            const SizedBox(height: AppSpace.lg),
+            OutlinedButton.icon(
+              onPressed: onOpenEntity,
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('Открыть связанную запись'),
+            ),
+          ],
+          const SizedBox(height: AppSpace.xl),
+          Text('История', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: AppSpace.sm),
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: history,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const LinearProgressIndicator();
+              }
+              if (snapshot.hasError) {
+                return const Text('Не удалось загрузить историю задачи.');
+              }
+              final items = snapshot.data ?? const [];
+              if (items.isEmpty) {
+                return const Text('Изменений пока нет.');
+              }
+              return Column(
+                children: [
+                  for (final item in items)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.history_rounded),
+                      title: Text(_taskHistoryAction(item['action'])),
+                      subtitle: Text(
+                        [
+                          if (item['actorName']?.toString().trim().isNotEmpty ==
+                              true)
+                            item['actorName'].toString(),
+                          if (DateTime.tryParse(
+                                item['occurredAt']?.toString() ?? '',
+                              )?.toLocal()
+                              case final occurred?)
+                            DateFormat('dd.MM.yyyy HH:mm').format(occurred),
+                        ].join(' · '),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _taskHistoryAction(Object? action) => switch (action?.toString()) {
+  'workflow.shared_task_created' => 'Задача создана',
+  'workflow.shared_task_updated' => 'Задача изменена',
+  'workflow.shared_task_closed' => 'Задача закрыта',
+  _ => 'Задача обновлена',
+};
+
 class _SharedTaskCard extends StatelessWidget {
   const _SharedTaskCard({
     required this.task,
@@ -537,6 +848,8 @@ class _SharedTaskCard extends StatelessWidget {
     required this.closeError,
     required this.onClose,
     required this.onEdit,
+    required this.onOpen,
+    required this.canEdit,
   });
 
   final Map<String, dynamic> task;
@@ -544,6 +857,8 @@ class _SharedTaskCard extends StatelessWidget {
   final Object? closeError;
   final VoidCallback onClose;
   final VoidCallback onEdit;
+  final VoidCallback onOpen;
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -551,91 +866,107 @@ class _SharedTaskCard extends StatelessWidget {
     final startsAt = DateTime.tryParse(task['startAt']?.toString() ?? '');
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpace.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    task['title']?.toString() ?? 'Задача',
-                    style: Theme.of(context).textTheme.titleMedium,
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      task['title']?.toString() ?? 'Задача',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  if (!closed && canEdit)
+                    IconButton(
+                      onPressed: closing
+                          ? null
+                          : () {
+                              onEdit();
+                            },
+                      tooltip: 'Изменить',
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                    ),
+                ],
+              ),
+              if (task['body']?.toString().trim().isNotEmpty == true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(task['body'].toString()),
+                ),
+              const SizedBox(height: AppSpace.sm),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  _MetaChip(
+                    icon: task['allDay'] == true
+                        ? Icons.event_outlined
+                        : Icons.schedule_outlined,
+                    label: startsAt == null
+                        ? 'Без даты'
+                        : DateFormat(
+                            'dd.MM.yyyy HH:mm',
+                          ).format(startsAt.toLocal()),
+                  ),
+                  _MetaChip(
+                    icon: closed
+                        ? Icons.check_circle_outline
+                        : Icons.groups_outlined,
+                    label: closed ? 'Закрыта' : 'Общая',
+                  ),
+                  if (task['hasReminder'] == true)
+                    const _MetaChip(
+                      key: Key('shared-task-reminder-badge'),
+                      icon: Icons.notifications_none,
+                      label: 'Напоминание',
+                    ),
+                ],
+              ),
+              if (!closed) ...[
+                const SizedBox(height: AppSpace.md),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    key: Key('close-shared-task-${task['id']}'),
+                    onPressed: closing ? null : onClose,
+                    icon: closing
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.task_alt_rounded),
+                    label: Text(
+                      closeError == null
+                          ? 'Закрыть задачу'
+                          : 'Повторить закрытие',
+                    ),
                   ),
                 ),
-                if (!closed)
-                  IconButton(
-                    onPressed: closing ? null : onEdit,
-                    tooltip: 'Изменить',
-                    icon: const Icon(Icons.edit_outlined, size: 20),
+                if (closeError != null)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Не удалось закрыть. Задача осталась открытой.',
+                      style: TextStyle(color: AppColor.danger),
+                    ),
                   ),
               ],
-            ),
-            if (task['body']?.toString().trim().isNotEmpty == true)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(task['body'].toString()),
-              ),
-            const SizedBox(height: AppSpace.sm),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                _MetaChip(
-                  icon: task['allDay'] == true
-                      ? Icons.event_outlined
-                      : Icons.schedule_outlined,
-                  label: startsAt == null
-                      ? 'Без даты'
-                      : DateFormat(
-                          'dd.MM.yyyy HH:mm',
-                        ).format(startsAt.toLocal()),
-                ),
-                _MetaChip(
-                  icon: closed
-                      ? Icons.check_circle_outline
-                      : Icons.groups_outlined,
-                  label: closed ? 'Закрыта' : 'Общая',
-                ),
-                if (task['hasReminder'] == true)
-                  const _MetaChip(
-                    key: Key('shared-task-reminder-badge'),
-                    icon: Icons.notifications_none,
-                    label: 'Напоминание',
-                  ),
-              ],
-            ),
-            if (!closed) ...[
-              const SizedBox(height: AppSpace.md),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  key: Key('close-shared-task-${task['id']}'),
-                  onPressed: closing ? null : onClose,
-                  icon: closing
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.task_alt_rounded),
-                  label: Text(
-                    closeError == null
-                        ? 'Закрыть задачу'
-                        : 'Повторить закрытие',
-                  ),
+              const SizedBox(height: AppSpace.xs),
+              Text(
+                'Открыть детали и историю',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColor.actionBlue,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              if (closeError != null)
-                const Padding(
-                  padding: EdgeInsets.only(top: 6),
-                  child: Text(
-                    'Не удалось закрыть. Задача осталась открытой.',
-                    style: TextStyle(color: AppColor.danger),
-                  ),
-                ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -669,10 +1000,16 @@ class _MetaChip extends StatelessWidget {
 }
 
 class SharedTaskEditor extends StatefulWidget {
-  const SharedTaskEditor({super.key, required this.audienceOptions, this.task});
+  const SharedTaskEditor({
+    super.key,
+    required this.audienceOptions,
+    this.task,
+    this.linkedEntity,
+  });
 
   final List<SharedTaskAudienceOption> audienceOptions;
   final Map<String, dynamic>? task;
+  final EntityLink? linkedEntity;
 
   @override
   State<SharedTaskEditor> createState() => _SharedTaskEditorState();
@@ -886,6 +1223,13 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
 
   void _submit() {
     final end = _allDay ? null : (_end ?? _start.add(const Duration(hours: 1)));
+    final existingLink = widget.task?['linkedEntity'];
+    final linkedEntity = widget.linkedEntity == null
+        ? existingLink
+        : {
+            'type': widget.linkedEntity!.rawEntityType,
+            'id': widget.linkedEntity!.entityId,
+          };
     Navigator.pop(context, {
       'title': _title.text.trim(),
       if (_body.text.trim().isNotEmpty) 'body': _body.text.trim(),
@@ -893,6 +1237,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       'startAt': _start.toUtc().toIso8601String(),
       if (end != null) 'endAt': end.toUtc().toIso8601String(),
       'audiences': _audiences,
+      'linkedEntity': ?linkedEntity,
       if (_reminder)
         'reminders': _existingReminders.isNotEmpty
             ? _existingReminders

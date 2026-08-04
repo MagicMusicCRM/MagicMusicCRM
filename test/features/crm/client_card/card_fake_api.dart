@@ -27,6 +27,8 @@ class FakeCardApiClient extends MagicApiClient {
     this.lead,
     this.student,
     this.leadTasks = const [],
+    this.sharedTasks = const [],
+    this.sharedTaskHistory = const [],
     this.subscriptionPackages = const [],
     this.studentSubscriptions = const [],
     this.studentAccounts = const [],
@@ -54,6 +56,8 @@ class FakeCardApiClient extends MagicApiClient {
 
   /// Сырые задачи лид-карточки (camelCase, как toTaskDto).
   final List<Map<String, dynamic>> leadTasks;
+  final List<Map<String, dynamic>> sharedTasks;
+  final List<Map<String, dynamic>> sharedTaskHistory;
 
   final List<Map<String, dynamic>> subscriptionPackages;
   final List<Map<String, dynamic>> studentSubscriptions;
@@ -145,6 +149,27 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (path == '/crm/subscription-packages') {
       return <String, dynamic>{'items': subscriptionPackages} as T;
+    }
+    if (path == '/crm/shared-tasks') {
+      final entityType = queryParameters?['linkedEntityType']?.toString();
+      final entityId = queryParameters?['linkedEntityId']?.toString();
+      final items = sharedTasks
+          .where((task) {
+            final link = task['linkedEntity'];
+            if (link is! Map) return entityType == null && entityId == null;
+            return (entityType == null ||
+                    link['type']?.toString() == entityType) &&
+                (entityId == null || link['id']?.toString() == entityId);
+          })
+          .toList(growable: false);
+      return <String, dynamic>{
+            'items': items,
+            'counters': {'open': items.length, 'overdue': 0},
+          }
+          as T;
+    }
+    if (path.startsWith('/crm/shared-tasks/') && path.endsWith('/history')) {
+      return <String, dynamic>{'items': sharedTaskHistory} as T;
     }
     if (path == '/crm/student-funnel') {
       return <String, dynamic>{

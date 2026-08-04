@@ -273,7 +273,10 @@ extension _MessengerBuildersA on _MessengerScreenState {
       // Не desktop-only: у Администратора «Задачи» — основная вкладка и на
       // телефоне (#17). Роли без 6 в crmVisibleTabs сюда не попадут — выбор
       // нормализуется по видимому списку в messenger_screen.dart.
-      6 when _hasManagerAccess => TasksWidget(initialLink: widget.initialLink),
+      6 when _hasManagerAccess => SharedTasksV4Panel(
+        initialLink: widget.initialLink,
+        canWrite: _accessSnapshot?.allows('workflow.task.write') == true,
+      ),
       7 when isDesktop && _hasManagerAccess => ReportsWidget(
         role: widget.role,
         initialTab: _selectedReportsTab,

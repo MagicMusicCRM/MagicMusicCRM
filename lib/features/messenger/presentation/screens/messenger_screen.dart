@@ -48,7 +48,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_wid
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/tasks_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_schedule_widget.dart';
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_students_widget.dart';

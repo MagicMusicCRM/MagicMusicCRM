@@ -84,22 +84,6 @@ extension _ClientCardData on _ClientCardState {
   // an origin chip, then de-dups by `id` and sorts desc by date. Single-side
   // modes return just their own half (no behavioural change vs Phase 1/2).
 
-  List<Map<String, dynamic>> _origin(
-    List<Map<String, dynamic>> rows,
-    String entityType,
-  ) => rows.map((r) => {...r, '_origin': entityType}).toList();
-
-  /// Lead tasks (from the lead card) + student tasks, de-duped by id.
-  List<Map<String, dynamic>> get _mergedTasks {
-    final leadTasks = _mode.hasLeadHalf
-        ? _origin(_list(_leadCard?['tasks']), 'lead')
-        : const <Map<String, dynamic>>[];
-    final studentTasks = _mode.hasStudentHalf
-        ? _origin(_studentTasks, 'student')
-        : const <Map<String, dynamic>>[];
-    return mergeByIdSorted([studentTasks, leadTasks], dateKey: 'created_at');
-  }
-
   /// Lead status history + student timeline, normalised onto a shared shape and
   /// merged/sorted desc. Returns rows with: `_kind` ('status'|'event'),
   /// `_origin`, `_date`, `_title`, `_subtitle`.

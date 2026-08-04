@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
@@ -131,7 +132,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // action controls so a double-tap can't fire two mutations.
   bool _familyBusy = false;
   // True while a task create is in flight — disables the add-task control.
-  bool _addingTask = false;
   // True once the user has edited a field but not saved — used to warn before
   // discarding unsaved changes on close.
   bool _edited = false;

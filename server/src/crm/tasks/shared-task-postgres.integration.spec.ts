@@ -65,10 +65,24 @@ describe("SharedTask API domain (PostgreSQL)", () => {
       allDay: true,
       startAt: "2026-08-01T00:00:00.000Z",
       audiences: [{ type: "branch" as const, targetId: fixture.branchId }],
+      linkedEntity: { type: "student", id: fixture.studentId },
     };
     const first = await tasks.create(fixture.director, dto, metadata);
     const replay = await tasks.create(fixture.director, dto, metadata);
     expect(replay).toEqual(first);
+
+    const focused = await tasks.list(fixture.director, {
+      taskId: first.id,
+      linkedEntityType: "student",
+      linkedEntityId: fixture.studentId,
+    });
+    expect(focused.items.map((item) => item.id)).toEqual([first.id]);
+    const history = await tasks.history(fixture.director, first.id);
+    expect(history.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "workflow.shared_task_created" }),
+      ]),
+    );
 
     const visible = await tasks.list(fixture.admin, { state: "open" });
     expect(visible.items.map((item) => item.id)).toContain(first.id);
@@ -273,11 +287,29 @@ async function createFixture(pool: Pool) {
     `,
     [staff.rows[0]!.id, branch.rows[0]!.id],
   );
+  const studentProfile = await pool.query<{ id: string }>(
+    `
+      insert into app.profiles (user_id, first_name)
+      values ($1, $2)
+      returning id
+    `,
+    [teacherRow!.id, `${marker}-student`],
+  );
+  const student = await pool.query<{ id: string }>(
+    `
+      insert into app.students (profile_id, branch_id)
+      values ($1, $2)
+      returning id
+    `,
+    [studentProfile.rows[0]!.id, branch.rows[0]!.id],
+  );
   return {
     marker,
     userIds: users.rows.map((row) => row.id),
     branchId: branch.rows[0]!.id,
     profileId: profile.rows[0]!.id,
+    studentProfileId: studentProfile.rows[0]!.id,
+    studentId: student.rows[0]!.id,
     staffId: staff.rows[0]!.id,
     assignmentId: assignment.rows[0]!.id,
     director: { userId: directorRow!.id, role: "director" } as ActorContext,
@@ -320,6 +352,7 @@ async function cleanupFixture(
       "delete from app.shared_tasks where id = any($1::uuid[])",
       [taskIds],
     );
+    await client.query("delete from app.students where id = $1", [fixture.studentId]);
     await client.query(
       `
         delete from app.platform_outbox_events
@@ -362,8 +395,8 @@ async function cleanupFixture(
     await client.query("delete from app.staff_members where id = $1", [
       fixture.staffId,
     ]);
-    await client.query("delete from app.profiles where id = $1", [
-      fixture.profileId,
+    await client.query("delete from app.profiles where id = any($1::uuid[])", [
+      [fixture.profileId, fixture.studentProfileId],
     ]);
     await client.query("delete from app.branches where id = $1", [
       fixture.branchId,

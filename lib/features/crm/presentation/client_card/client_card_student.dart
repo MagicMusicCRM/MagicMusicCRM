@@ -53,58 +53,16 @@ extension _ClientCardStudent on _ClientCardState {
   // ── Student tab: Задачи ──────────────────────────────────────────────────
   Widget _buildStudentTasksTab(ColorScheme cs) {
     return _studentGuard(cs, () {
-      return SingleChildScrollView(
-        controller: _taskScrollController,
-        padding: const EdgeInsets.fromLTRB(
-          AppSpace.xl,
-          AppSpace.lg,
-          AppSpace.xl,
-          AppSpace.xl,
+      return SharedTasksV4Panel(
+        embedded: true,
+        linkedEntity: EntityLink.typed(
+          entityType: EntityLinkType.client,
+          entityId: _studentId,
+          variant: 'student',
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: _sectionTitle('Задачи')),
-                _buildAddTaskButton(cs),
-              ],
-            ),
-            if (_mergedTasks.isEmpty)
-              _emptyHint(cs, 'Открытых задач нет')
-            else
-              // #12: задача раскрывается по тапу — полный текст, автор,
-              // исполнитель, срок.
-              ..._mergedTasks.map(
-                (row) => _TaskTile(
-                  task: row,
-                  origin: _isConverted ? row['_origin']?.toString() : null,
-                  onOpen: row['id']?.toString().isNotEmpty == true
-                      ? (sourceContext, target) => _openLinkedRecord(
-                          sourceContext,
-                          EntityLink.typed(
-                            entityType: EntityLinkType.task,
-                            entityId: row['id'].toString(),
-                            optionalFocus: EntityLinkFocus(
-                              focus: 'task',
-                              filter: {
-                                'taskId': row['id'].toString(),
-                                'entityType':
-                                    row['entity_type']?.toString() ??
-                                    (_isStudent ? 'student' : 'lead'),
-                                'entityId':
-                                    row['entity_id']?.toString() ??
-                                    (_isStudent ? _studentId : _leadId),
-                              },
-                            ),
-                          ),
-                          target,
-                        )
-                      : null,
-                ),
-              ),
-          ],
-        ),
+        scrollController: _taskScrollController,
+        canWrite:
+            widget.capabilitySnapshot?.allows('workflow.task.write') == true,
       );
     });
   }

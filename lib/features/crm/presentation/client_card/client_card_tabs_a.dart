@@ -615,168 +615,19 @@ extension _ClientCardTabsA on _ClientCardState {
 
   // ── Tab: Задачи ──────────────────────────────────────────────────────────
   Widget _buildTasksTab(ColorScheme cs) {
-    if (_loadingCard) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpace.lg),
-        child: Center(child: CircularProgressIndicator(color: AppColor.gold)),
-      );
-    }
-    final card = _leadCard;
-    final tasks = card == null
-        ? const <Map<String, dynamic>>[]
-        : _list(card['tasks']);
-    return SingleChildScrollView(
-      controller: _taskScrollController,
-      padding: const EdgeInsets.fromLTRB(
-        AppSpace.xl,
-        AppSpace.lg,
-        AppSpace.xl,
-        AppSpace.xl,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(child: _sectionTitle('Задачи')),
-              _buildAddTaskButton(cs),
-            ],
-          ),
-          if (card == null)
-            _emptyHint(cs, 'Карточка активности временно недоступна')
-          else if (tasks.isEmpty)
-            _emptyHint(cs, 'Открытых задач нет')
-          else
-            // #12: задача раскрывается по тапу — полный текст, автор,
-            // исполнитель, срок.
-            ...tasks.map(
-              (row) => _TaskTile(
-                task: row,
-                onOpen: row['id']?.toString().isNotEmpty == true
-                    ? (sourceContext, target) => _openLinkedRecord(
-                        sourceContext,
-                        EntityLink.typed(
-                          entityType: EntityLinkType.task,
-                          entityId: row['id'].toString(),
-                          optionalFocus: EntityLinkFocus(
-                            focus: 'task',
-                            filter: {
-                              'taskId': row['id'].toString(),
-                              'entityType': 'lead',
-                              'entityId': _leadId,
-                            },
-                          ),
-                        ),
-                        target,
-                      )
-                    : null,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddTaskButton(ColorScheme cs) {
-    return TextButton.icon(
-      onPressed: _addingTask ? null : _openAddTaskSheet,
-      style: TextButton.styleFrom(
-        foregroundColor: AppColor.gold,
-        backgroundColor: AppColor.goldSoft,
-        disabledForegroundColor: AppColor.gold.withValues(alpha: 0.5),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpace.md,
-          vertical: AppSpace.xs,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.chip),
-          side: const BorderSide(color: AppColor.goldLine),
-        ),
-        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-      ),
-      icon: _addingTask
-          ? const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.add_rounded, size: 16),
-      label: const Text('Добавить'),
-    );
-  }
-
-  Future<void> _openAddTaskSheet() async {
-    // Сотрудники для поля «Исполнитель»; сбой загрузки не блокирует задачу.
-    var staff = const <Map<String, dynamic>>[];
-    try {
-      staff = List<Map<String, dynamic>>.from(
-        await ref.read(magicCrmServiceProvider).listStaff(limit: 100),
-      );
-    } catch (_) {}
-    if (!mounted) return;
-
-    final input = await showAddTaskSheet(
-      context,
-      isStudent: _isStudent,
-      staff: staff,
-    );
-    if (input == null) return;
-    final title = input.title;
-    final dueAt = input.due?.toUtc().toIso8601String();
-    final assignedTo = input.assignedTo;
-    if (title.isEmpty) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Укажите название задачи',
-          type: MagicToastType.danger,
-        );
-      }
-      return;
-    }
-
-    // New tasks target the primary half: the student side for a converted
-    // client, otherwise the open entity.
     final targetType = _isConverted ? 'student' : widget.entityType;
     final targetId = _isConverted ? _studentId : _entityId;
-    if (targetId.isEmpty) return;
-    _emitState(() => _addingTask = true);
-    try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .createTask(
-            entityType: targetType,
-            entityId: targetId,
-            title: title,
-            dueAt: dueAt,
-            assignedTo: assignedTo,
-          );
-      _dirty = true;
-      if (_mode.hasStudentHalf) {
-        await _fetchStudentData();
-      }
-      if (_mode.hasLeadHalf) {
-        await _fetchCard();
-      }
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Задача добавлена',
-          type: MagicToastType.success,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Ошибка добавления',
-          detail: '$e',
-          type: MagicToastType.danger,
-        );
-      }
-    } finally {
-      if (mounted) _emitState(() => _addingTask = false);
-    }
+    return SharedTasksV4Panel(
+      embedded: true,
+      linkedEntity: EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: targetId,
+        variant: targetType,
+      ),
+      scrollController: _taskScrollController,
+      canWrite:
+          widget.capabilitySnapshot?.allows('workflow.task.write') == true,
+    );
   }
 
   /// Opens the month containing the nearest upcoming lesson and keeps the

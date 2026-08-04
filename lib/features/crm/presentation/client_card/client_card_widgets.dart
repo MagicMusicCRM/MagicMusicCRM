@@ -306,9 +306,7 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
 /// «Срок» (красным, если просрочен и задача не закрыта), «Создана», приоритет.
 class _TaskTile extends StatefulWidget {
   final Map<String, dynamic> task;
-  final String? origin;
-  final void Function(BuildContext context, EntityOpenTarget target)? onOpen;
-  const _TaskTile({required this.task, this.origin, this.onOpen});
+  const _TaskTile({required this.task});
 
   @override
   State<_TaskTile> createState() => _TaskTileState();
@@ -440,15 +438,7 @@ class _TaskTileState extends State<_TaskTile> {
                         ],
                       ),
                     ),
-                    if (widget.origin != null) ...[
-                      const SizedBox(width: 6),
-                      ClientOriginChip(entityType: widget.origin!),
-                    ],
                     const SizedBox(width: 4),
-                    if (widget.onOpen != null)
-                      _EntityOpenButtons(
-                        onOpen: (target) => widget.onOpen!(context, target),
-                      ),
                     Icon(
                       _expanded
                           ? Icons.expand_less_rounded

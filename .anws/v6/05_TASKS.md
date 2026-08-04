@@ -261,7 +261,7 @@ flowchart TD
 
 ## 9. Sprint S5 — Tasks, analytics & configurable CRM
 
-- [ ] **V6-501** `[REQ-TASK-001]` — Свести legacy/new tasks к одному canonical route/model.
+- [x] **V6-501** `[REQ-TASK-001]` — Свести legacy/new tasks к одному canonical route/model.
   - **Работа:** one create action/provider/detail/history; redirect legacy entry points; remove header+FAB duplication; preserve links/audit.
   - **Критерий:** one task can be created/updated/closed from every allowed entry without parallel state or duplicate notifications.
   - **Проверка:** route/provider inventory duplicate=0; create/edit/close/link flows and API trace parity.

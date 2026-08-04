@@ -105,4 +105,17 @@ export class SharedTaskListQuery {
   @Min(1)
   @Max(200)
   limit?: number;
+
+  @IsOptional()
+  @IsUUID()
+  taskId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  linkedEntityType?: string;
+
+  @IsOptional()
+  @IsUUID()
+  linkedEntityId?: string;
 }
