@@ -17,6 +17,7 @@ import { PlatformIntegrityService } from "../../platform/platform-integrity.serv
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import { ActualPaymentService } from "./actual-payment.service";
+import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
@@ -55,6 +56,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
   let database: DatabaseService;
   let issueService: SubscriptionIssueService;
   let paymentService: ActualPaymentService;
+  let commerceRepository: CommerceProjectionRepository;
   let actors: Record<UserRole, ActorContext>;
   let studentId: string;
   let profileId: string;
@@ -85,10 +87,12 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       integrity,
       reservations,
     );
+    commerceRepository = new CommerceProjectionRepository(database);
     paymentService = new ActualPaymentService(
       repository,
       policy,
       integrity,
+      commerceRepository,
     );
     const fixture = await createFixture(pool);
     actors = fixture.actors;
@@ -185,9 +189,34 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       idempotency: 1,
     });
     expect(await revenueMinor(first.subscription.id)).toBe("0");
+
+    await paymentService.record(
+      actors.director,
+      studentId,
+      {
+        issuedSubscriptionId: first.subscription.id,
+        amountMinor: "320000",
+        method: "cashless",
+        occurredAt: "2026-08-01T10:00:00.000Z",
+      },
+      mutationMetadata("first-installment-paid"),
+    );
+    const scope = await commerceRepository.resolveStudentScope(
+      actors.director,
+      studentId,
+    );
+    const projection = await commerceRepository.loadProjection(
+      actors.director,
+      [scope],
+    );
+    expect(
+      projection[0]!.subscriptions[0]!.installments.map(
+        (item) => item.status,
+      ),
+    ).toEqual(["paid", "pending"]);
   });
 
-  it("supports a fixed discount and creates one issue obligation", async () => {
+  it("reconciles a typed surcharge after a fixed discount", async () => {
     const result = await issueService.issue(
       actors.manager,
       studentId,
@@ -198,17 +227,26 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
           fixedMinor: "160000",
           reason: "Фиксированная скидка",
         },
+        surcharge: {
+          amountMinor: "60000",
+          reason: "Дополнительный урок",
+        },
       },
       mutationMetadata("fixed-discount"),
     );
 
     expect(result.subscription.commercialSnapshot).toMatchObject({
       basePriceMinor: "800000",
-      finalPriceMinor: "640000",
+      finalPriceMinor: "700000",
       discount: {
         type: "fixed",
         fixedMinor: "160000",
         reason: "Фиксированная скидка",
+      },
+      surcharge: {
+        type: "fixed",
+        amountMinor: "60000",
+        reason: "Дополнительный урок",
       },
     });
     expect(result.installments).toEqual([]);
@@ -216,12 +254,12 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     expect(result.obligations[0]).toMatchObject({
       factType: "issue",
       direction: "debit",
-      amountMinor: "640000",
+      amountMinor: "700000",
     });
     expect(await revenueMinor(result.subscription.id)).toBe("0");
   });
 
-  it("rejects ambiguous/unsupported discounts and a mismatched installment sum atomically", async () => {
+  it("rejects invalid commercial terms atomically", async () => {
     const before = await countIssuedSubscriptions();
     await expect(
       issueService.issue(
@@ -237,6 +275,34 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
           },
         },
         mutationMetadata("ambiguous-discount"),
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    await expect(
+      issueService.issue(
+        actors.director,
+        studentId,
+        {
+          packageId,
+          surcharge: {
+            amountMinor: "60000",
+            reason: "   ",
+          },
+        },
+        mutationMetadata("missing-surcharge-reason"),
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    await expect(
+      issueService.issue(
+        actors.director,
+        studentId,
+        {
+          packageId,
+          surcharge: {
+            amountMinor: "-1",
+            reason: "Некорректная доплата",
+          },
+        },
+        mutationMetadata("negative-surcharge"),
       ),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
     await expect(
@@ -305,6 +371,8 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       amountMinor: "100000",
       method: "cash" as const,
       occurredAt: "2026-08-02T10:00:00.000Z",
+      comment: "Оплата за август",
+      invoiceIdentifier: "ЧЕК-3905",
     };
     const outcomes = await Promise.all([
       paymentService.record(
@@ -327,6 +395,11 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       amountMinor: "100000",
       currencyCode: "RUB",
       method: "cash",
+      comment: "Оплата за август",
+      invoiceIdentifier: "ЧЕК-3905",
+      status: "paid",
+      branchName: `${marker}-branch`,
+      acceptedBy: expect.objectContaining({ userId: actors.admin.userId }),
       version: 1,
     });
     await expect(
@@ -337,6 +410,14 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         paymentMetadata,
       ),
     ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      paymentService.record(
+        actors.admin,
+        studentId,
+        { ...paymentInput, branchId: randomUUID() },
+        mutationMetadata("wrong-branch-payment"),
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
 
     const cashless = await paymentService.record(
       actors.manager,
@@ -536,6 +617,28 @@ async function createFixture(pool: Pool): Promise<{
       );
       actors[role] = { userId: result.rows[0]!.id, role };
     }
+    const branch = await client.query<{ id: string }>(
+      `insert into app.branches (name, timezone_name)
+       values ($1, 'Europe/Moscow') returning id`,
+      [`${marker}-branch`],
+    );
+    for (const role of ["admin", "manager"] as const) {
+      const staffProfile = await client.query<{ id: string }>(
+        `insert into app.profiles (user_id, first_name, last_name)
+         values ($1, $2, 'Payment') returning id`,
+        [actors[role].userId, role],
+      );
+      const staff = await client.query<{ id: string }>(
+        `insert into app.staff_members (profile_id, role)
+         values ($1, $2) returning id`,
+        [staffProfile.rows[0]!.id, role],
+      );
+      await client.query(
+        `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+         values ($1, $2)`,
+        [staff.rows[0]!.id, branch.rows[0]!.id],
+      );
+    }
     const profile = await client.query<{ id: string }>(
       `
         insert into app.profiles (
@@ -550,11 +653,11 @@ async function createFixture(pool: Pool): Promise<{
     );
     const student = await client.query<{ id: string }>(
       `
-        insert into app.students (profile_id, status)
-        values ($1, 'active')
+        insert into app.students (profile_id, status, branch_id)
+        values ($1, 'active', $2)
         returning id
       `,
-      [profile.rows[0]!.id],
+      [profile.rows[0]!.id, branch.rows[0]!.id],
     );
     const packageResult = await client.query<{ id: string }>(
       `
@@ -716,6 +819,26 @@ async function cleanupFixture(
         input.profileId,
       ]);
     }
+    await client.query(
+      `delete from app.staff_branch_assignments
+       where staff_member_id in (
+         select staff.id from app.staff_members staff
+         join app.profiles profile on profile.id = staff.profile_id
+         where profile.user_id = any($1::uuid[])
+       )`,
+      [input.actorUserIds],
+    );
+    await client.query(
+      `delete from app.staff_members
+       where profile_id in (
+         select id from app.profiles where user_id = any($1::uuid[])
+       )`,
+      [input.actorUserIds],
+    );
+    await client.query(
+      `delete from app.profiles where user_id = any($1::uuid[])`,
+      [input.actorUserIds],
+    );
     await deleteByIds(
       client,
       "app.users",
@@ -723,6 +846,9 @@ async function cleanupFixture(
       input.actorUserIds,
       "uuid",
     );
+    await client.query("delete from app.branches where name = $1", [
+      `${marker}-branch`,
+    ]);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");

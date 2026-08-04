@@ -272,6 +272,7 @@ class CommerceSubscriptionTerms {
     required this.finalPriceMinor,
     required this.currencyCode,
     required this.discount,
+    required this.surcharge,
   });
 
   final String displayName;
@@ -280,6 +281,7 @@ class CommerceSubscriptionTerms {
   final BigInt finalPriceMinor;
   final String currencyCode;
   final CommerceDiscount discount;
+  final CommerceSurcharge surcharge;
 
   factory CommerceSubscriptionTerms.fromJson(Map<String, dynamic> json) {
     final rawValidity = json['validityDays'];
@@ -297,6 +299,28 @@ class CommerceSubscriptionTerms {
       discount: CommerceDiscount.fromJson(
         _commerceMap(json['discount'], 'discount'),
       ),
+      surcharge: CommerceSurcharge.fromJson(
+        json['surcharge'] is Map
+            ? Map<String, dynamic>.from(json['surcharge'] as Map)
+            : const <String, dynamic>{'type': 'none'},
+      ),
+    );
+  }
+}
+
+class CommerceSurcharge {
+  const CommerceSurcharge({required this.amountMinor, this.reason});
+
+  final BigInt amountMinor;
+  final String? reason;
+
+  factory CommerceSurcharge.fromJson(Map<String, dynamic> json) {
+    if (json['type']?.toString() != 'fixed') {
+      return CommerceSurcharge(amountMinor: BigInt.zero);
+    }
+    return CommerceSurcharge(
+      amountMinor: _commerceMinor(json['amountMinor'], 'surcharge.amountMinor'),
+      reason: json['reason']?.toString(),
     );
   }
 }
@@ -417,6 +441,12 @@ class CommerceMovement {
     required this.method,
     required this.factType,
     required this.chargeType,
+    required this.branchId,
+    required this.branchName,
+    required this.comment,
+    required this.invoiceIdentifier,
+    required this.status,
+    required this.acceptedByName,
   });
 
   final String id;
@@ -428,6 +458,12 @@ class CommerceMovement {
   final String? method;
   final String? factType;
   final String? chargeType;
+  final String? branchId;
+  final String? branchName;
+  final String? comment;
+  final String? invoiceIdentifier;
+  final String? status;
+  final String? acceptedByName;
 
   factory CommerceMovement.fromJson(Map<String, dynamic> json) {
     return CommerceMovement(
@@ -440,6 +476,12 @@ class CommerceMovement {
       method: json['method']?.toString(),
       factType: json['factType']?.toString(),
       chargeType: json['chargeType']?.toString(),
+      branchId: json['branchId']?.toString(),
+      branchName: json['branchName']?.toString(),
+      comment: json['comment']?.toString(),
+      invoiceIdentifier: json['invoiceIdentifier']?.toString(),
+      status: json['status']?.toString(),
+      acceptedByName: json['acceptedByName']?.toString(),
     );
   }
 
@@ -451,8 +493,13 @@ class CommerceMovement {
     'payment_date': occurredAt.toIso8601String(),
     'method': method,
     'type': method,
-    'notes': factType ?? chargeType,
     'description': factType ?? chargeType,
+    'branch_id': branchId,
+    'branch_name': branchName,
+    'notes': comment ?? factType ?? chargeType,
+    'external_id': invoiceIdentifier,
+    'status': status,
+    'accepted_by_name': acceptedByName,
     'students': {'id': studentId, 'first_name': '', 'last_name': ''},
   };
 }

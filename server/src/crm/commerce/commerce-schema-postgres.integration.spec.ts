@@ -50,6 +50,33 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("rolls surcharge terms down and up without schema drift", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const migrationRoot = resolve(process.cwd(), "db/migrations");
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0095_subscription_surcharge_terms.down.sql"),
+          "utf8",
+        ),
+      );
+      expect(await hasColumn(client, "surcharge_minor")).toBe(false);
+
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0095_subscription_surcharge_terms.up.sql"),
+          "utf8",
+        ),
+      );
+      expect(await hasColumn(client, "surcharge_minor")).toBe(true);
+      expect(await hasColumn(client, "surcharge_reason")).toBe(true);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
   it("keeps issued snapshots stable while catalog versions change", async () => {
     const client = await pool.connect();
     await client.query("begin");
@@ -428,6 +455,25 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     }
   });
 });
+
+async function hasColumn(
+  client: PoolClient,
+  columnName: string,
+): Promise<boolean> {
+  const result = await client.query<{ present: boolean }>(
+    `
+      select exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'app'
+          and table_name = 'subscriptions'
+          and column_name = $1
+      ) as present
+    `,
+    [columnName],
+  );
+  return result.rows[0]?.present === true;
+}
 
 async function createClientFixture(
   client: PoolClient,

@@ -12,6 +12,7 @@ import { PlatformAuditInput } from "../../platform/platform-integrity.types";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { CrmPolicy } from "../crm.policy";
 import { RecordActualPaymentDto } from "../dto/record-actual-payment.dto";
+import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { CommerceMutationMetadata } from "./subscription-issue.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 
@@ -26,6 +27,7 @@ export class ActualPaymentService {
     private readonly repository: SubscriptionIssueRepository,
     private readonly policy: CrmPolicy,
     private readonly integrity: PlatformIntegrityService,
+    private readonly commerce: CommerceProjectionRepository,
   ) {}
 
   async record(
@@ -36,6 +38,21 @@ export class ActualPaymentService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     this.assertMetadata(metadata);
+    const scope = await this.commerce.resolveStudentScope(actor, studentId);
+    if (!scope.branchId) {
+      throw new UnprocessableEntityException({
+        code: "PAYMENT_BRANCH_REQUIRED",
+        field: "branchId",
+        message: "Для платежа укажите филиал в карточке ученика.",
+      });
+    }
+    if (dto.branchId !== undefined && dto.branchId !== scope.branchId) {
+      throw new UnprocessableEntityException({
+        code: "PAYMENT_BRANCH_MISMATCH",
+        field: "branchId",
+        message: "Платёж можно провести только в филиале ученика.",
+      });
+    }
     const amountMinor = this.normalizeAmount(dto.amountMinor);
     const occurredAt = new Date(dto.occurredAt);
     if (Number.isNaN(occurredAt.getTime())) {
@@ -66,13 +83,18 @@ export class ActualPaymentService {
       actor.userId,
       metadata.idempotencyKey,
     );
+    const comment = this.optionalText(dto.comment);
+    const invoiceIdentifier = this.optionalText(dto.invoiceIdentifier);
     const normalizedPayload = {
       studentId,
       issuedSubscriptionId: dto.issuedSubscriptionId ?? null,
+      branchId: scope.branchId,
       amountMinor,
       method: dto.method,
       occurredAt: occurredAt.toISOString(),
       currencyCode: dto.currencyCode ?? null,
+      comment,
+      invoiceIdentifier,
     };
     const audit: PlatformAuditInput = {
       action: "crm.actual_payment_recorded",
@@ -82,6 +104,7 @@ export class ActualPaymentService {
         studentId,
         issuedSubscriptionId: dto.issuedSubscriptionId ?? null,
         method: dto.method,
+        branchId: scope.branchId,
       },
     };
     const result =
@@ -142,6 +165,9 @@ export class ActualPaymentService {
             method: dto.method,
             occurredAt,
             actorUserId: actor.userId,
+            branchId: scope.branchId,
+            comment,
+            invoiceIdentifier,
             idempotencyRef:
               `${actor.userId}:${metadata.idempotencyKey}`,
             requestFingerprint: fingerprintPayload({
@@ -188,6 +214,15 @@ export class ActualPaymentService {
         currencyCode: payment.currency,
         method: payment.method,
         occurredAt: payment.payment_date,
+        branchId: payment.branch_id,
+        branchName: payment.branch_name,
+        comment: payment.notes,
+        invoiceIdentifier: payment.invoice_number,
+        status: "paid",
+        acceptedBy: {
+          userId: payment.created_by,
+          name: payment.created_by_name,
+        },
         version: paymentVersion,
         createdAt: payment.created_at,
       },
@@ -211,6 +246,11 @@ export class ActualPaymentService {
       });
     }
     return value.toString();
+  }
+
+  private optionalText(raw: string | undefined): string | null {
+    const value = raw?.trim();
+    return value ? value : null;
   }
 
   private assertMetadata(metadata: CommerceMutationMetadata): void {

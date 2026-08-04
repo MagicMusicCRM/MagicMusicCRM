@@ -234,7 +234,7 @@ flowchart TD
   - **Проверка:** lifecycle × relation matrix, viewport/network assertions, Windows/Android drilldown.
   - **Оценка:** 8 ч · **Зависимости:** V6-402, V6-105 · **Приоритет:** P0.
 
-- [ ] **V6-404** `[REQ-PAYMENT-001]` — Реализовать canonical Client Payments section/form.
+- [x] **V6-404** `[REQ-PAYMENT-001]` — Реализовать canonical Client Payments section/form.
   - **Работа:** balance, income/expense, actual payments, obligations/installments; create route with branch/date/amount/method/status/actors/comment/id and typed discount/surcharge/installment preview.
   - **Критерий:** immutable history not edited; invalid negative/hidden rewrite blocked; retry creates exactly one ledger effect; Manager sees only allowed client finance.
   - **Проверка:** money/idempotency/reconciliation tests, role/scope negative requests, network failure preserves input.

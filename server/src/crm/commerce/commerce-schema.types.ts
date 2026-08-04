@@ -24,6 +24,10 @@ export type IssuedDiscountSnapshot =
       reason: string;
     };
 
+export type IssuedSurchargeSnapshot =
+  | { type: "none" }
+  | { type: "fixed"; amountMinor: string; reason: string };
+
 export interface IssuedCommercialSnapshot {
   snapshotVersion: number;
   packageVersion: number;
@@ -33,6 +37,7 @@ export interface IssuedCommercialSnapshot {
   basePriceMinor: string;
   currencyCode: CurrencyCode;
   discount: IssuedDiscountSnapshot;
+  surcharge?: IssuedSurchargeSnapshot;
   finalPriceMinor: string;
   installments?: {
     installmentNumber: number;

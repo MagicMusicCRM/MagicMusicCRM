@@ -468,10 +468,6 @@ extension _ClientCardTabsA on _ClientCardState {
                 ),
               ]),
             ],
-            if (_balance != null) ...[
-              const SizedBox(height: AppSpace.lg),
-              _buildLedgerSection(cs),
-            ],
             const SizedBox(height: AppSpace.lg),
             _studentGroupsInfoCard(groups: _groups),
           ],

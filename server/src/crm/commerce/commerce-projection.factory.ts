@@ -8,6 +8,7 @@ import {
   CommerceDiscountDto,
   CommerceProjectionScope,
   CommerceProjectionSource,
+  CommerceSurchargeDto,
   CommerceStudentDto,
 } from "./commerce-projection.types";
 
@@ -59,6 +60,10 @@ export class CommerceProjectionFactory {
           actor,
           subscription.terms.discount,
         ),
+        surcharge: this.projectSurcharge(
+          actor,
+          subscription.terms.surcharge ?? { type: "none" },
+        ),
       },
       installments: subscription.installments.map((installment) => {
         return {
@@ -93,6 +98,12 @@ export class CommerceProjectionFactory {
         method: movement.method,
         factType: movement.factType,
         chargeType: movement.chargeType,
+        branchId: movement.branchId ?? null,
+        branchName: movement.branchName ?? null,
+        comment: movement.comment ?? null,
+        invoiceIdentifier: movement.invoiceIdentifier ?? null,
+        status: movement.status ?? null,
+        acceptedByName: movement.acceptedByName ?? null,
       })),
     };
   }
@@ -123,6 +134,22 @@ export class CommerceProjectionFactory {
           fixedMinor: discount.fixedMinor,
           ...(typeof discount.reason === "string"
             ? { reason: discount.reason }
+            : {}),
+        };
+  }
+
+  private projectSurcharge(
+    actor: ActorContext,
+    surcharge: CommerceSurchargeDto,
+  ): CommerceSurchargeDto {
+    if (surcharge.type === "none") return { type: "none" };
+    return actor.role === "client"
+      ? { type: "fixed", amountMinor: surcharge.amountMinor }
+      : {
+          type: "fixed",
+          amountMinor: surcharge.amountMinor,
+          ...(typeof surcharge.reason === "string"
+            ? { reason: surcharge.reason }
             : {}),
         };
   }

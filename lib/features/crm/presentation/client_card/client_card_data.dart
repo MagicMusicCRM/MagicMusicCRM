@@ -222,6 +222,7 @@ extension _ClientCardData on _ClientCardState {
         // therefore performs zero commerce requests and still cannot surface
         // stale/accidental balance, payment or subscription fields.
         _balance = commerce?.student.primaryBalance;
+        _commerceStudent = commerce?.student;
         _subscriptions =
             commerce?.student.subscriptionModels ?? const <Subscription>[];
         _payments = commerce?.student.paymentModels ?? const <Payment>[];

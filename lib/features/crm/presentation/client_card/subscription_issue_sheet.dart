@@ -95,6 +95,8 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
   final _discountValueController = TextEditingController();
   final _discountReasonController = TextEditingController();
   final _paymentAmountController = TextEditingController();
+  final _surchargeAmountController = TextEditingController();
+  final _surchargeReasonController = TextEditingController();
 
   late final BigInt _basePriceMinor;
   late final String _currencyCode;
@@ -107,6 +109,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
       SubscriptionIssueDiscountMode.none;
   SubscriptionPaymentMethod _paymentMethod = SubscriptionPaymentMethod.cash;
   bool _useInstallments = false;
+  bool _useSurcharge = false;
   bool _recordPayment = false;
   bool _paymentAmountTouched = false;
   int _installmentCount = 2;
@@ -136,6 +139,8 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     _discountValueController.dispose();
     _discountReasonController.dispose();
     _paymentAmountController.dispose();
+    _surchargeAmountController.dispose();
+    _surchargeReasonController.dispose();
     _exitController.dispose();
     super.dispose();
   }
@@ -168,7 +173,16 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
 
   BigInt? get _finalPriceMinor {
     final discount = _discountMinor;
-    return discount == null ? null : _basePriceMinor - discount;
+    final surcharge = _surchargeMinor;
+    return discount == null || surcharge == null
+        ? null
+        : _basePriceMinor - discount + surcharge;
+  }
+
+  BigInt? get _surchargeMinor {
+    if (!_useSurcharge) return BigInt.zero;
+    final value = _parseMoneyMinor(_surchargeAmountController.text);
+    return value == null || value <= BigInt.zero ? null : value;
   }
 
   void _selectDiscountMode(SubscriptionIssueDiscountMode mode) {
@@ -239,6 +253,19 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     return null;
   }
 
+  String? _validateSurchargeAmount(String? raw) {
+    if (!_useSurcharge) return null;
+    final amount = _parseMoneyMinor(raw ?? '');
+    return amount == null || amount <= BigInt.zero
+        ? 'Введите положительную сумму'
+        : null;
+  }
+
+  String? _validateSurchargeReason(String? raw) {
+    if (!_useSurcharge) return null;
+    return (raw ?? '').trim().isEmpty ? 'Укажите причину доплаты' : null;
+  }
+
   List<SubscriptionInstallmentInput> _installments(BigInt finalPrice) {
     if (!_useInstallments) return const <SubscriptionInstallmentInput>[];
     final count = _installmentCount;
@@ -287,6 +314,12 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
         discount: discount,
         installments: _installments(finalPrice),
         paymentMethod: payment?.method,
+        surcharge: _useSurcharge
+            ? SubscriptionSurchargeInput(
+                amountMinor: _surchargeMinor!,
+                reason: _surchargeReasonController.text,
+              )
+            : null,
       ),
       issueIdentity: _issueIdentity,
       payment: payment,
@@ -345,6 +378,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
   Widget build(BuildContext context) {
     final finalPrice = _finalPriceMinor;
     final discount = _discountMinor;
+    final surcharge = _surchargeMinor;
     final installmentItems = finalPrice == null
         ? const <SubscriptionInstallmentInput>[]
         : _installments(finalPrice);
@@ -364,6 +398,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
               packageName: widget.package['name']?.toString() ?? 'Абонемент',
               basePriceMinor: _basePriceMinor,
               discountMinor: discount,
+              surchargeMinor: surcharge,
               finalPriceMinor: finalPrice,
               currencyCode: _currencyCode,
             ),
@@ -439,6 +474,60 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
                     isDense: true,
                   ),
                   validator: _validateReason,
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpace.lg),
+            _OptionCard(
+              key: const Key('subscription-surcharge-toggle'),
+              icon: Icons.add_circle_outline_rounded,
+              title: 'Доплата',
+              subtitle: 'Добавить обоснованную сумму к стоимости абонемента',
+              value: _useSurcharge,
+              enabled: _fieldsEnabled,
+              onChanged: (value) => setState(() {
+                _useSurcharge = value;
+                _error = null;
+                _syncUntouchedPaymentAmount();
+                _exitController.markDirty();
+              }),
+            ),
+            if (_useSurcharge) ...[
+              const SizedBox(height: AppSpace.md),
+              _AdaptivePair(
+                first: TextFormField(
+                  key: const Key('subscription-surcharge-amount'),
+                  controller: _surchargeAmountController,
+                  enabled: _fieldsEnabled,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                  ],
+                  decoration: clientCardInputDecoration(
+                    Theme.of(context).colorScheme,
+                    label: 'Доплата, ₽',
+                    isDense: true,
+                  ),
+                  validator: _validateSurchargeAmount,
+                  onChanged: (_) => _pricingChanged(),
+                ),
+                second: TextFormField(
+                  key: const Key('subscription-surcharge-reason'),
+                  controller: _surchargeReasonController,
+                  enabled: _fieldsEnabled,
+                  maxLength: 500,
+                  decoration: clientCardInputDecoration(
+                    Theme.of(context).colorScheme,
+                    label: 'Причина доплаты',
+                    hint: 'Например: дополнительное занятие',
+                    isDense: true,
+                  ),
+                  validator: _validateSurchargeReason,
                   onChanged: (_) {
                     if (_error != null) setState(() => _error = null);
                   },
@@ -607,6 +696,7 @@ class _PriceSummary extends StatelessWidget {
     required this.packageName,
     required this.basePriceMinor,
     required this.discountMinor,
+    required this.surchargeMinor,
     required this.finalPriceMinor,
     required this.currencyCode,
   });
@@ -614,6 +704,7 @@ class _PriceSummary extends StatelessWidget {
   final String packageName;
   final BigInt basePriceMinor;
   final BigInt? discountMinor;
+  final BigInt? surchargeMinor;
   final BigInt? finalPriceMinor;
   final String currencyCode;
 
@@ -649,6 +740,12 @@ class _PriceSummary extends StatelessWidget {
             value: discountMinor == null
                 ? '—'
                 : '−${_formatMinor(discountMinor!, currencyCode)}',
+          ),
+          _PriceLine(
+            label: 'Доплата',
+            value: surchargeMinor == null || surchargeMinor == BigInt.zero
+                ? '—'
+                : '+${_formatMinor(surchargeMinor!, currencyCode)}',
           ),
           const Divider(height: AppSpace.lg, color: AppColor.divider),
           _PriceLine(

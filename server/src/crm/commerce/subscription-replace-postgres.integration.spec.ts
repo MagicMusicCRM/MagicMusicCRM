@@ -14,6 +14,7 @@ import { PlatformIntegrityService } from "../../platform/platform-integrity.serv
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import { ActualPaymentService } from "./actual-payment.service";
+import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
@@ -77,6 +78,7 @@ describe("Subscription replacement preview/confirm", () => {
       issueRepository,
       policy,
       integrity,
+      new CommerceProjectionRepository(database),
     );
     lifecycleService = new SubscriptionLifecycleService(
       new SubscriptionLifecycleRepository(database),
@@ -676,6 +678,11 @@ async function createFixture(pool: Pool) {
       `,
       [clientUser.rows[0]!.id],
     );
+    const branch = await client.query<{ id: string }>(
+      `insert into app.branches (name, timezone_name)
+       values ($1, 'Europe/Moscow') returning id`,
+      [`${marker}-branch`],
+    );
     const otherProfile = await client.query<{ id: string }>(
       `
         insert into app.profiles (user_id, first_name, last_name)
@@ -686,11 +693,11 @@ async function createFixture(pool: Pool) {
     );
     const student = await client.query<{ id: string }>(
       `
-        insert into app.students (profile_id, status)
-        values ($1, 'active')
+        insert into app.students (profile_id, status, branch_id)
+        values ($1, 'active', $2)
         returning id
       `,
-      [profile.rows[0]!.id],
+      [profile.rows[0]!.id, branch.rows[0]!.id],
     );
     const otherStudent = await client.query<{ id: string }>(
       `
@@ -907,6 +914,9 @@ async function cleanupFixture(
       fixture.userIds,
       "uuid",
     );
+    await client.query("delete from app.branches where name = $1", [
+      `${marker}-branch`,
+    ]);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");

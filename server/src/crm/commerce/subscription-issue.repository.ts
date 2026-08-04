@@ -60,6 +60,12 @@ export interface ActualPaymentRow {
   currency: string;
   method: "cash" | "cashless";
   payment_date: Date | string;
+  branch_id: string | null;
+  branch_name: string | null;
+  notes: string | null;
+  invoice_number: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
   created_at: Date | string;
 }
 
@@ -160,6 +166,8 @@ export class SubscriptionIssueRepository {
           discount_percent_basis_points,
           discount_fixed_minor,
           discount_reason,
+          surcharge_minor,
+          surcharge_reason,
           final_price_minor,
           version
         )
@@ -185,8 +193,10 @@ export class SubscriptionIssueRepository {
           $11,
           $12::text::bigint,
           $13,
-          $14::bigint,
-          $15
+          $14::text::bigint,
+          $15,
+          $16::bigint,
+          $17
         )
         returning
           id,
@@ -215,6 +225,12 @@ export class SubscriptionIssueRepository {
         input.discount.percentBasisPoints,
         input.discount.fixedMinor,
         input.discount.reason,
+        input.snapshot.surcharge?.type === "fixed"
+          ? input.snapshot.surcharge.amountMinor
+          : null,
+        input.snapshot.surcharge?.type === "fixed"
+          ? input.snapshot.surcharge.reason
+          : null,
         input.finalPriceMinor,
         input.version,
       ],
@@ -470,6 +486,9 @@ export class SubscriptionIssueRepository {
       method: "cash" | "cashless";
       occurredAt: Date;
       actorUserId: string;
+      branchId: string | null;
+      comment: string | null;
+      invoiceIdentifier: string | null;
       idempotencyRef: string;
       requestFingerprint: string;
     },
@@ -484,6 +503,8 @@ export class SubscriptionIssueRepository {
           payment_date,
           method,
           notes,
+          branch_id,
+          invoice_number,
           created_by,
           issued_subscription_id,
           idempotency_ref,
@@ -496,11 +517,13 @@ export class SubscriptionIssueRepository {
           $4,
           $5,
           $6,
-          'Оплата абонемента',
           $7,
           $8,
           $9,
-          $10
+          $10,
+          $11,
+          $12,
+          $13
         )
         returning
           id,
@@ -510,6 +533,12 @@ export class SubscriptionIssueRepository {
           currency,
           method,
           payment_date,
+          branch_id,
+          null::text as branch_name,
+          notes,
+          invoice_number,
+          created_by,
+          null::text as created_by_name,
           created_at
       `,
       [
@@ -519,6 +548,9 @@ export class SubscriptionIssueRepository {
         input.currencyCode,
         input.occurredAt,
         input.method,
+        input.comment,
+        input.branchId,
+        input.invoiceIdentifier,
         input.actorUserId,
         input.issuedSubscriptionId,
         input.idempotencyRef,
@@ -532,18 +564,30 @@ export class SubscriptionIssueRepository {
     const result = await this.database.query<ActualPaymentRow>(
       `
         select
-          id,
-          student_id,
-          issued_subscription_id,
-          amount_minor,
-          currency,
-          method,
-          payment_date,
-          created_at
-        from app.payments
-        where id = $1
-          and amount_minor is not null
-          and idempotency_ref is not null
+          payment.id,
+          payment.student_id,
+          payment.issued_subscription_id,
+          payment.amount_minor,
+          payment.currency,
+          payment.method,
+          payment.payment_date,
+          payment.branch_id,
+          branch.name as branch_name,
+          payment.notes,
+          payment.invoice_number,
+          payment.created_by,
+          nullif(btrim(
+            coalesce(author.first_name, '') || ' ' ||
+            coalesce(author.last_name, '')
+          ), '') as created_by_name,
+          payment.created_at
+        from app.payments payment
+        left join app.branches branch on branch.id = payment.branch_id
+        left join app.users creator on creator.id = payment.created_by
+        left join app.profiles author on author.user_id = creator.id
+        where payment.id = $1
+          and payment.amount_minor is not null
+          and payment.idempotency_ref is not null
       `,
       [paymentId],
     );

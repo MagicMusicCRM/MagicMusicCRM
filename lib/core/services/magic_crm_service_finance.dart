@@ -82,18 +82,35 @@ class SubscriptionInstallmentInput {
   };
 }
 
+class SubscriptionSurchargeInput {
+  const SubscriptionSurchargeInput({
+    required this.amountMinor,
+    required this.reason,
+  });
+
+  final BigInt amountMinor;
+  final String reason;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'amountMinor': amountMinor.toString(),
+    'reason': reason.trim(),
+  };
+}
+
 class IssueSubscriptionInput {
   const IssueSubscriptionInput({
     required this.packageId,
     this.discount,
     this.installments = const <SubscriptionInstallmentInput>[],
     this.paymentMethod,
+    this.surcharge,
   });
 
   final String packageId;
   final SubscriptionDiscountInput? discount;
   final List<SubscriptionInstallmentInput> installments;
   final SubscriptionPaymentMethod? paymentMethod;
+  final SubscriptionSurchargeInput? surcharge;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'packageId': packageId,
@@ -103,6 +120,7 @@ class IssueSubscriptionInput {
           .map((installment) => installment.toJson())
           .toList(growable: false),
     if (paymentMethod != null) 'paymentMethod': paymentMethod!.apiValue,
+    if (surcharge != null) 'surcharge': surcharge!.toJson(),
   };
 }
 
@@ -113,6 +131,9 @@ class RecordSubscriptionPaymentInput {
     required this.occurredAt,
     this.issuedSubscriptionId,
     this.currencyCode,
+    this.branchId,
+    this.comment,
+    this.invoiceIdentifier,
   });
 
   final String? issuedSubscriptionId;
@@ -120,6 +141,9 @@ class RecordSubscriptionPaymentInput {
   final SubscriptionPaymentMethod method;
   final DateTime occurredAt;
   final String? currencyCode;
+  final String? branchId;
+  final String? comment;
+  final String? invoiceIdentifier;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     if (issuedSubscriptionId != null)
@@ -128,6 +152,11 @@ class RecordSubscriptionPaymentInput {
     'method': method.apiValue,
     'occurredAt': occurredAt.toUtc().toIso8601String(),
     if (currencyCode != null) 'currencyCode': currencyCode,
+    if (branchId != null) 'branchId': branchId,
+    if (comment != null && comment!.trim().isNotEmpty)
+      'comment': comment!.trim(),
+    if (invoiceIdentifier != null && invoiceIdentifier!.trim().isNotEmpty)
+      'invoiceIdentifier': invoiceIdentifier!.trim(),
   };
 }
 
@@ -779,11 +808,7 @@ extension MagicCrmFinance on MagicCrmService {
   }) {
     return _api.get<Map<String, dynamic>>(
       '/analytics/v4/lesson-success',
-      queryParameters: _v4ReportQuery(
-        branchId: branchId,
-        from: from,
-        to: to,
-      ),
+      queryParameters: _v4ReportQuery(branchId: branchId, from: from, to: to),
     );
   }
 
@@ -794,11 +819,7 @@ extension MagicCrmFinance on MagicCrmService {
   }) {
     return _api.get<Map<String, dynamic>>(
       '/analytics/v4/school-finance',
-      queryParameters: _v4ReportQuery(
-        branchId: branchId,
-        from: from,
-        to: to,
-      ),
+      queryParameters: _v4ReportQuery(branchId: branchId, from: from, to: to),
     );
   }
 
@@ -1541,12 +1562,7 @@ class V4ReportExportResult {
     required String jobId,
     required String status,
     required int rowCount,
-  }) : this._(
-         mode: 'async',
-         jobId: jobId,
-         status: status,
-         rowCount: rowCount,
-       );
+  }) : this._(mode: 'async', jobId: jobId, status: status, rowCount: rowCount);
 
   final String mode;
   final List<int>? bytes;

@@ -50,6 +50,16 @@ export class IssueSubscriptionInstallmentDto {
   amountMinor: string;
 }
 
+export class IssueSubscriptionSurchargeDto {
+  @IsString()
+  @Matches(/^[1-9]\d*$/)
+  amountMinor: string;
+
+  @IsString()
+  @MaxLength(500)
+  reason: string;
+}
+
 export class IssueSubscriptionDto {
   @IsUUID()
   packageId: string;
@@ -58,6 +68,11 @@ export class IssueSubscriptionDto {
   @ValidateNested()
   @Type(() => IssueSubscriptionDiscountDto)
   discount?: IssueSubscriptionDiscountDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => IssueSubscriptionSurchargeDto)
+  surcharge?: IssueSubscriptionSurchargeDto;
 
   @IsOptional()
   @IsArray()

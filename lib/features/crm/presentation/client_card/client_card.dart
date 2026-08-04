@@ -8,7 +8,6 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/top_up_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
@@ -43,6 +42,7 @@ import 'subscription_issue_sheet.dart';
 import 'subscription_replace_sheet.dart';
 import 'student_schedule_section.dart';
 import 'client_schedule_calendar.dart';
+import 'client_payment_form.dart';
 
 part 'client_card_widgets.dart';
 part 'client_card_display.dart';
@@ -101,19 +101,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // Тип нового комментария (0037): admin_comment | teacher_note. Переключатель
   // виден staff-ролям и только когда комментарий уйдёт на ученик-половину.
   String _commentKind = 'admin_comment';
-  // Личный счёт (KVA-235): 0 = Приход, 1 = Расход; ключ перегружает FutureBuilder.
-  int _ledgerTab = 0;
-  int _ledgerRefreshKey = 0;
-  // Cached so card rebuilds (keystrokes, tab switches, Приход/Расход toggle)
-  // don't re-fetch the ledger — an inline future restarts a FutureBuilder on
-  // every build. Reset to null by _refreshLedger.
-  Future<Map<String, dynamic>>? _ledgerFuture;
   // Resolved status list: either the one passed in or self-fetched.
   List<StatusRecord> _statuses = const [];
   bool _saving = false;
   bool _converting = false;
   bool _replacingSubscription = false;
   bool _cancellingSubscription = false;
+  bool _creatingPayment = false;
   bool _loadingCard = true;
   int _commentsRefreshKey = 0;
   // Bumped after a homework is assigned so the «Прогресс» tab refetches.
@@ -214,6 +208,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   StudentBalance? _balance;
   List<Subscription> _subscriptions = [];
   List<Payment> _payments = [];
+  CommerceStudent? _commerceStudent;
   List<Lesson> _lessons = [];
   List<Map<String, dynamic>> _studentTasks = [];
   // Unified comment stream folded into the «История» merge — the «Комментарии»

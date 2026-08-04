@@ -30,6 +30,10 @@ export type CommerceDiscountDto =
       reason?: string;
     };
 
+export type CommerceSurchargeDto =
+  | { type: "none" }
+  | { type: "fixed"; amountMinor: string; reason?: string };
+
 export interface CommerceInstallmentDto {
   installmentNumber: number;
   dueAt: string;
@@ -55,6 +59,7 @@ export interface CommerceSubscriptionDto {
     finalPriceMinor: string;
     currencyCode: string;
     discount: CommerceDiscountDto;
+    surcharge?: CommerceSurchargeDto;
   };
   installments: CommerceInstallmentDto[];
 }
@@ -74,6 +79,12 @@ export interface CommerceMovementDto {
   method: "cash" | "cashless" | null;
   factType: string | null;
   chargeType: string | null;
+  branchId?: string | null;
+  branchName?: string | null;
+  comment?: string | null;
+  invoiceIdentifier?: string | null;
+  status?: "paid" | "pending" | "void" | null;
+  acceptedByName?: string | null;
 }
 
 export interface CommerceStudentDto {

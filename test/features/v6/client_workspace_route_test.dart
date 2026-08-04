@@ -68,7 +68,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(Dialog), findsNothing);
-        expect(find.text('Оплат не найдено'), findsOneWidget);
+        expect(find.byKey(const Key('client-payments-tab')), findsOneWidget);
+        expect(find.text('Оплаты и личный счёт'), findsOneWidget);
         expect(find.text('Обзор'), findsOneWidget);
         expect(find.text('Занятия'), findsOneWidget);
         expect(find.text('Абонементы'), findsOneWidget);
@@ -350,7 +351,7 @@ void main() {
       router.routeInformationProvider.value.uri.queryParameters['section'],
       'payments',
     );
-    expect(find.text('Оплат не найдено'), findsOneWidget);
+    expect(find.byKey(const Key('client-payments-tab')), findsOneWidget);
     expect(api.studentCardLoadCount, 1);
   });
 

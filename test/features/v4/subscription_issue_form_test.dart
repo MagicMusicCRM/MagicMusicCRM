@@ -129,6 +129,10 @@ void main() {
             ),
           ],
           paymentMethod: SubscriptionPaymentMethod.cashless,
+          surcharge: SubscriptionSurchargeInput(
+            amountMinor: BigInt.from(50000),
+            reason: 'Дополнительный урок',
+          ),
         ),
         identity: issueIdentity,
       );
@@ -161,6 +165,7 @@ void main() {
           {'dueAt': '2026-09-01T12:00:00.000Z', 'amountMinor': '320000'},
         ],
         'paymentMethod': 'cashless',
+        'surcharge': {'amountMinor': '50000', 'reason': 'Дополнительный урок'},
       });
       expect(api.calls.last.path, endsWith('/subscription-payments'));
       expect(api.calls.last.identity, same(paymentIdentity));
@@ -175,7 +180,7 @@ void main() {
   );
 
   testWidgets(
-    'narrow form calculates 8000 - 20%, exact installments and stable retry',
+    'narrow form calculates discount + surcharge, installments and stable retry',
     (tester) async {
       final submissions = <SubscriptionIssueSubmission>[];
       await _openIssueSheet(
@@ -208,6 +213,24 @@ void main() {
       expect(
         _textsInside(tester, find.byKey(const Key('subscription-issue-final'))),
         contains('6 400 ₽'),
+      );
+
+      await _tapVisible(
+        tester,
+        find.byKey(const Key('subscription-surcharge-toggle')),
+      );
+      await tester.enterText(
+        find.byKey(const Key('subscription-surcharge-amount')),
+        '600',
+      );
+      await tester.enterText(
+        find.byKey(const Key('subscription-surcharge-reason')),
+        'Дополнительный урок',
+      );
+      await tester.pump();
+      expect(
+        _textsInside(tester, find.byKey(const Key('subscription-issue-final'))),
+        contains('7 000 ₽'),
       );
 
       await _tapVisible(tester, find.text('Рассрочка'));
@@ -265,7 +288,11 @@ void main() {
         'reason': 'Семейная скидка',
       });
       expect(first.issue.toJson()['paymentMethod'], 'cashless');
-      expect(first.payment!.amountMinor, BigInt.from(640000));
+      expect(first.issue.toJson()['surcharge'], {
+        'amountMinor': '60000',
+        'reason': 'Дополнительный урок',
+      });
+      expect(first.payment!.amountMinor, BigInt.from(700000));
 
       final installments = first.issue.installments;
       expect(installments, hasLength(2));
@@ -274,7 +301,7 @@ void main() {
           BigInt.zero,
           (sum, item) => sum + item.amountMinor,
         ),
-        BigInt.from(640000),
+        BigInt.from(700000),
       );
       expect(
         installments.every((item) => item.amountMinor > BigInt.zero),

@@ -206,7 +206,36 @@ extension _ClientCardStudent on _ClientCardState {
 
   // ── Student tab: Оплаты ──────────────────────────────────────────────────
   Widget _buildPaymentsTab(ColorScheme cs) {
-    return _studentGuard(cs, () => _paymentsView(cs, payments: _payments));
+    return _studentGuard(
+      cs,
+      () => _paymentsView(
+        cs,
+        commerce: _commerceStudent,
+        fallbackPayments: _payments,
+        creating: _creatingPayment,
+        branchId: _clientBranchId,
+        branchName: _nonEmpty(_student?['branch_name']) ?? 'Филиал не указан',
+        onCreate: () => _emitState(() => _creatingPayment = true),
+        onCancel: () => _emitState(() => _creatingPayment = false),
+        onSubmit: _recordClientPayment,
+      ),
+    );
+  }
+
+  Future<void> _recordClientPayment(ClientPaymentSubmission submission) async {
+    await ref
+        .read(magicCrmServiceProvider)
+        .recordSubscriptionPayment(
+          _studentId,
+          input: submission.input,
+          identity: submission.identity,
+        );
+    if (!mounted) return;
+    _emitState(() => _creatingPayment = false);
+    _refreshLedger();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Оплата проведена и добавлена в историю')),
+    );
   }
 
   // ── Student tab: История ─────────────────────────────────────────────────

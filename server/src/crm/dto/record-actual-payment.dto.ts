@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   Matches,
 } from "class-validator";
 
@@ -11,6 +12,10 @@ export class RecordActualPaymentDto {
   @IsOptional()
   @IsUUID()
   issuedSubscriptionId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 
   @IsString()
   @Matches(/^[1-9]\d*$/)
@@ -26,4 +31,14 @@ export class RecordActualPaymentDto {
   @IsString()
   @Matches(/^[A-Z]{3}$/)
   currencyCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  comment?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  invoiceIdentifier?: string;
 }

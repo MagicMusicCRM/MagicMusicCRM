@@ -13,6 +13,7 @@ import { PlatformIntegrityService } from "../../platform/platform-integrity.serv
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import { ActualPaymentService } from "./actual-payment.service";
+import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
@@ -74,6 +75,7 @@ describe("Subscription cancellation preview/confirm", () => {
       issueRepository,
       policy,
       integrity,
+      new CommerceProjectionRepository(database),
     );
     lifecycleService = new SubscriptionLifecycleService(
       new SubscriptionLifecycleRepository(database),
@@ -652,7 +654,16 @@ async function createFixture(pool: Pool) {
     const otherUser = await insertUser(client, "other-student", "client");
     const studentProfile = await insertProfile(client, studentUser);
     const otherProfile = await insertProfile(client, otherUser);
-    const studentId = await insertStudent(client, studentProfile);
+    const branch = await client.query<{ id: string }>(
+      `insert into app.branches (name, timezone_name)
+       values ($1, 'Europe/Moscow') returning id`,
+      [`${marker}-branch`],
+    );
+    const studentId = await insertStudent(
+      client,
+      studentProfile,
+      branch.rows[0]!.id,
+    );
     const otherStudentId = await insertStudent(client, otherProfile);
     const sourcePackageId = await insertPackage(
       client,
@@ -719,14 +730,15 @@ async function insertProfile(
 async function insertStudent(
   client: PoolClient,
   profileId: string,
+  branchId?: string,
 ): Promise<string> {
   const result = await client.query<{ id: string }>(
     `
-      insert into app.students (profile_id, status)
-      values ($1, 'active')
+      insert into app.students (profile_id, status, branch_id)
+      values ($1, 'active', $2)
       returning id
     `,
-    [profileId],
+    [profileId, branchId ?? null],
   );
   return result.rows[0]!.id;
 }
@@ -861,6 +873,9 @@ async function cleanupFixture(
       "uuid",
     );
     await deleteByIds(client, "app.users", "id", fixture.userIds, "uuid");
+    await client.query("delete from app.branches where name = $1", [
+      `${marker}-branch`,
+    ]);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");

@@ -14,10 +14,12 @@ import {
   IssueSubscriptionDiscountDto,
   IssueSubscriptionDto,
   IssueSubscriptionInstallmentDto,
+  IssueSubscriptionSurchargeDto,
 } from "../dto/issue-subscription.dto";
 import {
   IssuedCommercialSnapshot,
   IssuedDiscountSnapshot,
+  IssuedSurchargeSnapshot,
 } from "./commerce-schema.types";
 import {
   IssueDiscountColumns,
@@ -41,6 +43,11 @@ interface NormalizedDiscount {
   snapshot: IssuedDiscountSnapshot;
   columns: IssueDiscountColumns;
   finalPriceMinor: string;
+}
+
+interface NormalizedSurcharge {
+  snapshot: IssuedSurchargeSnapshot;
+  amountMinor: string;
 }
 
 @Injectable()
@@ -114,13 +121,19 @@ export class SubscriptionIssueService {
             dto.discount,
             packageRow.base_price_minor,
           );
+          const surcharge = this.normalizeSurcharge(dto.surcharge);
+          const finalPriceMinor = (
+            BigInt(discount.finalPriceMinor) + BigInt(surcharge.amountMinor)
+          ).toString();
           const installments = this.normalizeInstallments(
             dto.installments,
-            discount.finalPriceMinor,
+            finalPriceMinor,
           );
           const snapshot = this.createSnapshot(
             packageRow,
             discount,
+            surcharge,
+            finalPriceMinor,
             installments,
             dto.paymentMethod ?? null,
           );
@@ -131,7 +144,7 @@ export class SubscriptionIssueService {
               package: packageRow,
               snapshot,
               discount: discount.columns,
-              finalPriceMinor: discount.finalPriceMinor,
+              finalPriceMinor,
               version: nextVersion,
             });
           await this.repository.createInstallments(client, {
@@ -143,7 +156,7 @@ export class SubscriptionIssueService {
             studentId,
             issuedSubscriptionId: subscription.id,
             currencyCode: packageRow.currency_code,
-            finalPriceMinor: discount.finalPriceMinor,
+            finalPriceMinor,
             installments,
           });
           await this.repository.createIssueLifecycle(client, {
@@ -321,9 +334,44 @@ export class SubscriptionIssueService {
     return installments;
   }
 
+  private normalizeSurcharge(
+    dto: IssueSubscriptionSurchargeDto | undefined,
+  ): NormalizedSurcharge {
+    if (!dto) return { snapshot: { type: "none" }, amountMinor: "0" };
+    const reason = dto.reason?.trim();
+    if (!reason) {
+      throw new UnprocessableEntityException({
+        code: "SURCHARGE_REASON_REQUIRED",
+        field: "surcharge.reason",
+        message: "Для доплаты обязательно укажите причину.",
+      });
+    }
+    if (!/^[1-9]\d*$/.test(dto.amountMinor)) {
+      throw new UnprocessableEntityException({
+        code: "SURCHARGE_AMOUNT_INVALID",
+        field: "surcharge.amountMinor",
+        message: "Доплата должна быть положительной суммой.",
+      });
+    }
+    const amount = BigInt(dto.amountMinor);
+    if (amount > 999_999_999_999n) {
+      throw new UnprocessableEntityException({
+        code: "SURCHARGE_AMOUNT_OUT_OF_RANGE",
+        field: "surcharge.amountMinor",
+        message: "Доплата выходит за допустимый диапазон.",
+      });
+    }
+    return {
+      snapshot: { type: "fixed", amountMinor: amount.toString(), reason },
+      amountMinor: amount.toString(),
+    };
+  }
+
   private createSnapshot(
     packageRow: IssuePackageRow,
     discount: NormalizedDiscount,
+    surcharge: NormalizedSurcharge,
+    finalPriceMinor: string,
     installments: PlannedInstallment[],
     paymentMethod: "cash" | "cashless" | null,
   ): IssuedCommercialSnapshot {
@@ -336,7 +384,8 @@ export class SubscriptionIssueService {
       basePriceMinor: packageRow.base_price_minor,
       currencyCode: packageRow.currency_code,
       discount: discount.snapshot,
-      finalPriceMinor: discount.finalPriceMinor,
+      surcharge: surcharge.snapshot,
+      finalPriceMinor,
       installments: installments.map((item) => ({
         installmentNumber: item.installmentNumber,
         dueAt: item.dueAt.toISOString(),

@@ -330,7 +330,12 @@ export class CommerceProjectionRepository {
                 'currencyCode',
                   issued.commercial_snapshot ->> 'currencyCode',
                 'discount',
-                  issued.commercial_snapshot -> 'discount'
+                  issued.commercial_snapshot -> 'discount',
+                'surcharge',
+                  coalesce(
+                    issued.commercial_snapshot -> 'surcharge',
+                    '{"type":"none"}'::jsonb
+                  )
               ),
               'installments', coalesce(
                 installment_projection.items,
@@ -355,12 +360,32 @@ export class CommerceProjectionRepository {
                 'dueAt', installment.due_at,
                 'amountMinor', installment.amount_minor::text,
                 'currencyCode', installment.currency_code,
-                'status', installment.status
+                'status', case
+                  when installment.status = 'void' then 'void'
+                  when installment.paid_minor >= installment.cumulative_minor
+                    then 'paid'
+                  else 'pending'
+                end
               )
               order by installment.installment_number
             ) as items
-            from app.subscription_installments installment
-            where installment.issued_subscription_id = issued.id
+            from (
+              select
+                item.*,
+                sum(
+                  case when item.status = 'void' then 0 else item.amount_minor end
+                ) over (
+                  order by item.installment_number
+                ) as cumulative_minor,
+                coalesce((
+                  select sum(payment.amount_minor)
+                  from app.payments payment
+                  where payment.issued_subscription_id = issued.id
+                    and payment.deleted_at is null
+                ), 0) as paid_minor
+              from app.subscription_installments item
+              where item.issued_subscription_id = issued.id
+            ) installment
           ) installment_projection on true
           where issued.student_id = selected.student_id
             and issued.commercial_snapshot is not null
@@ -376,7 +401,13 @@ export class CommerceProjectionRepository {
               'occurredAt', movement.occurred_at,
               'method', movement.method,
               'factType', movement.fact_type,
-              'chargeType', movement.charge_type
+              'chargeType', movement.charge_type,
+              'branchId', movement.branch_id,
+              'branchName', movement.branch_name,
+              'comment', movement.comment,
+              'invoiceIdentifier', movement.invoice_identifier,
+              'status', movement.status,
+              'acceptedByName', movement.accepted_by_name
             )
             order by movement.occurred_at desc, movement.id desc
           ) as items
@@ -392,8 +423,20 @@ export class CommerceProjectionRepository {
                 payment.payment_date as occurred_at,
                 payment.method::text as method,
                 null::text as fact_type,
-                null::text as charge_type
+                null::text as charge_type,
+                payment.branch_id,
+                branch.name as branch_name,
+                payment.notes as comment,
+                payment.invoice_number as invoice_identifier,
+                'paid'::text as status,
+                nullif(btrim(
+                  coalesce(author.first_name, '') || ' ' ||
+                  coalesce(author.last_name, '')
+                ), '') as accepted_by_name
               from app.payments payment
+              left join app.branches branch on branch.id = payment.branch_id
+              left join app.users creator on creator.id = payment.created_by
+              left join app.profiles author on author.user_id = creator.id
               where payment.student_id = selected.student_id
                 and payment.deleted_at is null
                 and payment.amount_minor is not null
@@ -407,6 +450,12 @@ export class CommerceProjectionRepository {
                 obligation.occurred_at,
                 null::text,
                 obligation.fact_type,
+                null::text,
+                null::uuid,
+                null::text,
+                null::text,
+                null::text,
+                null::text,
                 null::text
               from app.subscription_obligation_facts obligation
               where obligation.student_id = selected.student_id
@@ -420,7 +469,13 @@ export class CommerceProjectionRepository {
                 charge.created_at,
                 null::text,
                 null::text,
-                charge.charge_type
+                charge.charge_type,
+                null::uuid,
+                null::text,
+                null::text,
+                null::text,
+                null::text,
+                null::text
               from app.lesson_client_charge_facts charge
               where charge.client_type = 'student'
                 and charge.client_id = selected.student_id

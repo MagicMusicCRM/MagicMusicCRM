@@ -47,6 +47,8 @@ Map<String, dynamic> _legacyStudent(Map<String, dynamic> item) {
     'lifecycle_state': item['lifecycleState'],
     'lead_id': item['leadId'],
     'status': item['status'],
+    'branch_id': item['branchId'],
+    'branch_name': item['branchName'],
     'custom_data': customData,
     'profile_id': item['profileId'],
     'profile_user_id': item['profileUserId'],
