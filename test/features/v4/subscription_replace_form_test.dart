@@ -232,6 +232,9 @@ void main() {
         statuses: const [],
       );
 
+      await _tapVisible(tester, find.text('Абонементы'));
+      await _pumpFrames(tester);
+
       final replaceAction = find.byKey(
         const Key('subscription-replace-$_issuedId'),
       );

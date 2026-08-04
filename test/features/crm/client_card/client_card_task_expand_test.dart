@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -37,13 +38,17 @@ void main() {
       statuses: const [],
     );
 
-    // Вкладка «Задачи».
-    await tester.tap(find.text('Задачи'));
+    await tester.tap(find.text('История и задачи'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Tab, 'Задачи'));
     await tester.pumpAndSettle();
 
     expect(find.text('Позвонить клиенту'), findsOneWidget);
     // Свёрнутая строка не показывает детали.
-    expect(find.text('Обсудить расписание занятий и удобное время.'), findsNothing);
+    expect(
+      find.text('Обсудить расписание занятий и удобное время.'),
+      findsNothing,
+    );
     expect(find.text('Олег Сидоров'), findsNothing);
 
     await tester.tap(find.text('Позвонить клиенту'));

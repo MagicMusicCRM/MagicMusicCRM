@@ -72,11 +72,7 @@ void main() {
       'entityType': 'client_status_list',
       'entityId': 'lead:new',
       'optionalFocus': {
-        'filter': {
-          'version': 1,
-          'clientType': 'lead',
-          'status': 'new',
-        },
+        'filter': {'version': 1, 'clientType': 'lead', 'status': 'new'},
       },
     });
 
@@ -88,6 +84,28 @@ void main() {
       EntityRouteState.resolved,
     );
   });
+
+  test(
+    'client section deep links round-trip through the canonical registry',
+    () {
+      final registry = EntityRouteRegistry();
+      final link = EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: 'student-1',
+        variant: 'student',
+        optionalFocus: EntityLinkFocus(
+          focus: 'section',
+          filter: const {'section': 'payments'},
+        ),
+      );
+
+      final resolved = registry.resolve(link, snapshot());
+      expect(resolved.location, '/students/student-1?section=payments');
+      final restored = registry.resolveLocation(resolved.location!, snapshot());
+      expect(restored.state, EntityRouteState.resolved);
+      expect(restored.link.optionalFocus?.filter['section'], 'payments');
+    },
+  );
 
   test('policy is fail-closed and teacher client projection is limited', () {
     final registry = EntityRouteRegistry();

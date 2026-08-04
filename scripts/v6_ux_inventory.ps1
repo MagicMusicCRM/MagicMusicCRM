@@ -69,7 +69,7 @@ function Get-FileStateEvidence([string]$Text) {
 }
 
 function Get-ScreenStateContract([string]$Name) {
-  if ($Name -in @('ManagerDashboardScreen', 'AdminDashboardScreen', 'TeacherDashboardScreen', 'ClientPortalScreen')) {
+  if ($Name -in @('ManagerDashboardScreen', 'AdminDashboardScreen', 'TeacherDashboardScreen', 'ClientPortalScreen', 'ClientCardRouteScreen')) {
     return [ordered]@{ kind = 'composition-shell'; reason = 'Mounted sections own loading, empty, error, forbidden and retry states.' }
   }
   if ($Name -in @('RegistrationScreen', 'ProfileScreen', 'PasswordResetScreen', 'LoginScreen', 'EmailOtpScreen', 'OnboardingScreen', 'AccountDeletionScreen')) {

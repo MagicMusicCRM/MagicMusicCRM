@@ -151,6 +151,10 @@ class EntityRouteRegistry {
       );
     }
     final segments = uri.pathSegments;
+    final clientSection = uri.queryParameters['section'];
+    final clientFocus = clientSection == null || clientSection.isEmpty
+        ? null
+        : EntityLinkFocus(focus: 'section', filter: {'section': clientSection});
     EntityLink? link;
     if (segments.length == 2) {
       final id = Uri.decodeComponent(segments[1]);
@@ -158,11 +162,13 @@ class EntityRouteRegistry {
         'student' || 'students' => EntityLink.typed(
           entityType: EntityLinkType.client,
           entityId: id,
+          optionalFocus: clientFocus,
           variant: 'student',
         ),
         'leads' => EntityLink.typed(
           entityType: EntityLinkType.client,
           entityId: id,
+          optionalFocus: clientFocus,
           variant: 'lead',
         ),
         'lessons' => EntityLink.typed(
@@ -439,7 +445,13 @@ class EntityRouteRegistry {
       isAllowed: (_, snapshot) => snapshot.allows('crm.client.read.basic'),
       buildLocation: (link, _) {
         final segment = link.rawEntityType == 'lead' ? 'leads' : 'students';
-        return '/$segment/${Uri.encodeComponent(link.entityId)}';
+        final section = link.optionalFocus?.filter['section']?.toString();
+        return Uri(
+          pathSegments: ['', segment, link.entityId],
+          queryParameters: section == null || section.isEmpty
+              ? null
+              : {'section': section},
+        ).toString();
       },
     ),
     EntityLinkType.lesson: EntityRouteRegistration(

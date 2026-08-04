@@ -493,7 +493,7 @@ extension _ClientCardData on _ClientCardState {
         });
       }
       if (mounted && closeOnSuccess) {
-        Navigator.pop(context, true);
+        _closeCard(true);
       }
       return true;
     } catch (e) {

@@ -50,6 +50,7 @@ part 'client_card_tabs_a.dart';
 part 'client_card_tabs_b.dart';
 part 'client_card_student.dart';
 part 'client_card_editors.dart';
+part 'client_card_workspace_sections.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
 /// Инфо / Задачи / Комментарии / Семья / История). Behaviour is equivalent to
@@ -69,7 +70,16 @@ class ClientCard extends ConsumerStatefulWidget {
     required this.lead,
     this.allStatuses,
     this.entityType = 'lead',
+    this.routed = false,
+    this.initialSection = 'overview',
+    this.onSectionChanged,
+    this.onClose,
   });
+
+  final bool routed;
+  final String initialSection;
+  final ValueChanged<String>? onSectionChanged;
+  final ValueChanged<bool?>? onClose;
 
   @override
   ConsumerState<ClientCard> createState() => _ClientCardState();
@@ -118,12 +128,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _edited = false;
   String? _duplicateDecisionId;
 
-  // Adaptive segmented tab bar. Leads keep the original 5 tabs; students get the
-  // student tab set (Инфо / Задачи / Комментарии / Семья / Занятия / Оплаты /
-  // История). A converted client (lead → student) reuses the student tab set —
-  // its body folds in the lead Инфо/source section and the merged comments /
-  // tasks / history.
-  int _tabIndex = 0;
+  String _selectedSection = 'overview';
 
   // ── Aggregation (Phase 4) ─────────────────────────────────────────────────
   // The card opens for one entity (widget.entityType / widget.lead['id']) but a
@@ -153,31 +158,32 @@ class _ClientCardState extends ConsumerState<ClientCard>
   String get _leadId =>
       _resolvedLeadId ?? (widget.entityType == 'lead' ? _entityId : '');
 
-  static const List<(IconData, String)> _leadTabs = [
-    (Icons.info_outline_rounded, 'Инфо'),
-    (Icons.task_alt_rounded, 'Задачи'),
-    (Icons.forum_outlined, 'Комментарии'),
-    (Icons.people_alt_outlined, 'Семья'),
-    (Icons.auto_graph_rounded, 'Прогресс'),
-    (Icons.history_rounded, 'История'),
+  static const List<(IconData, String, String)> _leadTabs = [
+    (Icons.dashboard_outlined, 'Обзор', 'overview'),
+    (Icons.history_rounded, 'История и задачи', 'history_tasks'),
+    (Icons.people_alt_outlined, 'Контакты', 'contacts'),
+    (Icons.folder_outlined, 'Документы', 'documents'),
+    (Icons.tune_rounded, 'Доп. поля', 'custom_fields'),
   ];
 
-  static const List<(IconData, String)> _studentTabs = [
-    (Icons.info_outline_rounded, 'Инфо'),
-    (Icons.task_alt_rounded, 'Задачи'),
-    (Icons.forum_outlined, 'Комментарии'),
-    (Icons.people_alt_outlined, 'Семья'),
-    (Icons.event_note_rounded, 'Занятия'),
-    (Icons.account_balance_wallet_rounded, 'Оплаты'),
-    (Icons.history_rounded, 'История'),
-    (Icons.auto_graph_rounded, 'Прогресс'),
+  static const List<(IconData, String, String)> _studentTabs = [
+    (Icons.dashboard_outlined, 'Обзор', 'overview'),
+    (Icons.event_note_rounded, 'Занятия', 'lessons'),
+    (Icons.account_balance_wallet_rounded, 'Оплаты', 'payments'),
+    (Icons.confirmation_number_outlined, 'Абонементы', 'subscriptions'),
+    (Icons.history_rounded, 'История и задачи', 'history_tasks'),
+    (Icons.people_alt_outlined, 'Контакты', 'contacts'),
+    (Icons.folder_outlined, 'Документы', 'documents'),
+    (Icons.tune_rounded, 'Доп. поля', 'custom_fields'),
   ];
 
-  List<(IconData, String)> _tabsFor({required bool canReadClientFinance}) {
+  List<(IconData, String, String)> _tabsFor({
+    required bool canReadClientFinance,
+  }) {
     if (!_isStudent) return _leadTabs;
     if (canReadClientFinance) return _studentTabs;
     return _studentTabs
-        .where((tab) => tab.$2 != 'Оплаты')
+        .where((tab) => tab.$3 != 'payments' && tab.$3 != 'subscriptions')
         .toList(growable: false);
   }
 
@@ -225,7 +231,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   Future<void> _handleClose() async {
     if (!_edited) {
-      Navigator.pop(context, _dirty ? true : null);
+      _closeCard(_dirty ? true : null);
       return;
     }
     final leave = await showDialog<bool>(
@@ -249,8 +255,17 @@ class _ClientCardState extends ConsumerState<ClientCard>
       ),
     );
     if (leave == true && mounted) {
-      Navigator.pop(context, _dirty ? true : null);
+      _closeCard(_dirty ? true : null);
     }
+  }
+
+  void _closeCard([bool? result]) {
+    final onClose = widget.onClose;
+    if (onClose != null) {
+      onClose(result);
+      return;
+    }
+    Navigator.pop(context, result);
   }
 
   List<Map<String, dynamic>> _branches = [];
@@ -341,6 +356,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   @override
   void initState() {
     super.initState();
+    _selectedSection = widget.initialSection;
     _leadData = Map<String, dynamic>.from(widget.lead);
     _commentCtrl = TextEditingController();
     if (widget.entityType == 'student') {
@@ -366,6 +382,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
     _fetchDuplicateCandidates();
     _fetchStatusHistory();
     _fetchFamily();
+  }
+
+  @override
+  void didUpdateWidget(covariant ClientCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSection != widget.initialSection) {
+      _selectedSection = widget.initialSection;
+    }
   }
 
   // ── Counterpart resolution (Phase 4) ──────────────────────────────────────
@@ -404,7 +428,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final actorRole = ref.watch(releaseGateStatusProvider).asData?.value.role;
     final canReadClientFinance = crmHasClientCardFinanceAccess(actorRole ?? '');
     final tabs = _tabsFor(canReadClientFinance: canReadClientFinance);
-    final visibleTabIndex = _tabIndex < tabs.length ? _tabIndex : 0;
+    final visibleTabIndex = tabs.indexWhere(
+      (tab) => tab.$3 == _selectedSection,
+    );
+    final selectedIndex = visibleTabIndex < 0 ? 0 : visibleTabIndex;
     final fallbackStatus = _statuses.isNotEmpty
         ? _statuses.first
         : ('new', 'Новый', AppTheme.primaryGold);
@@ -413,84 +440,68 @@ class _ClientCardState extends ConsumerState<ClientCard>
       orElse: () => fallbackStatus,
     );
 
+    final card = Container(
+      width: widget.routed
+          ? double.infinity
+          : (MediaQuery.of(context).size.width * 0.92)
+                .clamp(0.0, 600.0)
+                .toDouble(),
+      height: widget.routed
+          ? double.infinity
+          : MediaQuery.of(context).size.height * 0.85,
+      color: cs.surface,
+      child: Column(
+        children: [
+          _isStudent
+              ? _buildStudentHeader(cs, curStatus)
+              : _buildHeader(cs, curStatus),
+          if (_isBlacklisted) _buildBlacklistBanner(cs),
+          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+          _buildTabBar(cs, tabs, selectedIndex: selectedIndex),
+          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+          Expanded(
+            child: IndexedStack(
+              index: selectedIndex,
+              children: [
+                for (final tab in tabs)
+                  _buildWorkspaceSection(
+                    cs,
+                    curStatus,
+                    tab.$3,
+                    canReadClientFinance: canReadClientFinance,
+                  ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+          _isStudent
+              ? _buildStudentActionBar(
+                  cs,
+                  canReadClientFinance: canReadClientFinance,
+                )
+              : _buildActionBar(cs),
+        ],
+      ),
+    );
     return PopScope(
       canPop: !_edited,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         await _handleClose();
       },
-      child: Dialog(
-        backgroundColor: cs.surface,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        child: Container(
-          // Narrow card width so the form reads as a focused client card
-          // instead of stretching edge-to-edge on wide desktop monitors.
-          width: (MediaQuery.of(context).size.width * 0.92)
-              .clamp(0.0, 600.0)
-              .toDouble(),
-          height: MediaQuery.of(context).size.height * 0.85,
-          color: cs.surface,
-          child: Column(
-            children: [
-              _isStudent
-                  ? _buildStudentHeader(cs, curStatus)
-                  : _buildHeader(cs, curStatus),
-              // ✔ Владелец 17.07: карточка забаненного помечается красным.
-              // Над вкладками, а не внутри одной из них: бан касается всей
-              // карточки, и он не должен зависеть от того, куда сотрудник
-              // успел переключиться.
-              if (_isBlacklisted) _buildBlacklistBanner(cs),
-              Divider(
-                height: 1,
-                color: cs.outlineVariant.withValues(alpha: 0.6),
-              ),
-              _buildTabBar(cs, tabs, selectedIndex: visibleTabIndex),
-              Divider(
-                height: 1,
-                color: cs.outlineVariant.withValues(alpha: 0.6),
-              ),
-              Expanded(
-                child: IndexedStack(
-                  index: visibleTabIndex,
-                  children: _isStudent
-                      ? [
-                          _buildClientInfoTab(cs, curStatus),
-                          _buildStudentTasksTab(cs),
-                          _buildCommentsTab(cs),
-                          _buildFamilyTab(cs),
-                          _buildLessonsTab(cs),
-                          if (canReadClientFinance) _buildPaymentsTab(cs),
-                          _buildStudentHistoryTab(cs),
-                          _buildProgressTab(cs),
-                        ]
-                      : [
-                          _buildClientInfoTab(cs, curStatus),
-                          _buildTasksTab(cs),
-                          _buildCommentsTab(cs),
-                          _buildFamilyTab(cs),
-                          _buildLeadProgressTab(cs),
-                          _buildHistoryTab(cs),
-                        ],
+      child: widget.routed
+          ? card
+          : Dialog(
+              backgroundColor: cs.surface,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                side: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
                 ),
               ),
-              Divider(
-                height: 1,
-                color: cs.outlineVariant.withValues(alpha: 0.6),
-              ),
-              _isStudent
-                  ? _buildStudentActionBar(
-                      cs,
-                      canReadClientFinance: canReadClientFinance,
-                    )
-                  : _buildActionBar(cs),
-            ],
-          ),
-        ),
-      ),
+              child: card,
+            ),
     );
   }
 }

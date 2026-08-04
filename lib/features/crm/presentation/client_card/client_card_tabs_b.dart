@@ -841,9 +841,11 @@ extension _ClientCardTabsB on _ClientCardState {
             ),
           ),
           IconButton(
-            tooltip: 'Закрыть форму',
+            tooltip: widget.routed ? 'Назад' : 'Закрыть форму',
             onPressed: _handleClose,
-            icon: const Icon(Icons.close_rounded),
+            icon: Icon(
+              widget.routed ? Icons.arrow_back_rounded : Icons.close_rounded,
+            ),
             iconSize: 20,
             color: cs.onSurfaceVariant,
           ),

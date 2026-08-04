@@ -255,7 +255,7 @@ extension _ClientCardStudent on _ClientCardState {
               allowed: clientRoleCanArchive(
                 ref.read(releaseGateStatusProvider).asData?.value.role ?? '',
               ),
-              onArchived: () => Navigator.of(context).pop(true),
+              onArchived: () => _closeCard(true),
             ),
             PopupMenuButton<String>(
               enabled: !busy,
@@ -330,7 +330,7 @@ extension _ClientCardStudent on _ClientCardState {
             TextButton(
               onPressed: _saving || _converting ? null : _handleClose,
               style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
-              child: const Text('Отмена'),
+              child: Text(widget.routed ? 'Назад' : 'Отмена'),
             ),
             FilledButton(
               onPressed: busy || _saving || _converting ? null : _save,
@@ -465,7 +465,7 @@ extension _ClientCardStudent on _ClientCardState {
       );
       // Reopen from «Ученики» against the freshly-created student id. This
       // also prevents any stale lead id from being reused by later actions.
-      Navigator.pop(context, true);
+      _closeCard(true);
     } catch (e) {
       if (!mounted) return;
       MagicToast.show(

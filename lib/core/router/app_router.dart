@@ -285,8 +285,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/student/:id',
-        builder: (context, state) =>
-            _StudentDeepLinkScreen(studentId: state.pathParameters['id']!),
+        builder: (context, state) => ClientCardRouteScreen(
+          entityType: 'student',
+          entityId: state.pathParameters['id']!,
+          initialSection: state.uri.queryParameters['section'] ?? 'overview',
+        ),
       ),
       GoRoute(
         path: '/admin/profiles/:id',
@@ -300,13 +303,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       // screen; a cold deep link lands on the role dashboard once closed.
       GoRoute(
         path: '/students/:id',
-        builder: (context, state) =>
-            _StudentDeepLinkScreen(studentId: state.pathParameters['id']!),
+        builder: (context, state) => ClientCardRouteScreen(
+          entityType: 'student',
+          entityId: state.pathParameters['id']!,
+          initialSection: state.uri.queryParameters['section'] ?? 'overview',
+        ),
       ),
       GoRoute(
         path: '/leads/:id',
-        builder: (context, state) =>
-            _LeadDeepLinkScreen(leadId: state.pathParameters['id']!),
+        builder: (context, state) => ClientCardRouteScreen(
+          entityType: 'lead',
+          entityId: state.pathParameters['id']!,
+          initialSection: state.uri.queryParameters['section'] ?? 'overview',
+        ),
       ),
       GoRoute(
         path: '/lessons/:id',
@@ -524,85 +533,6 @@ String _deepLinkHomeRoute(WidgetRef ref) {
   final gate = ref.read(_routeGateStateProvider).gateStatus;
   final role = (gate == null || gate.role.isEmpty) ? 'client' : gate.role;
   return _roleToRoute(role);
-}
-
-/// Lightweight host that presents the unified [showClientCard] for a lead
-/// opened by id (deep link). The card self-fetches its full data (and the lead
-/// status list) from the minimal `{'id': …}` stub (the KVA-175 pattern).
-class _LeadDeepLinkScreen extends ConsumerStatefulWidget {
-  const _LeadDeepLinkScreen({required this.leadId});
-
-  final String leadId;
-
-  @override
-  ConsumerState<_LeadDeepLinkScreen> createState() =>
-      _LeadDeepLinkScreenState();
-}
-
-class _LeadDeepLinkScreenState extends ConsumerState<_LeadDeepLinkScreen> {
-  bool _opened = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
-  }
-
-  Future<void> _open() async {
-    if (_opened || !mounted) return;
-    _opened = true;
-
-    await showClientCard(context, entityType: 'lead', entityId: widget.leadId);
-
-    if (!mounted) return;
-    returnFromDeepLink(context, fallbackLocation: _deepLinkHomeRoute(ref));
-  }
-
-  @override
-  Widget build(BuildContext context) => const _DeepLinkScaffold();
-}
-
-/// Lightweight host that presents the unified [showClientCard] for a student
-/// opened by id (deep link). The card self-fetches its full data from the
-/// minimal `{'id': …}` stub, mirroring the lead deep-link host. Reached both
-/// from raw `/student/:id` & `/students/:id` URLs and from in-app
-/// `context.push('/student/:id')` callers (tasks, finance/debtors, etc.).
-class _StudentDeepLinkScreen extends ConsumerStatefulWidget {
-  const _StudentDeepLinkScreen({required this.studentId});
-
-  final String studentId;
-
-  @override
-  ConsumerState<_StudentDeepLinkScreen> createState() =>
-      _StudentDeepLinkScreenState();
-}
-
-class _StudentDeepLinkScreenState
-    extends ConsumerState<_StudentDeepLinkScreen> {
-  bool _opened = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
-  }
-
-  Future<void> _open() async {
-    if (_opened || !mounted) return;
-    _opened = true;
-
-    await showClientCard(
-      context,
-      entityType: 'student',
-      entityId: widget.studentId,
-    );
-
-    if (!mounted) return;
-    returnFromDeepLink(context, fallbackLocation: _deepLinkHomeRoute(ref));
-  }
-
-  @override
-  Widget build(BuildContext context) => const _DeepLinkScaffold();
 }
 
 /// Compatibility host for old lesson deep links. Lifecycle details are opened

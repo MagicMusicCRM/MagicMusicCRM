@@ -216,7 +216,7 @@ flowchart TD
 
 ## 8. Sprint S4 — Client workspace, lessons & payments
 
-- [ ] **V6-401** `[REQ-CLIENT-001, REQ-NAV-002]` — Перевести client card в canonical full workspace route.
+- [x] **V6-401** `[REQ-CLIENT-001, REQ-NAV-002]` — Перевести client card в canonical full workspace route.
   - **Работа:** desktop full work area, compact full-screen route, stable section deep links and actor-safe capability projection; share existing providers/content.
   - **Критерий:** fixed 600px primary dialog absent; Overview/Lessons/Payments/Subscriptions/History & Tasks/Contacts/Documents/Custom fields route correctly and preserve context.
   - **Проверка:** Admin/Manager/Director + deny cases on 360/840/1200; API trace parity.

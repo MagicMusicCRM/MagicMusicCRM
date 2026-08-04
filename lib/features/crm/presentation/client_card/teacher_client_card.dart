@@ -9,10 +9,14 @@ class TeacherClientCard extends ConsumerStatefulWidget {
     super.key,
     required this.entityType,
     required this.entityId,
+    this.routed = false,
+    this.onClose,
   });
 
   final String entityType;
   final String entityId;
+  final bool routed;
+  final VoidCallback? onClose;
 
   @override
   ConsumerState<TeacherClientCard> createState() => _TeacherClientCardState();
@@ -56,18 +60,18 @@ class _TeacherClientCardState extends ConsumerState<TeacherClientCard> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Dialog(
+    final body = SizedBox(
       key: const ValueKey('teacher-client-card'),
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 720),
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? _TeacherCardError(error: _error!, onRetry: _load)
-            : _body(cs),
-      ),
+      width: widget.routed ? double.infinity : 600,
+      height: widget.routed ? double.infinity : 720,
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? _TeacherCardError(error: _error!, onRetry: _load)
+          : _body(cs),
     );
+    if (widget.routed) return body;
+    return Dialog(clipBehavior: Clip.antiAlias, child: body);
   }
 
   Widget _body(ColorScheme cs) {
@@ -113,9 +117,13 @@ class _TeacherClientCardState extends ConsumerState<TeacherClientCard> {
                 ),
               ),
               IconButton(
-                tooltip: 'Закрыть карточку',
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded),
+                tooltip: widget.routed ? 'Назад' : 'Закрыть карточку',
+                onPressed: widget.onClose ?? () => Navigator.of(context).pop(),
+                icon: Icon(
+                  widget.routed
+                      ? Icons.arrow_back_rounded
+                      : Icons.close_rounded,
+                ),
               ),
             ],
           ),

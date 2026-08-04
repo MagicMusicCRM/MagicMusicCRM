@@ -189,6 +189,9 @@ void main() {
         statuses: const [],
       );
 
+      await _tapVisible(tester, find.text('Абонементы'));
+      await _pumpFrames(tester);
+
       await _tapVisible(
         tester,
         find.byKey(const Key('subscription-cancel-$_issuedId')),

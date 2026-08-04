@@ -153,9 +153,11 @@ extension _ClientCardTabsA on _ClientCardState {
             ),
           ),
           IconButton(
-            tooltip: 'Закрыть форму',
+            tooltip: widget.routed ? 'Назад' : 'Закрыть форму',
             onPressed: _handleClose,
-            icon: const Icon(Icons.close_rounded),
+            icon: Icon(
+              widget.routed ? Icons.arrow_back_rounded : Icons.close_rounded,
+            ),
             iconSize: 20,
             color: cs.onSurfaceVariant,
           ),
@@ -166,7 +168,7 @@ extension _ClientCardTabsA on _ClientCardState {
 
   Widget _buildTabBar(
     ColorScheme cs,
-    List<(IconData, String)> tabs, {
+    List<(IconData, String, String)> tabs, {
     required int selectedIndex,
   }) {
     return Container(
@@ -174,15 +176,19 @@ extension _ClientCardTabsA on _ClientCardState {
         horizontal: AppSpace.lg,
         vertical: AppSpace.sm,
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (var i = 0; i < tabs.length; i++) ...[
-              if (i > 0) const SizedBox(width: AppSpace.sm),
-              _buildTabChip(cs, i, tabs, selectedIndex: selectedIndex),
+      child: MagicDesktopScrollbar(
+        axis: Axis.horizontal,
+        builder: (context, controller) => SingleChildScrollView(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var i = 0; i < tabs.length; i++) ...[
+                if (i > 0) const SizedBox(width: AppSpace.sm),
+                _buildTabChip(cs, i, tabs, selectedIndex: selectedIndex),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -191,17 +197,20 @@ extension _ClientCardTabsA on _ClientCardState {
   Widget _buildTabChip(
     ColorScheme cs,
     int index,
-    List<(IconData, String)> tabs, {
+    List<(IconData, String, String)> tabs, {
     required int selectedIndex,
   }) {
     final selected = selectedIndex == index;
-    final (icon, label) = tabs[index];
+    final (icon, label, section) = tabs[index];
     return Material(
       color: selected ? AppColor.goldSoft : Colors.transparent,
       borderRadius: BorderRadius.circular(AppRadius.chip),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.chip),
-        onTap: () => _emitState(() => _tabIndex = index),
+        onTap: () {
+          _emitState(() => _selectedSection = section);
+          widget.onSectionChanged?.call(section);
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpace.md,
@@ -261,7 +270,7 @@ extension _ClientCardTabsA on _ClientCardState {
               allowed: clientRoleCanArchive(
                 ref.read(releaseGateStatusProvider).asData?.value.role ?? '',
               ),
-              onArchived: () => Navigator.of(context).pop(true),
+              onArchived: () => _closeCard(true),
             ),
             // Product rule: a trial, its homework and feedback all belong to
             // the lead. Conversion happens only when a paid package is chosen,
@@ -321,7 +330,7 @@ extension _ClientCardTabsA on _ClientCardState {
             TextButton(
               onPressed: _saving || _converting ? null : _handleClose,
               style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
-              child: const Text('Отмена'),
+              child: Text(widget.routed ? 'Назад' : 'Отмена'),
             ),
             FilledButton(
               onPressed: _saving || _converting ? null : _save,
@@ -424,12 +433,6 @@ extension _ClientCardTabsA on _ClientCardState {
               ),
             )
           else ...[
-            ..._buildCustomFieldControls(
-              cs,
-              _isStudent ? 'students' : 'leads',
-              includeKeys: _ClientCardState._commonClientCustomFieldKeys,
-              excludedKeys: _ClientCardState._customKeysWithDedicatedEditor,
-            ),
             // #7: «Ответственный» — пикер по справочнику сотрудников. A lead
             // writes canonical assignedTo; a student keeps compatible custom_data.
             _buildResponsiblePicker(cs, _isStudent ? 'students' : 'leads'),
@@ -445,21 +448,6 @@ extension _ClientCardTabsA on _ClientCardState {
           ],
 
           if (_mode.hasStudentHalf) ...[
-            const SizedBox(height: AppSpace.lg),
-            _sectionTitle('Поля ученика'),
-            if (_loadingMetadata)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: CircularProgressIndicator(color: AppColor.gold),
-                ),
-              )
-            else
-              ..._buildCustomFieldControls(
-                cs,
-                'students',
-                includeKeys: _ClientCardState._studentOnlyCustomFieldKeys,
-              ),
             if (_balance != null) ...[
               const SizedBox(height: AppSpace.lg),
               _buildInfoCard('Финансы', [
@@ -478,85 +466,6 @@ extension _ClientCardTabsA on _ClientCardState {
                   label: 'Баланс',
                   value: '${_balance!.balanceRaw} ₽',
                 ),
-              ]),
-            ],
-            if (_subscriptions.isNotEmpty) ...[
-              const SizedBox(height: AppSpace.lg),
-              _buildInfoCard('Абонементы', [
-                for (final s in _subscriptions.take(5))
-                  _InfoRow(
-                    icon: s.isActive
-                        ? Icons.confirmation_number_outlined
-                        : Icons.history_toggle_off_rounded,
-                    label: (s.packageName?.trim().isNotEmpty ?? false)
-                        ? s.packageName!
-                        : 'Абонемент',
-                    value: [
-                      _subscriptionRemainder(s),
-                      // «Курс» — the whole subscription, next to what is left
-                      // of it, as on the reference card.
-                      ?_subscriptionCourse(s),
-                      // «Оплачено» — приход личного счёта за этот абонемент.
-                      ?_subscriptionPaid(s),
-                    ].join('\n'),
-                    // «Переплата»/«Долг» — разница между приходом и стоимостью.
-                    // Красным, потому что это то, на что надо посмотреть.
-                    hint: _subscriptionOverpayment(s)?.label,
-                    hintColor: _subscriptionOverpayment(s)?.isDebt == true
-                        ? AppTheme.danger
-                        : AppTheme.success,
-                    trailing: s.isActive && (s.id?.isNotEmpty ?? false)
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                key: Key('subscription-replace-${s.id}'),
-                                tooltip: 'Заменить абонемент',
-                                onPressed:
-                                    _replacingSubscription ||
-                                        _cancellingSubscription
-                                    ? null
-                                    : () => _showReplaceSubscriptionFlow(s),
-                                icon: _replacingSubscription
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppColor.gold,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.swap_horiz_rounded,
-                                        color: AppColor.gold,
-                                      ),
-                              ),
-                              IconButton(
-                                key: Key('subscription-cancel-${s.id}'),
-                                tooltip: 'Отменить абонемент',
-                                onPressed:
-                                    _replacingSubscription ||
-                                        _cancellingSubscription
-                                    ? null
-                                    : () => _showCancelSubscriptionFlow(s),
-                                icon: _cancellingSubscription
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppColor.danger,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.cancel_outlined,
-                                        color: AppColor.danger,
-                                      ),
-                              ),
-                            ],
-                          )
-                        : null,
-                  ),
               ]),
             ],
             if (_studentId.isNotEmpty) ...[
