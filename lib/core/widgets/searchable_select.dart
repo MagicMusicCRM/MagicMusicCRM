@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 
 class SearchableSelectItem {
   final String id;
@@ -26,6 +28,7 @@ class SearchableSelect extends StatefulWidget {
   final String? selectedId;
   final Function(SearchableSelectItem?) onSelected;
   final bool isNullable;
+  final bool embedded;
 
   /// Optional SERVER-side search. When set, keystrokes are debounced (350 ms)
   /// and this callback replaces the local filter, so the picker can find
@@ -42,6 +45,7 @@ class SearchableSelect extends StatefulWidget {
     this.selectedId,
     this.isNullable = true,
     this.onSearch,
+    this.embedded = false,
   });
 
   @override
@@ -57,18 +61,22 @@ class SearchableSelect extends StatefulWidget {
     bool isNullable = true,
     Future<List<SearchableSelectItem>> Function(String query)? onSearch,
   }) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => SearchableSelect(
+    unawaited(
+      showMagicAdaptiveSurface<void>(
+        context,
+        kind: AppSurfaceKind.selection,
         title: title,
-        hintText: hintText,
-        items: items,
-        onSelected: onSelected,
-        selectedId: selectedId,
-        isNullable: isNullable,
-        onSearch: onSearch,
+        icon: Icons.search_rounded,
+        builder: (context) => SearchableSelect(
+          title: title,
+          hintText: hintText,
+          items: items,
+          onSelected: onSelected,
+          selectedId: selectedId,
+          isNullable: isNullable,
+          onSearch: onSearch,
+          embedded: true,
+        ),
       ),
     );
   }
@@ -77,6 +85,7 @@ class SearchableSelect extends StatefulWidget {
 class _SearchableSelectState extends State<SearchableSelect> {
   final TextEditingController _searchController = TextEditingController();
   List<SearchableSelectItem> _filteredItems = [];
+
   /// How many matches a search shows. Requirement: the five best, not a wall
   /// of results to scroll through.
   static const _maxResults = 5;
@@ -144,9 +153,7 @@ class _SearchableSelectState extends State<SearchableSelect> {
           ? byScore
           : a.$2.label.toLowerCase().compareTo(b.$2.label.toLowerCase());
     });
-    return [
-      for (final entry in scored.take(_maxResults)) entry.$2,
-    ];
+    return [for (final entry in scored.take(_maxResults)) entry.$2];
   }
 
   void _onSearchChanged() {
@@ -188,138 +195,204 @@ class _SearchableSelectState extends State<SearchableSelect> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          // Handle
-          Center(
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(100),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          
-          // Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  widget.title,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 18),
+    return SizedBox(
+      height:
+          MediaQuery.sizeOf(context).height * (widget.embedded ? 0.62 : 0.75),
+      child: DecoratedBox(
+        decoration: widget.embedded
+            ? const BoxDecoration()
+            : BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
                 ),
-                if (widget.isNullable)
-                  TextButton(
-                    onPressed: () {
-                      widget.onSelected(null);
-                      Navigator.pop(context);
-                    },
-                    child: const Text('Сбросить'),
+              ),
+        child: Column(
+          children: [
+            if (!widget.embedded) ...[
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withAlpha(100),
+                    borderRadius: BorderRadius.circular(2),
                   ),
-              ],
-            ),
-          ),
-
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: TextField(
-              controller: _searchController,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: widget.hintText,
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear_rounded),
-                        onPressed: () => _searchController.clear(),
-                      )
-                    : null,
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
                 ),
               ),
-            ),
-          ),
-
-          if (_searching)
-            const LinearProgressIndicator(minHeight: 2),
-
-          // List
-          Expanded(
-            child: _filteredItems.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.search_off_rounded, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(100)),
-                        const SizedBox(height: 16),
-                        Text('Ничего не найдено', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      ],
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.headlineSmall?.copyWith(fontSize: 18),
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    itemCount: _filteredItems.length,
-                    itemBuilder: (context, index) {
-                      final item = _filteredItems[index];
-                      final isSelected = item.id == widget.selectedId;
+                    if (widget.isNullable)
+                      TextButton(
+                        onPressed: () {
+                          widget.onSelected(null);
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Сбросить'),
+                      ),
+                  ],
+                ),
+              ),
+            ] else if (widget.isNullable)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    widget.onSelected(null);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Сбросить'),
+                ),
+              ),
 
-                      return Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppTheme.primaryGold.withAlpha(30) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                          border: isSelected 
-                            ? Border.all(color: AppTheme.primaryGold.withAlpha(100))
-                            : null,
-                        ),
-                        child: ListTile(
-                          onTap: () {
-                            widget.onSelected(item);
-                            Navigator.pop(context);
-                          },
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          leading: CircleAvatar(
-                            backgroundColor: AppTheme.primaryGold.withAlpha(50),
-                            child: Text(
-                              item.label.isNotEmpty ? item.label[0].toUpperCase() : '?',
-                              style: const TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          title: Text(
-                            item.label.isEmpty ? 'Без имени' : item.label,
-                            style: TextStyle(
-                              color: isSelected ? AppTheme.primaryGold : Theme.of(context).colorScheme.onSurface,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                          subtitle: item.subtitle != null 
-                              ? Text(item.subtitle!, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12))
-                              : null,
-                          trailing: isSelected 
-                              ? const Icon(Icons.check_circle_rounded, color: AppTheme.primaryGold)
-                              : null,
-                        ),
-                      );
-                    },
+            // Search Bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: widget.hintText,
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded),
+                          onPressed: () => _searchController.clear(),
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
                   ),
-          ),
-        ],
+                ),
+              ),
+            ),
+
+            if (_searching) const LinearProgressIndicator(minHeight: 2),
+
+            // List
+            Expanded(
+              child: _filteredItems.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 48,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant.withAlpha(100),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Ничего не найдено',
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      itemCount: _filteredItems.length,
+                      itemBuilder: (context, index) {
+                        final item = _filteredItems[index];
+                        final isSelected = item.id == widget.selectedId;
+
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.primaryGold.withAlpha(30)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected
+                                ? Border.all(
+                                    color: AppTheme.primaryGold.withAlpha(100),
+                                  )
+                                : null,
+                          ),
+                          child: ListTile(
+                            onTap: () {
+                              widget.onSelected(item);
+                              Navigator.pop(context);
+                            },
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            leading: CircleAvatar(
+                              backgroundColor: AppTheme.primaryGold.withAlpha(
+                                50,
+                              ),
+                              child: Text(
+                                item.label.isNotEmpty
+                                    ? item.label[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  color: AppTheme.primaryGold,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              item.label.isEmpty ? 'Без имени' : item.label,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? AppTheme.primaryGold
+                                    : Theme.of(context).colorScheme.onSurface,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: item.subtitle != null
+                                ? Text(
+                                    item.subtitle!,
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  )
+                                : null,
+                            trailing: isSelected
+                                ? const Icon(
+                                    Icons.check_circle_rounded,
+                                    color: AppTheme.primaryGold,
+                                  )
+                                : null,
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

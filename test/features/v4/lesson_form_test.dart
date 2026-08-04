@@ -173,6 +173,9 @@ Future<void> _pumpDialog(
   await tester.pumpAndSettle();
   await tester.tap(find.text('открыть диалог'));
   await tester.pumpAndSettle();
+  final formContext = tester.element(find.textContaining('занятие').first);
+  expect(ModalRoute.of(formContext)?.settings.name, 'lesson-editor');
+  expect(find.byType(BackButton), findsOneWidget);
 }
 
 Future<void> _selectRequiredResources(

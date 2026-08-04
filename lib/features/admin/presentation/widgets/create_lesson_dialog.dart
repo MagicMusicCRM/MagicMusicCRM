@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -25,6 +26,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
   final String? leadId;
   final String? leadName;
   final bool initialIsTrial;
+  final bool pageMode;
 
   const CreateLessonDialog({
     super.key,
@@ -36,6 +38,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     this.leadId,
     this.leadName,
     this.initialIsTrial = false,
+    this.pageMode = false,
   });
 
   static Future<bool?> show(
@@ -49,17 +52,21 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     String? leadName,
     bool initialIsTrial = false,
   }) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => CreateLessonDialog(
-        initialDate: initialDate,
-        initialRoomId: initialRoomId,
-        initialBranchId: initialBranchId,
-        initialDurationMinutes: initialDurationMinutes,
-        lesson: lesson,
-        leadId: leadId,
-        leadName: leadName,
-        initialIsTrial: initialIsTrial,
+    return Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        settings: const RouteSettings(name: 'lesson-editor'),
+        builder: (ctx) => CreateLessonDialog(
+          initialDate: initialDate,
+          initialRoomId: initialRoomId,
+          initialBranchId: initialBranchId,
+          initialDurationMinutes: initialDurationMinutes,
+          lesson: lesson,
+          leadId: leadId,
+          leadName: leadName,
+          initialIsTrial: initialIsTrial,
+          pageMode: true,
+        ),
       ),
     );
   }
@@ -570,8 +577,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const AlertDialog(
-        content: Column(
+      const loading = Center(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(color: AppTheme.primaryGold),
@@ -580,13 +587,39 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           ],
         ),
       );
+      return widget.pageMode
+          ? Scaffold(
+              appBar: AppBar(title: Text(_dialogTitle)),
+              body: loading,
+            )
+          : const AlertDialog(content: loading);
     }
 
     final width = MediaQuery.sizeOf(context).width;
     return AlertDialog(
-      title: Text(_dialogTitle),
+      insetPadding: widget.pageMode ? EdgeInsets.zero : null,
+      shape: widget.pageMode
+          ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero)
+          : null,
+      title: Row(
+        children: [
+          if (widget.pageMode) ...[
+            const AppBackButton(),
+            const SizedBox(width: AppSpace.sm),
+          ],
+          Expanded(child: Text(_dialogTitle)),
+        ],
+      ),
+      contentPadding: widget.pageMode
+          ? const EdgeInsets.fromLTRB(16, 12, 16, 0)
+          : null,
       content: SizedBox(
-        width: width > 760 ? 680 : width - 80,
+        width: widget.pageMode
+            ? double.maxFinite
+            : width > 760
+            ? 680
+            : width - 80,
+        height: widget.pageMode ? double.maxFinite : null,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

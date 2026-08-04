@@ -162,7 +162,7 @@ flowchart TD
   - **Проверка:** reusable contract tests + three real forms including network failure/conflict.
   - **Оценка:** 7 ч · **Зависимости:** V6-203 · **Приоритет:** P0.
 
-- [ ] **V6-205** `[REQ-SURFACE-001, REQ-UX-001]` — Мигрировать representative modal set.
+- [x] **V6-205** `[REQ-SURFACE-001, REQ-UX-001]` — Мигрировать representative modal set.
   - **Работа:** Lesson quick view, one long edit form, one selector and one confirmation use the new policy; delete duplicate container code only after parity.
   - **Критерий:** primary work is full route on compact; quick view expands; confirmation remains concise; API trace unchanged.
   - **Проверка:** Android/Windows flows + screenshot comparison to approved v7 tokens.

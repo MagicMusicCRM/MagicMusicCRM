@@ -4,12 +4,12 @@
 
 | Slice | Count |
 |---|---:|
-| Navigation callsites | 275 |
-| Production-reachable callsites | 274 |
+| Navigation callsites | 276 |
+| Production-reachable callsites | 275 |
 | Typed entity usages | 14 |
 | Production workspace usages outside definitions | 2 |
 | EntityLink types | 19 |
-| Direct sites requiring classification/migration | 255 |
+| Direct sites requiring classification/migration | 256 |
 | Display-name route candidates | 1 |
 | Unowned | 0 |
 

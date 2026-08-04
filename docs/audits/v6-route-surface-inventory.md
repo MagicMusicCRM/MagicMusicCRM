@@ -14,8 +14,8 @@
 | Screen/Page classes | 21 |
 | Production-reachable screens | 21 |
 | Isolated/unreachable screens | 0 |
-| Modal/sheet/drawer callsites | 104 |
-| Reachable surface callsites | 104 |
+| Modal/sheet/drawer callsites | 103 |
+| Reachable surface callsites | 103 |
 | Screens missing loading/error/retry evidence | 12 |
 | Unowned items | 0 |
 
